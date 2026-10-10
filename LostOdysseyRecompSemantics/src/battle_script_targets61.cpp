@@ -1,3 +1,5 @@
+#include "lo_semantics/battle_action_readiness61.h"
+#include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_script_targets61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/battle_script_actions61.h"
@@ -22,7 +24,11 @@ struct Targets {
     (void)battle_script_extensions61::Apply(0x8238c198, m, d, s);
     return Address(s.r[3]);
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_action_readiness61::Apply(e, m, d, s) &&
+        !battle_action_adjustments61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   unsigned List() {
     Call(0x82380a18);
     Call(0x8238e2f8);

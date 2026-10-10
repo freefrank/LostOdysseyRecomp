@@ -229,3 +229,7 @@ Top-level action effects now compose all recovered parameter handlers, percentag
 ## Battle property removal
 
 Recovered the property-removal query and tail alias, including clearing both associated payload fields. Linked action adjustment now executes real property removal; its fixture checks both resource and peer masks. The peer virtual predicate remains a service boundary, with no native gameplay claim.
+
+## Target property composition
+
+Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated.

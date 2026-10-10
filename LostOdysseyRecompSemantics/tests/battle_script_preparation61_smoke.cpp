@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_preparation61.h"
 #include <iostream>
 struct PreparationGuest final : manager_release_context61::GuestServices {
-  unsigned tag = 0, property = 0;
+  unsigned tag = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -19,20 +19,8 @@ struct PreparationGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x80000 + 0x10000 * (unsigned(s.r[4]) - 24);
       return;
     }
-    if (e == 0x8238e368) {
-      s.r[3] = property;
-      return;
-    }
     if (e == 0x82ac8228) {
       s.r[3] = 25;
-      return;
-    }
-    if (e == 0x82ac84b8) {
-      s.r[3] = 0;
-      return;
-    }
-    if (e == 0x82ab0958) {
-      s.r[3] = 0;
       return;
     }
     if (e == 0x82aa0740) {
@@ -102,11 +90,13 @@ int main() {
     check(s.r[3] == 0 && m.ReadU32(actor + 84) == 1 && m.ReadU8(targets) == 24);
     run(1);
     check(m.ReadU8(targets) == 25);
-    guest.property = 1;
-    m.WriteU32(0x80000 + 4 * 567, 26);
+    m.WriteU32(0x83213438 + 16, 0);
+    m.WriteU32(0x8321343c + 16, 4);
+    m.WriteU32(0x80000 + 7 * 272 + 232, 4);
+    m.WriteU32(0x80000 + 4 * (567 + 2), 26);
     run(1);
     check(m.ReadU8(targets) == 26);
-    guest.property = 0;
+    m.WriteU32(0x80000 + 7 * 272 + 232, 0);
     run(2);
     check(m.ReadU32(actor + 84) == 2 && m.ReadU8(targets) == 24 &&
           m.ReadU8(targets + 1) == 25 && m.ReadU32(actor + 336) == 1);

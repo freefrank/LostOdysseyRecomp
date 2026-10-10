@@ -46,6 +46,8 @@ int main() {
       m.WriteU32(p, 1u << (id % 32));
       check(run(0x8238e368, id) == 1 && run(0x82ac9a28, 0) == 1);
       check(run(0x82ac9a28, 1) == unsigned(id < 32));
+      check(run(0x82ab0958, 0) ==
+            unsigned(id == 0 || id == 15 || id == 3 || id == 16));
       m.WriteU32(p, 0);
     }
     m.WriteU32(0x80000 + 8 * 272 + 232, 1u << 6);

@@ -135,6 +135,12 @@ int main() {
     s.r[3] = 244;
     check(battle_action_adjustments61::Apply(0x82ac84e8, m, {g, native}, s) &&
           s.r[3] == 20);
+    s.r[3] = 8;
+    check(battle_action_adjustments61::Apply(0x82ac84b8, m, {g, native}, s) &&
+          s.r[3] == 3);
+    s.r[3] = 0;
+    check(battle_action_adjustments61::Apply(0x82ac84b8, m, {g, native}, s) &&
+          s.r[3] == 31);
     check(!battle_action_adjustments61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_adjustments61 smoke passed\n";
     return 0;

@@ -50,6 +50,15 @@ void Scale(GuestMemory &m, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82ac84b8) {
+    auto mask = Address(s.r[3]);
+    unsigned i = 0;
+    for (; i < 31; ++i)
+      if (mask & (1u << i))
+        break;
+    s.r[3] = i;
+    return true;
+  }
   if (e == 0x82ac84e8) {
     s.r[3] = Index(m, Address(s.r[3]));
     return true;

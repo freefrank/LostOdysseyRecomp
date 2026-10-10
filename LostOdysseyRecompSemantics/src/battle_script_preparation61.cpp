@@ -1,3 +1,5 @@
+#include "lo_semantics/battle_action_readiness61.h"
+#include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_script_preparation61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -34,7 +36,11 @@ struct Runtime {
     auto a = Actor();
     m.WriteU32(a + 52, W(a + 52) + n);
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_action_readiness61::Apply(e, m, d, s) &&
+        !battle_action_adjustments61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   unsigned Manager(unsigned method) {
     Call(0x82380a18);
     Call(method);

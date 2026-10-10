@@ -15,10 +15,6 @@ struct TargetsGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x80000 + 0x4000 * (unsigned(s.r[4]) - 1);
       return;
     }
-    if (e == 0x8238e368) {
-      s.r[3] = s.r[4] == 7;
-      return;
-    }
     if (e == 0x82a9b288) {
       s.r[3] = 0x72000;
       return;
@@ -71,6 +67,8 @@ int main() {
     m.WriteU32(0x70004, 4);
     m.WriteU32(0x83213438, 0);
     m.WriteU32(0x8321343c, 1);
+    m.WriteU32(0x83213438 + 8 * 7, 0);
+    m.WriteU32(0x8321343c + 8 * 7, 128);
     m.WriteU32(0x82000d7c, std::bit_cast<unsigned>(0.01f));
     unsigned flags[]{0x40000000, 0, 0x48000000, 0x08000000};
     float hp[]{20, 10, 30, 0};
@@ -78,6 +76,7 @@ int main() {
       auto resource = 0x80000 + 0x4000 * i;
       m.WriteU32(0x70100 + 4 * i, resource);
       m.WriteU32(resource + 64, i + 1);
+      m.WriteU32(resource + 232, 128);
       m.WriteU32(resource + 68, i == 1 ? 8 : 9);
       m.WriteU32(resource + 124, flags[i]);
       m.WriteU32(resource + 132, 1);
