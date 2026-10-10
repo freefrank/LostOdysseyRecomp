@@ -48,6 +48,7 @@
 #include "lo_semantics/battle_script_global_modes61.h"
 #include "lo_semantics/battle_script_history61.h"
 #include "lo_semantics/battle_script_item_action61.h"
+#include "lo_semantics/battle_script_loading61.h"
 #include "lo_semantics/battle_script_marshaling61.h"
 #include "lo_semantics/battle_script_owned_labels61.h"
 #include "lo_semantics/battle_script_parameters61.h"
@@ -526,6 +527,14 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
     return battle_script_history61::Apply(entry, memory, dependencies, state);
   case 0x82b009b0u:
     return battle_script_item_action61::Apply(entry, memory, dependencies, state);
+  case 0x82a9de60u:
+  case 0x82a9e108u:
+  case 0x82a9ef80u:
+  case 0x82a9f028u:
+  case 0x82a9f0a0u:
+  case 0x82b024e0u:
+  case 0x82b025b8u:
+    return battle_script_loading61::Apply(entry, memory, dependencies, state);
   case 0x82afcb08u:
   case 0x82afcec8u:
   case 0x82afcf60u:

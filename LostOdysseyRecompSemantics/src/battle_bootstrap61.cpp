@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_bootstrap61.h"
+#include "lo_semantics/battle_script_loading61.h"
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_resource_creation61.h"
 #include "lo_semantics/battle_roster_persistence61.h"
@@ -11,6 +12,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned entry, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_bootstrap61::Apply(entry, m, d, s) &&
+      !battle_script_loading61::Apply(entry, m, d, s) &&
       !battle_resource_creation61::Apply(entry, m, d, s) &&
       !battle_roster_persistence61::Apply(entry, m, d, s) &&
       !battle_resource_stats61::Apply(entry, m, d, s) &&

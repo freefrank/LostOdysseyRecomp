@@ -163,8 +163,9 @@ int main() {
       m.WriteU32(0x93000 + 104 + 4 * i, 0xffffffff);
     m.WriteU32(0x6a000 + 84, 0x78000);
     m.WriteU32(0x8201dd2c, 0x42c80000);
+    m.WriteU32(0x93000 + 68, 0xffffffff);
     call(0x82ad20c0, 0x832ca0e8);
-    check(s.r[3] == 1 && guest.allocations == 10 && guest.startupCalls == 2 &&
+    check(s.r[3] == 1 && guest.allocations == 10 && guest.startupCalls == 0 &&
               m.ReadU32(0x832ca0e8 + 164) == 1,
           "startup orchestration completion");
     check(m.ReadU32(0x83291dc0) == 0x100000 &&

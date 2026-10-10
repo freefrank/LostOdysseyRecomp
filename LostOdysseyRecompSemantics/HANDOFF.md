@@ -1,3 +1,7 @@
+## Root direct continuation: script loading and initial dispatch (2026-10-10 UTC)
+
+Recovered script loading and initial execution: asset lookup, per-capacity actor buffers/defaults, little-endian header/events/constants decode, bytecode allocation/copy, source failure release, profile-based startup and initial event dispatch. Reuses actual script-state allocation, integer decoding and opcode dispatch. Battle startup now composes actual script startup entries. Focused fixture covers loaded and spare actors, constants and code bytes, initial cursor writeback, missing assets, zero-code/capacity failure and no-script profile shortcut. Complex encounter layout remains external; no gameplay/full ABI acceptance.
+
 ## Root direct continuation: battle startup orchestration (2026-10-10 UTC)
 
 Recovered battle startup AD20C0 and descriptor callback manager constructor AD1378. Startup allocates/registers ten managers and composes actual owner defaults, group/party rebuild, encounter population, both gauges, availability and stats reset. Constructor writes 167 callback slots with source hole 856 preserved; only 33 of its 83 distinct callback targets are currently recovered, so registration is not callback-completion credit. Focused empty-roster startup fixture passes manager allocations/registrations and composed state effects. Script startup and complex layout remain explicit service boundaries. No gameplay or full ABI acceptance.

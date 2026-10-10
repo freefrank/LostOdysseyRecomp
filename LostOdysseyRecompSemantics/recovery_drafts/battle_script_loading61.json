@@ -1,0 +1,86 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle script loading and startup.",
+  "entries": [
+    {
+      "address": "82B024E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 787,
+      "instruction_count": 26,
+      "body_sha256": "0fbe7160016039f9e476bcd7de63cfb21c4bf853223e91803ef4ed499d5c6aee",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B025B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 913,
+      "instruction_count": 26,
+      "body_sha256": "1f84571ac941e8c2a74090022ed15179a72b2bd53015de7cb21f222e0afa52c8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9DE60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 972,
+      "instruction_count": 169,
+      "body_sha256": "ceae2f5ddb96c6f40c7bcf2d5c4ac8a1b5bb4b34adb8d22b0fecd07d9f4a5a3d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9E108",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 1351,
+      "instruction_count": 172,
+      "body_sha256": "1ab8c10febd66d12e1de13ce1d5be47483761ff4b875953e6dc90b55d7276b4c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9EF80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3526,
+      "instruction_count": 41,
+      "body_sha256": "4f4bf86ee2da1ff3f4b9a9aaba9e5c9d0ae514e1eb93b5ef3593edb01d850883",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F028",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3617,
+      "instruction_count": 30,
+      "body_sha256": "c2b3830da0f834958557e3b20a98e0f53ebb0e0f595979f5781532e29d76d140",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F0A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3690,
+      "instruction_count": 48,
+      "body_sha256": "b2c7976a636c50641f6a3a6d131f2a71bff1b3399c6ad694e733a3175eb20984",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B024E0",
+      "82B025B8",
+      "82A9DE60",
+      "82A9E108",
+      "82A9EF80",
+      "82A9F028",
+      "82A9F0A0"
+    ],
+    "header": "include/lo_semantics/battle_script_loading61.h",
+    "source": "src/battle_script_loading61.cpp",
+    "smoke": "tests/battle_script_loading61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered script loading and initial execution: asset lookup, per-capacity actor buffers/defaults, little-endian header/events/constants decode, bytecode allocation/copy, source failure release, profile-based startup and initial event dispatch. Reuses actual script-state allocation, integer decoding and opcode dispatch. Battle startup now composes actual script startup entries. Focused fixture covers loaded and spare actors, constants and code bytes, initial cursor writeback, missing assets, zero-code/capacity failure and no-script profile shortcut. Complex encounter layout remains external; no gameplay/full ABI acceptance."
+  }
+}
