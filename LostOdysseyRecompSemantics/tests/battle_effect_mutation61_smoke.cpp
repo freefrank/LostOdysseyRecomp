@@ -35,6 +35,8 @@ int main() {
     for (unsigned p :
          {0x83213000u, 0x83245000u, 0x832cb000u, 0x832ae000u, 0x83264000u})
       regions.push_back({p, 0x1000});
+    regions.push_back({0x832ca000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -243,6 +245,54 @@ int main() {
     m.WriteU8(owner + 208, 1);
     call(0x82b0a698);
     check(!m.ReadU8(owner + 208), "restoration side gate");
+    m.WriteU8(owner + 200, 1);
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(owner + 108, 2);
+    m.WriteU32(target + 4876, 0);
+    put(target + 2588, 100);
+    put(target + 2592, 100);
+    call(0x82b0c880);
+    check(get(target + 2588) == 50 && get(owner + 32) == 50 &&
+              get(owner + 172) == 50 && get(record + 14904) == 50,
+          "fractional HP reduction and reporting");
+    m.WriteU32(target + 4876, 1);
+    call(0x82b0c880);
+    check(get(target + 2588) == 50, "fractional HP passive immunity");
+    m.WriteU32(target + 4876, 0);
+    m.WriteU32(source + 124, 0x50000000);
+    m.WriteU32(source + 132, 1);
+    put(source + 2588, 100);
+    put(source + 2592, 100);
+    put(source + 2616, 10);
+    put(source + 2620, 100);
+    m.WriteU32(owner + 100, 0);
+    m.WriteU32(owner + 92, 5);
+    m.WriteU8(owner + 203, 0);
+    call(0x82b0af88);
+    check(get(source + 2588) == 50 && get(source + 2616) == 60 &&
+              get(record + 104) == 50 && get(record + 56) == 50,
+          "HP to MP conversion");
+    m.WriteU32(0x832cb788, 0x70000);
+    m.WriteU32(0x832ca0e8 + 20, 0x71000);
+    m.WriteU32(0x71000, 0x72000);
+    m.WriteU32(0x71004, 3);
+    m.WriteU32(0x72000, source);
+    m.WriteU32(0x72004, target);
+    m.WriteU32(0x72008, 0xa0000);
+    m.WriteU32(source + 64, 24);
+    m.WriteU32(target + 64, 25);
+    m.WriteU32(0xa0000 + 64, 0);
+    m.WriteU32(0x83264558, 0xb0000);
+    m.WriteU32(owner + 36, 0);
+    m.WriteU32(owner + 40, record);
+    m.WriteU32(record + 20, 2);
+    m.WriteU32(record + 14884, 24);
+    m.WriteU32(record + 14884 + 464, 25);
+    call(0x82b110b8);
+    check(!(m.ReadU32(source + 124) & 0x40000000) &&
+              !(m.ReadU32(target + 124) & 0x40000000) &&
+              (m.ReadU32(0xa0000 + 124) & 0x40000000),
+          "random class flags and source ID fallback");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

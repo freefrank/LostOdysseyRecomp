@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor conversion effects (2026-10-10 UTC)
+
+Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
 ## Root direct continuation: restorative descriptor effects (2026-10-10 UTC)
 
 Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance.

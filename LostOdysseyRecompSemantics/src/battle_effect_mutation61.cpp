@@ -1,4 +1,6 @@
 #include "lo_semantics/battle_effect_mutation61.h"
+#include "lo_semantics/battle_script_actions61.h"
+#include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_effect_scaling61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
@@ -17,6 +19,8 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
+      !battle_script_actions61::Apply(e, m, d, s) &&
+      !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_effect_scaling61::Apply(e, m, d, s) &&
       !battle_random_range61::Apply(e, m, d, s) &&
       !battle_action_eligibility61::Apply(e, m, d, s) &&
@@ -43,6 +47,21 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b0c880:
+    frame = 144;
+    first = 28;
+    literal = 80;
+    break;
+  case 0x82b0af88:
+    frame = 144;
+    first = 27;
+    literal = 80;
+    break;
+  case 0x82b110b8:
+    frame = 160;
+    first = 24;
+    literal = 80;
+    break;
   case 0x82b0a568:
   case 0x82b0a698:
     break;
@@ -116,12 +135,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Call(method, m, d, s);
     return (Address(s.r[3]) & 255) != 0;
   };
-  auto eligible = [&](unsigned kind) {
+  auto eligible = [&](unsigned kind, unsigned detail = 1) {
     s.r[3] = m.ReadU32(0x8324570c);
     s.r[4] = m.ReadU32(owner + 4);
     s.r[5] = m.ReadU32(owner + 8);
     s.r[6] = kind;
-    s.r[7] = 1;
+    s.r[7] = detail;
     s.r[8] = m.ReadU8(owner + 200);
     Call(0x82ace408, m, d, s);
     return (Address(s.r[3]) & 255) != 0;
@@ -137,8 +156,127 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0a568 || e == 0x82b0a698 || e == 0x82b0a928 ||
-      e == 0x82b0a7a0) {
+  if (e == 0x82b0c880) {
+    if (!eligible(1))
+      m.WriteU8(owner + 208, 0);
+    else if (chance(0x82b08e28)) {
+      s.r[3] = 0;
+      Call(0x8238aab0, m, d, s);
+      if (!(Address(s.r[3]) & m.ReadU32(m.ReadU32(owner + 8) + 4876)) &&
+          m.ReadU32(owner + 184) != 1) {
+        mark();
+        auto result = m.ReadU32(0x832cb790), resource = m.ReadU32(owner + 8);
+        auto divisor = std::int32_t(m.ReadU32(owner + 108));
+        fp();
+        auto previous = trunc(std::bit_cast<float>(m.ReadU32(resource + 2588)));
+        m.WriteU32(sp + 84, unsigned(previous));
+        recovery_abi::WriteU64(m, sp + 88,
+                               std::uint64_t(std::int64_t(divisor)));
+        s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(float(divisor)));
+        s.r[3] = result;
+        s.r[4] = resource;
+        s.r[6] = 8;
+        Call(0x82b2b9e0, m, d, s);
+        fp();
+        auto index =
+            116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + 3726;
+        m.WriteU32(m.ReadU32(result + 20) + 4 * index,
+                   std::bit_cast<unsigned>(
+                       float(std::bit_cast<double>(s.fpr_bits[1]))));
+        recovery_abi::WriteU64(m, sp + 88,
+                               std::uint64_t(std::int64_t(previous)));
+        auto difference =
+            float(float(previous) -
+                  std::bit_cast<float>(m.ReadU32(m.ReadU32(owner + 8) + 2588)));
+        m.WriteU32(owner + 32, std::bit_cast<unsigned>(difference));
+        m.WriteU32(owner + 172, std::bit_cast<unsigned>(difference));
+      }
+    }
+  } else if (e == 0x82b0af88) {
+    if (!eligible(2, 0))
+      m.WriteU8(owner + 208, 0);
+    else {
+      s.r[3] = m.ReadU32(owner + 4);
+      s.r[4] = 114;
+      Call(0x8238e368, m, d, s);
+      if ((Address(s.r[3]) & 255) != 1) {
+        mark();
+        auto divisor = std::int32_t(m.ReadU32(owner + 108));
+        recovery_abi::WriteU64(m, sp + 88,
+                               std::uint64_t(std::int64_t(divisor)));
+        fp();
+        auto amount =
+            float(std::bit_cast<float>(m.ReadU32(m.ReadU32(owner + 4) + 2588)) /
+                  float(divisor));
+        m.WriteU32(owner + 28, std::bit_cast<unsigned>(amount));
+        s.r[3] = owner;
+        Call(0x82b0a3b0, m, d, s);
+        for (auto mode : {3u, 0u}) {
+          auto result = m.ReadU32(0x832cb790);
+          fp();
+          s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
+              double(std::bit_cast<float>(m.ReadU32(owner + 32))));
+          s.r[3] = result;
+          s.r[4] = m.ReadU32(owner + 4);
+          s.r[6] = mode;
+          Call(0x82b2b9e0, m, d, s);
+          fp();
+          auto index = 116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) +
+                       (mode ? 26 : 14);
+          m.WriteU32(m.ReadU32(result + 20) + 4 * index,
+                     std::bit_cast<unsigned>(
+                         float(std::bit_cast<double>(s.fpr_bits[1]))));
+        }
+        s.r[3] = m.ReadU32(owner + 4);
+        s.r[4] = m.ReadU32(owner + 92);
+        s.r[5] = m.ReadU32(owner + 100);
+        s.r[6] = 0;
+        Call(0x82aca6f0, m, d, s);
+      }
+    }
+  } else if (e == 0x82b110b8) {
+    if (eligible(1)) {
+      mark();
+      if (m.ReadU32(owner + 36) == 0) {
+        bool any = false;
+        auto find = [&](unsigned id) {
+          Call(0x82380a18, m, d, s);
+          Call(0x82389b78, m, d, s);
+          s.r[4] = id;
+          Call(0x8238e308, m, d, s);
+          return Address(s.r[3]);
+        };
+        for (unsigned i = 0;
+             std::int32_t(i) <
+             std::int32_t(m.ReadU32(m.ReadU32(owner + 40) + 20));
+             ++i) {
+          auto record = m.ReadU32(owner + 40);
+          auto resource = find(m.ReadU32(record + 14884 + 464 * i));
+          s.r[3] = m.ReadU32(0x83264558);
+          s.r[4] = 0;
+          s.r[5] = 1;
+          s.r[6] = 16;
+          s.r[7] = m.ReadU32(m.ReadU32(owner + 8) + 64);
+          Call(0x82aa0740, m, d, s);
+          auto flags = (m.ReadU32(resource + 124) & ~0x40000000u) |
+                       ((Address(s.r[3]) & 1) << 30);
+          m.WriteU32(resource + 124, flags);
+          any |= (flags & 0x40000000) != 0;
+        }
+        if (!any) {
+          s.r[3] = m.ReadU32(0x83264558);
+          s.r[4] = 0;
+          s.r[5] = m.ReadU32(m.ReadU32(owner + 40) + 20) - 1;
+          s.r[6] = 17;
+          s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+          Call(0x82aa0740, m, d, s);
+          auto resource = find(Address(s.r[3]));
+          m.WriteU32(resource + 124, m.ReadU32(resource + 124) | 0x40000000);
+        }
+      }
+    }
+  } else if (e == 0x82b0a568 || e == 0x82b0a698 || e == 0x82b0a928 ||
+             e == 0x82b0a7a0) {
     bool mp = e == 0x82b0a698, combined = e == 0x82b0a7a0;
     if (!mp)
       m.WriteU8(owner + 203, 0);

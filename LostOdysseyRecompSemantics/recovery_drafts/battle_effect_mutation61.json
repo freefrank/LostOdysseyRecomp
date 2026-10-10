@@ -145,6 +145,30 @@
       "instruction_count": 70,
       "body_sha256": "b317c856f8c2baabca47b77d1476de7b937c6dd2c44f626a3963b1ab19462393",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0C880",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 592,
+      "instruction_count": 76,
+      "body_sha256": "51137805f87bf39ef77af20ac5032d3fceb5a725dafd7391280d3dfdbad217b9",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0AF88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 21878,
+      "instruction_count": 78,
+      "body_sha256": "b6cd711f4cf46109278a7c05fe60473b7cfe37de72abef83ea795f6edce0469e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B110B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 11485,
+      "instruction_count": 83,
+      "body_sha256": "ffdfca60f99dad4b148ee0548839477d3b981edaecdbc469ca48ad3b5222b3f4",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -166,7 +190,10 @@
       "82B0A568",
       "82B0A698",
       "82B0A7A0",
-      "82B0A928"
+      "82B0A928",
+      "82B0C880",
+      "82B0AF88",
+      "82B110B8"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -182,6 +209,7 @@
     "focused_smoke_paths": 1,
     "case_scope": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
     "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-    "restorative_effects": "Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance."
+    "restorative_effects": "Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance.",
+    "descriptor_conversion": "Recovered three more descriptor callbacks: fractional HP reduction with recorded delta, source HP-to-MP conversion, and randomized target class flags with fallback selection. Focused checks cover real result mutation, passive immunity, paired HP/MP outcomes and the source fallback quirk that treats the random index as a resource ID. Descriptor callback coverage now 54 of 83 distinct targets; remaining 29 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }
