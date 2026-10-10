@@ -25,6 +25,7 @@
 #include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_random_range61.h"
+#include "lo_semantics/battle_resource_creation61.h"
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_result_application61.h"
@@ -288,6 +289,9 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82aa0740u:
   case 0x82aa0838u:
     return battle_random_range61::Apply(entry, memory, dependencies, state);
+  case 0x82ab3b08u:
+  case 0x82af5d18u:
+    return battle_resource_creation61::Apply(entry, memory, dependencies, state);
   case 0x82abfe38u:
   case 0x82abfe90u:
   case 0x82ac0588u:

@@ -1,3 +1,7 @@
+## Root direct continuation: resource creation (2026-10-10 UTC)
+
+Recovered resource reset and battle resource factory. The factory composes actual action-record initialization, profile restore or creature growth, skills/equipment recalculation, position/angle writes and active-state reset before roster append. Class lookup/load and object allocation remain explicit external services. Focused fixture covers failed class load, party and creature paths, actual record setup, roster append and nonvolatile preservation with public synthetic data. Library builds; no gameplay, full ABI or bitwise FP acceptance.
+
 ## Root direct continuation: profile restore and resource baseline (2026-10-10 UTC)
 
 Recovered profile-to-resource restore ABFC50 with actual seven-span copy and passive-state reset, plus ABFE38 baseline counters/level limits and ABFE90 active-state/group flag reset. Focused roster fixture now checks save/restore data, the deliberate passive reset, 32 initial limits and all group-dependent mask cases. Library and focused logic checks pass; no gameplay/full ABI acceptance is claimed.

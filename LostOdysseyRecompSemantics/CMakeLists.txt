@@ -333,6 +333,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_formation61.cpp
     src/battle_roster_persistence61.cpp
     src/battle_resource_growth61.cpp
+    src/battle_resource_creation61.cpp
     src/battle_scene_requests61.cpp
     src/battle_semantic_runtime61.cpp
     src/battle_progression61.cpp
