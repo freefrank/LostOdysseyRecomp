@@ -8,6 +8,10 @@ struct GatesGuest final : manager_release_context61::GuestServices {
   unsigned virtualResult = 0, first = 0, second = 0, calls = 0, predicate = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82380a18 || e == 0x82389b78) {
+      s.r[3] = 0x70000;
+      return;
+    }
     if (e != 0x82ac90e8 && e != 0x82ac8978 && e != 0x82aca700)
       throw std::runtime_error("gate direct");
     if (s.r[3] != 0x90000 || (s.r[4] != 10 && s.r[4] != 11))
@@ -143,6 +147,38 @@ int main() {
     check(run(0x82b0f310));
     g.virtualResult = 1;
     check(!run(0x82b0f310));
+    for (unsigned category = 0; category < 8; ++category) {
+      m.WriteU32(0x73000 + 108, category);
+      m.WriteU32(0x70000 + 148, 0x4000);
+      m.WriteU32(0x80000 + 124, 0);
+      check(run(0x82b11690) ==
+            unsigned(category != 0 && category != 1 && category != 4));
+    }
+    m.WriteU32(0x73000 + 108, 6);
+    m.WriteU32(0x80000 + 124, 0x10000000);
+    check(!run(0x82b11690));
+    m.WriteU32(0x70000 + 148, 0);
+    check(run(0x82b11690));
+    g.virtualResult = 0;
+    m.WriteU32(0x73000 + 92, 7);
+    m.WriteU32(0x73000 + 100, 2);
+    m.WriteU32(0x73000 + 120, 0);
+    m.WriteU32(0x8321343c + 8, 2);
+    m.WriteU32(0x83213538 + 4 * (7 * 32 + 1), 1);
+    m.WriteU32(0x90000 + 7 * 272 + 232, 2);
+    m.WriteU32(0x80000 + 124, 0);
+    m.WriteU32(0x90000 + 124, 0);
+    check(!run(0x82b0f6a8));
+    m.WriteU32(0x90000 + 124, 0x10000000);
+    check(run(0x82b0f6a8));
+    m.WriteU32(0x73000 + 20, 3);
+    m.WriteU32(0x73000 + 24, 17);
+    m.WriteU32(0x80000 + 64, 1);
+    check(!run(0x82b0f6a8));
+    m.WriteU32(0x80000 + 64, 2);
+    check(run(0x82b0f6a8));
+    g.virtualResult = 1;
+    check(!run(0x82b0f6a8));
     check(!battle_evaluation_gates61::Apply(0, m, {g, native}, s));
     std::cout << "battle_evaluation_gates61 smoke passed\n";
     return 0;

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 216,
-    "distinct_entries": 862,
+    "distinct_entries": 864,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2430,11 +2430,14 @@
           "82B09050",
           "82B0FB08",
           "82B0AC68",
-          "82B0F310"
+          "82B0F310",
+          "82B0F6A8",
+          "82B11690"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks constant accept/reject leaves, target virtual status, distinct source/target IDs, source property 114, secondary predicate, paired-query early exits and exact low-byte-one matching. Recovered predicates and existing no-op are composed into actual descriptor dispatch. Lower property predicates and target virtual methods remain guest boundaries; native gameplay is unvalidated. Logical/ABI only",
-        "extended_gates": "Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim."
+        "extended_gates": "Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim.",
+        "special_gates": "Recovered special target property admission with same-resource exclusion and opposing-side exception, plus category-specific manager restrictions. The special property check composes actual property state semantics; only the manager accessor and target virtual method remain service boundaries. Focused fixture covers category routes, manager flag, self-target exclusion and side exception. Logical/ABI recovery only; native gameplay remains unvalidated."
       },
       {
         "unit": "battle_evaluation_effects61",

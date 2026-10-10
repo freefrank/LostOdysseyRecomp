@@ -297,3 +297,7 @@ Recovered and composed effect preparation: source/target and argument bindings, 
 ## Property state transitions
 
 Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim.
+
+## Special descriptor gates
+
+Recovered special target property admission with same-resource exclusion and opposing-side exception, plus category-specific manager restrictions. The special property check composes actual property state semantics; only the manager accessor and target virtual method remain service boundaries. Focused fixture covers category routes, manager flag, self-target exclusion and side exception. Logical/ABI recovery only; native gameplay remains unvalidated.
