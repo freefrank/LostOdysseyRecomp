@@ -1,0 +1,41 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Recursive archive member matching and candidate lookup metadata composition.",
+  "entries": [
+    {
+      "address": "82853B28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 16100,
+      "instruction_count": 159,
+      "body_sha256": "d4c99888a6155260b420baab8f8fd5710a1b987ee4a9c84d80271f6d81ded663",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828548A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 18058,
+      "instruction_count": 100,
+      "body_sha256": "98593754b56e8f3d0a38ad7c567f03186a65b09e8d2d731a606dd383cf43db40",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82853B28",
+      "828548A0"
+    ],
+    "header": "include/lo_semantics/archive_member61.h",
+    "source": "src/archive_member61.cpp",
+    "smoke": "tests/archive_member61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture checks nested file metadata, directory and exact-archive results, loose-path flags and original-byte append, missing members and stack restoration. Time conversion remains a guest boundary. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

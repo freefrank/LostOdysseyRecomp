@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 158,
-    "distinct_entries": 499,
+    "unit_count": 159,
+    "distinct_entries": 501,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1648,6 +1648,15 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture checks packed date fields and the original weekday accumulation, guest time-field argument order, success copy and failure-output preservation, and case-insensitive guest suffix rewriting. The kernel time conversion/error services remain explicit guest boundaries; the fixture supplies their results, not a recovered kernel calendar implementation. Logical/ABI only"
+      },
+      {
+        "unit": "archive_member61",
+        "entries": [
+          "82853B28",
+          "828548A0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused synthetic fixture checks nested file metadata, directory and exact-archive results, loose-path flags and original-byte append, missing members and stack restoration. Time conversion remains a guest boundary. Logical/ABI only"
       }
     ]
   },

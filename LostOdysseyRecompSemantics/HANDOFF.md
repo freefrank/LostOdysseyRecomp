@@ -1,3 +1,7 @@
+## Root direct continuation: archive member lookup (2026-10-10 UTC)
+
+Archive lookup now composes candidate prefix selection with recursive 24-byte entry matching, decoded names, packed timestamps and output metadata. Focused synthetic checks cover regular files, directories (type 16), exact archive matches (type 17), loose members (type 0 with flag 4), path append and misses. Guest time conversion remains an explicit boundary; no archive file I/O or gameplay acceptance is claimed.
+
 ## Root direct continuation: archive metadata (2026-10-10 UTC)
 
 Archive metadata now decodes the packed year/month/day/time fields, bridges them to the guest FILETIME conversion and applies the original guest-pattern suffix rewrite. The weekday calculation preserves the source single month-table load; the bridge intentionally omits that weekday field. A focused fixture checks field order, success/failure output handling and suffix matching. Kernel calendar/error services remain explicit guest boundaries.
