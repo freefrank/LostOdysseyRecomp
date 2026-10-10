@@ -20,6 +20,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 31;
     frame = 96;
     break;
+  case 0x82b7ae18:
   case 0x82b7aef0:
     first = 27;
     frame = 144;
@@ -74,6 +75,28 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[5] = 16;
     s.r[6] = 0x82298938;
     Call(0x82b7aef0, m, d, s);
+  } else if (e == 0x82b7ae18) {
+    auto stride = Address(s.r[4]), count = Address(s.r[5]),
+         callback = Address(s.r[6]), end = owner;
+    s.r[30] = end;
+    s.r[29] = stride;
+    s.r[27] = count;
+    s.r[28] = callback;
+    while (true) {
+      --count;
+      s.r[27] = count;
+      m.WriteU32(sp + 180, count);
+      if (std::int32_t(count) < 0)
+        break;
+      end -= stride;
+      s.r[30] = end;
+      m.WriteU32(sp + 164, end);
+      s.r[3] = end;
+      s.ctr = callback;
+      if (!string_storage_context61::Apply(callback & ~3u, m, d, s) &&
+          !battle_action_destruction61::Apply(callback & ~3u, m, d, s))
+        d.guest.CallIndirect(callback & ~3u, m, s);
+    }
   } else {
     auto stride = Address(s.r[4]), count = Address(s.r[5]),
          callback = Address(s.r[6]), end = owner + stride * count;

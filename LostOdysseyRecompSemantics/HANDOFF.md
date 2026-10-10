@@ -1,3 +1,7 @@
+## Root direct continuation: reverse cleanup continuation (2026-10-10 UTC)
+
+Recovered 82B7AE18 completes the reverse cleanup continuation from a captured end pointer. The focused destruction fixture now executes that loop and verifies callback order instead of mocking it. Native exception unwinding remains unvalidated.
+
 ## Root direct continuation: compose string lifetime (2026-10-10 UTC)
 
 Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.

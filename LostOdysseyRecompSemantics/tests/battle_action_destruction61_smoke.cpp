@@ -5,13 +5,9 @@
 #include <iostream>
 struct DestructionGuest final : manager_release_context61::GuestServices {
   std::vector<unsigned> calls;
-  unsigned cleanup = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e != 0x82b7ae18 || s.r[3] != 111 || s.r[4] != 12 || s.r[5] != 3 ||
-        s.r[6] != 0x2220)
-      throw std::runtime_error("cleanup boundary");
-    ++cleanup;
+    throw std::runtime_error("unexpected destruction direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
@@ -81,7 +77,7 @@ int main() {
     s.r[27] = 0x2220;
     m.WriteU32(0x90000 + 80, 0);
     check(battle_action_destruction61::Apply(0x82b7afa8, m, {g, native}, s));
-    check(g.cleanup == 1);
+    check((g.calls == std::vector<unsigned>{99, 87, 75}));
     check(!battle_action_destruction61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_destruction61 smoke passed\n";
     return 0;
