@@ -11,6 +11,10 @@
 #include <unistd.h>
 #endif
 
+// Nintendo Switch: like Android, everything lives in one app folder on the SD
+// card (LO_SWITCH_DATA_ROOT, sdmc:/switch/LostOdysseyRecomp), which main.cpp
+// passes to Initialize() as the "executable directory".
+
 namespace os::user_paths
 {
     inline bool g_usePortableLayout = true;
@@ -21,7 +25,7 @@ namespace os::user_paths
         g_executableDirectory = executableDirectory;
 #ifdef _WIN32
         g_usePortableLayout = true;
-#elif LO_PLATFORM_ANDROID
+#elif LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
         g_usePortableLayout = false;
 #elif LO_PLATFORM_MACOS
         // Never write into an app bundle: it may be user-writable, but changing
@@ -54,7 +58,7 @@ namespace os::user_paths
     {
 #ifdef _WIN32
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
-#elif LO_PLATFORM_ANDROID
+#elif LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
         return g_executableDirectory / "config";
 #elif LO_PLATFORM_MACOS
         return detail::LibraryPath("Application Support");
@@ -68,7 +72,7 @@ namespace os::user_paths
     {
 #ifdef _WIN32
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
-#elif LO_PLATFORM_ANDROID
+#elif LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
         return g_executableDirectory;
 #elif LO_PLATFORM_MACOS
         return detail::LibraryPath("Application Support");
@@ -84,7 +88,7 @@ namespace os::user_paths
     {
 #ifdef _WIN32
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
-#elif LO_PLATFORM_ANDROID
+#elif LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
         return g_executableDirectory / "state";
 #elif LO_PLATFORM_MACOS
         return detail::LibraryPath("Logs");

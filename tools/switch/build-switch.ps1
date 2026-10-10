@@ -7,7 +7,7 @@
 # mesa-switch NVK driver); nothing else needs installing on Windows. The NRO
 # lands in out\switch\. See docs\SWITCH.md.
 param(
-    [string]$Image = "lo-switch-dev",
+    [string]$Image = "ghcr.io/autorunhq/switch-dev:2026.10.05",
     [int]$Jobs = 0,
     [ValidateSet("Release", "RelWithDebInfo")][string]$BuildType = "Release",
     [switch]$Clean

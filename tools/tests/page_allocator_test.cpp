@@ -34,6 +34,8 @@ constexpr uint32_t STATUS_INVALID_PARAMETER = 0xC000000D;
 constexpr uint32_t STATUS_NO_MEMORY = 0xC0000017;
 #define LOG_KERNEL(...) ((void)0)
 #define LOG_ERROR(...) ((void)0)
+// Desktop commit is a no-op (guest_address_space.h); only Switch backs pages here.
+namespace GuestAddressSpace { inline bool Commit(uint32_t, uint32_t) { return true; } }
 
 // PRODUCTION_DEFINITIONS
 

@@ -695,6 +695,24 @@ std::wstring DlssNotice()
 }
 bool GraphicsRowHidden(int r)
 {
+#if LO_PLATFORM_SWITCH
+    // The console owns the display and output size, and settings::Validate pins
+    // the Xbox 360 image (720p scene, no host AA, AO, filtering, upscaling, HDR).
+    switch (GraphicsRow(r))
+    {
+    case GraphicsRow::Backend: case GraphicsRow::Gpu: case GraphicsRow::DisplayMode:
+    case GraphicsRow::Display: case GraphicsRow::AspectRatio: case GraphicsRow::OutputResolution:
+    case GraphicsRow::RenderResolution: case GraphicsRow::ShadowResolution: case GraphicsRow::AntiAliasing:
+    case GraphicsRow::DlssQuality: case GraphicsRow::FsrSharpness: case GraphicsRow::DlssNeuralRendering:
+    case GraphicsRow::FrameGeneration: case GraphicsRow::FrameGenerationMultiplier:
+    case GraphicsRow::AmbientOcclusion: case GraphicsRow::AnisotropicFiltering:
+    case GraphicsRow::VariableRefreshRate: case GraphicsRow::Hdr: case GraphicsRow::HdrPaperWhite:
+    case GraphicsRow::HdrPeak:
+        return true;
+    default:
+        return false;
+    }
+#endif
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.

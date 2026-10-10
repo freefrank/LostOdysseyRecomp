@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <os/platform.h>
 
 namespace GuestAddressSpace
 {
@@ -49,4 +51,14 @@ const char* FailureApiName(FailureOperation operation);
 // Keep these OS mappings coherent even for direct recompiled base+address loads.
 uint8_t* Allocate();
 void Release(uint8_t* base);
+#if LO_PLATFORM_SWITCH
+// Horizon has no lazy commit: guest pages must be backed before first use.
+// Commits [address, address + size) of the virtual or A view (A also backs
+// its C and E aliases). Returns false when the console is out of memory.
+bool Commit(uint32_t address, uint32_t size);
+size_t CommittedBytes();
+#else
+// Desktop hosts commit on first touch.
+inline bool Commit(uint32_t, uint32_t) { return true; }
+#endif
 }

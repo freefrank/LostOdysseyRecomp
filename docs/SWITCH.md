@@ -9,10 +9,14 @@ Switch layer follows the Sonic Unleashed Switch ports
 ([NaGaa95/UnleashedRecomp-NX](https://github.com/NaGaa95/UnleashedRecomp-NX),
 [ChanseyIsTheBest/UnleashedRecomp-NX](https://github.com/ChanseyIsTheBest/UnleashedRecomp-NX)).
 
-> **Status: bring-up.** The port compiles as Switch code; it has not yet been
-> run on a console. Expect crashes and missing features until it has been
-> tested. Performance on the Tegra X1 is unknown: Lost Odyssey is a heavy
-> Unreal Engine 3 game, so a lower internal resolution will likely be needed.
+> **Status: early.** The game runs on a console, but slowly: the GPU is the
+> limit, and battles stay well below 30 fps. Expect crashes and missing
+> features.
+
+The Switch build keeps the Xbox 360 image: the game's 720p scene and its own
+effects (bloom, depth of field, motion blur, shadows). The PC additions are off
+and hidden in the Graphics menu: anti-aliasing, ambient occlusion, anisotropic
+filtering, render and shadow resolution, upscalers, frame generation and HDR.
 
 ## What you need
 
@@ -94,7 +98,7 @@ mesa-switch (NVK). Nothing else is installed on the PC.
 2. Copy your Disc 1 `default.xex` to `LostOdysseyRecompLib/private/disc1/`.
 3. Pull the image once (a few GB):
    ```
-   docker pull ghcr.io/autorunhq/switch-dev:2026.09.28
+   docker pull ghcr.io/autorunhq/switch-dev:2026.10.05
    ```
 4. Build:
    - Windows (PowerShell):
@@ -103,7 +107,7 @@ mesa-switch (NVK). Nothing else is installed on the PC.
      ```
    - Linux/macOS:
      ```
-     docker run --rm -v "$PWD:/work" -w /work ghcr.io/autorunhq/switch-dev:2026.09.28 \
+     docker run --rm -v "$PWD:/work" -w /work ghcr.io/autorunhq/switch-dev:2026.10.05 \
          bash tools/switch/build-switch.sh
      ```
 
@@ -185,12 +189,14 @@ Delete the file to turn sampling off. Per-thread CPU shares are logged every
 | Shaders | Prebuilt SPIR-V pack plus the PC's Vulkan shader cache; DXC is not available (`LO_SWITCH_DXC_IDENTITY`) |
 | Window, input, audio | devkitPro's SDL 3.4 fork (`thirdparty/SDL-switch`), built without EGL (`tools/patches/sdl-switch-no-egl.patch`) |
 | XMA audio | Xenia's FFmpeg fork with `thirdparty/ffmpeg-config/switch-aarch64` |
+| Graphics settings | `settings::Validate()` pins a 720p scene, 1x shadow maps and no AA, AO, anisotropic filtering, upscaling, frame generation or HDR; `GraphicsRowHidden()` hides those rows |
 | Not on Switch | Updater, network downloads, importer, D3D12, DLSS/FSR/XeSS, frame generation, HDR |
 
 ## Known gaps
 
-- Not yet run on hardware; the first runs will find problems the compile
-  checks cannot.
+- Slow: the GPU time per draw call is the limit, not the CPU. Candidates are
+  the occlusion queries, constants read through buffer device addresses, and
+  render pass breaks.
 - No on-console importer: discs are copied from a PC.
 - Shaders missing from both the pack and the PC cache cannot be compiled on the
   console.
