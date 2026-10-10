@@ -1,3 +1,7 @@
+## Root direct continuation: complete cloth cooking (2026-10-10 UTC)
+
+BAC6D0 now composes cloth descriptor validation, concrete import/topology, bounded scheduling, vertex permutation, inverse mapping, channel/index remapping and reversed tier output. B9CE98/B9D0A0 convert the public triangle/tetrahedral descriptors and cook/write CLTH with cleanup. Four type/endian combinations validate strided channels, duplicate triangle mapping, byte-identical stream roundtrip and readable public-entry output with complete ownership cleanup. This closes the synthetic cloth cooking logic chain; moving realloc, independent native assets and gameplay remain unvalidated.
+
 ## Root direct continuation: cloth constraint scheduling (2026-10-10 UTC)
 
 BB6290 now builds adjacency, ranks compatible constraints, splits bounded child batches, advances conflict tiers and packs triangle/tetrahedral records. Three samples cover disjoint batch splitting, a connected chain requiring a second tier, both packed layouts and complete ownership cleanup. The input descriptor/orchestration and final vertex/channel remapping remain pending.
