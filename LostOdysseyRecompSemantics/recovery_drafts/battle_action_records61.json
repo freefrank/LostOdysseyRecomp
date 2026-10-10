@@ -54,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One compact fixture covers both action record writers, first and subsequent targets, inherited record flags, actor mode metadata, alternate action flags, first-free linked member insertion, deduplicated additional targets and termination callbacks. Array reset/growth, command configuration and finalization remain service boundaries. The model is compiled and independently validated; replacing execution-layer emission boundaries is the next integration step. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "The compact record fixture covers both writers, append, source flags, actor mode metadata, linked member insertion and duplicate target rejection. The model is now composed into the execution layer; four affected caller fixtures pass with assertions on actual records and isolated synthetic allocation/reset. Command configuration and finalization remain explicit service boundaries. Logical/ABI only, not native gameplay acceptance.",
+    "integration_status": "composed_into_battle_script_execution61"
   }
 }

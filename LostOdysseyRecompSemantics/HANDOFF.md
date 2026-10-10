@@ -1,3 +1,7 @@
+## Root direct continuation: action-record chain integration (2026-10-10 UTC)
+
+The recovered execution layer now calls the resource action-record implementations directly. The chain writes real record metadata and target lists, including linked-member flags and extra-target deduplication, instead of stopping at mocked emission callbacks. The four affected opcode/execution fixtures pass; their remaining synthetic record-array initialization is explicitly isolated. Guest allocation/reset, command configuration and finalization services are still unvalidated boundaries, and there is no native gameplay claim.
+
 ## Root direct continuation: battle resource action records (2026-10-10 UTC)
 
 Four lower-level resource action-record routines now have logical implementations. They write record metadata, append target IDs, preserve prior-record flags, insert linked members and deduplicate additional targets. A compact synthetic fixture passes. Array initialization, command configuration and finalization remain service boundaries; integration into the execution-layer emission calls is pending, with no native gameplay claim.

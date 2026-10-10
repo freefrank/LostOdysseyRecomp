@@ -3,11 +3,18 @@
 #undef main
 #include "lo_semantics/battle_script_actions61.h"
 #include <iostream>
+#include "battle_action_record_fixture.h"
 struct ActionsGuest final : manager_release_context61::GuestServices {
   unsigned mode = 4, predicate = 0, invoked = 0, reset = 0, effects = 0,
            ready = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82ab31e0 || e == 0x82ab2d88) {
+      InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
+      return;
+    }
+    if (e == 0x82af68d8)
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
@@ -38,14 +45,14 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acee70)
       return;
-    if (e == 0x82ab36c8 || e == 0x82ab38f0) {
-      if (unsigned(s.r[4]) == 0xffffffff)
-        return;
-      if (s.r[3] != 0x80000 || s.r[4] != 0 || s.r[5] != 9 || s.r[6] != 24)
-        throw std::runtime_error("action emission arguments");
+    if (e == 0x82ab0d50) {
+      if (s.r[3] != 0x80000 || s.r[4] != 0 || s.r[5] != 9)
+        throw std::runtime_error("action configuration arguments");
       ++invoked;
       return;
     }
+    if (e == 0x82b1f1d0)
+      return;
     if (e == 0x82ac3118) {
       ++reset;
       return;
@@ -71,6 +78,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83245000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
     test::GuestWindow w(regions);
@@ -82,6 +90,10 @@ int main() {
                        code = 0x64000, vars = 0x65000, resource = 0x80000;
     m.WriteU32(owner + 24, actor);
     m.WriteU32(owner + 44, state);
+    m.WriteU32(0x832c9c54 + 44, state);
+    m.WriteU32(state + 4, actor);
+    m.WriteU32(state + 12, 1);
+    m.WriteU32(actor + 8, 24);
     m.WriteU32(state + 4, actor);
     m.WriteU32(state + 12, 1);
     m.WriteU32(actor, 7);

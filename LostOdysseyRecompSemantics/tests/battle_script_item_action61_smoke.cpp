@@ -3,6 +3,7 @@
 #undef main
 #include "lo_semantics/battle_script_item_action61.h"
 #include <iostream>
+#include "battle_action_record_fixture.h"
 struct ItemGuest final : manager_release_context61::GuestServices {
   unsigned selected = 0, prepared = 0, executed = 0, last = 0, random = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
@@ -15,6 +16,12 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
+    if (e == 0x82ab31e0 || e == 0x82ab2d88) {
+      InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
+      return;
+    }
+    if (e == 0x82af68d8)
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
@@ -29,22 +36,22 @@ struct ItemGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acee70)
       return;
-    if (e == 0x82ab36c8 || e == 0x82ab38f0) {
-      if (unsigned(s.r[4]) == 0xffffffff)
-        return;
+    if (e == 0x82ab0d50) {
       if (s.r[3] != 0x80000 || s.r[4] != 11)
-        throw std::runtime_error("item emission ABI");
+        throw std::runtime_error("item configuration ABI");
       selected = unsigned(s.r[5]);
       if (selected)
         ++prepared;
       ++executed;
       auto mode = m.ReadU32(0x62000 + 60);
-      last = e == 0x82ab36c8 ? 0x82b00698 : mode == 2 ? 0x82afdcf0 : 0x82afdb90;
+      last = s.r[6] == 0 ? 0x82b00698 : mode == 2 ? 0x82afdcf0 : 0x82afdb90;
       return;
     }
+    if (e == 0x82b1f1d0)
+      return;
     throw std::runtime_error("unexpected item service");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
+  void CallIndirect(GuestAddress, GuestMemory &m,
                     manager_release_context61::Registers &) override {
     throw std::runtime_error("unexpected item indirect");
   }
@@ -56,6 +63,7 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x83245000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -66,6 +74,10 @@ int main() {
                        table = 0xa0000;
     m.WriteU32(owner + 24, actor);
     m.WriteU32(owner + 44, state);
+    m.WriteU32(0x832c9c54 + 44, state);
+    m.WriteU32(state + 4, actor);
+    m.WriteU32(state + 12, 1);
+    m.WriteU32(actor + 8, 24);
     m.WriteU32(actor + 36, code);
     m.WriteU32(actor + 12, vars);
     m.WriteU32(actor + 4, resource);

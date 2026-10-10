@@ -2,14 +2,11 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_script_execution61.h"
+#include "battle_action_record_fixture.h"
 #include <iostream>
 struct ExecutionGuest final : manager_release_context61::GuestServices {
-  struct Event {
-    unsigned entry, a, b, c, index;
-  };
-  std::vector<Event> events;
-  unsigned predicate = 0, overrides = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  unsigned predicate = 0, configured = 0, finalized = 0;
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
@@ -29,18 +26,20 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acee70)
       return;
-    if (e == 0x82afde70) {
-      if (s.r[3] != 0x60000 || s.r[4] != 77 || s.r[5] != 0)
-        throw std::runtime_error("override preparation");
-      ++overrides;
+    if (e == 0x82ab31e0 || e == 0x82ab2d88) {
+      InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
       return;
     }
-    if (e == 0x82ab36c8 || e == 0x82ab38f0 || e == 0x82ab0b28 ||
-        e == 0x82ab0b98) {
+    if (e == 0x82ab0d50) {
       if (s.r[3] != 0x80000)
-        throw std::runtime_error("execution resource");
-      events.push_back({e, unsigned(s.r[4]), unsigned(s.r[5]), unsigned(s.r[6]),
-                        unsigned(s.r[7])});
+        throw std::runtime_error("execution configuration resource");
+      ++configured;
+      return;
+    }
+    if (e == 0x82af68d8)
+      return;
+    if (e == 0x82b1f1d0) {
+      ++finalized;
       return;
     }
     throw std::runtime_error("unexpected execution service");
@@ -57,15 +56,17 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
     ExecutionGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
-                       resource = 0x80000;
+                       resource = 0x80000, record = 0x100000;
     m.WriteU32(owner + 24, actor);
     m.WriteU32(owner + 44, state);
+    m.WriteU32(0x832c9c54 + 44, state);
     m.WriteU32(actor + 4, resource);
     m.WriteU32(actor + 8, 24);
     m.WriteU32(actor + 80, 0x64000);
@@ -82,10 +83,9 @@ int main() {
     }
     auto check = [](bool b) {
       if (!b)
-        throw std::runtime_error("execution result");
+        throw std::runtime_error("execution chain result");
     };
     auto run = [&](unsigned entry, unsigned a, unsigned b) {
-      guest.events.clear();
       s.r[3] = owner;
       s.r[4] = a;
       s.r[5] = b;
@@ -93,13 +93,13 @@ int main() {
       check(s.r[1] == initial.r[1] && s.r[24] == initial.r[24] &&
             s.r[31] == initial.r[31]);
     };
-    m.WriteU32(actor + 96, 4);
     run(0x82b00698, 1, 9);
-    check(guest.events.size() == 3 && guest.events[0].a == 1 &&
-          guest.events[0].b == 0 && guest.events[0].c == 25 &&
-          guest.events[0].index == 4 && guest.events[1].a == 0xffffffff &&
-          guest.events[1].c == 26 && guest.events[2].c == 0xffffffff &&
-          m.ReadU32(actor + 100) == 10 && m.ReadU32(actor + 96) == 5);
+    check(m.ReadU32(record) == 1 && m.ReadU32(record + 4) == 0 &&
+          m.ReadU32(record + 14884) == 25 &&
+          m.ReadU32(record + 14884 + 464) == 26 &&
+          m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 100) == 10 &&
+          m.ReadU32(actor + 96) == 1 && guest.finalized == 1);
+    m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 300, 7);
     m.WriteU32(actor + 304, 8);
     m.WriteU32(actor + 308, 13);
@@ -108,43 +108,57 @@ int main() {
     m.WriteU8(0x65000, 25);
     m.WriteU8(0x65001, 26);
     run(0x82b00698, 2, 3);
-    check(m.ReadU32(actor + 84) == 2 && guest.events[0].a == 7 &&
-          guest.events[0].b == 8 && m.ReadU32(actor + 88) == 7);
+    check(m.ReadU32(record) == 7 && m.ReadU32(record + 4) == 8 &&
+          m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 88) == 7);
     m.WriteU32(actor + 300, 0);
+    m.WriteU32(actor + 96, 0);
     guest.predicate = 1;
     run(0x82b00698, 7, 8);
-    check(guest.events.size() == 2 && guest.events[0].a == 0 &&
-          guest.events[0].c == 24);
-    auto busy = m.ReadU32(actor + 96);
+    check(m.ReadU32(record) == 0 && m.ReadU32(record + 14884) == 24 &&
+          m.ReadU32(record + 16) == 1);
+    auto busy = m.ReadU32(actor + 96), configured = guest.configured;
     run(0x82afdcf0, 7, 8);
-    check(guest.events.empty() && m.ReadU32(actor + 96) == busy);
+    check(guest.configured == configured && m.ReadU32(actor + 96) == busy);
     guest.predicate = 0;
+    m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 64, 0x01000000);
+    auto finalized = guest.finalized;
     run(0x82afdcf0, 7, 8);
-    check(guest.events.size() == 2 && m.ReadU32(actor + 96) == busy + 1);
-    busy = m.ReadU32(actor + 96);
+    check(m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 96) == 1 &&
+          guest.finalized == finalized && (m.ReadU32(actor + 64) & 96) == 96);
+    m.WriteU32(actor + 96, 0);
     run(0x82afdb90, 7, 8);
-    check(guest.events.size() == 3 && guest.events.back().c == 0xffffffff &&
-          m.ReadU32(actor + 96) == busy);
-    // Ordered membership scans are single-pass; a later order-1 member does not
-    // revisit order-2.
+    check(m.ReadU32(record + 16) == 2 && !m.ReadU32(actor + 96) &&
+          guest.finalized == finalized + 1);
+    // Ordered membership remains single-pass: order 2 preceding order 1 is not
+    // revisited.
+    InitializeActionRecordFixture(m, resource, true);
+    m.WriteU32(record + 36, 24);
     m.WriteU32(resource + 212, 5);
     m.WriteU32(0x90000 + 212, 5);
     m.WriteU32(0x90000 + 216, 2);
     m.WriteU32(0xa0000 + 212, 5);
     m.WriteU32(0xa0000 + 216, 1);
     m.WriteU32(actor + 84, 0);
-    run(0x82afd970, 6, 0);
-    check(guest.events.size() == 1 && guest.events[0].entry == 0x82ab0b28 &&
-          guest.events[0].a == 26 && guest.events[0].b == 6);
+    run(0x82afd970, 0, 0);
+    check(m.ReadU32(record + 36 + 464) == 26 &&
+          m.ReadU32(record + 36 + 928) == 0xffffffff &&
+          (m.ReadU32(record + 248 + 464) & 0x80000000));
+    InitializeActionRecordFixture(m, resource, true);
+    m.WriteU32(record + 36, 24);
+    m.WriteU32(record + 14884, 25);
+    m.WriteU32(record + 20, 1);
+    m.WriteU32(record + 16, 1);
     m.WriteU32(resource + 212, 0);
     for (unsigned p : {resource, 0x90000u, 0xa0000u})
       m.WriteU32(p + 204, 4);
     m.WriteU32(actor + 84, 1);
-    run(0x82afd970, 7, 0);
-    check(guest.events.size() == 4 && guest.events[0].a == 25 &&
-          guest.events[1].a == 26 && guest.events[2].entry == 0x82ab0b98 &&
-          guest.events[2].a == 24 && guest.events[3].a == 26);
+    run(0x82afd970, 0, 0);
+    check(m.ReadU32(record + 36 + 464) == 25 &&
+          m.ReadU32(record + 36 + 928) == 26 &&
+          m.ReadU32(record + 14884 + 464) == 24 &&
+          m.ReadU32(record + 14884 + 928) == 26 &&
+          m.ReadU32(record + 20) == 3 && m.ReadU32(record + 16) == 1);
     m.WriteU32(actor + 64, 0x2000);
     auto stock = state + 4 * (2065 + 77 + 50);
     m.WriteU32(stock, 1);

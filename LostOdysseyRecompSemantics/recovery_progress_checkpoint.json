@@ -2212,7 +2212,7 @@
           "82AB0B98"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One compact fixture covers both action record writers, first and subsequent targets, inherited record flags, actor mode metadata, alternate action flags, first-free linked member insertion, deduplicated additional targets and termination callbacks. Array reset/growth, command configuration and finalization remain service boundaries. The model is compiled and independently validated; replacing execution-layer emission boundaries is the next integration step. Native gameplay is unvalidated. Logical/ABI only"
+        "validation": "The recovered execution layer now calls the resource action-record implementations directly. The chain writes real record metadata and target lists, including linked-member flags and extra-target deduplication, instead of stopping at mocked emission callbacks. The four affected opcode/execution fixtures pass; their remaining synthetic record-array initialization is explicitly isolated. Guest allocation/reset, command configuration and finalization services are still unvalidated boundaries, and there is no native gameplay claim."
       }
     ]
   },

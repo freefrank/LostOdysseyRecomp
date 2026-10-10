@@ -3,6 +3,7 @@
 #undef main
 #include "lo_semantics/battle_script_marshaling61.h"
 #include <iostream>
+#include "battle_action_record_fixture.h"
 struct MarshalGuest final : manager_release_context61::GuestServices {
   unsigned prepared = 0, executed = 0, picker = 0, ok = 1, kind = 0, detail = 0,
            labels = 0, flags = 0;
@@ -12,6 +13,12 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       if (!good)
         throw std::runtime_error("marshaling service ABI " + std::to_string(e));
     };
+    if (e == 0x82ab31e0 || e == 0x82ab2d88) {
+      InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
+      return;
+    }
+    if (e == 0x82af68d8)
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
@@ -57,8 +64,9 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
-    if (e == 0x82ab36c8) {
-      fail(s.r[3] == 0x80000 && !m.ReadU32(0x80000 + 14680));
+    if (e == 0x82ab0d50)
+      return;
+    if (e == 0x82b1f1d0) {
       kind = m.ReadU32(0x62000 + 88);
       detail = m.ReadU32(0x62000 + 92);
       return;
@@ -92,7 +100,7 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("unexpected marshaling service");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
+  void CallIndirect(GuestAddress, GuestMemory &m,
                     manager_release_context61::Registers &) override {
     throw std::runtime_error("unexpected indirect");
   }
@@ -115,9 +123,14 @@ int main() {
                        code = 0x64000, vars = 0x65000;
     m.WriteU32(owner + 24, actor);
     m.WriteU32(owner + 44, state);
+    m.WriteU32(0x832c9c54 + 44, state);
+    m.WriteU32(state + 4, actor);
+    m.WriteU32(state + 12, 1);
+    m.WriteU32(actor + 8, 24);
     m.WriteU32(actor + 36, code);
     m.WriteU32(actor + 12, vars);
     m.WriteU32(actor + 4, 0x80000);
+    m.WriteU32(0x80000 + 64, 24);
     m.WriteU32(actor + 80, 0x66000);
     m.WriteU32(actor + 84, 1);
     m.WriteU8(0x66000, 24);
@@ -178,6 +191,7 @@ int main() {
     op(0x82b00d08);
     check(!m.ReadU32(vars + 4) && guest.executed == executions);
     m.WriteU32(actor + 4, 0x80000);
+    m.WriteU32(0x80000 + 64, 24);
     m.WriteU32(actor + 80, 0x66000);
     m.WriteU32(actor + 84, 1);
     m.WriteU8(0x66000, 24);
