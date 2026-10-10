@@ -1,3 +1,7 @@
+## Root direct continuation: battle script lifetime and timing (2026-10-10 UTC)
+
+Battle script storage initialization/release, per-frame integer tick updates and the timed-wait opcode are recovered. The original integer conversion still yields zero ticks at 120 Hz; this semantic layer preserves that behavior rather than silently incorporating a new timing fix. The diagnostic/step boundary retains LR 8238AD64 and f31 so the existing fractional-tick hook can recognize its caller. Synthetic checks cover lifecycle ownership, first-frame gating, wait transitions and actor update selection. Parameter evaluation, diagnostics and actor sub-updates remain guest services; no full interpreter or gameplay acceptance is claimed.
+
 ## Root direct continuation: DLC overlay registration (2026-10-10 UTC)
 
 DLC index registration now composes the resident loader, reuses vacant pointer slots or appends segmented storage, and rebuilds the stable descending priority order from owner+340. A synthetic three-owner case, hole reuse and segment growth pass. Path formatting and runtime file/lock/allocation services remain guest boundaries. The original nonzero loader-result insertion gate is preserved, even though its final return requires result 1; failure-path insertion has not been fixture-tested.

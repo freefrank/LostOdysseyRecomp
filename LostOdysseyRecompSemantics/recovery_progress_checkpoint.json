@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 165,
-    "distinct_entries": 520,
+    "unit_count": 166,
+    "distinct_entries": 524,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1718,6 +1718,17 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture checks DLC index loading and insertion, vacant-slot reuse, stable descending unsigned priority ordering and segmented append growth. Guest path formatting, allocator and file/lock services remain boundaries. The source nonzero loader-result insertion gate, including negative failure results, is preserved but not exercised by the fixture. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script61",
+        "entries": [
+          "82A9DBB8",
+          "82A9E3B8",
+          "82A9BF40",
+          "8238ACC8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused synthetic fixture checks initialization ownership, inactive release refusal, first-update gate, original 120-Hz truncation and 30-Hz integer ticks, timed-wait initialization/zero/negative transitions, actor update selection, full cleanup and stack/f31 restoration. The 8238AE08 call keeps LR 8238AD64 and live f31 for the existing timer hook. Parameter evaluation, diagnostics and actor sub-updates remain guest boundaries; the full script interpreter and gameplay timing fix are not claimed. Logical/ABI only"
       }
     ]
   },
