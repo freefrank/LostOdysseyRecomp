@@ -7668,6 +7668,24 @@
       ],
       "source_lines": [],
       "record_type": "backlog"
+    },
+    {
+      "key": "loading-and-save-speed-2026-10-10",
+      "title": "Faster loading, and fewer steps when saving and loading",
+      "body": "<!-- lo-project:loading-and-save-speed-2026-10-10 -->\n\n## Summary and objectives\n\nMaintainer requirement, 2026-10-10 (Chinese, quoted): \"加需求，提升loading的速度，目前游戏loading的速度似乎还是xbox360时代的速度，还有存档读档也有一堆没必要的冗余设计。\" Speed up game loading, which still feels like Xbox 360 speed, and remove the unnecessary redundant steps in saving and loading.\n\n## Scope and completion criteria\n\n- [ ] Measure first: wall time and its breakdown (guest sleeps/waits, file reads, CPU, GPU work) for title Continue, field-to-field transitions, battle entry/exit, and in-game save/load.\n- [ ] Cut the dominant waits on the loading path without changing game logic or breaking streaming.\n- [ ] List every save/load screen and dialog with its cost; the maintainer picks which to drop or skip.\n- [ ] Keep save durability (one sync point per save) and the original save format.\n- [ ] Before/after timings on the same scenes and host.\n\n## Status — 2026-10-10\n\nRequested by the maintainer; measurement started (host file I/O and XAM content calls already complete immediately, so the time is in the game's own logic).\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Loading and saves",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Release": null,
+        "Evidence": "Maintainer requirement of 2026-10-10 (Chinese): speed up loading, which still feels like Xbox 360 speed, and remove redundant steps in saving and loading. Requested; measurement started. Host file I/O and XAM content calls already complete immediately, so the time is in the game's own logic. No timings, fix, validation or acceptance yet.",
+        "Source key": "loading-and-save-speed-2026-10-10"
+      },
+      "source_refs": [],
+      "source_lines": [],
+      "record_type": "backlog"
     }
   ]
 }

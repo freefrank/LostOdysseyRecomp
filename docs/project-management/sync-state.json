@@ -4227,6 +4227,19 @@
       },
       "title": "Publish the 5.1 fix, Matrix surround, language packs and Mods in v0.9.22",
       "body_sha256": "d319c8694e005f6c6825c384315e2f1ff0d742667630d3dd63b230d236729045"
+    },
+    "loading-and-save-speed-2026-10-10": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_0EEg",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Loading and saves",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Evidence": "Maintainer requirement of 2026-10-10 (Chinese): speed up loading, which still feels like Xbox 360 speed, and remove redundant steps in saving and loading. Requested; measurement started. Host file I/O and XAM content calls already complete immediately, so the time is in the game's own logic. No timings, fix, validation or acceptance yet.",
+        "Source key": "loading-and-save-speed-2026-10-10"
+      },
+      "title": "Faster loading, and fewer steps when saving and loading",
+      "body_sha256": "a7ad8a20fe32e0eb0406de3e9a897f25fb390b42c6a64f16de0a47769d46cdc8"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
