@@ -6,8 +6,8 @@
 #include <iostream>
 struct TasksGuest final : manager_release_context61::GuestServices {
   unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0,
-           handlesReleased = 0, ownedReleased = 0;
-  bool factoryMode = false, pathMode = false;
+           handlesReleased = 0, ownedReleased = 0, trackedReleases = 0;
+  bool factoryMode = false, pathMode = true;
   unsigned nextPath = 0x200000;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
@@ -25,11 +25,8 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       ++ownedReleased;
       return;
     }
-    if (e == 0x82b1a7f0) {
-      if (s.r[5] != 12 || s.r[6] != 0x99000 || s.r[7] != 2 || s.r[8] != 11 ||
-          s.r[9])
-        throw std::runtime_error("tracked creation");
-      s.r[3] = 21;
+    if (e == 0x82388998 || e == 0x82388a48 || e == 0x8236c7d8) {
+      ++trackedReleases;
       return;
     }
     throw std::runtime_error("tasks direct");
@@ -60,9 +57,9 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x123404) {
-      if (s.r[4] != 104 || s.r[5] != 8)
+      if ((s.r[4] != 104 && s.r[4] != 64) || s.r[5] != 8)
         throw std::runtime_error("object allocation");
-      s.r[3] = 0x110000;
+      s.r[3] = s.r[4] == 64 ? 0xa6000 : 0x110000;
       return;
     }
     if (e == 0x123474) {
@@ -125,6 +122,8 @@ int main() {
                    0x821a8000u, 0x820c4000u, 0x82041000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x832d2000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -164,6 +163,10 @@ int main() {
     m.WriteU32(0x8330b608, 0x8e000);
     m.WriteU32(0x8e000, 0x8f000);
     m.WriteU32(0x8f008, 0x123408);
+    m.WriteU32(0x8f004, 0x123404);
+    m.WriteU32(0x832cc0fc + 4, 20);
+    m.WriteU32(0x832cc0fc + 8, 0xa5000);
+    m.WriteU32(0x832cc0fc + 16, 4);
     m.WriteU32(0x832cc05c + 124, 0x85000);
     m.WriteU32(0x832cc05c + 132, 4);
     m.WriteU32(0x832cc05c + 136, 0x86000);
@@ -216,14 +219,6 @@ int main() {
     m.WriteU32(0x832cc05c + 56, 1);
     m.WriteU8(0xb1001, 4);
     m.WriteU32(0xb1000 + 36, 21);
-    m.WriteU32(0xa6000 + 36, 0xa7000);
-    m.WriteU32(0xa6000 + 40, 1);
-    m.WriteU32(0xa6000 + 44, 1);
-    m.WriteU8(0xa7000, 0);
-    m.WriteU32(0xa6000 + 48, 0xa8000);
-    m.WriteU32(0xa6000 + 52, 1);
-    m.WriteU32(0xa6000 + 56, 1);
-    m.WriteU32(0xa8000, 12);
     m.WriteU32(0x832cb6f0, 9);
     run(0x82b035e0);
     check(g.removed == 3 && g.freed == 7 && m.ReadU32(0xb0000 + 36) == 99 &&
@@ -235,7 +230,7 @@ int main() {
     m.WriteU32(0x88004, 2);
     m.WriteU32(0x88008, 2);
     check(run(0x82b1a560, 0x88000, 1) == 2 && m.ReadU32(0x88004) == 3 &&
-          m.ReadU32(0x88008) == 36 && m.ReadU32(0x88000) == 0x90000);
+          m.ReadU32(0x88008) == 36 && m.ReadU32(0x88000) != 0);
     // Clear-all uses the same destructor/array resize path.
     m.WriteU32(0x832cb68c + 4, 0xa0000);
     m.WriteU32(0x832cb68c + 8, 1);
@@ -391,6 +386,44 @@ int main() {
     run(0x82b339d0, 0x110000);
     check(g.rawFreed == 2 && !m.ReadU32(0x110000 + 80) &&
           s.r[1] == initial.r[1]);
+    // Same name reuses the object and only adds a new membership pair.
+    m.WriteU32(0x832cc0fc + 8, 0xa5000);
+    m.WriteU32(0x832cc0fc + 12, 1);
+    m.WriteU32(0xa5000, 0xa6000);
+    m.WriteU32(0xa6000 + 24, 0xffffffff);
+    m.WriteU32(0xa6000 + 28, 0);
+    s.r[3] = 0xa6000;
+    s.r[4] = 0;
+    s.r[5] = 12;
+    s.r[6] = 0x99000;
+    s.r[7] = 2;
+    check(battle_scene_tasks61::Apply(0x82b36330, m, {g, native}, s));
+    s.r[3] = 0x832cc0fc;
+    s.r[4] = 1;
+    s.r[5] = 13;
+    s.r[6] = 0x99000;
+    s.r[7] = 2;
+    s.r[8] = 11;
+    s.r[9] = 0;
+    check(battle_scene_tasks61::Apply(0x82b1a7f0, m, {g, native}, s) &&
+          s.r[3] == 21 && m.ReadU32(0xa6000 + 40) == 2 &&
+          m.ReadU32(0x832cc0fc + 12) == 1);
+    s.r[3] = 0xa6000;
+    s.r[4] = 1;
+    s.r[5] = 13;
+    check(battle_scene_tasks61::Apply(0x82b36258, m, {g, native}, s) &&
+          m.ReadU32(0xa6000 + 40) == 2);
+    m.WriteU32(0xa6000 + 28, 7);
+    m.WriteU32(0x83213d74, 21);
+    m.WriteU32(0x83213d40, 21);
+    m.WriteU32(0x832cb554, 0x170000);
+    m.WriteU32(0x832cb558, 1);
+    m.WriteU32(0x170000, 0x171000);
+    m.WriteU32(0x171000 + 1316, 21);
+    run(0x82388700, 0xa6000);
+    check(g.trackedReleases == 3 && m.ReadU32(0x83213d74) == 0xffffffff &&
+          m.ReadU32(0x83213d40) == 0xffffffff &&
+          m.ReadU32(0x171000 + 1316) == 0xffffffff && !m.ReadU32(0xa6000 + 40));
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

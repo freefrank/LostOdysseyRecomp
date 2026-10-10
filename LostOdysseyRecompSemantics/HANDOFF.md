@@ -1,3 +1,7 @@
+## Root direct continuation: tracked scene factory (2026-10-10 UTC)
+
+Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance.
+
 ## Root direct continuation: task initialization (2026-10-10 UTC)
 
 Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed.
