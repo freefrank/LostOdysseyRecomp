@@ -10,6 +10,7 @@
 #include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_action_snapshot61.h"
 #include "lo_semantics/battle_action_storage61.h"
+#include "lo_semantics/battle_bootstrap61.h"
 #include "lo_semantics/battle_completion61.h"
 #include "lo_semantics/battle_effect_calculation61.h"
 #include "lo_semantics/battle_effect_execution61.h"
@@ -137,6 +138,13 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82a9b698u:
   case 0x82ab2d88u:
     return battle_action_storage61::Apply(entry, memory, dependencies, state);
+  case 0x822a7c58u:
+  case 0x82aab200u:
+  case 0x82ac1b90u:
+  case 0x82acd398u:
+  case 0x82ad1c88u:
+  case 0x82b08a30u:
+    return battle_bootstrap61::Apply(entry, memory, dependencies, state);
   case 0x82388b60u:
   case 0x82aad200u:
   case 0x82ab5768u:

@@ -1,3 +1,7 @@
+## Root direct continuation: battle initialization baselines (2026-10-10 UTC)
+
+Recovered battle manager baseline setup, position defaults, typed root lookup, small manager constructor and stats workspace reset. Manager setup composes real profile casting, releases two existing list buffers, reconnects embedded list headers and establishes source defaults. Focused fixture checks type success/failure, release ABI, workspace slots, descriptor defaults and untouched padding. Public synthetic inputs only; library builds without gameplay or full ABI acceptance.
+
 ## Root direct continuation: group construction and party rebuild (2026-10-10 UTC)
 
 Recovered two-group construction AF60D8, shared profile restore ABFDD8 and party rebuild wrapper AF63E0. Rebuild now composes real group creation, party resource population and formation selection. Preserved typed object services, list capacity growth and paired shared-profile copy ranges. Focused fixture checks two objects, array resize, all shared bytes and empty-party rebuild composition. Object allocation remains external; logical ABI coverage only, not gameplay acceptance.
