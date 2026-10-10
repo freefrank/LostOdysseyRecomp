@@ -50,7 +50,7 @@ enabled=true
 
 `api_version=1` is mandatory. ID defaults to the directory name and must contain 1-128 ASCII letters, digits, `.`, `_` or `-`, excluding `.` and `..`. Priority defaults to zero and is a signed 32-bit integer. Enabled defaults to true; accepted values are `true`, `false`, `1`, `0`. Unknown/duplicate/invalid metadata rejects the manifest. Disabled mods do not participate. Enabled duplicate IDs reject the later directory.
 
-Resource kinds are `image`, `font`, `model`, `movie`. Invalid resource lines are diagnosed and skipped. Payload paths are relative to the mod directory and may not be absolute or contain `..`. Containment is checked on the path as written, not after symlink resolution, so symlinked mod folders and a manager's virtual file system work. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod.
+Resource kinds are `image`, `font`, `model`, `movie`, `texture` and `text`. Invalid resource lines are diagnosed and skipped. Payload paths are relative to the mod directory and may not be absolute or contain `..`. Containment is checked on the path as written, not after symlink resolution, so symlinked mod folders and a manager's virtual file system work. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod.
 
 Higher priority wins. Equal priority uses the lexically later directory in UTF-8 byte order. Within the same manifest, the last declaration of an identity wins. These priorities do not override a merged overlay.
 
@@ -125,6 +125,21 @@ Type 2 stores a complete DDS file with block-compressed levels:
 The game replaces only uploads it can match safely. These are tiled 2D base levels in the formats above, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced. Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
 
 Replacement files are read on a background thread. A texture shows the original until its file has been read, usually a few frames later, and then switches to the replacement. `LO_MODS_TEXTURE_SYNC=1` reads each file during the upload instead, so the replacement shows in the first frame but large files on a slow disk stall the game.
+
+## Text (language packs)
+
+Translations replace the game's text file by file, by **key**, in the JSON files `--export-assets` writes (`--export-kinds text`).
+
+- Identity: `AssetKind::Text` (6). The key is the archive member path as `text/index.csv` lists it: lower case with `/`, for example `bin/xenon/loc/int/menu/menu_int.dat`.
+- Overlay path: `overlay/text/<member path>.json`, the export's `text/` folder placed under `overlay/`.
+- Standalone manifest line: `text:<member path>=text/<member path>.json`.
+- Modes and precedence follow the image rules; one file per member path wins.
+- File: a UTF-8 JSON object of strings, `{"<key>": "<text>"}`, with the export's keys. Keys left out keep the original text; keys the game file does not have are counted in the log. Keep the tokens (`{E001}`, `{E10D:0500}`, …) in place. A translation may be longer than the original. Subtitle, credits and engine (Coalesced) lines may not contain line breaks; menu, name and description strings may not contain `{0000}`.
+- Keys name the place that shows a string (a text ID such as `id.9104`, a record field, a message index, a line), so places that share one string in the original can be translated differently.
+
+When the game opens an archive or index of a disc or DLC folder, every translated text file of that folder is rebuilt with its translation and served from memory, and the index points the game at the rebuilt copies. DLC copies of a file (for example `namedata.bin` with DLC installed) take the same translation file. Changes need a restart. The log reports `[mods] text: N translated files in <folder> (F failed, K keys not in their file)`; a file that fails keeps its original text.
+
+Text has to use characters the game's font for that language has. The English (`int`) fonts cover ASCII and Latin-1 except `¤¥¦§¬¯±µ¶·¸¼½¾Ð×Þð÷þÿ`, plus `Œœ–—―‘’‚“”„…‹›€™←→∞★☆♪`. The credits font lacks `–`.
 
 ## Trusted providers and future consumers
 

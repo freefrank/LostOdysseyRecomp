@@ -36,7 +36,7 @@ my-export/text/index.csv            path,language,format,source,entries,round_tr
 my-export/export-summary.txt
 ```
 
-Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. Importing translated text is planned ([#369](https://github.com/freefrank/LostOdysseyRecomp/issues/369)); the export is the starting point. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
+Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. See [1e](#1e-translate-the-games-text-experimental) for putting translations back into the game. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
 
 `index.csv` holds the mod key of every texture, so no catalog is needed. Select one texture and copy its PNG into a new mod:
 
@@ -95,6 +95,15 @@ python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv
 - `lo_mod.py inspect <file>` prints and validates a `.lotex2` header.
 
 The default `--payload rgba8` stores uncompressed pixels, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. DDS payloads are about 4 to 8 times smaller on disk and in video memory than RGBA8 (and a full mip chain adds only a third), so a 4x upscale of the textures used in one play session shrinks from about 1.9 GB to about 340 MB. Levels larger than about 72 MiB (above 4096x4096) are skipped for RGBA8. With Settings > System > Debug log on (or `LO_DEBUG_LOG=1`), the run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced; failures are always logged.
+
+## 1e. Translate the game's text (experimental)
+
+1. Export the text of your discs: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text` (or tick Text in the MO2 tool). Translate from the English files (`int` in the paths): they are the same in the Asia and USA/Europe editions, and their fonts have every Latin-1 letter.
+2. Copy the files you translate into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. With Mod Organizer 2, make a mod whose folder holds `overlay/text/...`. A standalone mod lists each file in its `mod.ini` instead: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
+3. Translate the values and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Leave out entries you do not translate: they stay in the original language.
+4. Start the game with the same language setting as the files you translated (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
+
+Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet, and a translation cannot yet be offered as its own language in Settings. See [Modding API](Modding-API#text-language-packs) for the file rules.
 
 ## 2. Prepare artwork and a specification
 
