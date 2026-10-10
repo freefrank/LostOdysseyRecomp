@@ -25,6 +25,11 @@ namespace apu
     // Matrix surround: where the surrounds are heard, 90-150 degrees from the
     // front (110 is Pro Logic II). Applied from the next frame.
     void SetMatrixRearAngle(uint32_t degrees);
+    // Voice volume, 0-100: the gain of the spoken-dialogue streams in place
+    // of the Sound effects volume they follow in the retail game
+    // (patches/voice_volume.cpp). Applied when the game next sets a volume.
+    void SetVoiceVolume(uint32_t percent);
+    uint32_t VoiceVolume();
     // Speaker test noise (test_signal.h) in place of the game's sound. Call
     // it every frame while the test should play; it stops by itself 0.3 s
     // after the last call with true.

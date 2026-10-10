@@ -32,6 +32,7 @@ namespace apu
         bool g_surroundOpen = false; // driver thread after Init
         std::atomic<bool> g_matrix{ false }; // matrix-encode the stereo frames
         std::atomic<uint32_t> g_matrixRear{ 110 };
+        std::atomic<uint32_t> g_voiceVolume{ 100 };
         // steady_clock time until which the speaker test plays
         std::atomic<std::chrono::steady_clock::rep> g_testSignalUntil{ 0 };
         std::atomic<float> g_testPosition{ -1.0f };
@@ -231,6 +232,16 @@ namespace apu
     void SetMatrixRearAngle(uint32_t degrees)
     {
         g_matrixRear = std::clamp(degrees, 90u, 150u);
+    }
+
+    void SetVoiceVolume(uint32_t percent)
+    {
+        g_voiceVolume = std::min(percent, 100u);
+    }
+
+    uint32_t VoiceVolume()
+    {
+        return g_voiceVolume.load(std::memory_order_relaxed);
     }
 
     void SetTestSignal(bool on)
