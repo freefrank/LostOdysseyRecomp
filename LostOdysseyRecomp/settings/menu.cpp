@@ -8,6 +8,7 @@
 #include <gpu/dlss_nr_state.h>
 #include "restart.h"
 #include "translations.h"
+#include "mods_page.h"
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
@@ -113,6 +114,17 @@ bool mainMenuRequested = false;
 bool importPrompt = false;
 int importChoice = 1;
 bool importLaunchPending = false;
+// Mods page (System → Mods). The mods are listed when it opens; the order and
+// switches stay unsaved until Save. modsSaved is the order saved in this run,
+// applied at the next start; reopening the page shows it.
+std::atomic<bool> modsOpen{false};
+std::vector<mods_page::Entry> modsEntries;
+mods_page::Order modsStart, modsRunning, modsSaved;
+bool modsSavedThisRun = false;
+int modsFocus = 0;
+bool modsDiscardPrompt = false;
+int modsDiscardChoice = 1;
+bool restartForMods = false;
 Config restartAfter;
 int tab = 0, row = 0;
 bool bypass = false, sawModal = false;
@@ -358,6 +370,107 @@ std::wstring Widen(std::string_view text)
             result.push_back(wchar_t(code));
     }
     return result;
+}
+std::wstring PathText(const std::filesystem::path &path)
+{
+    const auto utf8 = path.u8string();
+    return Widen(std::string_view(reinterpret_cast<const char *>(utf8.data()), utf8.size()));
+}
+void OpenModsPage()
+{
+    modsEntries = mods_page::FromList(modding::ListMods());
+    modsRunning = mods_page::SaveOrder(modsEntries);
+    if (modsSavedThisRun) mods_page::ApplyOrder(modsEntries, modsSaved);
+    modsStart = mods_page::SaveOrder(modsEntries);
+    modsFocus = 0;
+    modsDiscardPrompt = false;
+    status.clear();
+    modsOpen = true;
+    LOG_INFO("settings: mods page opened ({} mods, {} entries)", modsStart.size(), modsEntries.size());
+}
+void CloseModsPage()
+{
+    modsOpen = false;
+    modsDiscardPrompt = false;
+    modsEntries.clear();
+    status.clear();
+}
+// A mod row: name, then version and author (or a mark for a mod.ini problem),
+// then on / off. Rejected mods and mods off in mod.ini have one inert cell.
+Row ModRow(const mods_page::Entry &entry)
+{
+    const auto &info = entry.info;
+    Row row{mods_page::Shorten(Widen(info.name.empty() ? info.id : info.name), 24), {}, true, {}, 0};
+    if (!mods_page::IsMod(entry))
+    {
+        row.detail = Tr(L"Language pack: ", L"語言包：") + mods_page::BaseLanguageName(info.base);
+        return row;
+    }
+    // Separators the menu font has (no "·"), so the line keeps that font.
+    std::wstring detail = Widen(info.version);
+    if (!info.author.empty()) detail += (detail.empty() ? L"" : L" - ") + Widen(info.author);
+    if (detail.empty()) detail = info.name.empty() ? L"—" : Widen(info.id);
+    if (info.apiVersion == 0 || !info.manifestEnabled || !info.problems.empty()) detail = L"! " + detail;
+    row.detail = mods_page::Shorten(detail, 34);
+    if (info.apiVersion == 0 || !info.manifestEnabled)
+    {
+        row.choices = {info.apiVersion == 0 ? Tr(L"Error", L"錯誤") : Tr(L"mod.ini: Off", L"mod.ini：關")};
+        row.enabled = false;
+    }
+    else
+    {
+        row.choices = {Tr(L"On", L"開"), Tr(L"Off", L"關")};
+        row.selectedChoice = entry.on ? 0 : 1;
+    }
+    row.value = row.choices[size_t(row.selectedChoice)];
+    return row;
+}
+// Help for the focused Mods page row: what it is (line 1) and where (line 2).
+std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
+{
+    const std::wstring folder = PathText(modding::Root());
+    if (modsFocus == rows.empty)
+        return {modding::Enabled()
+                    ? Tr(L"Put each mod in its own folder inside the mods folder, then restart the game.",
+                         L"將每個 Mod 放在 mods 資料夾中各自的資料夾內，然後重新啟動遊戲。")
+                    : Tr(L"Mods are turned off for this run (LO_MODS=0 or an invalid --mods-mode).",
+                         L"本次執行已停用 Mod（LO_MODS=0 或 --mods-mode 無效）。"),
+                folder};
+    if (modsFocus == rows.open)
+        return {Tr(L"Opens the mods folder in File Explorer.", L"在檔案總管中開啟 mods 資料夾。"), folder};
+    if (modsFocus == rows.save)
+        return {Tr(L"Saves the order and the switches. They apply after the game restarts.",
+                   L"儲存順序與開關。重新啟動遊戲後生效。"),
+                Tr(L"When two mods change the same file, the one higher in the list wins.",
+                   L"兩個 Mod 修改同一個檔案時，清單中較上方的優先。")};
+    const int index = rows.EntryAt(modsFocus, modsEntries.size());
+    if (index < 0) return {};
+    const auto &info = modsEntries[size_t(index)].info;
+    const std::wstring problem = info.problems.empty() ? std::wstring{}
+                                                       : mods_page::Shorten(Widen(info.problems.front().message), 100);
+    std::wstring help;
+    if (!mods_page::IsMod(modsEntries[size_t(index)]))
+        help = !problem.empty() ? Tr(L"Problem: ", L"問題：") + problem
+                                : Tr(L"A language pack. Choose it in System → Game language.",
+                                     L"語言包。請在 系統 → 遊戲語言 中選擇。");
+    else if (modding::Mode() == modding::ResolutionMode::Overlay)
+        help = Tr(L"Mod folders are not used: the game was started with --mods-mode overlay.",
+                  L"遊戲以 --mods-mode overlay 啟動，不使用 Mod 資料夾。");
+    else if (info.apiVersion == 0)
+        help = Tr(L"Not loaded: ", L"未載入：") + problem;
+    else if (!info.manifestEnabled)
+        help = Tr(L"Its mod.ini turns it off (enabled=false).", L"它的 mod.ini 已將其關閉（enabled=false）。");
+    else if (!problem.empty())
+        help = Tr(L"Problem: ", L"問題：") + problem;
+    else
+        help = info.description.empty() ? std::wstring(Tr(L"No description.", L"沒有說明。"))
+                                        : mods_page::Shorten(Widen(info.description), 110);
+    std::wstring where = Tr(L"Folder: ", L"資料夾：") + PathText(info.folder.filename());
+    if (info.active && info.overlayFiles)
+        where += L"     " + (Tr(L"Overlay files: ", L"overlay 檔案：") + std::to_wstring(info.overlayFiles));
+    if (info.active && info.manifestEntries)
+        where += L"     " + (Tr(L"mod.ini entries: ", L"mod.ini 項目：") + std::to_wstring(info.manifestEntries));
+    return {help, where};
 }
 // Menu choice 0 is Automatic; choice i names[i - 1]. A saved name that is not
 // listed stays as the last choice, so the row shows the saved value.
@@ -812,7 +925,7 @@ void Publish(uint8_t *base, uint32_t config)
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
-    next.row = row;
+    next.row = modsOpen ? modsFocus : row;
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -840,7 +953,36 @@ void Publish(uint8_t *base, uint32_t config)
     auto onOff = [&]() {
         return std::vector<std::wstring>{Tr(L"On", L"開"), Tr(L"Off", L"關")};
     };
-    if (tab == 0)
+    const auto modsRows = mods_page::Layout(modsEntries, mods_page::CanOpenFolder);
+    if (modsOpen)
+    {
+        next.pageTitle = Tr(L"Mods", L"Mod");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"B: on / off     LB / RB: move     Start: save     A: back",
+                 L"B：開 / 關     LB / RB：移動     Start：儲存     A：返回")
+            : Tr(L"A: on / off     LB / RB: move     Start: save     B: back",
+                 L"A：開 / 關     LB / RB：移動     Start：儲存     B：返回");
+        next.rows.resize(size_t(modsRows.count));
+        if (modsRows.empty >= 0)
+        {
+            std::wstring folder = PathText(modding::Root());
+            if (folder.size() > 52) folder = L"..." + folder.substr(folder.size() - 49);
+            next.rows[size_t(modsRows.empty)] = {modding::Enabled() ? Tr(L"No mods installed", L"未安裝 Mod")
+                                                                    : Tr(L"Mods are off", L"Mod 已停用"),
+                                                 {}, true, {}, 0};
+            next.rows[size_t(modsRows.empty)].detail = folder.empty() ? L"—" : folder;
+        }
+        for (size_t i = 0; i < modsEntries.size(); ++i)
+            next.rows[size_t(modsRows.first) + i] = ModRow(modsEntries[i]);
+        if (modsRows.open >= 0)
+            next.rows[size_t(modsRows.open)] = makeChoices(L"Open mods folder", L"開啟 mods 資料夾", {Tr(L"Open", L"開啟")}, 0);
+        if (modsRows.save >= 0)
+            next.rows[size_t(modsRows.save)] = makeChoices(L"Save mod list", L"儲存 Mod 清單", {Tr(L"Save", L"儲存")}, 0);
+        const int focused = modsRows.EntryAt(modsFocus, modsEntries.size());
+        next.reorder = focused >= 0 && mods_page::IsMod(modsEntries[size_t(focused)]) &&
+                       modsEntries[size_t(focused)].info.apiVersion != 0 && mods_page::ModCount(modsEntries) > 1;
+    }
+    else if (tab == 0)
     {
         addChoices(L"Text speed", L"文字速度", {Tr(L"Fast", L"快"), Tr(L"Normal", L"正常"),
                                                     Tr(L"Slow", L"慢")},
@@ -1078,6 +1220,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.push_back({os::log_collection::Label(edit.uiLanguage),
             !logUpload ? Tr(L"Windows only", L"僅限 Windows") : os::log_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"),
             logUpload, {}, 0});
+        addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
@@ -1085,15 +1228,15 @@ void Publish(uint8_t *base, uint32_t config)
     // so returning to a long list restores its position.
     if (tab >= 0 && tab < MenuTabCount)
     {
-        static int scrollByTab[MenuTabCount] = {};
+        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0;
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
             if (next.rows[i].hidden) continue;
-            if (int(i) <= row) visibleFocus = visibleCount;
+            if (int(i) <= next.row) visibleFocus = visibleCount;
             ++visibleCount;
         }
-        int &scroll = scrollByTab[tab];
+        int &scroll = modsOpen ? modsScroll : scrollByTab[tab];
         scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
         if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
@@ -1120,6 +1263,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemDebugLogRow)
         next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
                        L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
+    if (tab == 3 && row == SystemModsRow)
+        next.help = Tr(L"Turn installed mods on or off and change their order. Changes apply after a restart.",
+                       L"開關已安裝的 Mod 並調整順序。重新啟動後生效。");
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
@@ -1374,6 +1520,12 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         }
     }
+    std::pair<std::wstring, std::wstring> modsHelp;
+    if (modsOpen)
+    {
+        modsHelp = ModsHelp(modsRows);
+        next.help = modsHelp.first;
+    }
     if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
@@ -1382,6 +1534,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogMessage = restartSaveFailed
             ? Tr(L"Settings could not be saved. Check settings.ini permissions, then retry or cancel.",
                  L"無法儲存設定。請檢查 settings.ini 權限後重試或取消。")
+            : restartForMods ? Tr(L"Mod list saved. Restart now?", L"Mod 清單已儲存。立即重新啟動嗎？")
             : savedRestartPrompt && restartForFgProvider
                 ? edit.graphicsBackend == GraphicsBackend::Vulkan
                     ? Tr(L"Enabling or changing Vulkan frame generation requires a restart. Settings saved. Restart now?",
@@ -1396,6 +1549,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogMessage = restartSaveFailed
             ? Tr(L"Settings could not be saved. Check settings.ini permissions, then retry or cancel.",
                  L"無法儲存設定。請檢查 settings.ini 權限後重試或取消。")
+            : restartForMods ? Tr(L"Mod list saved. Restart the game to apply the changes.", L"Mod 清單已儲存。請重新啟動遊戲以套用變更。")
             : savedRestartPrompt ? Tr(L"Settings saved. Restart manually to apply changes.", L"設定已儲存。請手動重新啟動以套用變更。")
             : Tr(L"Save these settings? Restart manually to apply changes.", L"儲存這些設定嗎？請手動重新啟動以套用變更。");
         next.dialogChoices = savedRestartPrompt
@@ -1425,6 +1579,13 @@ void Publish(uint8_t *base, uint32_t config)
                                 L"關閉遊戲並開啟匯入器嗎？尚未儲存的進度將會遺失。");
         next.dialogChoices = {Tr(L"Open importer", L"開啟匯入器"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = importChoice;
+    }
+    if (modsDiscardPrompt)
+    {
+        next.dialogTitle = Tr(L"Unsaved changes", L"尚未儲存的變更");
+        next.dialogMessage = Tr(L"Leave without saving the mod list?", L"不儲存 Mod 清單就離開嗎？");
+        next.dialogChoices = {Tr(L"Discard changes", L"捨棄變更"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = modsDiscardChoice;
     }
     if (displayConfirm)
     {
@@ -1456,6 +1617,7 @@ void Publish(uint8_t *base, uint32_t config)
         : tab == 2 ? (row == int(GraphicsRow::FrameGeneration) ||
         row == int(GraphicsRow::FrameGenerationMultiplier) ? FgNotice() : DlssNotice()) : std::wstring{};
 #endif
+    if (modsOpen) next.notice = std::move(modsHelp.second);
     std::lock_guard lock(snapshotMutex);
     // Presentation may have published availability while this snapshot was built.
     next.calibration.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
@@ -1467,7 +1629,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows == snapshot.rows && next.help == snapshot.help && next.notice == snapshot.notice && next.dialogTitle == snapshot.dialogTitle &&
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
-        next.speakerRear == snapshot.speakerRear)
+        next.speakerRear == snapshot.speakerRear && next.pageTitle == snapshot.pageTitle &&
+        next.keyLegend == snapshot.keyLegend && next.reorder == snapshot.reorder)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
@@ -1554,7 +1717,9 @@ bool CalibrationKey(uint32_t key)
         displayConfirmEscape = true;
         return true;
     }
-    const bool brightnessKey = (brightnessOpen.load() || nrOpen.load()) && (key == 13 || key == 27);
+    // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
+    const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load()) && (key == 13 || key == 27)) ||
+                               (modsOpen.load() && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -1710,15 +1875,18 @@ void PointerClick(float x, float y, bool reverse)
         }
         return;
     }
+    // A list page (Mods) has no tabs; its focused row may have move cells.
+    const bool listPage = !snapshot.pageTitle.empty();
     if (x >= 386 && x < 1026 && y >= 110 && y < 142)
     {
-        mouseTab = int(x - 386) / MenuTabWidth;
+        if (!listPage) mouseTab = int(x - 386) / MenuTabWidth;
         return;
     }
     constexpr int height = 43;
     constexpr int top = 150;
     const int slot = int(y - top) / height;
-    if (x < 38 || x >= 1026 || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
+    const int right = snapshot.reorder ? ModsMoveLeft + 2 * ModsMoveWidth + ModsMoveGap : 1026;
+    if (x < 38 || x >= right || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
         return;
     // Translate the clicked slot through hidden rows and the scroll window
     // back to a logical row index.
@@ -1737,8 +1905,19 @@ void PointerClick(float x, float y, bool reverse)
     }
     if (hit >= snapshot.rows.size())
         return;
+    if (x >= 1026)
+    {
+        // Move up / move down cells beside the focused row: LB / RB.
+        if (int(hit) == snapshot.row && x >= ModsMoveLeft)
+            mouseAction = x < ModsMoveLeft + ModsMoveWidth ? 0x100
+                        : x >= ModsMoveLeft + ModsMoveWidth + ModsMoveGap ? 0x200 : 0;
+        return;
+    }
     mouseRow = int(hit);
-    if (x >= 386 && snapshot.rows[hit].enabled) {
+    if (listPage) {
+        // A switches a mod or runs an action; a right click switches too.
+        if (x >= 386 && snapshot.rows[hit].enabled) mouseAction = reverse ? 4 : 0x1000;
+    } else if (x >= 386 && snapshot.rows[hit].enabled) {
         const bool hdrLevel = snapshot.tab == 2 &&
             (hit == size_t(GraphicsRow::HdrPaperWhite) || hit == size_t(GraphicsRow::HdrPeak));
         // Pointer adjustment is explicit left/right, not a synthetic A press.
@@ -1889,6 +2068,10 @@ PPC_FUNC(sub_822F19B0)
         mainMenuPrompt = false;
         importPrompt = false;
         importLaunchPending = false;
+        modsOpen = false;
+        modsDiscardPrompt = false;
+        restartForMods = false;
+        modsEntries.clear();
         displayConfirm = displayReverting = false;
         displayConfirmOpen = false;
         {
@@ -1929,7 +2112,8 @@ PPC_FUNC(sub_822F19B0)
     }
     if (int selected = mouseRow.exchange(-1); selected >= 0)
     {
-        row = selected;
+        if (modsOpen) modsFocus = selected;
+        else row = selected;
         input |= 0x400;
     }
     input |= mouseAction.exchange(0);
@@ -1947,6 +2131,7 @@ PPC_FUNC(sub_822F19B0)
         calibrationOpen = false;
         brightnessOpen = false;
         nrOpen = false;
+        modsOpen = false;
         cancelPolls = 0;
         pending = 0;
         PPCContext apply = ctx;
@@ -2044,6 +2229,7 @@ PPC_FUNC(sub_822F19B0)
                 savedRestartPrompt = false;
                 restartSaveFailed = false;
                 restartForFgProvider = false;
+                restartForMods = false;
 #ifdef _WIN32
                 status = restartChoice == 0
                     ? Tr(L"Saved. Preparing a safe restart…", L"已儲存，正在準備安全重新啟動……")
@@ -2460,6 +2646,93 @@ PPC_FUNC(sub_822F19B0)
             status = Tr(L"Restoring display settings…", L"正在還原顯示設定……");
         }
         else graphicsSaved();
+        Publish(base, config);
+        return;
+    }
+    if (modsOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        // B, Back (keyboard Backspace) and Escape leave the page.
+        bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        if (modsDiscardPrompt)
+        {
+            if (int selected = mouseDialog.exchange(-1); selected >= 0) modsDiscardChoice = std::min(selected, 1);
+            if (input & 3) modsDiscardChoice = 1 - modsDiscardChoice;
+            if (back) modsDiscardPrompt = false;
+            else if (input & 0x1000)
+            {
+                modsDiscardPrompt = false;
+                if (modsDiscardChoice == 0) CloseModsPage();
+            }
+            Publish(base, config);
+            return;
+        }
+        const auto rows = mods_page::Layout(modsEntries, mods_page::CanOpenFolder);
+        if (input & 0x331f) status.clear();
+        if (input & 1) modsFocus = (modsFocus + rows.count - 1) % rows.count;
+        if (input & 2) modsFocus = (modsFocus + 1) % rows.count;
+        // Start / Enter goes to Save, and saves when pressed there.
+        if ((input & 0x10) && rows.save >= 0)
+        {
+            if (modsFocus == rows.save) input |= 0x1000;
+            else
+            {
+                modsFocus = rows.save;
+                input &= ~0x1000;
+            }
+        }
+        const int entry = rows.EntryAt(modsFocus, modsEntries.size());
+        if (back) {}
+        else if (entry >= 0 && (input & 0x300))
+        {
+            // LB / RB move a mod among the mods; a rejected mod.ini keeps its place.
+            if (mods_page::IsMod(modsEntries[size_t(entry)]) && modsEntries[size_t(entry)].info.apiVersion != 0)
+                modsFocus = rows.first + int(mods_page::Move(modsEntries, size_t(entry), (input & 0x100) ? -1 : 1));
+        }
+        else if (entry >= 0 && (input & 0x100c) && mods_page::Switchable(modsEntries[size_t(entry)]))
+            modsEntries[size_t(entry)].on = !modsEntries[size_t(entry)].on;
+        else if ((input & 0x1000) && modsFocus == rows.open)
+        {
+            if (!mods_page::OpenFolder(modding::Root()))
+                status = Tr(L"Could not open the mods folder.", L"無法開啟 mods 資料夾。");
+        }
+        else if ((input & 0x1000) && modsFocus == rows.save)
+        {
+            const auto order = mods_page::SaveOrder(modsEntries);
+            std::string error;
+            if (!modding::SaveModList(order, &error))
+            {
+                status = std::wstring(Tr(L"Could not save the mod list.", L"無法儲存 Mod 清單。")) + L" " + Widen(error);
+                LOG_INFO("settings: mod list not saved: {}", error);
+            }
+            else
+            {
+                modsSaved = modsStart = order;
+                modsSavedThisRun = true;
+                LOG_INFO("settings: mod list saved ({} mods)", order.size());
+                // Saving the order this run started with needs no restart.
+                if (order == modsRunning) status = Tr(L"Mod list saved.", L"Mod 清單已儲存。");
+                else
+                {
+                    restartPrompt = savedRestartPrompt = restartForMods = true;
+                    restartSaveFailed = restartForFgProvider = false;
+                    restartChoice = 0;
+                }
+            }
+        }
+        if (back)
+        {
+            if (mods_page::SaveOrder(modsEntries) != modsStart)
+            {
+                modsDiscardPrompt = true;
+                modsDiscardChoice = 1; // Cancel unless Discard is chosen
+            }
+            else CloseModsPage();
+        }
         Publish(base, config);
         return;
     }
@@ -2899,6 +3172,12 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemModsRow)
+    {
+        OpenModsPage();
+        Publish(base, config);
+        return;
+    }
     if ((input & 0x1000) && !(input & 0x2000) && tab == 2 && row == int(GraphicsRow::DlssNeuralRendering) &&
         !GraphicsRowHidden(row))
     {
@@ -2948,6 +3227,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     static uint32_t cachedWidth = 0, cachedHeight = 0;
     static bool cachedPlayStation = false, cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
     static int cachedTab = -1;
+    static std::wstring cachedPage;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
     // Motion is presentation only: input and menu state change at once, and the
     // shown image moves toward the newest raster (#151), timed like the retail menus.
@@ -3080,7 +3360,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
             eraseArrow();
         arrowDrawn = {};
         eraseMarker();
-        const auto fade = current.tab != cachedTab ? menu_motion::PageFade
+        const auto fade = current.tab != cachedTab || current.pageTitle != cachedPage ? menu_motion::PageFade
                         : dialog != cachedDialog   ? menu_motion::DialogFade
                                                    : menu_motion::ChangeFade;
         eased = motion.Start(pixels, raster, width, now, fade);
@@ -3110,6 +3390,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     cachedPreviewPage = previewPage;
     cachedDialog = dialog;
     cachedTab = current.tab;
+    cachedPage = current.pageTitle;
     cachedAssets = current.assets;
     revision = current.revision;
     return true;

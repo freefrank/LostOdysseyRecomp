@@ -30,6 +30,10 @@ struct MenuRow
     // Show only the selected choice between arrows, as rows with more than
     // five choices do; for long names such as GPUs and displays.
     bool singleValue = false;
+    // Muted text at the start of the value column (Mods page: version and
+    // author). The choice cells then take the last ModsCellsWidth; with no
+    // choices and no value the text has the whole column.
+    std::wstring detail;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot
@@ -56,6 +60,11 @@ struct MenuSnapshot
     // gives the test sound; the marker that follows it is a layer (DrawSpeakerMarker).
     bool speakerLayout = false;
     int speakerRear = 110;
+    // A list page opened from a tab row (System → Mods): the tab bar shows this
+    // title instead of the tabs and keyLegend sits in the header. With reorder,
+    // the focused row has move up / move down cells (ModsMoveLeft).
+    std::wstring pageTitle, keyLegend;
+    bool reorder = false;
     std::shared_ptr<const menu_assets::Assets> assets;
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.

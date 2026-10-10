@@ -27,6 +27,7 @@ PREAMBLE = r'''
 #include <settings/translations.h>
 #include <settings/restart.h>
 #include <settings/language_selection.h>
+#include <settings/mods_page.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_rate.h>
 #include <gpu/dlss_nr_state.h>
@@ -111,6 +112,14 @@ bool SetConsent(bool){++consents;return true;}
 namespace apu { bool surround=false; uint32_t matrixRear=110; void SetOutput(Output o){surround=o==Output::Surround;}
 void SetMatrixRearAngle(uint32_t d){matrixRear=d;} void SetTestSignal(bool){} float TestSignalPosition(){return -1.0f;} uint32_t OutputChannels(){return surround?6:2;} }
 namespace settings { bool SaveAudioOutput(uint32_t o){savedConfig.audioOutput=o;return true;} }
+// No mods folder: the Mods page shows its empty state.
+namespace modding {
+std::vector<ModInfo> ListMods(){return {};}
+std::filesystem::path Root(){return "mods";}
+bool Enabled(){return true;}
+ResolutionMode Mode(){return ResolutionMode::Combined;}
+bool SaveModList(const std::vector<std::pair<std::string,bool>>&,std::string*){Check(false,"empty Mods page must not save");return false;}
+}
 '''
 TEST = r'''
 extern "C" PPC_FUNC(__imp__sub_822F19B0) {}
@@ -151,6 +160,13 @@ int main(int argc, char** argv) {
             for(int i=0;i<8;++i)Check(words[i]==PPC_LOAD_U32(ConfigData+i*4),"A leaves guest settings unchanged");
         }
     }
+    // System -> Mods opens the Mods page; with no mods it says where they go, and B returns.
+    settings::tab=3;settings::row=settings::SystemModsRow;tick(0x1000);
+    Check(settings::modsOpen && settings::snapshot.pageTitle==L"Mods" && settings::snapshot.rows.front().name==L"No mods installed" &&
+          settings::snapshot.rows.size()==size_t(settings::mods_page::CanOpenFolder?2:1),"System Mods opens the empty Mods page");
+    tick(2);tick(0x2000);
+    Check(!settings::modsOpen && settings::active && settings::tab==3 && settings::row==settings::SystemModsRow,
+          "B leaves the Mods page for the System tab");
     settings::tab=0;settings::row=0;tick(8);
     Check(PPC_LOAD_U32(ConfigData)==1 && applies==1,"right still applies gameplay setting");
     settings::tab=1;settings::row=settings::AudioOutputRow;tick(8);

@@ -93,7 +93,7 @@ inline bool IsAction(int tab, int row)
 {
     return (tab == 0 && (row == GameRestoreRow || row == GameMainMenuRow)) ||
            (tab == 2 && (row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
-           (tab == 3 && (row == SystemImportRow || row == SystemSaveRow));
+           (tab == 3 && (row == SystemModsRow || row == SystemImportRow || row == SystemSaveRow));
 }
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::DlssModel));
 static_assert(int(GraphicsRow::DlssModel) + 1 == int(GraphicsRow::FsrSharpness));

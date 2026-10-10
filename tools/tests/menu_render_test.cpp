@@ -334,6 +334,57 @@ int main(int argc, char **argv)
     }
     std::puts("Language reference (with Korean 한국어) rendered at 1280x720");
 
+    // Mods page: a list page with a title in place of the tabs, version/author
+    // details beside narrow switches, and move cells beside the focused mod.
+    {
+        settings::MenuSnapshot mods = snapshot;
+        mods.language = 0;
+        mods.row = 0;
+        mods.pageTitle = L"Mods";
+        mods.keyLegend = L"A: on / off     LB / RB: move     Start: save     B: back";
+        mods.reorder = true;
+        mods.rows = {
+            {L"4x HD Texture Pack", L"On", true, {L"On", L"Off"}, 0},
+            {L"My Menu", L"Off", true, {L"On", L"Off"}, 1},
+            {L"broken", L"Error", false, {L"Error"}, 0},
+            {L"Brasil", L"", true, {}, 0},
+            {L"Open mods folder", L"Open", true, {L"Open"}, 0},
+            {L"Save mod list", L"Save", true, {L"Save"}, 0}};
+        mods.rows[0].detail = L"1.0 - Someone";
+        mods.rows[1].detail = L"2.3";
+        mods.rows[2].detail = L"! —";
+        mods.rows[3].detail = L"Language pack: English";
+        mods.help = L"Upscaled textures for every map.";
+        mods.notice = L"Folder: hd-textures-4x     Overlay files: 15000";
+        std::vector<uint32_t> page, plain;
+        Require(settings::RasterizeMenu(mods, 1280, 720, page), "Mods page rasterization failed");
+        auto still = mods;
+        still.reorder = false;
+        still.pageTitle.clear();
+        still.keyLegend.clear();
+        for (auto &row : still.rows) row.detail.clear();
+        Require(settings::RasterizeMenu(still, 1280, 720, plain), "Mods page comparison rasterization failed");
+        const auto differs = [&](int x0, int y0, int x1, int y1) {
+            int count = 0;
+            for (int y = y0; y < y1; ++y)
+                for (int x = x0; x < x1; ++x)
+                    count += page[size_t(y) * 1280 + x] != plain[size_t(y) * 1280 + x];
+            return count > 20;
+        };
+        Require(differs(386, 110, 1026, 142), "Mods page title does not replace the tabs");
+        Require(differs(400, 50, 1260, 84), "Mods page key legend is missing");
+        Require(differs(394, 150, 780, 191), "mod detail text is missing");
+        Require(differs(settings::ModsMoveLeft, 150, settings::ModsMoveLeft + 2 * settings::ModsMoveWidth + settings::ModsMoveGap, 191),
+                "move cells beside the focused mod are missing");
+        Require(!differs(settings::ModsMoveLeft, 193, 1270, 234), "move cells drawn beside an unfocused row");
+        if (argc > 1) {
+            std::ofstream f(std::filesystem::path(argv[1]) / "mods-page.ppm", std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : page) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+        }
+        std::puts("Mods page: title, legend, details, narrow switches and move cells rendered at 1280x720");
+    }
+
     // Upscaling and FG share one divided group inside the four-tab Graphics page.
     // The hidden logical rows model scrolling to the group without changing
     // row IDs; FSR hides the multiplier and compacts the visible list.
