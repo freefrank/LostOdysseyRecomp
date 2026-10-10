@@ -97,6 +97,14 @@
       "instruction_count": 30,
       "body_sha256": "7aa408ec2fa3dbe9a960c68364c9b91570646cd71de62fff30d82f68678e54b7",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82377168",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.9.cpp",
+      "source_line": 21277,
+      "instruction_count": 34,
+      "body_sha256": "0064beb18d21ac8a497508a0ec82359bfa8e9962d342ce54f3e38560bda3ea6a",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -112,7 +120,8 @@
       "82B1AA50",
       "82B1ACA8",
       "82B1AFE8",
-      "82B356B0"
+      "82B356B0",
+      "82377168"
     ],
     "header": "include/lo_semantics/battle_scene_requests61.h",
     "source": "src/battle_scene_requests61.cpp",
@@ -127,6 +136,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance.",
-    "positional_scene_requests": "Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance."
+    "positional_scene_requests": "Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance.",
+    "packed_scene_position": "Recovered three-component guest D3D half packing 377168 and composed it into spatial scene requests. Preserves truncating mantissas, signed zero, subnormal shifts and the guest overflow/NaN sentinel 0x7fff, with guest flush-mode transitions. Replaces the last packed-position fixture boundary. Library and focused request-factory and scene-command checks pass; synthetic checks include XYZ, negative values, signed zero and overflow. Logical coverage only, not full VMX/volatile-register or runtime playback acceptance."
   }
 }

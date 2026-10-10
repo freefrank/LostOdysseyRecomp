@@ -21,14 +21,6 @@ struct RequestGuest final : manager_release_context61::GuestServices {
       ++released;
       return;
     }
-    if (e == 0x82377168) {
-      for (unsigned i = 0; i < 3; ++i) {
-        if (m.ReadU32(unsigned(s.r[4]) + 4 * i))
-          throw std::runtime_error("zero packed origin");
-        m.WriteU16(unsigned(s.r[3]) + 2 * i, 0);
-      }
-      return;
-    }
     throw std::runtime_error("request direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -127,7 +119,7 @@ int main() {
     check(run(0x82b1aa50, 0x20000002) == 0xffffffff && g.deleted == 1 &&
           m.ReadU32(owner + 28) == 4);
     g.metadata = 0xb0000;
-    m.WriteU8(g.metadata + 9, 0);
+    m.WriteU8(g.metadata + 9, 9);
     s.r[3] = owner;
     s.r[4] = 0x20000003;
     s.r[5] = (std::uint64_t(std::bit_cast<unsigned>(10.f)) << 32) |
@@ -142,6 +134,18 @@ int main() {
           m.ReadU32(positional + 84) == std::bit_cast<unsigned>(10.f) &&
           m.ReadU32(positional + 88) == std::bit_cast<unsigned>(15.f) &&
           m.ReadU32(positional + 92) == std::bit_cast<unsigned>(20.f));
+    check(m.ReadU16(positional + 68) == 0x4900 &&
+          m.ReadU16(positional + 70) == 0x4b80 &&
+          m.ReadU16(positional + 72) == 0x4d00);
+    m.WriteU32(0xc0000, 0xc0000000);
+    m.WriteU32(0xc0004, 0x7f800000);
+    m.WriteU32(0xc0008, 0x80000000);
+    s.r[3] = 0xc0100;
+    s.r[4] = 0xc0000;
+    check(battle_scene_requests61::Apply(0x82377168, m, {g, native}, s));
+    check(m.ReadU16(0xc0100) == 0xc000 && m.ReadU16(0xc0102) == 0x7fff &&
+          m.ReadU16(0xc0104) == 0x8000 &&
+          (s.cached_fp_control & 0x8040) == 0x8040);
     std::cout << "battle scene requests logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

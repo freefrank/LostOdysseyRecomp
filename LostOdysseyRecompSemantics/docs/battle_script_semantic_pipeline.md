@@ -513,3 +513,7 @@ Recovered scene request key classification, default parameter blocks, tracked-pa
 ## Positional scene requests
 
 Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance.
+
+## Packed scene positions
+
+Recovered three-component guest D3D half packing 377168 and composed it into spatial scene requests. Preserves truncating mantissas, signed zero, subnormal shifts and the guest overflow/NaN sentinel 0x7fff, with guest flush-mode transitions. Replaces the last packed-position fixture boundary. Library and focused request-factory and scene-command checks pass; synthetic checks include XYZ, negative values, signed zero and overflow. Logical coverage only, not full VMX/volatile-register or runtime playback acceptance.

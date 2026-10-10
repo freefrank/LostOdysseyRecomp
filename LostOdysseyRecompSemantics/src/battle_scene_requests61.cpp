@@ -18,6 +18,35 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   auto owner = Address(s.r[3]), arg4 = Address(s.r[4]), arg5 = Address(s.r[5]),
        arg6 = Address(s.r[6]), arg7 = Address(s.r[7]), arg8 = Address(s.r[8]);
   auto packed4 = s.r[4], packed5 = s.r[5], packed6 = s.r[6];
+  if (e == 0x82377168) {
+    auto sp = Address(s.r[1]);
+    for (unsigned i = 0; i < 3; ++i) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+      auto bits = m.ReadU32(arg4 + 4 * i);
+      s.fpr_bits[0] =
+          std::bit_cast<std::uint64_t>(double(std::bit_cast<float>(bits)));
+      m.WriteU32(sp - (i ? 16 : 12), bits);
+      s.cached_fp_control |= 0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+      auto magnitude = bits & 0x7fffffffu, exponent = (bits >> 23) & 255,
+           mantissa = (bits >> 13) & 1023;
+      unsigned packed;
+      // Guest D3D packing truncates and uses 0x7fff for overflow/NaN.
+      if (magnitude > 0x477fe000u)
+        packed = 0x7fff;
+      else if (exponent > 112)
+        packed = ((exponent - 112) << 10) | mantissa;
+      else {
+        auto shift = 113 - exponent;
+        packed = shift > 31 ? 0 : (1024 + mantissa) >> shift;
+      }
+      packed |= (bits >> 16) & 0x8000;
+      m.WriteU16(sp - 16, packed);
+      m.WriteU16(owner + 2 * i, packed);
+    }
+    return true;
+  }
   if (e == 0x82b35a20) {
     auto high = owner >> 16;
     s.r[3] = std::uint64_t(-1);
