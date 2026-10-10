@@ -5,22 +5,18 @@
 #include <iostream>
 struct StringGuest final : manager_release_context61::GuestServices {
   unsigned allocations = 0, releases = 0, conversions = 0;
-  bool heap = false;
   void Need(bool b) {
     if (!b)
       throw std::runtime_error("string storage boundary");
   }
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x823227c8) {
-      auto temp = unsigned(s.r[3]), source = unsigned(s.r[4]),
-           out = heap ? 0xb0000 : temp;
-      unsigned i = 0;
-      do {
-        m.WriteU16(out + 2 * i, m.ReadU8(source + i));
-      } while (m.ReadU8(source + i++));
-      m.WriteU32(temp + 256, out);
+    if (e == 0x830d9cdc) {
+      Need(s.r[5] == 0);
+      for (unsigned i = 0; i < unsigned(s.r[7]); ++i)
+        m.WriteU16(unsigned(s.r[3]) + 2 * i, m.ReadU8(unsigned(s.r[6]) + i));
       ++conversions;
+      s.r[3] = 0;
       return;
     }
     if (e == 0x82b7a0b0) {
@@ -33,6 +29,11 @@ struct StringGuest final : manager_release_context61::GuestServices {
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
     Need(s.r[3] == 0x70000);
+    if (e == 0x123408) {
+      Need(s.r[4] == 516 && s.r[5] == 8);
+      s.r[3] = 0xb0000;
+      return;
+    }
     if (e == 0x123400) {
       Need(s.r[6] == 8);
       ++allocations;
@@ -61,6 +62,7 @@ int main() {
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     m.WriteU32(0x8330b608, 0x70000);
     m.WriteU32(0x70000, 0x71000);
+    m.WriteU32(0x71004, 0x123408);
     m.WriteU32(0x71008, 0x123400);
     m.WriteU32(0x7100c, 0x123404);
     auto run = [&](unsigned e) {
@@ -80,7 +82,8 @@ int main() {
            !m.ReadU16(0xa0004) && !g.releases);
     run(0x82298938);
     g.Need(!m.ReadU32(0x80000) && !m.ReadU32(0x80004) && !m.ReadU32(0x80008));
-    g.heap = true;
+    for (unsigned i = 0; i < 128; ++i)
+      m.WriteU8(0x90000 + i, 'x');
     run(0x822d02f8);
     g.Need(g.releases == 1 && g.conversions == 2);
     run(0x82298a98);

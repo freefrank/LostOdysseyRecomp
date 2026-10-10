@@ -25,13 +25,22 @@
       "instruction_count": 23,
       "body_sha256": "489511ad92e134c1d2cd0fe7c7b4458a789d885bd2e394110d8619c705a9241c",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82486C88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.24.cpp",
+      "source_line": 7258,
+      "instruction_count": 24,
+      "body_sha256": "a09a5833fd3eeb5fd8491372382d3e76c4dc1187e1838b14f802ac9a898a56e5",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "822D02F8",
       "82298938",
-      "82298A98"
+      "82298A98",
+      "82486C88"
     ],
     "header": "include/lo_semantics/string_storage_context61.h",
     "source": "src/string_storage_context61.cpp",
@@ -46,6 +55,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "A focused fixture checks empty and nonempty construction, local and heap conversion temporaries, UTF-16 copy extent, reset/release, zero-capacity owned storage and preserved nonvolatile registers. Existing ResizeArray, ResetTwoByteArray, ReleaseTwoByteArray and manager release implementations are reused. Byte-to-UTF16 conversion 823227C8 and copy/allocator services remain boundaries; caller composition is pending. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
+    "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.",
+    "allocation_adapter_update": "Added the full-register 82486C88 allocation adapter by reusing AllocateManagerBuffer. Long-string conversion now reaches the manager virtual allocator through recovered code; both string conversion and storage fixtures pass."
   }
 }

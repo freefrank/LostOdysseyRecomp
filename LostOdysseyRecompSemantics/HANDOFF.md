@@ -1,3 +1,11 @@
+## Root direct continuation: string allocation adapter (2026-10-10 UTC)
+
+Added the full-register 82486C88 allocation adapter by reusing AllocateManagerBuffer. Long-string conversion now reaches the manager virtual allocator through recovered code; both string conversion and storage fixtures pass.
+
+## Root direct continuation: string conversion wrappers (2026-10-10 UTC)
+
+String construction now composes byte-length and temporary-conversion wrappers, including local versus heap buffer selection and error routing. The long-string allocation request preserves the source four-times-count arithmetic. Two focused fixtures pass. Imported character conversion and UTF-8 decoding remain boundaries; native locale and gameplay behavior are unvalidated.
+
 ## Root direct continuation: reverse cleanup continuation (2026-10-10 UTC)
 
 Recovered 82B7AE18 completes the reverse cleanup continuation from a captured end pointer. The focused destruction fixture now executes that loop and verifies callback order instead of mocking it. Native exception unwinding remains unvalidated.

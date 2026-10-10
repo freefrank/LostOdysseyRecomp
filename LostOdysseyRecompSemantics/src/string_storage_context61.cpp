@@ -1,3 +1,4 @@
+#include "lo_semantics/string_conversion_context61.h"
 #include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/manager_facade.h"
 #include "lo_semantics/recovery_abi.h"
@@ -11,7 +12,8 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
   Bridge(GuestMemory &memory, Dependencies deps, Registers &state)
       : m(memory), d(deps), s(state) {}
   std::uint64_t Direct(unsigned e) {
-    d.guest.CallDirect(e, m, s);
+    if (!string_conversion_context61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
     return s.r[3];
   }
   std::uint64_t Virtual(unsigned e) {
@@ -69,6 +71,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   case 0x82298938:
   case 0x82298a98:
     break;
+  case 0x82486c88:
+    frame = 112;
+    first = 30;
+    break;
   case 0x822d02f8:
     frame = 368;
     first = 30;
@@ -86,7 +92,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(sp, old);
   s.r[31] = header;
   Bridge b(m, d, s);
-  if (e == 0x82298938)
+  if (e == 0x82486c88)
+    s.r[3] = AllocateManagerBuffer(m, b, header, old);
+  else if (e == 0x82298938)
     s.r[3] = ResetTwoByteArray(m, b, header, old);
   else if (e == 0x82298a98)
     s.r[3] = ReleaseTwoByteArray(m, b, header, old);

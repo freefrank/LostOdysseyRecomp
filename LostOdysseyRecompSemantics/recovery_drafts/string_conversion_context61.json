@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Byte-string length, temporary conversion buffer selection and codepage dispatch.",
+  "entries": [
+    {
+      "address": "823227C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.5.cpp",
+      "source_line": 38668,
+      "instruction_count": 38,
+      "body_sha256": "f4e7b2df59cf2b07b0399b06454e7474ee3a5f5ec7ae3baee49720e5ed013889",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8229C538",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 29103,
+      "instruction_count": 9,
+      "body_sha256": "e3e99a26afffc06c8b24ff414b0f84d3608aa1160dc09ce11ffcccf0baaadc8b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8229C560",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 29127,
+      "instruction_count": 54,
+      "body_sha256": "32a4c4ed4fe0a7f98b9fefaafb2983f33cae7a735e3a0b296027c0507d19eec3",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "823227C8",
+      "8229C538",
+      "8229C560"
+    ],
+    "header": "include/lo_semantics/string_conversion_context61.h",
+    "source": "src/string_conversion_context61.cpp",
+    "smoke": "tests/string_conversion_context61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused fixture checks byte length, null source, local and heap temporary buffers, exact 4-times-count heap request, size query, insufficient output, imported conversion failure and UTF-8 delegation. String storage composes the wrapper and its fixture passes with the actual temporary-buffer path. Imported character conversion and UTF-8 implementation remain boundaries; native locale behavior is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
