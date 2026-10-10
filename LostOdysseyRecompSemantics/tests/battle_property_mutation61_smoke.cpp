@@ -4,8 +4,19 @@
 #include "lo_semantics/battle_property_mutation61.h"
 #include <iostream>
 struct MutationGuest final : manager_release_context61::GuestServices {
-  void CallDirect(GuestAddress, GuestMemory &,
-                  manager_release_context61::Registers &) override {
+  unsigned notifications = 0;
+  void CallDirect(GuestAddress e, GuestMemory &,
+                  manager_release_context61::Registers &s) override {
+    if (e == 0x82380a18 || e == 0x82389b78) {
+      s.r[3] = 0x70000;
+      return;
+    }
+    if (e == 0x82ad0ad0) {
+      if (s.r[3] != 0x70000 || s.r[4] != 0x80000 || s.r[5] != 1 || s.r[6] != 1)
+        throw std::runtime_error("status notification ABI");
+      ++notifications;
+      return;
+    }
     throw std::runtime_error("property direct");
   }
   void CallIndirect(GuestAddress, GuestMemory &,
@@ -18,6 +29,7 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83213000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -113,6 +125,60 @@ int main() {
     m.WriteU32(payload, 0xffffffff);
     check(payloadRun(0x82ac8978, 4, 0, 0, 0));
     check(!payloadRun(0x82ac87d8, 0x80000000, 1, 1, 0));
+    auto admission = [&](unsigned bank, unsigned mask, unsigned mode,
+                         unsigned bypass) {
+      s.r[3] = resource;
+      s.r[4] = bank;
+      s.r[5] = mask;
+      s.r[6] = mode;
+      s.r[7] = bypass;
+      check(battle_property_mutation61::Apply(0x82aca468, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[15] == initial.r[15]);
+      return unsigned(s.r[3]);
+    };
+    m.WriteU32(resource + 232, 0);
+    check(admission(0, 8, 0, 0));
+    m.WriteU32(resource + 76348, 0x80000000);
+    check(!admission(0, 8, 0, 0));
+    m.WriteU32(resource + 76348, 0);
+    m.WriteU32(resource + 5088, 8);
+    check(!admission(0, 8, 0, 1));
+    m.WriteU32(resource + 5088, 0);
+    m.WriteU32(resource + 4876, 8);
+    check(admission(0, 8, 0, 0) && !admission(0, 8, 1, 0));
+    check(admission(0, 8, 1, 1) && m.ReadU32(resource + 232) == 8);
+    m.WriteU32(resource + 124, 0x10000000);
+    check(!admission(0, 8, 0, 0));
+    m.WriteU32(resource + 124, 0);
+    m.WriteU32(resource + 4876, 0);
+    m.WriteU32(resource + 232, 0);
+    check(!admission(0, 0x10000, 0, 0));
+    m.WriteU32(resource + 232, 4);
+    check(admission(0, 0x10000, 0, 0));
+    m.WriteU32(resource + 232, 0x10000);
+    check(!admission(0, 4, 0, 0));
+    m.WriteU32(0x832134b4, 8);
+    m.WriteU32(resource + 4876, 8);
+    check(!admission(7, 2, 0, 0));
+    m.WriteU32(resource + 4876, 0);
+    check(admission(7, 2, 1, 0));
+    m.WriteU32(0x83213438 + 8 * 16, 0);
+    m.WriteU32(0x8321343c + 8 * 16, 1u << 16);
+    m.WriteU32(0x83213438 + 8 * 2, 0);
+    m.WriteU32(0x8321343c + 8 * 2, 4);
+    m.WriteU32(resource + 232, 4);
+    check(admission(0, 0x10000, 1, 0));
+    check(m.ReadU32(resource + 232) == 0x10000 &&
+          m.ReadU32(resource + 4 * (16 + 59)) == 3);
+    m.WriteU32(0x832c9c54 + 44, 0x63000);
+    m.WriteU32(0x63004, 0x62000);
+    m.WriteU32(0x6300c, 1);
+    m.WriteU32(0x62008, 24);
+    m.WriteU32(resource + 64, 24);
+    m.WriteU32(0x62000 + 64, 0x800000);
+    m.WriteU32(resource + 232, 0);
+    check(admission(0, 1, 1, 0));
+    check(g.notifications == 1 && m.ReadU32(0x62000 + 64) == 0xc00000);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

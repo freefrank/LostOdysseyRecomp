@@ -76,23 +76,13 @@ int main() {
     m.WriteU32(0x8321343c + 8 * 18, 4);
     m.WriteU32(0x80000 + 3 * 272 + 232, 4);
     check(!run(0x82b0b0f0));
-    for (auto e : {0x82b0e9d0u}) {
-      g.first = 0;
-      g.second = 0;
-      g.calls = 0;
-      check(!run(e) && g.calls == 2);
-      g.first = 1;
-      g.calls = 0;
-      check(run(e) && g.calls == 1);
-      g.first = 2;
-      g.second = 257;
-      g.calls = 0;
-      check(run(e) && g.calls == 2);
-      m.WriteU32(0x73000 + 104, 0);
-      g.calls = 0;
-      check(!run(e) && g.calls == 1);
-      m.WriteU32(0x73000 + 104, 21);
-    }
+    check(run(0x82b0e9d0));
+    for (unsigned bank : {10u, 11u})
+      for (unsigned bit = 0; bit < 31; ++bit)
+        m.WriteU32(0x83213538 + 4 * (32 * bank + bit), 1);
+    m.WriteU32(0x90000 + 272 * 10 + 232, 20);
+    m.WriteU32(0x90000 + 272 * 11 + 232, 21);
+    check(!run(0x82b0e9d0));
     m.WriteU32(0x90000 + 272 * 10 + 232, 0);
     m.WriteU32(0x90000 + 272 * 11 + 232, 1);
     check(run(0x82b0eb68));
