@@ -79,6 +79,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 24;
     literal = 80;
     break;
+  case 0x82b0aa70:
+    frame = 160;
+    first = 27;
+    literal = 80;
+    break;
   case 0x82b13220:
   case 0x82b0a568:
   case 0x82b0a698:
@@ -129,8 +134,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  if (e == 0x82b0a7a0)
-    recovery_abi::WriteU64(m, old - 40, s.fpr_bits[31]);
+  unsigned savedFp = e == 0x82b0a7a0 ? 40 : e == 0x82b0aa70 ? 56 : 0;
+  if (savedFp)
+    recovery_abi::WriteU64(m, old - savedFp, s.fpr_bits[31]);
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -390,9 +396,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       }
     }
   } else if (e == 0x82b0a568 || e == 0x82b0a698 || e == 0x82b0a928 ||
-             e == 0x82b0a7a0 || e == 0x82b13220) {
+             e == 0x82b0a7a0 || e == 0x82b13220 || e == 0x82b0aa70) {
     bool priced = e == 0x82b13220;
-    bool mp = e == 0x82b0a698, combined = e == 0x82b0a7a0;
+    bool mp = e == 0x82b0a698,
+         combined =
+             e == 0x82b0a7a0 || (e == 0x82b0aa70 && m.ReadU32(owner + 120));
     if (!mp && !priced)
       m.WriteU8(owner + 203, 0);
     bool allowed = priced ? eligible(1)
@@ -476,10 +484,15 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         }
         if (combined) {
           auto value = std::int32_t(m.ReadU32(owner + 120));
-          recovery_abi::WriteU64(m, sp + 80,
+          recovery_abi::WriteU64(m, sp + (e == 0x82b0aa70 ? 88 : 80),
                                  std::uint64_t(std::int64_t(value)));
           calculate(double(float(value)), true, false);
           apply(3, 3738);
+        }
+        if (e == 0x82b0aa70) {
+          property(0x82ac91d8, 92, 100);
+          if (m.ReadU32(owner + 104))
+            property(0x82ac91d8, 96, 104);
         }
         if (e == 0x82b0a928) {
           s.r[3] = m.ReadU32(owner + 8);
@@ -684,8 +697,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (literal)
     m.WriteU32(sp + literal, 0x8204a1d8);
   s.r[1] += frame;
-  if (e == 0x82b0a7a0)
-    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 40);
+  if (savedFp)
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - savedFp);
   for (unsigned i = first; i < 32; ++i)
     s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
   s.lr = m.ReadU32(old - 8);

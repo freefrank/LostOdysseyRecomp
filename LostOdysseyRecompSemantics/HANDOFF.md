@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor cleansing effect (2026-10-10 UTC)
+
+Recovered B0AA70 cleansing restoration: HP healing through real scaling and result application, optional MP restoration reusing the critical decision, followed by primary and optional secondary property-bank clearing. Focused integration checks HP/MP changes, both cleared masks, the zero-MP branch and preserved FPR31. Descriptor callback coverage now 58 of 83 distinct targets; remaining 25 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
 ## Root direct continuation: descriptor gauge damage (2026-10-10 UTC)
 
 Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.

@@ -359,6 +359,24 @@ int main() {
     call(0x82b0db98);
     check(get(target + 2588) == 50 && get(owner + 32) == 0,
           "blocked damage mode");
+    m.WriteU32(owner + 120, 7);
+    m.WriteU32(owner + 92, 1);
+    m.WriteU32(owner + 100, 2);
+    m.WriteU32(owner + 96, 2);
+    m.WriteU32(owner + 104, 4);
+    m.WriteU32(target + 272 + 232, 2);
+    m.WriteU32(target + 544 + 232, 4);
+    put(target + 2616, 10);
+    put(target + 2620, 100);
+    call(0x82b0aa70);
+    check(get(target + 2588) == 60 && get(target + 2616) == 17 &&
+              !m.ReadU32(target + 272 + 232) && !m.ReadU32(target + 544 + 232),
+          "combined restoration and dual property clearing");
+    m.WriteU32(owner + 120, 0);
+    call(0x82b0aa70);
+    check(get(target + 2588) == 70 && get(target + 2616) == 17 &&
+              s.fpr_bits[31] == initial.fpr_bits[31],
+          "optional MP restoration and FPR save");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
