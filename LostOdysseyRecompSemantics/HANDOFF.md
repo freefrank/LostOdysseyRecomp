@@ -1,3 +1,7 @@
+## Root direct continuation: periodic effect prerequisites (2026-10-10 UTC)
+
+Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed.
+
 ## Root direct continuation: battle restart orchestration (2026-10-10 UTC)
 
 Recovered AD40D0 battle restart orchestration: retain or remove roster entries, select replacement actions, reset formation/resources, clear both gauges, rebuild stats/action timing, restart script events and force phase zero. Focused service-spy checks validate roster mutation, release flag, replacement action, service arguments/counts and final manager state. Nested services route through the composed runtime; the restart check is isolated orchestration validation, not full nested runtime or gameplay acceptance.

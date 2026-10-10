@@ -36,7 +36,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     return true;
   }
   unsigned frame, first;
-  if (e == 0x8238a8a0 || e == 0x82ab0958) {
+  if (e == 0x8238a8a0 || e == 0x82ab0958 || e == 0x82ab06a0 ||
+      e == 0x82ab0738) {
     frame = 112;
     first = 30;
   } else if (e == 0x82ac9a28) {
@@ -50,7 +51,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
   s.r[1] -= frame;
   m.WriteU32(Address(s.r[1]), old);
-  if (e == 0x82ab0958) {
+  if (e == 0x82ab06a0 || e == 0x82ab0738) {
+    auto id = e == 0x82ab06a0 ? 228u : 229u;
+    s.r[3] = Property(m, resource, id) || Property(m, resource, id + 22);
+  } else if (e == 0x82ab0958) {
     bool unavailable = false;
     for (unsigned id : {0u, 15u, 3u, 16u})
       if (Property(m, resource, id)) {

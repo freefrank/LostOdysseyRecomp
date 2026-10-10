@@ -58,6 +58,14 @@ int main() {
     }
     m.WriteU32(0x80000 + 124, 0x80000000);
     check(!run(0x82ac9a28, 0));
+    for (auto id : {228u, 229u, 250u, 251u}) {
+      auto p = 0x80000 + 7 * 272 + 232;
+      m.WriteU32(p, 1u << (id % 32));
+      check(run(0x82ab06a0, 0) == unsigned(id == 228 || id == 250));
+      check(run(0x82ab0738, 0) == unsigned(id == 229 || id == 251));
+      m.WriteU32(p, 0);
+    }
+    check(!run(0x82ab06a0, 0) && !run(0x82ab0738, 0));
     check(!battle_action_readiness61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_readiness61 smoke passed\n";
     return 0;

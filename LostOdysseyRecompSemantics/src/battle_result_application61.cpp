@@ -88,12 +88,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.lr = m.ReadU32(old - 8);
     return true;
   }
-  if (e == 0x82b2b9e0 || e == 0x82b2b720 || e == 0x82b2b7f8 ||
-      e == 0x82b2b910) {
+  if (e == 0x82b2bba0 || e == 0x82b2b9e0 || e == 0x82b2b720 ||
+      e == 0x82b2b7f8 || e == 0x82b2b910) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]),
          resource = Address(s.r[4]), mode = Address(s.r[6]);
-    bool dispatcher = e == 0x82b2b9e0, divide = e == 0x82b2b720,
-         quarter = e == 0x82b2b7f8;
+    bool dispatcher = e == 0x82b2b9e0 || e == 0x82b2bba0,
+         divide = e == 0x82b2b720, quarter = e == 0x82b2b7f8;
     unsigned frame = dispatcher ? 96 : 128, first = dispatcher ? 32
                                                     : divide   ? 29
                                                                : 30;
@@ -148,10 +148,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       auto adjusted = float(input + load(0x8201f9f0, 0));
       auto zero = load(0x82000e50, 1);
       auto value = integer(trunc(adjusted, 0), 80, 0);
-      if (mode == 0 || mode == 1 || mode == 6 || mode == 7 || mode == 8) {
+      if (mode == 0 || mode == 1 || mode == 6 || mode == 7 ||
+          (mode == 8 && e == 0x82b2b9e0)) {
         f(1, value);
         if (mode == 0)
-          s.r[6] = 1;
+          s.r[6] = e == 0x82b2b9e0 ? 1 : 0;
         Call(mode == 0   ? 0x82b2b640
              : mode == 1 ? 0x82b2b5e0
              : mode == 6 ? 0x82b2b7f8

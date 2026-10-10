@@ -81,6 +81,14 @@
       "instruction_count": 51,
       "body_sha256": "980b5a58ef10d8421fd5f186870dd697dd9450c7d281d5bad994ff84af3d6ec4",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2BBA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 4705,
+      "instruction_count": 105,
+      "body_sha256": "88efa0f841fed38d7da0afec9f43f499128a84ec31cd26029b6776dbe27606a7",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +102,8 @@
       "82B2B9E0",
       "82B2B720",
       "82B2B7F8",
-      "82B2B910"
+      "82B2B910",
+      "82B2BBA0"
     ],
     "header": "include/lo_semantics/battle_result_application61.h",
     "source": "src/battle_result_application61.cpp",
@@ -109,6 +118,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "resource_modes": "Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance."
+    "resource_modes": "Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance.",
+    "periodic_effect_prerequisites": "Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed."
   }
 }

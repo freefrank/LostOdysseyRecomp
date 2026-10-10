@@ -41,6 +41,22 @@
       "instruction_count": 65,
       "body_sha256": "69e95794773d5e0923763039794fa967da097ce713796404d2e8fdb8cca6593f",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB06A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 7488,
+      "instruction_count": 37,
+      "body_sha256": "807f7b7e719d993e2b07b8816ffa52663d3a04adef4b0c7dca2a4a4bbe8ade1b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB0738",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 7576,
+      "instruction_count": 37,
+      "body_sha256": "3629fc847e62eee6fc329c05e50d25a0f93e54ffbdcbbbf61435309cff9ffc7d",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -49,7 +65,9 @@
       "8238A8A0",
       "82AC9768",
       "82AC9A28",
-      "82AB0958"
+      "82AB0958",
+      "82AB06A0",
+      "82AB0738"
     ],
     "header": "include/lo_semantics/battle_action_readiness61.h",
     "source": "src/battle_action_readiness61.cpp",
@@ -65,6 +83,7 @@
     "focused_smoke_paths": 1,
     "case_scope": "One compact fixture checks all nine unavailable-property paths, standard versus extended modes, resource flag fallback, property upper bound 262 and nonvolatile preservation. Uses synthetic property tables; execution and target-picker composition is pending. Native status meanings and gameplay are not asserted. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
     "composition_update": "Execution now calls the recovered readiness predicates. Four execution/opcode fixtures pass after replacing predicate mocks with actual resource flags, and marshaling failure checks now inspect the real actor busy count. Property lookup in target pickers remains a separate pending composition step. Logical validation only; native gameplay is unvalidated.",
-    "target_property_composition": "Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated."
+    "target_property_composition": "Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated.",
+    "periodic_effect_prerequisites": "Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed."
   }
 }

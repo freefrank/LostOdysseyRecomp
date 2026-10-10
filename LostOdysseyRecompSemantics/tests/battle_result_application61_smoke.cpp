@@ -225,6 +225,23 @@ int main() {
     put(resource + 2588, 81);
     check(modeRun(8, 2) == 41 && get(resource + 2588) == 40);
     check(modeRun(99, 12) == 0 && get(resource + 2588) == 40);
+    auto periodic = [&](unsigned mode, float input) {
+      s.r[3] = owner;
+      s.r[4] = resource;
+      s.r[6] = mode;
+      amount(input);
+      run(0x82b2bba0);
+      return std::bit_cast<double>(s.fpr_bits[1]);
+    };
+    put(resource + 2588, 80);
+    check(periodic(0, 4.6f) == 5 && get(resource + 2588) == 75);
+    check(periodic(1, 4.6f) == 5 && get(resource + 2588) == 80);
+    put(resource + 2616, 5);
+    check(periodic(2, 10) == 10 && get(resource + 2616) == 0);
+    check(periodic(3, 100) == 100 && get(resource + 2616) == 60);
+    put(resource + 2588, 10);
+    check(periodic(4, 2) == 50 && get(resource + 2588) == 50);
+    check(periodic(8, 2) == 0 && get(resource + 2588) == 50);
     std::cout << "battle result application logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

@@ -118,6 +118,8 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
     return battle_action_parameters61::Apply(entry, memory, dependencies, state);
   case 0x8238a8a0u:
   case 0x8238e368u:
+  case 0x82ab06a0u:
+  case 0x82ab0738u:
   case 0x82ab0958u:
   case 0x82ac9768u:
   case 0x82ac9a28u:
@@ -433,6 +435,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b2b7f8u:
   case 0x82b2b910u:
   case 0x82b2b9e0u:
+  case 0x82b2bba0u:
   case 0x82b2bd50u:
     return battle_result_application61::Apply(entry, memory, dependencies, state);
   case 0x82abfc50u:
