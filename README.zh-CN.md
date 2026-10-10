@@ -81,7 +81,7 @@
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。 |
 | 输入 | 手柄、键盘和震动；Android 上有触摸按键。 |
-| Mod | 仅 Windows：纹理、菜单和字体替换，以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。 |
+| Mod | 仅 Windows：纹理、菜单和字体替换、文本翻译，以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。 |
 | 调试菜单 | 渲染捕获、随时存档、遇敌开关、传送、快进和修改。见[调试菜单](#调试菜单)。 |
 
 ## 操作按键

@@ -279,6 +279,31 @@ void Textures(const fs::path& root) {
     Env("LO_MODS_MODE", "overlay"); Reload(); assert(!HasTextureReplacements());
     Env("LO_MODS_MODE", nullptr); Reload();
 }
+void Texts(const fs::path& root) {
+    const std::string menu = "bin/xenon/loc/int/menu/menu_int.dat", jmd = "bin/xenon/scr/mes/int/a.jmd";
+    const AssetRequest text{{AssetKind::Text, "BIN/Xenon/loc/int/menu/menu_int.dat"}, {}};
+    assert(OverlayRelativePath(text.id) == fs::path("overlay/text/" + menu + ".json"));
+    for (const auto* bad : {"", "/bin/a.dat", "bin/../a.dat", "bin/a/", "c:/a.dat"})
+        assert(OverlayRelativePath({AssetKind::Text, bad}).empty());
+    Reload(); assert(ListTexts().empty());
+    Write(root / "lang/menu.json", "{}");
+    Write(root / "lang/mod.ini", "api_version=1\nid=lang\ntext:" + menu + "=menu.json\ntext:" + jmd + "=missing.json\n");
+    Reload();
+    auto texts = ListTexts();
+    assert(texts.size() == 1 && texts[0].id.key == menu && texts[0].modId == "lang" && Resolve(text)->modId == "lang");
+    // The export's text/ folder under overlay/; other files there are ignored.
+    Write(root / "overlay/text" / (menu + ".json"), "{}");
+    Write(root / "overlay/text" / (jmd + ".json"), "{}");
+    Write(root / "overlay/text/readme.txt", "x");
+    texts = ListTexts();
+    assert(texts.size() == 2 && texts[0].modId == "@overlay" && texts[1].id.key == jmd && Resolve(text)->modId == "@overlay");
+    Env("LO_MODS_MODE", "standalone"); Reload();
+    texts = ListTexts();
+    assert(texts.size() == 1 && texts[0].modId == "lang");
+    Env("LO_MODS_MODE", nullptr);
+    fs::remove_all(root / "lang"); fs::remove_all(root / "overlay/text"); Reload();
+    assert(ListTexts().empty());
+}
 }
 int main() {
     Environment environment;
@@ -288,6 +313,7 @@ int main() {
     Resolution(root);
     Validation(root, temp.path / "outside");
     Textures(root);
+    Texts(root);
     Shutdown(); assert(!Resolve(request));
-    std::cout << "Mod API, image and texture contracts, manager isolation and reload tests passed\n";
+    std::cout << "Mod API, image, texture and text contracts, manager isolation and reload tests passed\n";
 }

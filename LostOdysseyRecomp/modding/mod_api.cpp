@@ -47,7 +47,7 @@ std::string_view Trim(std::string_view s) {
     return s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
 }
 bool KindValid(AssetKind kind) {
-    return kind >= AssetKind::Image && kind <= AssetKind::Texture;
+    return kind >= AssetKind::Image && kind <= AssetKind::Text;
 }
 std::optional<AssetKind> ParseKind(std::string_view s) {
     if (s == "image") return AssetKind::Image;
@@ -55,6 +55,7 @@ std::optional<AssetKind> ParseKind(std::string_view s) {
     if (s == "model") return AssetKind::Model;
     if (s == "movie") return AssetKind::Movie;
     if (s == "texture") return AssetKind::Texture;
+    if (s == "text") return AssetKind::Text;
     return {};
 }
 template<class T> bool Number(std::string_view s, T& value) {
@@ -94,8 +95,18 @@ std::string CanonicalKey(std::string_view key) {
     if (colon == key.npos || !Number(key.substr(hash + 1, colon - hash - 1), index)) return {};
     return MakeManifestKey(key.substr(0, hash), index, key.substr(colon + 1));
 }
+// Archive member paths: relative, '/' separators, ASCII lower case like the FPI names.
+std::string CanonicalTextKey(std::string_view key) {
+    const auto relative = Relative(key);
+    if (!relative || *relative == ".") return {};
+    auto path = Utf8(*relative);
+    if (path.empty() || path.back() == '/' || path.size() > 1024) return {};
+    for (char& c : path) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+    return path;
+}
 // Texture fingerprints are matched exactly, never normalized.
 std::string CanonicalKey(AssetKind kind, std::string_view key) {
+    if (kind == AssetKind::Text) return CanonicalTextKey(key);
     if (kind != AssetKind::Texture) return CanonicalKey(key);
     const bool hex = key.size() == 16 && std::all_of(key.begin(), key.end(),
         [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
@@ -207,6 +218,7 @@ std::filesystem::path OverlayRelativePath(const AssetId& id) {
     // A fingerprint is already a fixed-size name, so two manager mods that
     // replace the same image collide on the same path.
     if (id.kind == AssetKind::Texture) return std::filesystem::path("overlay") / "textures" / ("fp-" + key + ".lotex2");
+    if (id.kind == AssetKind::Text) return std::filesystem::path("overlay") / "text" / FromUtf8(key + ".json");
     uint64_t hash = 14695981039346656037ull;
     for (unsigned char c : key) { hash ^= c; hash *= 1099511628211ull; }
     char name[40];
@@ -286,6 +298,33 @@ bool HasTextureReplacements() {
     const auto& s = *gSnapshot;
     return s.enabled && (s.textureOverlay || (s.mode != ResolutionMode::Overlay &&
         (s.textureEntries || gProviders.count(AssetKind::Texture))));
+}
+std::vector<ResolvedAsset> ListTexts() {
+    std::shared_ptr<const Snapshot> snapshot;
+    { std::lock_guard lock(gMutex); snapshot = gSnapshot; }
+    std::map<std::string, ResolvedAsset> found;
+    if (!snapshot->enabled) return {};
+    if (snapshot->mode != ResolutionMode::Standalone) {
+        const auto overlay = snapshot->root / "overlay" / "text";
+        std::error_code ec;
+        std::filesystem::recursive_directory_iterator it(overlay, ec), end;
+        for (; !ec && it != end; it.increment(ec)) {
+            std::error_code entryError;
+            if (!it->is_regular_file(entryError)) continue;
+            auto relative = Utf8(it->path().lexically_relative(overlay));
+            if (relative.size() <= 5 || relative.compare(relative.size() - 5, 5, ".json") != 0) continue;
+            const auto key = CanonicalTextKey(std::string_view(relative).substr(0, relative.size() - 5));
+            if (!key.empty() && ContainedFile(overlay, it->path()))
+                found.emplace(key, ResolvedAsset{{AssetKind::Text, key}, it->path(), "@overlay", 0});
+        }
+    }
+    if (snapshot->mode != ResolutionMode::Overlay)
+        for (const auto& [lookup, e] : snapshot->entries)
+            if (e.id.kind == AssetKind::Text && ContainedFile(snapshot->root, e.file) && ContainedFile(e.base, e.file))
+                found.emplace(e.id.key, ResolvedAsset{e.id, e.file, e.modId, e.priority});
+    std::vector<ResolvedAsset> result;
+    for (auto& [key, asset] : found) result.push_back(std::move(asset));
+    return result;
 }
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};
