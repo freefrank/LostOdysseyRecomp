@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor profile damage (2026-10-10 UTC)
+
+Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
 ## Root direct continuation: descriptor property toggling (2026-10-10 UTC)
 
 Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.

@@ -477,6 +477,26 @@ int main() {
     m.WriteU32(target + 4876, 128);
     call(0x82b0fbd0);
     check(!m.ReadU32(target + 3 * 272 + 232), "passive property seven gate");
+    m.WriteU32(0x832cb778, 183);
+    m.WriteU32(0xc1000 + 324, 0);
+    m.WriteU32(0x93000 + 8260 + 181104, 3);
+    m.WriteU32(0x93000 + 8260 + 181104 + 4, 2);
+    m.WriteU32(owner + 120, 0);
+    put(owner + 80, 2);
+    m.WriteU32(target + 124, 0x50000000);
+    m.WriteU32(target + 2136, 0);
+    put(target + 2588, 100);
+    call(0x82b12a98);
+    check(m.ReadU32(0xc1000 + 324) == 1 && get(target + 2588) == 90 &&
+              get(owner + 172) == 10,
+          "profile aggregate damage and encounter override");
+    m.WriteU32(owner + 120, 1);
+    m.WriteU32(owner + 116, 5);
+    put(owner + 80, 10);
+    call(0x82b12a98);
+    check(get(target + 2588) == 81 && get(owner + 172) == 9 &&
+              s.fpr_bits[31] == initial.fpr_bits[31],
+          "profile ratio damage and FPR preservation");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

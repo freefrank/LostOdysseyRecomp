@@ -61,6 +61,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 28;
     literal = 80;
     break;
+  case 0x82b12a98:
+    frame = 160;
+    first = 27;
+    break;
   case 0x82b0ad38:
     frame = 128;
     first = 29;
@@ -150,7 +154,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  unsigned savedFp = e == 0x82b0a7a0 ? 40 : e == 0x82b0aa70 ? 56 : 0;
+  unsigned savedFp = e == 0x82b0a7a0                        ? 40
+                     : (e == 0x82b0aa70 || e == 0x82b12a98) ? 56
+                                                            : 0;
   if (savedFp)
     recovery_abi::WriteU64(m, old - savedFp, s.fpr_bits[31]);
   s.r[1] -= frame;
@@ -419,18 +425,57 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         Call(0x82ac91e0, m, d, s);
       }
     }
-  } else if (e == 0x82b0db98) {
+  } else if (e == 0x82b0db98 || e == 0x82b12a98) {
     if (!eligible(1))
       m.WriteU8(owner + 208, 0);
     else {
       mark();
-      Call(0x82380a18, m, d, s);
-      Call(0x82389b78, m, d, s);
-      auto factor = std::int32_t(m.ReadU32(Address(s.r[3]) + 156));
-      recovery_abi::WriteU64(m, sp + 88, std::uint64_t(std::int64_t(factor)));
-      fp();
-      auto amount =
-          float(std::bit_cast<float>(m.ReadU32(owner + 80)) * float(factor));
+      float amount;
+      if (e == 0x82b12a98) {
+        s.r[3] = m.ReadU32(0x83315fb4);
+        s.ctr = m.ReadU32(m.ReadU32(Address(s.r[3])) + 352);
+        d.guest.CallIndirect(Address(s.ctr), m, s);
+        Call(0x8229dfd8, m, d, s);
+        auto play = Address(s.r[3]);
+        s.r[3] = 0x832c9c54;
+        s.r[4] = m.ReadU32(owner + 4);
+        Call(0x82a9bdb0, m, d, s);
+        auto actor = Address(s.r[3]), encounter = m.ReadU32(0x832cb778);
+        if (encounter == 183 || encounter == 184 || encounter == 185)
+          m.WriteU32(actor + 324, 1);
+        auto base = play + 8260 * m.ReadU32(actor + 324) + 181104;
+        unsigned sum = 0;
+        for (unsigned i = 0; i < 1024; ++i)
+          sum += m.ReadU32(base + 4 * i);
+        fp();
+        auto input = std::bit_cast<float>(m.ReadU32(owner + 80));
+        auto total = std::int32_t(sum);
+        if (!m.ReadU32(owner + 120)) {
+          recovery_abi::WriteU64(m, sp + 88,
+                                 std::uint64_t(std::int64_t(total)));
+          amount = float(input * float(total));
+        } else {
+          auto divisor = std::int32_t(m.ReadU32(owner + 116));
+          auto scaled = std::int32_t(unsigned(total / divisor) * 10u);
+          recovery_abi::WriteU64(m, sp + 88,
+                                 std::uint64_t(std::int64_t(scaled)));
+          auto product = float(float(scaled) * input);
+          amount = float(
+              -(double(product) * std::bit_cast<float>(m.ReadU32(0x82000d7c)) -
+                double(input)));
+          auto zero = std::bit_cast<float>(m.ReadU32(0x82000e50));
+          if (amount < zero)
+            amount = zero;
+        }
+      } else {
+        Call(0x82380a18, m, d, s);
+        Call(0x82389b78, m, d, s);
+        auto factor = std::int32_t(m.ReadU32(Address(s.r[3]) + 156));
+        recovery_abi::WriteU64(m, sp + 88, std::uint64_t(std::int64_t(factor)));
+        fp();
+        amount =
+            float(std::bit_cast<float>(m.ReadU32(owner + 80)) * float(factor));
+      }
       m.WriteU32(owner + 28, std::bit_cast<unsigned>(amount));
       s.r[3] = owner;
       Call(0x82b0a0d0, m, d, s);
