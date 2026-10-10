@@ -63,6 +63,10 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 
 [Step-by-step guide](docs/INSTALLING.md#android).
 
+### Nintendo Switch (experimental)
+
+A homebrew Switch build is in bring-up: it compiles for the console but has not been run on one yet. Building it, the SD card layout and the shader files it needs are in the [Switch guide](docs/SWITCH.md).
+
 ### HDR
 
 Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibration page; **LB / RB** switch between the game scene and a test pattern. HDR is available on Windows, Linux and macOS.

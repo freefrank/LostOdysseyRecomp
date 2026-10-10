@@ -15,7 +15,18 @@ target_include_directories(LostOdysseyRecompLib PUBLIC
     "${CMAKE_SOURCE_DIR}/tools/XenonRecomp/thirdparty/simde")
 target_compile_features(LostOdysseyRecompLib PUBLIC cxx_std_20)
 
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(LO_TARGET_PLATFORM STREQUAL "switch" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # devkitA64 GCC. ppc_context.h maps the Clang builtins XenonRecomp emits
+    # (tools/patches/XenonRecomp-switch.patch). The guest never sees host errno
+    # or FP exception flags; rounding stays honoured (-frounding-math). The
+    # recompiled code gets x29 back as a general register. Same flags as
+    # UnleashedRecomp-NX.
+    target_compile_options(LostOdysseyRecompLib PRIVATE
+        -frounding-math -fno-math-errno -fno-trapping-math -fomit-frame-pointer)
+    if(LO_SWITCH_RECOMP_O2)
+        target_compile_options(LostOdysseyRecompLib PRIVATE -O2)
+    endif()
+elseif(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(FATAL_ERROR "The recompiled code requires clang-cl (uses __int128, weak aliases, builtins)")
 endif()
 # Same spirit as UnleashedRecompLib: no exceptions, no RTTI, warnings off for generated code.

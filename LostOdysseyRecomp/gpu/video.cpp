@@ -112,6 +112,12 @@ namespace plume {
 #ifdef __ANDROID__
 #include <jni.h>
 #endif
+#if LO_PLATFORM_SWITCH
+// libnx's default native window; <switch.h> is not included here (its Mutex
+// and Event typedefs collide with the runtime's).
+struct NWindow;
+extern "C" NWindow* nwindowGetDefault(void);
+#endif
 
 // LO_VK_CUSTOM_DRIVER=<soname>: load a custom Vulkan driver (Mesa Turnip) from
 // LO_CUSTOM_DRIVER_DIR through libadrenotools before plume initialises volk.
@@ -278,6 +284,23 @@ namespace gpu::video
         SDL_MetalView g_metalView = nullptr;
         void* g_cocoaWindow = nullptr;
         void* g_metalLayer = nullptr;
+#endif
+#if defined(LO_GPU_PLUME) && LO_PLATFORM_SWITCH
+        // SDL's Switch video driver has no Vulkan surface support: plume
+        // presents to the libnx window (VK_NN_vi_surface) directly. SDL still
+        // owns the window object for events and sizing (nwindowSetDimensions).
+        plume::RenderWindow PlumeWindow() { return nwindowGetDefault(); }
+        std::unique_ptr<plume::RenderInterface> CreatePlumeVulkanInterface(const plume::VulkanExtensionHooks& hooks)
+        {
+            // The instance needs no window; the swap chain takes PlumeWindow().
+            return plume::CreateVulkanInterface(hooks);
+        }
+#elif defined(LO_GPU_PLUME) && !defined(_WIN32) && !LO_PLATFORM_MACOS
+        plume::RenderWindow PlumeWindow() { return g_window; }
+        std::unique_ptr<plume::RenderInterface> CreatePlumeVulkanInterface(const plume::VulkanExtensionHooks& hooks)
+        {
+            return plume::CreateVulkanInterface(g_window, hooks);
+        }
 #endif
         std::atomic<uint32_t> g_displayRefreshHz{0}; // Window thread -> presentation thread.
         std::chrono::steady_clock::time_point g_nextRefreshPoll{};
@@ -927,7 +950,7 @@ namespace gpu::video
 #elif LO_PLATFORM_MACOS
             plume::RenderSwapChainDesc desc(plume::RenderWindow{ g_cocoaWindow, g_metalLayer }, kSwapChainFormat, kSwapChainBuffers);
 #else
-            plume::RenderSwapChainDesc desc(g_window, kSwapChainFormat, kSwapChainBuffers);
+            plume::RenderSwapChainDesc desc(PlumeWindow(), kSwapChainFormat, kSwapChainBuffers);
 #endif
             if (g_hdrSwapchain) {
                 desc.format = plume::RenderFormat::R16G16B16A16_FLOAT;
@@ -2091,6 +2114,8 @@ namespace gpu::video
 #if LO_PLATFORM_MACOS
             // macOS renders through plume's Metal backend (CAMetalLayer).
             flags |= SDL_WINDOW_METAL;
+#elif LO_PLATFORM_SWITCH
+            // No SDL_WINDOW_VULKAN: plume creates the surface on the libnx window.
 #elif !defined(_WIN32)
             // Without it a scaled Wayland desktop gets a logical-size swapchain
             // that the compositor upscales.
@@ -2302,9 +2327,9 @@ namespace gpu::video
             g_dlssController = std::make_unique<dlss::Controller>(DlssApplicationDataPath(), DlssRuntimePath());
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(*g_dlssController);
             LoadCustomVulkanDriver();
-            g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
+            g_interface = CreatePlumeVulkanInterface(g_dlssController->ExtensionHooks());
             if (!g_interface && RetryWithSystemVulkanDriver("instance creation"))
-                g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
+                g_interface = CreatePlumeVulkanInterface(g_dlssController->ExtensionHooks());
 #endif
             if (!g_interface) return "API/loader initialization failed";
 #ifdef __ANDROID__
@@ -2341,7 +2366,7 @@ namespace gpu::video
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
             if (!g_device && RetryWithSystemVulkanDriver("device creation")) {
                 g_interface.reset();
-                g_interface = plume::CreateVulkanInterface(g_window, g_dlssController->ExtensionHooks());
+                g_interface = CreatePlumeVulkanInterface(g_dlssController->ExtensionHooks());
                 if (!g_interface) return "API/loader initialization failed";
                 LogVulkanPhysicalDevices(static_cast<plume::VulkanInterface*>(g_interface.get())->instance);
                 g_device = g_interface->createDevice(preferredGpu);

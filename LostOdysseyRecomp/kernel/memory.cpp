@@ -77,6 +77,21 @@ Memory::Memory()
     if (!base)
         return;
 
+#if LO_PLATFORM_SWITCH
+    // Horizon commits nothing lazily. Back what is used before any allocator
+    // runs: the low pages, the XEX image with the recompiled function table
+    // behind it, and the top of the virtual view (host heap 0x7C000000, XMA
+    // and GPU MMIO pages 0x7FC00000-0x7FFFFFFF, read and written as memory).
+    // Everything else is committed by PageAllocator::Alloc.
+    if (!GuestAddressSpace::Commit(0x1000, 0x1FF000) ||
+        !GuestAddressSpace::Commit(uint32_t(PPC_IMAGE_BASE), uint32_t(PPC_IMAGE_SIZE + PPC_CODE_SIZE * 2)) ||
+        !GuestAddressSpace::Commit(0x7C000000, 0x04000000))
+    {
+        base = nullptr;
+        return;
+    }
+#endif
+
     // Every code address the recompiler did not emit a function for gets a
     // logging stub instead of a null pointer, so a virtual call into a missed
     // function reports the guest address instead of jumping to host 0.
@@ -196,6 +211,17 @@ uint32_t PageAllocator::Alloc(Region& region, uint32_t size, uint32_t alignment,
     {
         std::lock_guard sizeLock(m_sizesMutex);
         m_allocationSizes[address] = size;
+    }
+    if (!GuestAddressSpace::Commit(address, size))
+    {
+        // Out of console memory (Switch): undo the reservation and fail the
+        // guest request instead of handing out unbacked pages.
+        for (uint32_t i = 0; i < pageCount; i++)
+            region.used[page + i] = 0;
+        std::lock_guard sizeLock(m_sizesMutex);
+        m_allocationSizes.erase(address);
+        LOG_ERROR("guest memory commit failed: {:#x} + {:#x}", address, size);
+        return 0;
     }
     memset(g_memory.Translate(address), 0, size);
     return address;
