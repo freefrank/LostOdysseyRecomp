@@ -8,6 +8,8 @@ inline void InitializeActionRecordFixture(lo::semantic::gpu::GuestMemory &m,
     base = 0x100000;
     m.WriteU32(resource + 14656, base);
   }
+  if (base == 0x100000)
+    m.WriteU32(0x78200, 1);
   auto index = reset ? 0u : m.ReadU32(resource + 14660);
   auto record = base + 124208 * index;
   for (unsigned i = 0; i < 124208; i += 4)
@@ -40,9 +42,19 @@ inline bool ActionStorageDirectFixture(
   return false;
 }
 inline bool ActionStorageIndirectFixture(
-    unsigned e, lo::semantic::gpu::manager_release_context61::Registers &s) {
+    unsigned e, lo::semantic::gpu::GuestMemory &m,
+    lo::semantic::gpu::manager_release_context61::Registers &s) {
   if (e != 0x123400)
     return false;
-  s.r[3] = s.r[5] ? 0x100000 : 0;
+  auto old = unsigned(s.r[4]);
+  if (!s.r[5]) {
+    if (old)
+      m.WriteU32(old == 0x100000 ? 0x78200 : 0x78204, 0);
+    s.r[3] = 0;
+  } else {
+    auto storage = old ? old : (m.ReadU32(0x78200) ? 0x200000 : 0x100000);
+    m.WriteU32(storage == 0x100000 ? 0x78200 : 0x78204, 1);
+    s.r[3] = storage;
+  }
   return true;
 }

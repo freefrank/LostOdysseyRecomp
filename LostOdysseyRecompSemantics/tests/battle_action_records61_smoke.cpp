@@ -35,7 +35,7 @@ struct RecordGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
-    if (ActionStorageIndirectFixture(e, s))
+    if (ActionStorageIndirectFixture(e, m, s))
       return;
     throw std::runtime_error("unexpected record indirect");
   }

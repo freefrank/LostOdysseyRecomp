@@ -30,8 +30,6 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       s.r[3] = predicate;
       return;
     }
-    if (e == 0x82acee70)
-      return;
 
     if (e == 0x82acde40) {
       if (s.r[4] != 0x80000)
@@ -49,7 +47,7 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
-    if (ActionStorageIndirectFixture(e, s))
+    if (ActionStorageIndirectFixture(e, m, s))
       return;
     throw std::runtime_error("unexpected execution indirect");
   }
@@ -127,6 +125,10 @@ int main() {
     auto busy = m.ReadU32(actor + 96), configured = guest.configured;
     run(0x82afdcf0, 7, 8);
     check(guest.configured == configured && m.ReadU32(actor + 96) == busy);
+    check(m.ReadU32(resource + 14668) == 0x200000 &&
+          m.ReadU32(resource + 14672) == 1 &&
+          m.ReadU32(0x200000 + 14884) == 24 &&
+          m.ReadU32(resource + 156) == 0xfffffffe);
     guest.predicate = 0;
     m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 64, 0x01000000);

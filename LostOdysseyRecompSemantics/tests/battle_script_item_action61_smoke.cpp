@@ -37,8 +37,6 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
-    if (e == 0x82acee70)
-      return;
     if (e == 0x82acde40) {
       if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 11)
         throw std::runtime_error("item configuration ABI");
@@ -56,7 +54,7 @@ struct ItemGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
-    if (ActionStorageIndirectFixture(e, s))
+    if (ActionStorageIndirectFixture(e, m, s))
       return;
     throw std::runtime_error("unexpected item indirect");
   }

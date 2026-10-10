@@ -1,3 +1,7 @@
+## Root direct continuation: compose action snapshots (2026-10-10 UTC)
+
+Execution now composes alternate-record snapshot preparation. Four execution/opcode fixtures pass with the actual backup state and independent normal/alternate storage, including an assertion that readiness early-return still creates the alternate snapshot. The shared synthetic allocator now represents separate live allocations. Record/effect caller fixtures also pass; native gameplay remains unvalidated.
+
 ## Root direct continuation: battle action snapshots (2026-10-10 UTC)
 
 Action snapshot preparation now has logical implementations for manager field updates, selective record copy and alternate-array backup. The focused fixture executes real storage and string lifetime and checks both preparation modes and flag preservation. Integration into execution callers is next; native gameplay and bitwise FP remain unvalidated.
