@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/battle_script_events61.h"
@@ -46,7 +47,8 @@ struct Actions {
     m.WriteU32(Actor() + 52, Address(s.r[3]));
   }
   void Call(unsigned e) {
-    if (!battle_script_execution61::Apply(e, m, d, s))
+    if (!battle_action_eligibility61::Apply(e, m, d, s) &&
+        !battle_script_execution61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
   unsigned Manager() {

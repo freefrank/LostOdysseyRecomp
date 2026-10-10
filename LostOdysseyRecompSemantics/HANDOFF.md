@@ -1,3 +1,7 @@
+## Root direct continuation: composed action eligibility (2026-10-10 UTC)
+
+Composed real action eligibility, category configuration, parameter initialization and descriptor dispatch into skill pickers and action availability. Picker, action and marshaling focused fixtures pass without AD0C10/setup/initializer service mocks; descriptor-specific evaluation remains an explicit callback boundary. This is logical composition, not full game/runtime acceptance.
+
 ## Root direct continuation: eligibility parameter initialization (2026-10-10 UTC)
 
 Recovered and composed category-specific evaluator parameter initialization: skill/item/special/inventory rows, paired field copies, adjusted costs, preserved untouched fields and random element selection. The focused fixture covers categories 0 through 32, actual cost/property helpers and random selection. Eligibility configuration now has no setup or initialization mock; only descriptor-specific evaluation callbacks and manager access remain boundaries. Logical/ABI recovery only, with no Full72, bitwise FP or native gameplay acceptance.

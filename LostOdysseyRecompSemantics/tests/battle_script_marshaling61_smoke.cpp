@@ -34,10 +34,7 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       prepared = unsigned(s.r[4]) + 1;
       return;
     }
-    if (e == 0x82ad0c10) {
-      s.r[3] = ok;
-      return;
-    }
+
     if (e == 0x82b08b80) {
       s.r[3] = 7;
       return;
@@ -82,6 +79,13 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123458) {
+      if (s.r[3] != 0x73000 || s.ctr != e)
+        throw std::runtime_error("composed eligibility descriptor ABI");
+      m.WriteU8(0x73000 + 208, ok);
+      m.WriteU8(0x73000 + 76, 0);
+      return;
+    }
     if (ActionStorageIndirectFixture(e, m, s))
       return;
     throw std::runtime_error("unexpected indirect");
@@ -104,6 +108,9 @@ int main() {
     w.Fill(0);
     auto m = w.Memory();
     SetupActionStorageFixture(m);
+    m.WriteU32(0x832ca0d8, 0x73000);
+    m.WriteU32(0x73000 + 4 * 124, 0x123458);
+    m.WriteU32(0x80000 + 132, 1);
     MarshalGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,

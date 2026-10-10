@@ -19,12 +19,7 @@ struct PickerGuest final : manager_release_context61::GuestServices {
       s.r[3] = s.r[4] == 20 ? 0x90000 : 0x80000;
       return;
     }
-    if (e == 0x82ad0c10) {
-      if (s.r[3] != 0x70000 || s.r[4] != 0x80000 || s.r[6] != 2)
-        throw std::runtime_error("picker action eligibility ABI");
-      s.r[3] = predicate;
-      return;
-    }
+
     if (e == 0x82b08b80) {
       if (s.r[3] != 0x73000)
         throw std::runtime_error("picker kind lookup ABI");
@@ -35,6 +30,13 @@ struct PickerGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123458) {
+      if (s.r[3] != 0x73000 || s.ctr != e)
+        throw std::runtime_error("composed eligibility descriptor ABI");
+      m.WriteU8(0x73000 + 208, predicate);
+      m.WriteU8(0x73000 + 76, 0);
+      return;
+    }
     if (skip)
       m.WriteU32(0x80000 + 2616, 0x41200000);
     if (s.r[3] != 0x90000)
@@ -56,6 +58,12 @@ int main() {
     w.Fill(0);
     auto m = w.Memory();
     m.WriteU32(0x831f3304, 1);
+    m.WriteU32(0x832ca0d8, 0x73000);
+    m.WriteU32(0x73000 + 4 * 124, 0x123458);
+    m.WriteU32(0x80000 + 132, 1);
+    m.WriteU32(0x832649c0, 0xb0000);
+    m.WriteU32(0x832ca0d0, 0x75000);
+    m.WriteU32(0x75000 + 132, 0xc0000);
     PickerGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
