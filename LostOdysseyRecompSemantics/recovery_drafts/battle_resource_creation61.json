@@ -17,12 +17,30 @@
       "instruction_count": 229,
       "body_sha256": "2dc8d2b603318dd5b943515a929657221f97af5decdbe17713fedd348fc3f4e1",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6290",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 4962,
+      "instruction_count": 84,
+      "body_sha256": "d17e43255bc40d8d48fa5c9e4fcd40bc49d9eb8b4b0b4d899adb8cf0459bd263",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6448",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 5217,
+      "instruction_count": 58,
+      "body_sha256": "a97e652cbc4545424c2e3e7caa1d8b4e18ab2836e33fb5555510d9021ce7c9a7",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82AB3B08",
-      "82AF5D18"
+      "82AF5D18",
+      "82AF6290",
+      "82AF6448"
     ],
     "header": "include/lo_semantics/battle_resource_creation61.h",
     "source": "src/battle_resource_creation61.cpp",
@@ -36,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered resource reset and battle resource factory. The factory composes actual action-record initialization, profile restore or creature growth, skills/equipment recalculation, position/angle writes and active-state reset before roster append. Class lookup/load and object allocation remain explicit external services. Focused fixture covers failed class load, party and creature paths, actual record setup, roster append and nonvolatile preservation with public synthetic data. Library builds; no gameplay, full ABI or bitwise FP acceptance."
+    "case_scope": "Recovered resource reset and battle resource factory. The factory composes actual action-record initialization, profile restore or creature growth, skills/equipment recalculation, position/angle writes and active-state reset before roster append. Class lookup/load and object allocation remain explicit external services. Focused fixture covers failed class load, party and creature paths, actual record setup, roster append and nonvolatile preservation with public synthetic data. Library builds; no gameplay, full ABI or bitwise FP acceptance.",
+    "roster_population": "Recovered party roster construction AF6290 and enabled encounter-row construction AF6448. Both compose the actual resource factory, profile/creature initialization and record setup. Party slots retain source slot IDs and compact selected group indexes; encounter rows preserve enable/class bytes, tags and per-resource marker, then call the existing layout service boundary AAC1E0. Focused roster fixture passes party and encounter paths and preserved nonvolatile state. Complex encounter layout remains a guest boundary; no gameplay acceptance."
   }
 }

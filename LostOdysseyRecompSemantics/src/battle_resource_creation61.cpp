@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_resource_creation61.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_action_storage61.h"
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_resource_stats61.h"
@@ -20,6 +21,101 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82af6290 || e == 0x82af6448) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 25; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    recovery_abi::WriteU64(m, old - 72, s.fpr_bits[31]);
+    s.r[1] -= 160;
+    m.WriteU32(Address(s.r[1]), old);
+    auto clearCoordinates = [&]() {
+      if (s.cached_fp_control & 0x8040) {
+        s.cached_fp_control &= ~0x8040u;
+        d.fp.SetHostFpControl(s.cached_fp_control);
+      }
+      auto zero = std::bit_cast<std::uint64_t>(
+          double(std::bit_cast<float>(m.ReadU32(0x82000e50))));
+      for (unsigned i = 1; i < 5; ++i)
+        s.fpr_bits[i] = zero;
+    };
+    if (e == 0x82af6290) {
+      auto list = m.ReadU32(owner + 20);
+      m.WriteU32(list + 4, 0);
+      if (m.ReadU32(list + 8)) {
+        auto data = m.ReadU32(list);
+        m.WriteU32(list + 8, 0);
+        if (data) {
+          auto manager = m.ReadU32(0x8330b608);
+          if (!manager) {
+            Call(0x827c5f38, m, d, s);
+            manager = m.ReadU32(0x8330b608);
+          }
+          s.r[3] = manager;
+          s.r[4] = data;
+          s.r[5] = 0;
+          s.r[6] = 8;
+          s.ctr = m.ReadU32(m.ReadU32(manager) + 8);
+          d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+          m.WriteU32(list, Address(s.r[3]));
+        }
+      }
+      auto profile = m.ReadU32(owner + 32),
+           group = m.ReadU32(m.ReadU32(m.ReadU32(owner + 48)) + 4);
+      auto formation = profile + (m.ReadU32(profile + 204704) ? 204684 : 76);
+      for (unsigned i = 0; i < 5; ++i)
+        m.WriteU32(group + 12656 + 4 * i, 0xffffffff);
+      unsigned count = 0;
+      for (unsigned slot = 0; slot < 5; ++slot) {
+        auto index = m.ReadU32(formation + 28 + 4 * slot);
+        if (index == 0xffffffff)
+          continue;
+        auto row = formation + 14308 * index;
+        clearCoordinates();
+        s.r[3] = owner;
+        s.r[4] = m.ReadU32(row + 48);
+        s.r[5] = (~m.ReadU32(row + 56) >> 31) & 1;
+        s.r[6] = slot;
+        s.r[7] = m.ReadU32(row + 52);
+        Call(0x82af5d18, m, d, s);
+        m.WriteU32(group + 12656 + 4 * count,
+                   m.ReadU32(formation + 28 + 4 * slot));
+        ++count;
+      }
+      m.WriteU32(group + 12676, count);
+    } else {
+      auto group = m.ReadU32(m.ReadU32(m.ReadU32(owner + 48)));
+      Call(0x82380a18, m, d, s);
+      (void)battle_manager_access61::Apply(0x82389aa0, m, d, s);
+      auto profile = Address(s.r[3]);
+      for (unsigned i = 0;
+           std::int32_t(i) < std::int32_t(m.ReadU32(profile + 152)); ++i) {
+        auto row = m.ReadU32(profile + 148) + 32 * i;
+        if (!m.ReadU8(row + 13))
+          continue;
+        clearCoordinates();
+        s.r[3] = owner;
+        s.r[4] = m.ReadU32(row + 8);
+        s.r[5] = m.ReadU8(row + 12) == 1;
+        s.r[6] = m.ReadU8(row);
+        s.r[7] = m.ReadU32(row + 4);
+        Call(0x82af5d18, m, d, s);
+        m.WriteU32(Address(s.r[3]) + 76312, m.ReadU8(row + 29));
+        m.WriteU32(group + 12676, m.ReadU32(group + 12676) + 1);
+      }
+      s.r[3] = 0x832ca0e0;
+      s.r[4] = 0;
+      s.r[5] = 0;
+      s.r[6] = m.ReadU8(profile + 132);
+      Call(0x82aac1e0, m, d, s);
+    }
+    s.r[1] += 160;
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 72);
+    for (unsigned i = 25; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e != 0x82ab3b08 && e != 0x82af5d18)
     return false;
   unsigned frame = e == 0x82ab3b08 ? 112 : 224,

@@ -291,6 +291,8 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
     return battle_random_range61::Apply(entry, memory, dependencies, state);
   case 0x82ab3b08u:
   case 0x82af5d18u:
+  case 0x82af6290u:
+  case 0x82af6448u:
     return battle_resource_creation61::Apply(entry, memory, dependencies, state);
   case 0x82abfe38u:
   case 0x82abfe90u:
