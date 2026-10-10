@@ -111,6 +111,20 @@ Config Validate(Config value)
     if (uint32_t(value.aspectRatio) >= gpu::aspect_ratio::ModeCount)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
+#if LO_PLATFORM_SWITCH
+    // The Xbox 360 image: the game's own 720p scene, retail shadow maps and none
+    // of the host AA, AO, filtering, upscaling or HDR passes. The menu hides them.
+    value.internalResolution = 720;
+    value.shadowResolution = 1;
+    value.antialiasing = 0;
+    value.fxaa = false;
+    value.ambientOcclusion = 0;
+    value.anisotropicFiltering = 0;
+    value.upscaler = gpu::upscaling::Upscaler::Off;
+    value.dlssNeuralRendering = 0;
+    value.frameGenerationProvider = framegen::Provider::Off;
+    value.hdr = false;
+#endif
     return value;
 }
 Config Read()
