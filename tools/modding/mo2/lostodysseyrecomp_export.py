@@ -3,7 +3,7 @@
 # Copy this file to <MO2>/plugins/ and restart MO2. With a "Lost Odyssey Recomp"
 # instance selected, the Tools menu gets "Export Lost Odyssey assets". It runs
 # LostOdysseyRecomp.exe --export-assets in the game folder (outside MO2's
-# virtual file system) and writes textures and movies from your own game data
+# virtual file system) and writes textures, movies and text from your own game data
 # to a new folder. Use the result as reference for your mods; do not share it.
 
 from __future__ import annotations
@@ -48,8 +48,9 @@ class ExportDialog(QDialog):
         self._errors: list[str] = []
 
         info = QLabel(
-            "Exports the original textures (PNG) and movies from your own game "
-            "data. The files are for reference only; do not share them."
+            "Exports the original textures (PNG), movies and text (JSON, the "
+            "starting point for a translation) from your own game data. The files "
+            "are for reference only; do not share them."
         )
         info.setWordWrap(True)
         self._folder = QLineEdit(default_output)
@@ -62,9 +63,12 @@ class ExportDialog(QDialog):
         self._textures.setChecked(True)
         self._movies = QCheckBox("Movies")
         self._movies.setChecked(True)
+        self._text = QCheckBox("Text")
+        self._text.setChecked(True)
         kinds = QHBoxLayout()
         kinds.addWidget(self._textures)
         kinds.addWidget(self._movies)
+        kinds.addWidget(self._text)
         kinds.addStretch(1)
         self._filter = QLineEdit()
         self._filter.setPlaceholderText("optional: only names containing this text")
@@ -121,7 +125,7 @@ class ExportDialog(QDialog):
         )
 
     def _set_busy(self, busy: bool) -> None:
-        for widget in (self._folder, self._textures, self._movies, self._filter, self._start):
+        for widget in (self._folder, self._textures, self._movies, self._text, self._filter, self._start):
             widget.setEnabled(not busy)
 
     def _fail(self, message: str) -> None:
@@ -135,9 +139,10 @@ class ExportDialog(QDialog):
         if os.path.exists(output) and (not os.path.isdir(output) or os.listdir(output)):
             self._fail("The output folder must not exist or must be empty.")
             return
-        kinds = [name for name, box in (("textures", self._textures), ("movies", self._movies)) if box.isChecked()]
+        boxes = (("textures", self._textures), ("movies", self._movies), ("text", self._text))
+        kinds = [name for name, box in boxes if box.isChecked()]
         if not kinds:
-            self._fail("Select textures, movies or both.")
+            self._fail("Select at least one of textures, movies and text.")
             return
         exe = os.path.join(self._game_dir, GAME_BINARY)
         if not os.path.isfile(exe):
@@ -264,7 +269,7 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "dotSlash"
 
     def description(self) -> str:
-        return "Exports the original textures and movies from your own game data."
+        return "Exports the original textures, movies and text from your own game data."
 
     def version(self) -> mobase.VersionInfo:
         return mobase.VersionInfo(1, 0, 0, 0)
@@ -279,7 +284,7 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "Export Lost Odyssey assets"
 
     def tooltip(self) -> str:
-        return "Export the original textures and movies to a folder for reference."
+        return "Export the original textures, movies and text to a folder for reference."
 
     def icon(self) -> QIcon:
         return QIcon()

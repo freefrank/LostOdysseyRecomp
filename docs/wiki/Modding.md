@@ -11,7 +11,7 @@ These pages document the API v1 implementation developed in PR #68. A published 
 | Textures drawn by the game | Replaced at upload by fingerprint from `.lotex2` files, at the original size or 2x/4x/8x larger (experimental; uncompressed RGBA8 or BC1/BC4/BC7 DDS). See [Creating mods](Creating-Mods.md) and [Modding API](Modding-API.md). |
 | Font files/metrics, models and movies | Resource kinds and provider extension points reserved; no runtime consumers yet. |
 | External manager overlay | Implemented deterministic paths and isolated resolution mode. |
-| Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys) and movies, also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md). |
+| Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys), movies and text (JSON per game text file, the starting point for translations), also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md). |
 | Mod Organizer 2 | Game plugin in `tools/modding/mo2`; MO2 maps mods onto `mods/`. See [Mod Organizer 2](Mod-Organizer-2.md). |
 
 Mods do not modify `LO.fpi`, FPD archives or other imported game files. Mod packages contain data, not automatically loaded native libraries.
