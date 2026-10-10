@@ -1,0 +1,86 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Owned inline scene labels and associated commands.",
+  "entries": [
+    {
+      "address": "82B016E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 31982,
+      "instruction_count": 86,
+      "body_sha256": "e529c5811f4a5d270d8e0df9df4e1f45dad00e7dac9655e43640c0f67a56dfc5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B018C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 32266,
+      "instruction_count": 95,
+      "body_sha256": "702048a93e832c5d63dec56b5a4d7087d7dd11758b59be4572d5fd847d3b4340",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B01AE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 32603,
+      "instruction_count": 95,
+      "body_sha256": "c9fd700f33cb77c5d15bc4d74fbb551d27ab2d22483f6df24a9bdd932670cc0a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B01D10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 32940,
+      "instruction_count": 81,
+      "body_sha256": "fd1305c0afb9d46e6ecbd382ae45c80e17a05f316d973287e3cbb0d9d4393a84",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB0C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16699,
+      "instruction_count": 21,
+      "body_sha256": "fe0957a7ad838cf22da3dfd94edc64389c1c23d514207c451583659d7cb7f237",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB198",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16824,
+      "instruction_count": 30,
+      "body_sha256": "901380affd5943636615df3b38f010c1ac9a57d55ec18123625d023598004998",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB120",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16751,
+      "instruction_count": 30,
+      "body_sha256": "174b5dd86bc9459013293674282e4157da0ff5aae1590843bb54142b24141fcd",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B016E8",
+      "82B018C0",
+      "82B01AE8",
+      "82B01D10",
+      "82AFB0C8",
+      "82AFB198",
+      "82AFB120"
+    ],
+    "header": "include/lo_semantics/battle_script_owned_labels61.h",
+    "source": "src/battle_script_owned_labels61.cpp",
+    "smoke": "tests/battle_script_owned_labels61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact synthetic fixture covers inline label descriptor layout, allocator initialization and alignment, nonempty/empty copies, both flag-controlled commands across three modes, simple scene commands and nonzero predicate branching. Source offset overlap in 82B018C0 is preserved. Concrete allocator, string initialization and scene services remain boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

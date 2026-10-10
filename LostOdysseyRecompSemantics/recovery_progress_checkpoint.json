@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 190,
-    "distinct_entries": 719,
+    "unit_count": 191,
+    "distinct_entries": 726,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2092,6 +2092,20 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture covers preparation modes 0 through 5, manager-state fallback, failed picker and absent resource, packed numeric scene ABI, boolean parameters, copied 32-unit inline labels and the source repeated-destination label quirk. Concrete pickers, preparation, scene services and gameplay are unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_owned_labels61",
+        "entries": [
+          "82B016E8",
+          "82B018C0",
+          "82B01AE8",
+          "82B01D10",
+          "82AFB0C8",
+          "82AFB198",
+          "82AFB120"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact synthetic fixture covers inline label descriptor layout, allocator initialization and alignment, nonempty/empty copies, both flag-controlled commands across three modes, simple scene commands and nonzero predicate branching. Source offset overlap in 82B018C0 is preserved. Concrete allocator, string initialization and scene services remain boundaries; native gameplay is unvalidated. Logical/ABI only"
       }
     ]
   },

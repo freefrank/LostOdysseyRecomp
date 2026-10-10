@@ -105,3 +105,7 @@ Fifteen further battle instructions now connect readiness checks, the 60-tick ph
 ## Preparation and scene marshaling
 
 Four battle instructions now route preparation modes and marshal scene label and boolean commands. The original manager-state fallback, failure result, packed constant numeric arguments and 32-unit label copy are preserved. A separate source loop repeatedly overwrites its first label unit; recovery intentionally preserves this behavior. One synthetic fixture passes. Concrete preparation and scene services and native gameplay remain unvalidated.
+
+## Owned scene labels
+
+Seven scene handlers now build the original owned UTF16 label descriptors, preserve allocation and copy call contracts, and dispatch mode-controlled and predicate commands. The source parameter/payload offset overlap is retained. A compact synthetic fixture passes empty and nonempty labels, allocation alignment, descriptor self pointers, mode flags and branching. Concrete string, allocator and scene services and native gameplay remain unvalidated.
