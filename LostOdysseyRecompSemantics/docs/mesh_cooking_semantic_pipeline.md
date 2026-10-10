@@ -424,3 +424,8 @@ BB5518/BB7B48 now sort signed bucket/local-index keys and produce the original-t
 ### Cloth scheduling support
 
 BB56D0/BB59A8 now build vertex-to-constraint adjacency and select scheduling candidates by bucket compatibility, matched-vertex count and bounding-box shape. A small boundary/tetrahedral sample validates stable incidence lists, ranking, tie breaking, conflict rejection, repeat rebuild and complete cleanup. The higher-level scheduler and complete cloth cooker remain pending.
+
+
+### Cloth constraint scheduling
+
+BB6290 now builds adjacency, ranks compatible constraints, splits bounded child batches, advances conflict tiers and packs triangle/tetrahedral records. Three samples cover disjoint batch splitting, a connected chain requiring a second tier, both packed layouts and complete ownership cleanup. The input descriptor/orchestration and final vertex/channel remapping remain pending.
