@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 145,
-    "distinct_entries": 455,
+    "unit_count": 146,
+    "distinct_entries": 457,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1513,6 +1513,15 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Five faces with two duplicate classes map to their lowest original face IDs (0/0/2/0/2), across repeated invocation and complete cleanup. The fixture exercises in-place shrinking realloc; empty and invalid input, moving realloc and gameplay remain unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "cloth_import61",
+        "entries": [
+          "82BA8AE8",
+          "82BA9530"
+        ],
+        "focused_smoke_paths": 4,
+        "validation": "Triangle and tetrahedral inputs with halfword and word indices exercise strided xyz, two optional vertex channels, triangle winding reversal, guest vector growth and complete cleanup. Invalid descriptors and failure callbacks remain source-reviewed; this does not validate the complete cooker. Logical/ABI only"
       }
     ]
   },

@@ -399,3 +399,8 @@ Cloth topology support now sorts 16-byte records by two or three keys and 12-byt
 ### Cloth canonical face mapping
 
 BA8208 canonicalizes each triangle by sorted vertex IDs, sorts the resulting key/face records and maps duplicate faces to the lowest original face ID. The owned output vector is resized and shrunk through SDK callbacks. A five-face sample validates orientation-independent duplicate classes, repeated reuse and complete cleanup. This connects one concrete topology step; the complete cloth cooker is still pending.
+
+
+### Cloth strided import
+
+BA8AE8/BA9530 now append strided triangle/tetrahedral inputs into owned cooking vectors, including optional per-vertex float/word channels, halfword/word indices and triangle winding selection. Four small combinations validate the data flow and ownership cleanup. These importers preserve the original growth path and early empty-input rejection; no additional validation layer or complete-cooker claim was added.
