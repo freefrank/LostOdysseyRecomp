@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_effect_mutation61.h"
+#include "lo_semantics/battle_effect_scaling61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_evaluation_chance61.h"
@@ -16,6 +17,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
+      !battle_effect_scaling61::Apply(e, m, d, s) &&
       !battle_random_range61::Apply(e, m, d, s) &&
       !battle_action_eligibility61::Apply(e, m, d, s) &&
       !battle_evaluation_chance61::Apply(e, m, d, s) &&
@@ -41,6 +43,18 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b0a568:
+  case 0x82b0a698:
+    break;
+  case 0x82b0a928:
+    frame = 128;
+    first = 28;
+    literal = 80;
+    break;
+  case 0x82b0a7a0:
+    frame = 128;
+    first = 29;
+    break;
   case 0x82b0ee40:
   case 0x82b0ec18:
   case 0x82b0f7d0:
@@ -78,6 +92,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+  if (e == 0x82b0a7a0)
+    recovery_abi::WriteU64(m, old - 40, s.fpr_bits[31]);
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -121,7 +137,93 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0ee40 || e == 0x82b0ec18 || e == 0x82b0f7d0) {
+  if (e == 0x82b0a568 || e == 0x82b0a698 || e == 0x82b0a928 ||
+      e == 0x82b0a7a0) {
+    bool mp = e == 0x82b0a698, combined = e == 0x82b0a7a0;
+    if (!mp)
+      m.WriteU8(owner + 203, 0);
+    bool allowed =
+        mp ? (m.ReadU32(owner + 116) != 0 || eligible(2)) : eligible(2);
+    if (e == 0x82b0a568 && !allowed)
+      allowed = m.ReadU32(owner + 116) != 0;
+    if (!allowed)
+      m.WriteU8(owner + 208, 0);
+    else {
+      mark();
+      fp();
+      auto input = std::bit_cast<float>(m.ReadU32(owner + 80));
+      if (e == 0x82b0a568 &&
+          input == std::bit_cast<float>(m.ReadU32(0x822184dc))) {
+        auto target = m.ReadU32(owner + 8);
+        m.WriteU32(target + 2588, m.ReadU32(target + 2592));
+      } else {
+        float criticalMultiplier = 0;
+        auto calculate = [&](double amount, bool skipStat,
+                             bool decideCritical) {
+          fp();
+          s.fpr_bits[1] = std::bit_cast<std::uint64_t>(amount);
+          s.r[3] = owner;
+          s.r[5] = skipStat;
+          Call(0x82b09b30, m, d, s);
+          fp();
+          m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
+                                     std::bit_cast<double>(s.fpr_bits[1]))));
+          if (decideCritical) {
+            s.r[3] = owner;
+            Call(0x82b097a0, m, d, s);
+            fp();
+            criticalMultiplier = std::bit_cast<float>(m.ReadU32(0x82000e1c));
+          }
+          if (m.ReadU8(owner + 79) == 1) {
+            auto value = std::bit_cast<float>(m.ReadU32(owner + 28));
+            m.WriteU32(owner + 28, std::bit_cast<unsigned>(
+                                       float(value * criticalMultiplier)));
+          }
+          s.r[3] = owner;
+          Call(0x82b0a188, m, d, s);
+          fp();
+          m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
+                                     std::bit_cast<double>(s.fpr_bits[1]))));
+          s.r[3] = owner;
+          Call(0x82b0a3b0, m, d, s);
+        };
+        auto apply = [&](unsigned mode, unsigned offset) {
+          auto result = m.ReadU32(0x832cb790);
+          fp();
+          s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
+              double(std::bit_cast<float>(m.ReadU32(owner + 32))));
+          s.r[3] = result;
+          s.r[4] = m.ReadU32(owner + 8);
+          s.r[6] = mode;
+          Call(0x82b2b9e0, m, d, s);
+          fp();
+          auto index =
+              116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + offset;
+          m.WriteU32(m.ReadU32(result + 20) + 4 * index,
+                     std::bit_cast<unsigned>(
+                         float(std::bit_cast<double>(s.fpr_bits[1]))));
+        };
+        calculate(input, mp, true);
+        apply(mp ? 3 : 1, mp ? 3738 : 3730);
+        if (combined) {
+          auto value = std::int32_t(m.ReadU32(owner + 120));
+          recovery_abi::WriteU64(m, sp + 80,
+                                 std::uint64_t(std::int64_t(value)));
+          calculate(double(float(value)), true, false);
+          apply(3, 3738);
+        }
+        if (e == 0x82b0a928) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = m.ReadU32(owner + 92);
+          s.r[5] = m.ReadU32(owner + 100);
+          s.r[6] = m.ReadU32(owner + 108);
+          s.r[7] = m.ReadU32(owner + 112);
+          s.r[8] = m.ReadU32(owner + 120);
+          Call(0x82ac8ec8, m, d, s);
+        }
+      }
+    }
+  } else if (e == 0x82b0ee40 || e == 0x82b0ec18 || e == 0x82b0f7d0) {
     bool removing = e == 0x82b0ee40;
     bool allowed = eligible(2) || m.ReadU32(owner + 92) != (removing ? 2u : 1u);
     if (allowed)
@@ -313,6 +415,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (literal)
     m.WriteU32(sp + literal, 0x8204a1d8);
   s.r[1] += frame;
+  if (e == 0x82b0a7a0)
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 40);
   for (unsigned i = first; i < 32; ++i)
     s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
   s.lr = m.ReadU32(old - 8);

@@ -16,6 +16,7 @@
 #include "lo_semantics/battle_effect_execution61.h"
 #include "lo_semantics/battle_effect_followups61.h"
 #include "lo_semantics/battle_effect_mutation61.h"
+#include "lo_semantics/battle_effect_scaling61.h"
 #include "lo_semantics/battle_evaluation_chance61.h"
 #include "lo_semantics/battle_evaluation_effects61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
@@ -193,6 +194,10 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b21970u:
   case 0x82b22100u:
     return battle_effect_followups61::Apply(entry, memory, dependencies, state);
+  case 0x82b0a568u:
+  case 0x82b0a698u:
+  case 0x82b0a7a0u:
+  case 0x82b0a928u:
   case 0x82b0d378u:
   case 0x82b0dd20u:
   case 0x82b0ddf8u:
@@ -208,6 +213,11 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b11660u:
   case 0x82b11758u:
     return battle_effect_mutation61::Apply(entry, memory, dependencies, state);
+  case 0x82b097a0u:
+  case 0x82b09b30u:
+  case 0x82b0a188u:
+  case 0x82b0a3b0u:
+    return battle_effect_scaling61::Apply(entry, memory, dependencies, state);
   case 0x82ac9858u:
   case 0x82b08d98u:
   case 0x82b08e28u:

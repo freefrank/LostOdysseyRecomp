@@ -199,6 +199,50 @@ int main() {
     m.WriteU8(owner + 208, 1);
     call(0x82b0ee40);
     check(!m.ReadU8(owner + 208), "inverse property side gate");
+    m.WriteU8(owner + 200, 1);
+    m.WriteU8(owner + 77, 1);
+    m.WriteU32(owner + 116, 0);
+    m.WriteU32(owner + 92, 5);
+    m.WriteU32(owner + 96, 6);
+    m.WriteU32(owner + 100, 0);
+    m.WriteU32(owner + 104, 0);
+    for (unsigned bank : {1u, 3u, 4u, 5u, 7u})
+      m.WriteU32(target + 272 * bank + 232, 0);
+    m.WriteU32(source + 3 * 272 + 232, 0);
+    put(0x82000e1c, 2);
+    put(0x822184dc, 9999);
+    put(owner + 80, 10);
+    put(target + 2588, 40);
+    put(target + 2592, 100);
+    put(target + 2616, 20);
+    put(target + 2620, 100);
+    call(0x82b0a568);
+    check(get(target + 2588) == 50 && get(record + 14920) == 10,
+          "HP restoration pipeline");
+    call(0x82b0a698);
+    check(get(target + 2616) == 30 && get(record + 14952) == 10,
+          "MP restoration pipeline");
+    m.WriteU32(owner + 120, 7);
+    call(0x82b0a7a0);
+    check(get(target + 2588) == 60 && get(target + 2616) == 37 &&
+              get(record + 14920) == 10 && get(record + 14952) == 7,
+          "combined HP MP restoration");
+    m.WriteU32(owner + 100, 16);
+    m.WriteU32(owner + 108, 3);
+    m.WriteU32(owner + 112, 4);
+    m.WriteU32(owner + 120, 1);
+    call(0x82b0a928);
+    check(get(target + 2588) == 70 &&
+              m.ReadU32(target + 4 * (68 * 5 + 4 + 59)) == 3,
+          "HP restoration with paired property payload");
+    put(owner + 80, 9999);
+    call(0x82b0a568);
+    check(get(target + 2588) == 100, "full HP sentinel shortcut");
+    m.WriteU8(owner + 200, 0);
+    m.WriteU32(owner + 116, 0);
+    m.WriteU8(owner + 208, 1);
+    call(0x82b0a698);
+    check(!m.ReadU8(owner + 208), "restoration side gate");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

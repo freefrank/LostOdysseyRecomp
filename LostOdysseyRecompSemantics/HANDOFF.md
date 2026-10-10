@@ -1,3 +1,11 @@
+## Root direct continuation: restorative descriptor effects (2026-10-10 UTC)
+
+Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance.
+
+## Root direct continuation: effect magnitude scaling (2026-10-10 UTC)
+
+Recovered shared effect scaling, critical-property/chance decision, bounded magnitude jitter and final status/partner normalization. Uses guest-provided coefficients and source single-precision stages, with no embedded private constants. Focused synthetic checks cover stat scaling, target status multiplier, bypass, critical categories, jitter/zero handling, source/target status overrides, partner short-circuit and rounding. Logical ABI coverage only, not bitwise FP or gameplay acceptance.
+
 ## Root direct continuation: descriptor property effects (2026-10-10 UTC)
 
 Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance.

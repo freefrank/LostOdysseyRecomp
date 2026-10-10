@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Shared effect scaling and final magnitude normalization.",
+  "entries": [
+    {
+      "address": "82B09B30",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18699,
+      "instruction_count": 53,
+      "body_sha256": "2fb6d0ae4df0f3726f10e88dca52d3cc0312ddc7b99db0493380305dd0673124",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B097A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18166,
+      "instruction_count": 58,
+      "body_sha256": "b46596d9d84dd35b9a2ad4e9837fcdae434d12e1890c77e24fcbaa1156da1214",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A188",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 19696,
+      "instruction_count": 52,
+      "body_sha256": "7b98a28de0607939ec1f8ff1d4965f8c20e724756235522585378c4812d18633",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A3B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 20029,
+      "instruction_count": 100,
+      "body_sha256": "f24f5408bcefd802e5be2f150da142a8622bc486329e9f25677f1a655c8ac511",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B09B30",
+      "82B097A0",
+      "82B0A188",
+      "82B0A3B0"
+    ],
+    "header": "include/lo_semantics/battle_effect_scaling61.h",
+    "source": "src/battle_effect_scaling61.cpp",
+    "smoke": "tests/battle_effect_scaling61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered shared effect scaling, critical-property/chance decision, bounded magnitude jitter and final status/partner normalization. Uses guest-provided coefficients and source single-precision stages, with no embedded private constants. Focused synthetic checks cover stat scaling, target status multiplier, bypass, critical categories, jitter/zero handling, source/target status overrides, partner short-circuit and rounding. Logical ABI coverage only, not bitwise FP or gameplay acceptance."
+  }
+}

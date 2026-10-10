@@ -113,6 +113,38 @@
       "instruction_count": 75,
       "body_sha256": "a3af7dfe06b2d184a72018cdac4718e6b4706f4c147737a6a789e1798c3ce87b",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A568",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 20301,
+      "instruction_count": 75,
+      "body_sha256": "a0a10a44bc99db8f09df5e6654d514f91e2035c101f7e69959e36a03867dc883",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A698",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 20488,
+      "instruction_count": 65,
+      "body_sha256": "dcc2c701d05d3907f28c8e8b633913dbdb96b7d9694d45266ca1b1a00d73201c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A7A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 20651,
+      "instruction_count": 96,
+      "body_sha256": "4caec6152b4e77df7ac8b8e51e08a5588b86e6a8303a16565c751bbdf02f5d52",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A928",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 20895,
+      "instruction_count": 70,
+      "body_sha256": "b317c856f8c2baabca47b77d1476de7b937c6dd2c44f626a3963b1ab19462393",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -130,7 +162,11 @@
       "82B0EC18",
       "82B0F7D0",
       "82B11758",
-      "82B0FDB0"
+      "82B0FDB0",
+      "82B0A568",
+      "82B0A698",
+      "82B0A7A0",
+      "82B0A928"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -145,6 +181,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
-    "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "restorative_effects": "Recovered four restorative descriptor callbacks using actual scaling, critical decision, jitter, normalization and result application: HP restore/full-HP sentinel, MP restore, combined HP/MP and HP-plus-property payload. Focused fixture checks restored values, result deltas, paired payload, full restore shortcut and side rejection. Descriptor callback coverage now51 of83 distinct targets; remaining32 unclaimed. No gameplay/full ABI or bitwise FP acceptance."
   }
 }
