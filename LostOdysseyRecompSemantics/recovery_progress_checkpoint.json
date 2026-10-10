@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 193,
-    "distinct_entries": 752,
+    "unit_count": 195,
+    "distinct_entries": 754,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2146,6 +2146,22 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture covers all ten handlers: source overlapping operand offsets, inline label ABI, nonzero predicates, both resource refresh branches and invalid levels, all four message routes, special circle/square glyph substitutions, zero-coordinate fallback and invalid message mode. Concrete scene, refresh and message services remain boundaries. Native gameplay is unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_item_action61",
+        "entries": [
+          "82B009B0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact fixture covers candidate eligibility, later equal-score min/max winners, random tag88, direct selection, actor action dispatch modes, busy gating, bank selection, empty candidates and the source zero-ID execution path. Concrete item preparation and action services remain unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_global_modes61",
+        "entries": [
+          "82B00E98"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact fixture runs all39 modes plus an out-of-range mode, checks resource and actor flags, source first-matching-group early exits, buffer list transitions, descriptor vector callbacks, state mode bits and recovered group-controller routing. Concrete scene and action service implementations and native gameplay remain unvalidated. Logical/ABI only"
       }
     ]
   },

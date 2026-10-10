@@ -306,6 +306,8 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_script_owned_labels61.cpp
     src/battle_script_queues61.cpp
     src/battle_script_commands61.cpp
+    src/battle_script_item_action61.cpp
+    src/battle_script_global_modes61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp
     src/cloth_topology_support61.cpp

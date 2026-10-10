@@ -1,3 +1,7 @@
+## Root direct continuation: battle script constructor handler coverage (2026-10-10 UTC)
+
+The final two distinct handlers in the battle-script constructor table now have logical implementations: banked item-action selection and the 39-mode global transition instruction. Source tie-breaking, random tag88, zero-ID execution, first-group early exits and controller routing are preserved. Two small synthetic fixtures pass. Constructor handler coverage does not mean the engine service boundaries or native gameplay are complete.
+
 ## Root direct continuation: battle script scene and message commands (2026-10-10 UTC)
 
 Ten remaining service-facing battle handlers now preserve scene command arguments, resource level refresh ordering, health and MP refill fields, four-way message routing and short-label glyph substitutions. Overlapping source operand offsets and zero-coordinate fallback remain intact. A compact synthetic fixture passes; concrete scene, resource refresh and message services and native gameplay remain unvalidated.
