@@ -1,3 +1,5 @@
+#include "lo_semantics/battle_evaluation_gates61.h"
+#include "lo_semantics/battle_script_party61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/battle_script_runtime61.h"
@@ -36,7 +38,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     auto callback =
         m.ReadU32(receiver + 4 * (m.ReadU32(record + offset) + 124));
     s.ctr = callback;
-    d.guest.CallIndirect(callback, m, s);
+    if (!battle_evaluation_gates61::Apply(callback, m, d, s) &&
+        !battle_script_party61::Apply(callback, m, d, s))
+      d.guest.CallIndirect(callback, m, s);
     return true;
   }
   unsigned first = 31, frame = 96;

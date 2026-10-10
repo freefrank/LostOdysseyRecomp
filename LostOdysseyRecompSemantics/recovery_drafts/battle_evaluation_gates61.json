@@ -1,0 +1,122 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Descriptor eligibility predicates, virtual gates and paired property checks.",
+  "entries": [
+    {
+      "address": "82ACF878",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 22391,
+      "instruction_count": 3,
+      "body_sha256": "99a4632fb6edf0a9316d933264e4a2f54aa304fb3d87f12a4ecf740925986a73",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08B20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16233,
+      "instruction_count": 3,
+      "body_sha256": "19597e0b449fb21b4807e6e4d08770a599175e93c754dffece55e9e3a5b68252",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08B30",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16244,
+      "instruction_count": 20,
+      "body_sha256": "f57677d6d8b34e68ebb90e2dc76f4902d392849c6d6b7a10d0e463b0a3f51463",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08AB8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16170,
+      "instruction_count": 26,
+      "body_sha256": "fa3a5ece784d7158cf01ab2dac5db1de0af803111acc7d6058395fc010d1b116",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0B0F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 22092,
+      "instruction_count": 21,
+      "body_sha256": "61b2413c9cc9bdea110f07e1948a6736f5bf2a2580ae602048d32c554a92fe4b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B102D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 9381,
+      "instruction_count": 23,
+      "body_sha256": "d130f6fda2afddbc5391fa7381f3630ab6900f78ceb55b2f3df61377edcc55df",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B10618",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 9878,
+      "instruction_count": 28,
+      "body_sha256": "e7ce4b0145d43bff36c187ef39aca9b074dfb1044678dffb18f81cbeaa421020",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0EB68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 5940,
+      "instruction_count": 32,
+      "body_sha256": "83b64ecffabc95e16fe534424261510052a529e92a038199a80bc10e219cbb31",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0C430",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 25047,
+      "instruction_count": 34,
+      "body_sha256": "b2fb0bb593733e8caa49f5be2bddac77d414508168fa155daa288d4277d00694",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0E9D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 5697,
+      "instruction_count": 34,
+      "body_sha256": "8e26786b9ed9c35bd03acda50edf3a6b62ba8a8d7d734dd329bc213482f4c320",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0ED68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 6242,
+      "instruction_count": 41,
+      "body_sha256": "5925e9d3173eb9abc75b05c96b9250fb096585d351db120fa9b8dab791c1e330",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82ACF878",
+      "82B08B20",
+      "82B08B30",
+      "82B08AB8",
+      "82B0B0F0",
+      "82B102D8",
+      "82B10618",
+      "82B0EB68",
+      "82B0C430",
+      "82B0E9D0",
+      "82B0ED68"
+    ],
+    "header": "include/lo_semantics/battle_evaluation_gates61.h",
+    "source": "src/battle_evaluation_gates61.cpp",
+    "smoke": "tests/battle_evaluation_gates61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Focused fixture checks constant accept/reject leaves, target virtual status, distinct source/target IDs, source property 114, secondary predicate, paired-query early exits and exact low-byte-one matching. Recovered predicates and existing no-op are composed into actual descriptor dispatch. Lower property predicates and target virtual methods remain guest boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

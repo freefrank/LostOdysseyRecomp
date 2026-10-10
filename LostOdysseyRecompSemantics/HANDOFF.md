@@ -1,3 +1,7 @@
+## Root direct continuation: battle descriptor gates (2026-10-10 UTC)
+
+Recovered eleven descriptor eligibility callbacks and composed them into the evaluator dispatch. Focused checks cover constant leaves, virtual status, identity/property gates and paired query ordering. Lower property predicates and target virtual callbacks remain explicit dependencies. The eligibility fixture still passes; logical recovery only, with no full equivalence or native gameplay claim.
+
 ## Root direct continuation: composed action eligibility (2026-10-10 UTC)
 
 Composed real action eligibility, category configuration, parameter initialization and descriptor dispatch into skill pickers and action availability. Picker, action and marshaling focused fixtures pass without AD0C10/setup/initializer service mocks; descriptor-specific evaluation remains an explicit callback boundary. This is logical composition, not full game/runtime acceptance.
