@@ -1,0 +1,104 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Descriptor effect mutation callbacks.",
+  "entries": [
+    {
+      "address": "82B11660",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 12304,
+      "instruction_count": 11,
+      "body_sha256": "6aa9188c352fca0092083db0978767bedd28c476bca61a23556b4c1888f1d822",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B104A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 9656,
+      "instruction_count": 27,
+      "body_sha256": "b2eaecde8f7380eb5875da3f7840b2d033c2f53755d3d144cf9e688d9b6c6bbe",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FCF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8507,
+      "instruction_count": 36,
+      "body_sha256": "f83445d313c54024534bfb6ee1627e5ed778fd0f4b552890f55ff0fa054dbfcf",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0D378",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 2297,
+      "instruction_count": 38,
+      "body_sha256": "ea18e7dbbf3aae006e6091e932c1076c78cef031065b4d4e3790889a2fe57e1f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B10548",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 9753,
+      "instruction_count": 39,
+      "body_sha256": "45750fdfdddbb5a2ec16d640f8a74e9fd269a63a252ec65123cca970c6e8ff0b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0DDF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 3912,
+      "instruction_count": 43,
+      "body_sha256": "bb86933b737e1e01c0494c3d6d92dd96cf20373a562e3de7280978da89ce3716",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0EA88",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 5809,
+      "instruction_count": 43,
+      "body_sha256": "d747c4424a858ac6e9b94c01d7828bd99d391fce1e700209bdfa71580db5b393",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B10DD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 11064,
+      "instruction_count": 46,
+      "body_sha256": "49753a5486f915b815f20e4411721588cc819d8488b8ff6d5f4c179ab5a74083",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0DD20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 3786,
+      "instruction_count": 53,
+      "body_sha256": "81a5c28bf21ff9c653bc7b8bde752f0cc1b4469c8e4880b49f7f546399d20682",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B11660",
+      "82B104A8",
+      "82B0FCF0",
+      "82B0D378",
+      "82B10548",
+      "82B0DDF8",
+      "82B0EA88",
+      "82B10DD8",
+      "82B0DD20"
+    ],
+    "header": "include/lo_semantics/battle_effect_mutation61.h",
+    "source": "src/battle_effect_mutation61.cpp",
+    "smoke": "tests/battle_effect_mutation61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance."
+  }
+}

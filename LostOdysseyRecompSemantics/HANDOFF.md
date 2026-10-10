@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor effect mutations (2026-10-10 UTC)
+
+Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.
+
 ## Root direct continuation: group gauge mutations (2026-10-10 UTC)
 
 Recovered group gauge mutation AC7000/AC7178/AC71E8/AC80B8: property-adjusted depletion, capped addition, max-HP division and roster-share application. Preserves source behavior that applies each eligible share to the original resource, rather than silently changing it to each iterated peer. Focused checks cover caps, property multipliers, divide mode, repeated original-target reduction and actual removed-amount accounting. Logical ABI checks pass; no gameplay/full ABI or FP acceptance.

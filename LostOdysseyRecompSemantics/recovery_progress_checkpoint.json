@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 236,
-    "distinct_entries": 1097,
+    "unit_count": 237,
+    "distinct_entries": 1106,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2890,6 +2890,22 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered script loading and initial execution: asset lookup, per-capacity actor buffers/defaults, little-endian header/events/constants decode, bytecode allocation/copy, source failure release, profile-based startup and initial event dispatch. Reuses actual script-state allocation, integer decoding and opcode dispatch. Battle startup now composes actual script startup entries. Focused fixture covers loaded and spare actors, constants and code bytes, initial cursor writeback, missing assets, zero-code/capacity failure and no-script profile shortcut. Complex encounter layout remains external; no gameplay/full ABI acceptance."
+      },
+      {
+        "unit": "battle_effect_mutation61",
+        "entries": [
+          "82B11660",
+          "82B104A8",
+          "82B0FCF0",
+          "82B0D378",
+          "82B10548",
+          "82B0DDF8",
+          "82B0EA88",
+          "82B10DD8",
+          "82B0DD20"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {
@@ -2974,8 +2990,8 @@
   },
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
-    "routed_units": 72,
-    "routed_distinct_entries": 582,
+    "routed_units": 73,
+    "routed_distinct_entries": 591,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -2983,8 +2999,8 @@
     "library_validated": true,
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
-    "routed_battle_units": 69,
-    "routed_battle_entries": 553,
+    "routed_battle_units": 70,
+    "routed_battle_entries": 562,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -2997,6 +3013,7 @@
     "bootstrap_baselines": "Recovered battle manager baseline setup, position defaults, typed root lookup, small manager constructor and stats workspace reset. Manager setup composes real profile casting, releases two existing list buffers, reconnects embedded list headers and establishes source defaults. Focused fixture checks type success/failure, release ABI, workspace slots, descriptor defaults and untouched padding. Public synthetic inputs only; library builds without gameplay or full ABI acceptance.",
     "startup_orchestration": "Recovered battle startup AD20C0 and descriptor callback manager constructor AD1378. Startup allocates/registers ten managers and composes actual owner defaults, group/party rebuild, encounter population, both gauges, availability and stats reset. Constructor writes 167 callback slots with source hole 856 preserved; only 33 of its 83 distinct callback targets are currently recovered, so registration is not callback-completion credit. Focused empty-roster startup fixture passes manager allocations/registrations and composed state effects. Script startup and complex layout remain explicit service boundaries. No gameplay or full ABI acceptance.",
     "script_loading": "Recovered script loading and initial execution: asset lookup, per-capacity actor buffers/defaults, little-endian header/events/constants decode, bytecode allocation/copy, source failure release, profile-based startup and initial event dispatch. Reuses actual script-state allocation, integer decoding and opcode dispatch. Battle startup now composes actual script startup entries. Focused fixture covers loaded and spare actors, constants and code bytes, initial cursor writeback, missing assets, zero-code/capacity failure and no-script profile shortcut. Complex encounter layout remains external; no gameplay/full ABI acceptance.",
-    "gauge_mutation": "Recovered group gauge mutation AC7000/AC7178/AC71E8/AC80B8: property-adjusted depletion, capped addition, max-HP division and roster-share application. Preserves source behavior that applies each eligible share to the original resource, rather than silently changing it to each iterated peer. Focused checks cover caps, property multipliers, divide mode, repeated original-target reduction and actual removed-amount accounting. Logical ABI checks pass; no gameplay/full ABI or FP acceptance."
+    "gauge_mutation": "Recovered group gauge mutation AC7000/AC7178/AC71E8/AC80B8: property-adjusted depletion, capped addition, max-HP division and roster-share application. Preserves source behavior that applies each eligible share to the original resource, rather than silently changing it to each iterated peer. Focused checks cover caps, property multipliers, divide mode, repeated original-target reduction and actual removed-amount accounting. Logical ABI checks pass; no gameplay/full ABI or FP acceptance.",
+    "descriptor_effect_mutations": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance."
   }
 }
