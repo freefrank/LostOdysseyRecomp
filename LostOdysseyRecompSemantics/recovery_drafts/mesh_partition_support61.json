@@ -1,0 +1,105 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle partition workspace ownership, dense labels, angular merging and queue-driven convex component traversal.",
+  "entries": [
+    {
+      "address": "82BC10F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 29449,
+      "instruction_count": 6,
+      "body_sha256": "ddc9c77b2eeb132f401550ae6f545debe93bfef47afe2488fb47c1aff96fb00e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1108",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 29466,
+      "instruction_count": 33,
+      "body_sha256": "650a1b322d26883f26fdf64c50013854528843b95975fca48ce81590b8ea5d78",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1190",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 29546,
+      "instruction_count": 52,
+      "body_sha256": "522dcda3b343ebae6d2aeafbe06003f2986522f0f84b6c5ed2365ab8045175ed",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1C68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 31082,
+      "instruction_count": 165,
+      "body_sha256": "47f13e7f0971cb22c8d42015039f9e8103741829e17233634078b8dbcecd2a73",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC4258",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 36594,
+      "instruction_count": 23,
+      "body_sha256": "784f3a8c30ce2227721f311f431eb14f7e8a1f44dccbd1c108ac1453c440be16",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1260",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 29669,
+      "instruction_count": 222,
+      "body_sha256": "827d68430b3fb54e5748b205a50f7ed25fa468b8664fa94699cc51f3178d6a9b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC15D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 30164,
+      "instruction_count": 334,
+      "body_sha256": "b7b34ec4f7b2ce21fcef4124bcabd80c52729482c903f4f9c4eee84405c41fa1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1B10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 30885,
+      "instruction_count": 63,
+      "body_sha256": "4f4a1ef529e5df2d6b0404bfebc48eea0dab233789080d333d32594fd46eb44b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC1C10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 31030,
+      "instruction_count": 21,
+      "body_sha256": "c8b444f8671514d9458d83d24f0a50015da7e2ff94261a4dbddc9b27fdd31e20",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC10F0",
+      "82BC1108",
+      "82BC1190",
+      "82BC1C68",
+      "82BC4258",
+      "82BC1260",
+      "82BC15D8",
+      "82BC1B10",
+      "82BC1C10"
+    ],
+    "header": "include/lo_semantics/mesh_partition_support61.h",
+    "source": "src/mesh_partition_support61.cpp",
+    "smoke": "tests/mesh_partition_support61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused fixture verifies coplanar merge versus perpendicular faces, dense relabeling, FIFO empty/reset, a two-face connected component, seed and coplanar face acceptance, and full cleanup. Geometry rejection branches remain source-reviewed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "private_constants": "Angular merging uses the existing private atan2 bundle; no private data is published."
+  }
+}

@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 136,
-    "distinct_entries": 420,
+    "unit_count": 137,
+    "distinct_entries": 429,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1415,6 +1415,22 @@
         ],
         "focused_smoke_paths": 2,
         "validation": "Both endian modes round-trip nine separated triangles, tree, material IDs, original face IDs, group/category arrays and edge flags with exact stream cursor and complete owner cleanup. The open-surface fixture seeds a cached zero mass and a synthetic version 17; it does not establish compatibility with an independently captured native asset. Byte indices are exercised; wider indices are source-reviewed only. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_partition_support61",
+        "entries": [
+          "82BC10F0",
+          "82BC1108",
+          "82BC1190",
+          "82BC1C68",
+          "82BC4258",
+          "82BC1260",
+          "82BC15D8",
+          "82BC1B10",
+          "82BC1C10"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One focused fixture verifies coplanar merge versus perpendicular faces, dense relabeling, FIFO empty/reset, a two-face connected component, seed and coplanar face acceptance, and full cleanup. Geometry rejection branches remain source-reviewed. Logical/ABI only"
       }
     ]
   },

@@ -359,3 +359,8 @@ BB42E8/BB4F40/BB5230 now sort and group triangle edges, retain incident face IDs
 ### Triangle owner serialization
 
 Triangle owner serialization now composes storage, tree envelopes, coupled material/remap arrays, optional group/category data, edge flags and mass cache. BA6868 computes tetrahedron mass/centroid and reuses the cache; BC5ED8 builds the owned edge topology. BA6B18/B9D4F8 round-trip a nine-triangle fixture in both endian modes with exact cursor and complete cleanup. BAE0C0 preserves scalar byte/half input callbacks. The open-surface I/O fixture uses a pre-existing zero mass cache and synthetic version 17; compatibility with an independent native asset is not claimed. Wider index and negative-mass paths remain source-reviewed. The full default triangle processing entry and graph partition stage are still pending.
+
+
+### Triangle partition support
+
+Triangle partition support now initializes and releases label arrays, merges sufficiently aligned face labels using guest atan2, compacts labels, traverses edge-incidence components with a guest FIFO, and applies the original two-sided plane acceptance before extending a convex group. A focused sample checks merging, relabeling, FIFO reset, connected traversal and face acceptance with complete cleanup. The higher-level BC1F00 partition orchestrator remains pending; these helpers alone do not constitute the full default triangle processing entry.
