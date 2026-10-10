@@ -42,6 +42,7 @@
 #include "temporal_lifecycle.h"
 #include "motion_options.h"
 #include "motion_replay_gpu.h"
+#include "record_timing.h"
 #include "fsr_alpha_replay_gpu.h"
 #include "fsr_alpha_postprocess_gpu.h"
 #include "fsr_alpha_propagation_gpu.h"
@@ -729,7 +730,11 @@ namespace gpu::renderer
             std::unordered_map<uint64_t, Shader> shaders[2];
             // Keyed by the normalized pipeline key. sceneSerial: the scene in which
             // the pipeline was last drawn was recorded in its recipe.
-            struct PipelineSlot { std::unique_ptr<RenderPipeline> pipeline; uint32_t sceneSerial = 0; };
+            // origin/drawn: LO_RECORD_TIMING first-use attribution only.
+            struct PipelineSlot {
+                std::unique_ptr<RenderPipeline> pipeline; uint32_t sceneSerial = 0;
+                record_timing::Origin origin = record_timing::Origin::Unknown; bool drawn = false;
+            };
             std::unordered_map<PipelineKey, PipelineSlot, PipelineKeyHash> pipelines;
             std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> hdrPipelines;
             // Full state recipes are portable; driver blobs and object pointers
@@ -929,6 +934,41 @@ namespace gpu::renderer
             uint64_t mvScratchBytes = 0;
             const temporal::MotionOptions motionOptions = temporal::MotionOptions::Environment();
             std::unique_ptr<temporal::MotionReplayGPU> motionReplay;
+            // LO_RECORD_TIMING: phase split of the record timer. The create
+            // counters below are bumped on slow paths only.
+            record_timing::Recorder recordTiming;
+            uint32_t recordFramebufferCreates = 0, recordOtherPipelineCreates = 0;
+            double recordOtherPipelineMs = 0;
+            static void ReadRecordCounters(const void* context, record_timing::Counters& out)
+            {
+                const auto& r = *static_cast<const Renderer*>(context);
+                out = {};
+                if (r.motionReplay) {
+                    const auto& mv = r.motionReplay->Work();
+                    out.mvTranslated = mv.translated; out.mvShaders = mv.shadersCreated;
+                    out.mvPipelines = mv.pipelinesCreated; out.mvPending = mv.pendingDraws; out.mvScene = mv.sceneBegins;
+                    out.mvTranslateMs = mv.translateMs; out.mvShaderMs = mv.shaderCreateMs;
+                    out.mvPipelineMs = mv.pipelineMs; out.mvSceneMs = mv.sceneMs;
+                }
+                out.framebuffers = r.recordFramebufferCreates;
+                out.otherPipelines = r.recordOtherPipelineCreates;
+                out.otherPipelineMs = r.recordOtherPipelineMs;
+            }
+            // Origin and first use of the game-state pipeline bound by this draw.
+            void NoteRecordPipeline(record_timing::DrawSample& sample, const PipelineKey& drawKey, const RenderPipeline* bound)
+            {
+                const auto it = pipelines.find(gpu::pipeline_cache::Normalize(drawKey));
+                if (it != pipelines.end() && it->second.pipeline.get() == bound) {
+                    sample.pipelineKnown = true;
+                    sample.origin = it->second.origin;
+                    sample.firstUse = !it->second.drawn;
+                    it->second.drawn = true;
+                }
+#if defined(LO_GPU_PLUME)
+                if (nativeVulkan && bound)
+                    sample.linked = static_cast<const VulkanGraphicsPipeline*>(bound)->linked;
+#endif
+            }
 #if defined(LO_GPU_PLUME)
             // Diagnostic-only, one requested real frame. No allocation/copy on
             // the default path; this is not a provider-ready or HUDless claim.
@@ -5152,7 +5192,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }, [&](size_t i) {
                             auto& job = jobs[i];
                             if (!job.pipeline) ++failed;
-                            else { preparedPipelineKeys.insert(job.key); pipelines.emplace(job.key, PipelineSlot{ std::move(job.pipeline) }); }
+                            else { preparedPipelineKeys.insert(job.key); pipelines.emplace(job.key, PipelineSlot{ std::move(job.pipeline), 0, record_timing::Origin::Prebuilt }); }
                             video::SetShaderPreparationProgress(uint32_t(++done), uint32_t(jobs.size()),
                                 video::PreparationStage::Pipelines, video::PreparationUnit::Pipelines);
                             return !video::ShaderPreparationSkipped();
@@ -5716,7 +5756,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     for (const auto* need : { &job.needVs, &job.needPs })
                         if (*need) PublishShaderJob(**need);
                     if (!job.pipeline) failedPrefetch.insert(job.key);
-                    else if (pipelines.try_emplace(job.key, PipelineSlot{ std::move(job.pipeline) }).second &&
+                    else if (pipelines.try_emplace(job.key, PipelineSlot{ std::move(job.pipeline), 0,
+                                 job.kind == PrefetchJob::Scene ? record_timing::Origin::ScenePrefetch :
+                                 job.kind == PrefetchJob::Sibling ? record_timing::Origin::Sibling : record_timing::Origin::DrawJob }).second &&
                              job.kind == PrefetchJob::Sibling) {
                         ++workerStats.built;
                         if (pipelineMissVerbose) unusedSiblings.insert(job.key);
@@ -5789,7 +5831,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!job->pipeline) return nullptr;
                 ++prefetchServed;
                 take = JobTake::Served;
-                auto& slot = pipelines.try_emplace(key, PipelineSlot{ std::move(job->pipeline) }).first->second;
+                auto& slot = pipelines.try_emplace(key, PipelineSlot{ std::move(job->pipeline), 0, record_timing::Origin::Served }).first->second;
                 return slot.pipeline.get();
             }
 
@@ -7015,6 +7057,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
                 const RenderTexture* colors[1] = { key.first };
                 RenderFramebufferDesc desc(colors, color ? 1u : 0u, key.second);
+                ++recordFramebufferCreates;
                 auto fb = device->createFramebuffer(desc);
                 RenderFramebuffer* result = fb.get();
                 framebuffers.emplace(key, std::move(fb));
@@ -7990,7 +8033,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 RenderPipeline* result = pipeline.get();
                 // A failed speculative creation must not poison the draw cache.
                 if (result) {
-                    pipelines.emplace(key, PipelineSlot{ std::move(pipeline), sceneSerial });
+                    pipelines.emplace(key, PipelineSlot{ std::move(pipeline), sceneSerial, record_timing::Origin::Created });
                     NoteRecipeUse(key);
                 }
                 return result;
@@ -10161,6 +10204,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 // Record.
                 ScopedTimer recordTimer{ tRecord, cpuTimingEnabled };
+                const bool recordProbeOn = record_timing::Enabled();
+                if (recordProbeOn) recordTiming.SetCounterReader(&ReadRecordCounters, this);
+                record_timing::Probe recordProbe{ recordTiming, recordProbeOn, drawsThisFrame };
+                if (auto* sample = recordProbe.Sample()) {
+                    sample->vs = key.vs; sample->ps = key.ps;
+                    sample->indexCount = indexCount; sample->primitive = info.primitiveType;
+                    sample->rtBase = colorInfo & 0xFFF; sample->rtFormat = (colorInfo >> 16) & 0xF;
+                    sample->depth = depth != nullptr;
+                }
                 RenderRect scissor(int32_t(scissorTl & 0x3FFF), int32_t((scissorTl >> 16) & 0x3FFF), int32_t(scissorBr & 0x3FFF), int32_t((scissorBr >> 16) & 0x3FFF));
                 uint32_t windowOffset = Reg(REG_PA_SC_WINDOW_OFFSET);
                 if (!(scissorTl & 0x80000000u) && windowOffset)
@@ -10172,6 +10224,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 scissor.top = std::clamp(scissor.top, 0, int32_t(rasterTarget->guestHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rasterTarget->guestHeight));
                 const RenderRect guestScissor = scissor;
                 bool scenePromotionActivated = false;
+                recordProbe.Enter(record_timing::Phase::Promote);
                 if (dlssSrRequested && dlssSceneCopyInputs && fullSceneCopy && !depth
 #if defined(LO_GPU_PLUME)
                     && (dlssController || temporalUpscaler)
@@ -10231,10 +10284,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // 2x-scaled while the actual depth raster target is fixed-size.
                 // Keeping that unused attachment makes VkFramebuffer invalid
                 // (04533/04534); reducing the depth draw's viewport would hide it.
+                recordProbe.Enter(record_timing::Phase::Framebuffer);
+                if (auto* sample = recordProbe.Sample()) { sample->width = rasterTarget->width; sample->height = rasterTarget->height; }
                 RenderFramebuffer* framebuffer = GetFramebuffer(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
                 commandList->setFramebuffer(framebuffer);
                 commandList->setViewports(&rasterViewport, 1);
                 commandList->setScissors(&scissor, 1);
+                recordProbe.Enter(record_timing::Phase::Trace);
                 if (p2Evidence.is_open() && ps &&
                     (key.ps == 0xb4b4d54a7a2d6b96ull || key.ps == 0xcda578aef1724fdcull))
                 {
@@ -10324,6 +10380,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         << ",\"blend_control\":" << key.blend << ",\"color_mask\":" << key.colorMask
                         << ",\"exp_bias\":\"unknown\"}}\n";
                 }
+                recordProbe.Enter(record_timing::Phase::Pipeline);
                 const auto samplerVersion = samplerState.Current();
                 if (!samplerVersion) return;
                 const auto versionsBefore = Gpu().samplerVersions.size();
@@ -10332,6 +10389,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 set0 = vulkan ? staticSet0.get() : samplerVersion->descriptors.get();
                 RenderDescriptorSet* set4 = vulkan ? samplerVersion->descriptors.get() : nullptr;
                 commandList->setPipeline(pipeline);
+                if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, pipeline);
                 // The command list keeps the constant for later rebinds of this
                 // pipeline, e.g. after the motion-vector replay.
                 if (UsesBlendConstant(key.blend))
@@ -10356,6 +10414,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                 }
                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                recordProbe.Enter(record_timing::Phase::Sets);
                 if (vulkan) {
                     const uint64_t base = uploadRing->getDeviceAddress();
                     constantAddresses[0] = base + vsOffset;
@@ -10373,6 +10432,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 commandList->setGraphicsDescriptorSet(set3, 3);
                 if(vulkan) commandList->setGraphicsDescriptorSet(set4,4);
 
+                recordProbe.Enter(record_timing::Phase::Trace);
                 // Expanded rect-list indices already include the offset.
                 int32_t baseVertex = info.primitiveType == 8 && rectListExpansion ? 0 : int32_t(Reg(REG_VGT_INDX_OFFSET));
                 static uint32_t drawLogs = 0;
@@ -10500,11 +10560,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         RegF(REG_ALU_CONSTANTS + 255 * 4), RegF(REG_ALU_CONSTANTS + 255 * 4 + 1), RegF(REG_ALU_CONSTANTS + 255 * 4 + 2), RegF(REG_ALU_CONSTANTS + 255 * 4 + 3));
                 }
                 // Inside a guest occlusion query, count exactly this draw's samples.
+                recordProbe.Enter(record_timing::Phase::Occlusion);
                 const uint32_t occlusionIndex = OcclusionQueryForDraw();
                 RenderQueryPool* occlusionPool = occlusionIndex != ~0u
                     ? Gpu().occlusionQueries[occlusionIndex / kOcclusionPoolQueries].get() : nullptr;
                 if (occlusionPool)
                     commandList->beginOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
+                recordProbe.Enter(record_timing::Phase::Draw);
                 if (useIndices)
                 {
                     RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
@@ -10515,6 +10577,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
+                recordProbe.Enter(record_timing::Phase::Occlusion);
                 if (occlusionPool) {
                     commandList->endOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
                     const HostTexture* measured = depth ? depth : color;
@@ -10522,6 +10585,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         measured->guestWidth, measured->guestHeight, measured->width, measured->height, (surfaceInfo >> 16) & 3)});
                     LogOcclusionDraw(occlusionIndex, ps != nullptr, measured);
                 }
+                recordProbe.Enter(record_timing::Phase::Hdr);
                 // Keep the guest SDR target untouched. The verified tone-map draw
                 // starts an extended-gamma FP16 copy; later UI/fade draws reproduce
                 // their original blend against it. Any unknown writer invalidates
@@ -10704,7 +10768,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             hdrDesc.depthEnabled = hdrDesc.depthWriteEnabled = hdrDesc.stencilEnabled = false;
                             hdrDesc.depthTargetFormat = RenderFormat::UNKNOWN;
                             auto& hdrPipeline = hdrPipelines[key];
-                            if (!hdrPipeline) hdrPipeline = device->createGraphicsPipeline(hdrDesc);
+                            if (!hdrPipeline) {
+                                ScopedTimer createTimer{ recordOtherPipelineMs, record_timing::Enabled() };
+                                ++recordOtherPipelineCreates;
+                                hdrPipeline = device->createGraphicsPipeline(hdrDesc);
+                            }
                             if (!hdrPipeline) reject = "pipeline_creation";
                             else {
                                 auto& sidecar = *color->hdrSidecar;
@@ -10746,6 +10814,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
+                recordProbe.Enter(record_timing::Phase::FgUi);
                 if (fgUiBindingExpected && fgUiCapture) {
                     auto capture = fgUiCapture;
                     if (capture->Valid() && (capture->frame != frame ||
@@ -10780,7 +10849,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             auto replayDesc = desc;
                             replayDesc.depthEnabled = replayDesc.depthWriteEnabled = replayDesc.stencilEnabled = false;
                             replayDesc.depthTargetFormat = RenderFormat::UNKNOWN;
-                            auto replayPipeline = device->createGraphicsPipeline(replayDesc);
+                            std::unique_ptr<RenderPipeline> replayPipeline;
+                            {
+                                ScopedTimer createTimer{ recordOtherPipelineMs, record_timing::Enabled() };
+                                ++recordOtherPipelineCreates;
+                                replayPipeline = device->createGraphicsPipeline(replayDesc);
+                            }
                             if (!replayPipeline) capture->Reject("replay_pipeline_creation_failed");
                             else {
                                 RenderPipeline* replay = replayPipeline.get();
@@ -10821,11 +10895,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     fgUiBindingExpected = false;
                 }
+                recordProbe.Enter(record_timing::Phase::Trace);
                 // These are recorded draws. Verify the pointer survived all
                 // shader bindings and descriptor acquisition, including slot>0.
                 if (traceControllerAtlas)
                     TraceControllerAtlasRecorded(controllerAtlasCandidates, textureBindings, key.vs, key.ps);
   #if defined(LO_GPU_PLUME)
+                recordProbe.Enter(record_timing::Phase::FsrAlpha);
                 bool alphaReplayRecorded = false;
                 // Controlled P2 collection: this raw R8 mask is deliberately
                 // independent of the later scene-copy/SDK inputs. Only the six
@@ -11451,12 +11527,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         TraceFsrAlphaBridge(std::move(event));
                     }
                 }
+                recordProbe.Enter(record_timing::Phase::SceneDlss);
                 if (scenePromotionActivated)
                     RecordSceneCopyDlss(color, rasterTarget);
                 if (video::GpuWorkStopped()) return;
  #endif
                 drawsThisFrame++;
 
+                recordProbe.Enter(record_timing::Phase::MvTrack);
                 if (motionDepthWrite) {
                     const auto logFirstMotionFailure = [&](const char* reason, uint32_t reasonCode) {
                         if (!motionOptions.log) return;
@@ -11561,12 +11639,14 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             }
                         }
                         mvTimer.AddTo(mvTrackCpuMs);
+                        recordProbe.Enter(record_timing::Phase::MvPrepare);
                         if (motionReplay && motionReplay->UsableThisFrame()) {
                             const auto w = uint32_t(rasterViewport.width), h = uint32_t(rasterViewport.height);
                             // Cold start: allocate/clear real MV targets without previous or pipeline.
                             const auto prepared = motionReplay->PrepareSceneDraw(commandList, depth->allocationSerial, depth->texture.get(), w, h,
                                 key, DescribePipeline(key, vs, ps, false),
                                 vsWords, vsCount, ps ? psWords : nullptr, ps ? psCount : 0);
+                            recordProbe.Enter(record_timing::Phase::MvDraw);
                             if (!prepared.sceneReady || prepared.status == temporal::MotionReplayGPU::PipelinePrepareStatus::Failed) {
                                 logFirstMotionFailure(prepared.sceneReady ? "replay_pipeline_failed" : "replay_scene_failed", 3);
                                 motionReplay->AbortFrame();
@@ -11606,6 +11686,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         }
                     }
                 }
+                recordProbe.Enter(record_timing::Phase::Tail);
                 // Offline vertex replay: capture one frame of relative-addressed
                 // draws with their constants, indices and current guest streams.
                 // Stream files are swapped CPU snapshots, not upload-heap reads.
@@ -12279,6 +12360,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (fgUiCapture && fgUiCapture->frame == frame && !fgUiCapture->finalRecorded)
                     ExportFgUiCapture(fgUiCapture);
                 OcclusionFrameEnd();
+                if (record_timing::Enabled()) recordTiming.EndFrame(frame);
                 ++frame; drawsThisFrame = 0; drops = {};
             }
             frame_generation::ResolveIdentity FgIdentity(const ResolvedSurface& rs) const

@@ -9,9 +9,11 @@
 #include <bit>
 #include <cstdint>
 #include <chrono>
+#include <cstdlib>
 #include <future>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #ifdef LO_GPU_PLUME
@@ -114,6 +116,32 @@ class MotionReplayGPU {
     uint64_t maskBatchAllocations_ = 0;
     uint32_t compilingModules_ = 0;
     static constexpr uint32_t kMaxCompilingModules = 2;
+public:
+    // Render-thread work on the slow paths only (first sight of a shader,
+    // module/pipeline creation, target allocation); read by LO_RECORD_TIMING.
+    struct WorkStats {
+        uint32_t translated = 0, shadersCreated = 0, pipelinesCreated = 0, pendingDraws = 0, sceneBegins = 0;
+        double translateMs = 0, shaderCreateMs = 0, pipelineMs = 0, sceneMs = 0;
+    };
+    const WorkStats& Work() const { return work_; }
+private:
+    WorkStats work_;
+    // Replay pipelines are built off the render thread: no recipe, corpus or
+    // pipeline library covers them, and a cold driver compile took up to 170 ms
+    // in one draw. LO_MV_ASYNC_PIPELINES=0 creates them in the draw as before.
+    // The device creates pipelines from worker threads elsewhere too. Declared
+    // after the layout and modules so pending creations finish before those go.
+    static bool AsyncPipelines() {
+        static const bool enabled = [] { const char* v = std::getenv("LO_MV_ASYNC_PIPELINES"); return !v || std::string_view(v) != "0"; }();
+        return enabled;
+    }
+    static constexpr size_t kMaxCreatingPipelines = 4;
+    std::unordered_map<Key, std::future<std::unique_ptr<plume::RenderPipeline>>, KeyHash> creating_;
+    struct AddElapsed {
+        double& total;
+        std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+        ~AddElapsed() { total += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(); }
+    };
     static constexpr const char* kMaskShader = R"HLSL(
 Texture2D<float2> motionDepth : register(t0);
 Texture2D<uint> motionTag : register(t1);
@@ -163,6 +191,8 @@ float pixel(float4 p : SV_Position) : SV_Target {
         auto [it, inserted] = cache.try_emplace(hash);
         auto& m = it->second;
         if (inserted) {
+            AddElapsed timer{work_.translateMs};
+            ++work_.translated;
             // Endian conversion is identical to Renderer::GetShader.
             xenos::TranslatedShader translated;
             if (count && guestWords) {
@@ -203,8 +233,12 @@ float pixel(float4 p : SV_Position) : SV_Target {
         m.source.clear();
         if (!compiled.ok) { m.error = compiled.errors; m.failure = Module::Failure::Translation; return m; }
         if (testFailNextModuleAllocation_) testFailNextModuleAllocation_ = false;
-        else m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
-            vulkan_ ? plume::RenderShaderFormat::SPIRV : plume::RenderShaderFormat::DXIL);
+        else {
+            AddElapsed timer{work_.shaderCreateMs};
+            ++work_.shadersCreated;
+            m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
+                vulkan_ ? plume::RenderShaderFormat::SPIRV : plume::RenderShaderFormat::DXIL);
+        }
         if (!m.shader) {
             m.error = "Replay shader module allocation failed";
             m.failure = Module::Failure::GpuAllocation;
@@ -312,6 +346,8 @@ public:
         uint32_t width, uint32_t height) {
         if (!initialized_ || aborted_ || finalized_ || !commands || !depth || !width || !height || width > 7680 || height > 4320) return false;
         if (cleared_) return allocation_ == allocation && width_ == width && height_ == height && boundDepth_ == depth;
+        AddElapsed timer{work_.sceneMs};
+        ++work_.sceneBegins;
         FlushQueued(commands);
         if (width_ != width || height_ != height) {
             ++targetGeneration_;
@@ -362,6 +398,21 @@ public:
             setStatus(PipelinePrepareStatus::Ready);
             return found->second.get();
         }
+        if (auto creating = creating_.find(key); creating != creating_.end()) {
+            if (!wait && creating->second.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                pendingThisFrame_ = true;
+                ++work_.pendingDraws;
+                setStatus(PipelinePrepareStatus::Pending);
+                return nullptr;
+            }
+            auto pipeline = creating->second.get();
+            creating_.erase(creating);
+            auto* result = pipeline.get();
+            if (!result) { ++failedDraws_; resourceFailedThisFrame_ = true; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
+            pipelines_.emplace(key, std::move(pipeline));
+            setStatus(PipelinePrepareStatus::Ready);
+            return result;
+        }
         if (desc.geometryShader || desc.stencilEnabled || !desc.depthEnabled) {
             ++failedDraws_; setStatus(PipelinePrepareStatus::Failed); return nullptr;
         }
@@ -370,6 +421,7 @@ public:
         if (!vs.shader || !ps.shader) {
             if (vs.error.empty() && ps.error.empty()) {
                 pendingThisFrame_ = true;
+                ++work_.pendingDraws;
                 setStatus(PipelinePrepareStatus::Pending);
                 return nullptr;
             }
@@ -387,7 +439,30 @@ public:
         desc.renderTargetFormat[2] = plume::RenderFormat::R32_UINT;
         for (unsigned i = 0; i < 3; ++i) desc.renderTargetBlend[i] = plume::RenderBlendDesc::Copy();
         desc.dynamicBlendConstantsEnabled = false; // Copy blends never read it.
-        auto pipeline = device_->createGraphicsPipeline(desc);
+        if (AsyncPipelines() && !wait) {
+            // The frame falls back like a pending module compile until it is built.
+            // Finished creations whose key was not drawn again must free their slot.
+            for (auto it = creating_.begin(); it != creating_.end(); ) {
+                if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::ready) { ++it; continue; }
+                if (auto built = it->second.get()) pipelines_.emplace(it->first, std::move(built));
+                it = creating_.erase(it);
+            }
+            if (creating_.size() < kMaxCreatingPipelines) {
+                ++work_.pipelinesCreated;
+                creating_.emplace(key, std::async(std::launch::async,
+                    [device = device_, desc] { return device->createGraphicsPipeline(desc); }));
+            }
+            pendingThisFrame_ = true;
+            ++work_.pendingDraws;
+            setStatus(PipelinePrepareStatus::Pending);
+            return nullptr;
+        }
+        std::unique_ptr<plume::RenderPipeline> pipeline;
+        {
+            AddElapsed timer{work_.pipelineMs};
+            ++work_.pipelinesCreated;
+            pipeline = device_->createGraphicsPipeline(desc);
+        }
         auto* result = pipeline.get();
         if (!result) { ++failedDraws_; resourceFailedThisFrame_ = true; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
         pipelines_.emplace(key, std::move(pipeline));
