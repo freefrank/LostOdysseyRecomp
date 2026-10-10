@@ -73,6 +73,46 @@
       "instruction_count": 53,
       "body_sha256": "81a5c28bf21ff9c653bc7b8bde752f0cc1b4469c8e4880b49f7f546399d20682",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0EE40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 6369,
+      "instruction_count": 62,
+      "body_sha256": "f1f2f9f74e5683761a2ca1e66ae1cf7a7727a81474343f86c24307573889f972",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0EC18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 6048,
+      "instruction_count": 72,
+      "body_sha256": "19f20e5aa64a71b5148d672ae0035a26e8f31e96ecf6c6188500b7bd40ad1922",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0F7D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 7745,
+      "instruction_count": 71,
+      "body_sha256": "bd70d38c697b6e5261180eff9ee226a43e0ff2ff9dbc21a7eef48aeaf11576fa",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B11758",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 12461,
+      "instruction_count": 60,
+      "body_sha256": "c956e1a270326783035e000beafcca7af871c5c62206411def0e648ff5a048d8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FDB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8624,
+      "instruction_count": 75,
+      "body_sha256": "a3af7dfe06b2d184a72018cdac4718e6b4706f4c147737a6a789e1798c3ce87b",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -85,7 +125,12 @@
       "82B0DDF8",
       "82B0EA88",
       "82B10DD8",
-      "82B0DD20"
+      "82B0DD20",
+      "82B0EE40",
+      "82B0EC18",
+      "82B0F7D0",
+      "82B11758",
+      "82B0FDB0"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -99,6 +144,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance."
+    "case_scope": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
+    "descriptor_properties": "Recovered five additional descriptor property effects: dual-side gates, paired payload insertion/removal, mutually exclusive categories, bounded random payload with source attribution, and selected property-family clearing. Focused checks cover actual paired values and masks, source ID retention, family clearing and opposite side-gate failures. Descriptor callback coverage now47 of83 distinct targets; remaining36 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

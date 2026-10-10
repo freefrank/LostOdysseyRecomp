@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_effect_mutation61.h"
+#include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_evaluation_chance61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
@@ -15,6 +16,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
+      !battle_random_range61::Apply(e, m, d, s) &&
       !battle_action_eligibility61::Apply(e, m, d, s) &&
       !battle_evaluation_chance61::Apply(e, m, d, s) &&
       !battle_evaluation_gates61::Apply(e, m, d, s) &&
@@ -39,6 +41,19 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b0ee40:
+  case 0x82b0ec18:
+  case 0x82b0f7d0:
+  case 0x82b11758:
+    frame = 128;
+    first = 28;
+    literal = 80;
+    break;
+  case 0x82b0fdb0:
+    frame = 128;
+    first = 29;
+    literal = 80;
+    break;
   case 0x82b104a8:
   case 0x82b0fcf0:
   case 0x82b0ea88:
@@ -106,7 +121,84 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b104a8) {
+  if (e == 0x82b0ee40 || e == 0x82b0ec18 || e == 0x82b0f7d0) {
+    bool removing = e == 0x82b0ee40;
+    bool allowed = eligible(2) || m.ReadU32(owner + 92) != (removing ? 2u : 1u);
+    if (allowed)
+      allowed = eligible(1) || m.ReadU32(owner + 92) != (removing ? 1u : 2u);
+    if (!allowed)
+      m.WriteU8(owner + 208, 0);
+    else if (m.ReadU32(owner + 92) != (removing ? 1u : 2u) ||
+             chance(0x82b08ea8)) {
+      mark();
+      if (removing) {
+        property(0x82ac91d8, 92, 100);
+        if (m.ReadU32(owner + 104))
+          property(0x82ac91d8, 96, 104);
+      } else {
+        auto add = [&](unsigned bank, unsigned mask, unsigned value,
+                       unsigned option) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = m.ReadU32(owner + bank);
+          s.r[5] = m.ReadU32(owner + mask);
+          s.r[6] = m.ReadU32(owner + value);
+          s.r[7] = option;
+          Call(0x82ac8968, m, d, s);
+        };
+        add(92, 100, 108, e == 0x82b0ec18 && m.ReadU32(owner + 120) != 0);
+        if (e == 0x82b0ec18) {
+          if (m.ReadU32(owner + 104))
+            add(96, 104, 112, m.ReadU32(owner + 120) != 0);
+        } else {
+          property(0x82ac8ae8, 96, 104);
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = m.ReadU32(owner + 96) == 5 ? 6 : 5;
+          s.r[5] = m.ReadU32(owner + 104);
+          Call(0x82ac91d8, m, d, s);
+        }
+      }
+    }
+  } else if (e == 0x82b11758) {
+    if (!eligible(1))
+      m.WriteU8(owner + 208, 0);
+    else {
+      if (chance(0x82b08e28)) {
+        mark();
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 1;
+        s.r[5] = m.ReadU32(owner + 108);
+        s.r[6] = 97;
+        s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+        Call(0x82aa0740, m, d, s);
+        s.r[6] = s.r[3];
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = m.ReadU32(owner + 92);
+        s.r[5] = m.ReadU32(owner + 100);
+        s.r[7] = 0;
+        s.r[8] = m.ReadU32(owner + 120);
+        Call(0x82ac8ec8, m, d, s);
+        auto source = m.ReadU32(owner + 4);
+        s.r[3] = m.ReadU32(owner + 100);
+        Call(0x82ac84b8, m, d, s);
+        m.WriteU32(m.ReadU32(owner + 8) +
+                       4 * (68 * m.ReadU32(owner + 92) + Address(s.r[3]) + 91),
+                   m.ReadU32(source + 64));
+      }
+      m.WriteU8(owner + 208, 1);
+    }
+  } else if (e == 0x82b0fdb0) {
+    if (!eligible(1))
+      m.WriteU8(owner + 208, 0);
+    else {
+      mark();
+      for (unsigned id : {32u, 33u, 34u, 35u, 36u, 37u, 38u, 160u, 161u, 162u,
+                          163u, 164u, 165u, 224u, 228u, 229u}) {
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = id;
+        Call(0x82ac9000, m, d, s);
+      }
+    }
+  } else if (e == 0x82b104a8) {
     auto source = m.ReadU32(owner + 4);
     m.WriteU32(source + 124, m.ReadU32(source + 124) | 0x40000);
     if (chance(0x82b08ea8)) {

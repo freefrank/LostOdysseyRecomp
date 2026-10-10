@@ -152,6 +152,53 @@ int main() {
     m.WriteU32(owner + 120, 0);
     call(0x82b10dd8);
     check(!m.ReadU32(target + 188), "zero gauge payload resets current");
+    m.WriteU8(owner + 200, 1);
+    m.WriteU32(owner + 92, 5);
+    m.WriteU32(owner + 100, 4);
+    m.WriteU32(owner + 96, 6);
+    m.WriteU32(owner + 104, 8);
+    m.WriteU32(owner + 108, 7);
+    m.WriteU32(owner + 112, 9);
+    m.WriteU32(owner + 120, 1);
+    call(0x82b0ec18);
+    check((m.ReadU32(target + 5 * 272 + 232) & 4) &&
+              (m.ReadU32(target + 6 * 272 + 232) & 8) &&
+              m.ReadU32(target + 4 * (68 * 5 + 2 + 59)) == 7 &&
+              m.ReadU32(target + 4 * (68 * 6 + 3 + 59)) == 9,
+          "paired property payloads");
+    call(0x82b0ee40);
+    check(!(m.ReadU32(target + 5 * 272 + 232) & 4) &&
+              !(m.ReadU32(target + 6 * 272 + 232) & 8),
+          "paired property clear");
+    m.WriteU32(target + 5 * 272 + 232, 8);
+    call(0x82b0f7d0);
+    check((m.ReadU32(target + 6 * 272 + 232) & 8) &&
+              !(m.ReadU32(target + 5 * 272 + 232) & 8),
+          "exclusive property category");
+    m.WriteU32(source + 64, 24);
+    m.WriteU32(owner + 108, 1);
+    m.WriteU32(owner + 100, 16);
+    call(0x82b11758);
+    check(m.ReadU8(owner + 208) == 1 &&
+              m.ReadU32(target + 4 * (68 * 5 + 4 + 59)) == 1 &&
+              m.ReadU32(target + 4 * (68 * 5 + 4 + 91)) == 24,
+          "random bounded payload and source attribution");
+    for (unsigned bank : {1u, 5u, 7u})
+      m.WriteU32(target + 272 * bank + 232, 0x7fffffff);
+    call(0x82b0fdb0);
+    check((m.ReadU32(target + 272 + 232) & 127) == 0 &&
+              (m.ReadU32(target + 5 * 272 + 232) & 63) == 0 &&
+              (m.ReadU32(target + 7 * 272 + 232) & 49) == 0,
+          "selected property family clear");
+    m.WriteU8(owner + 200, 0);
+    m.WriteU32(owner + 92, 1);
+    m.WriteU8(owner + 208, 1);
+    call(0x82b0ec18);
+    check(!m.ReadU8(owner + 208), "primary property side gate");
+    m.WriteU32(owner + 92, 2);
+    m.WriteU8(owner + 208, 1);
+    call(0x82b0ee40);
+    check(!m.ReadU8(owner + 208), "inverse property side gate");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
