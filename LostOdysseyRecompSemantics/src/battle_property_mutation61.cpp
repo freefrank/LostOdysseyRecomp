@@ -11,6 +11,38 @@
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ac8608) {
+    auto old = Address(s.r[1]), resource = Address(s.r[3]),
+         value = Address(s.r[5]), mode = Address(s.r[6]) & 255;
+    auto id = std::int32_t(Address(s.r[4]));
+    recovery_abi::WriteU64(m, old - 16, s.r[30]);
+    recovery_abi::WriteU64(m, old - 8, s.r[31]);
+    if (id <= 262) {
+      auto quotient = id / 32, remainder = id - quotient * 32;
+      auto table = 0x83213438u + 8 * unsigned(remainder),
+           mask = m.ReadU32(table + 4);
+      auto bank = m.ReadU32(table) + unsigned(quotient),
+           flagsAddress = resource + 272 * bank + 232;
+      unsigned bit = 0;
+      while (bit < 31 && !(mask & (1u << bit)))
+        ++bit;
+      auto payload = resource + 4 * (68 * bank + bit + 59);
+      if (m.ReadU32(flagsAddress) & mask) {
+        auto previous = m.ReadU32(payload);
+        if (mode == 1)
+          m.WriteU32(payload, previous + value);
+        else if (std::int32_t(previous) < std::int32_t(value))
+          m.WriteU32(payload, value);
+      } else {
+        m.WriteU32(flagsAddress, m.ReadU32(flagsAddress) | mask);
+        m.WriteU32(payload, value);
+        m.WriteU32(resource + 4 * (68 * bank + bit + 91), 0);
+      }
+    }
+    s.r[30] = recovery_abi::ReadU64(m, old - 16);
+    s.r[31] = recovery_abi::ReadU64(m, old - 8);
+    return true;
+  }
   if (e == 0x82ac9548) {
     auto resource = Address(s.r[3]), bank = Address(s.r[4]),
          mask = Address(s.r[5]);

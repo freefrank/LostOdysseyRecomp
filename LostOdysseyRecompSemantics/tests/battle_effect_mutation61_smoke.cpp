@@ -769,6 +769,61 @@ int main() {
               get(owner + 172) == 20 && m.ReadU32(0x93000 + 76) == 0 &&
               m.ReadU32(0x93000 + 185200) == 130,
           "physical hit with MP siphon and profile spending");
+    m.WriteU32(owner + 108, 1);
+    m.WriteU32(owner + 112, 5);
+    m.WriteU32(owner + 120, 7);
+    call(0x82b106b8);
+    check((m.ReadU32(target + 4956) & 5) == 5 &&
+              m.ReadU32(target + 4960) == 7 && m.ReadU32(target + 4968) == 7,
+          "selected duration mask assignment");
+    m.WriteU32(owner + 108, 2);
+    m.WriteU32(target + 5 * 272 + 232, 6);
+    m.WriteU32(target + 272 + 232, 1);
+    m.WriteU32(target + 508, 5);
+    m.WriteU32(target + 780, 0);
+    call(0x82b106b8);
+    check(!(m.ReadU32(target + 5 * 272 + 232) & 6) &&
+              (m.ReadU32(target + 6 * 272 + 232) & 6) == 6 &&
+              (m.ReadU32(target + 2 * 272 + 232) & 1) &&
+              m.ReadU32(target + 780) == 5,
+          "property family conversion preserves effective value");
+    m.WriteU32(owner + 108, 0);
+    m.WriteU32(owner + 36, 0);
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 100, 2);
+    m.WriteU32(owner + 96, 4);
+    m.WriteU32(owner + 104, 8);
+    m.WriteU32(target + 4 * 272 + 232, 8);
+    call(0x82b106b8);
+    check(m.ReadU32(owner + 188) == 0 &&
+              (m.ReadU32(target + 3 * 272 + 232) & 2) &&
+              !(m.ReadU32(target + 4 * 272 + 232) & 8),
+          "one randomly selected target receives primary property");
+    m.WriteU32(0x832cb798, 0xf9000);
+    m.WriteU32(0xf9000 + 16, 0xfa000);
+    m.WriteU32(target + 64, 25);
+    m.WriteU32(owner + 108, 0);
+    call(0x82b11a20);
+    check(m.ReadU32(target + 5088) == 4 && m.ReadU32(0xf9000 + 24) == 54 &&
+              m.ReadU32(0xfa000 + 268) == 54,
+          "random temporary immunity and report");
+    m.WriteU32(owner + 108, 1);
+    m.WriteU32(target + 4880, 0);
+    m.WriteU32(target + 4888, 0);
+    m.WriteU32(0x200000 + 14888, 0);
+    call(0x82b11a20);
+    check(m.ReadU32(0xf9000 + 24) == 78 && !m.ReadU32(0x200000 + 14888) &&
+              m.ReadU8(owner + 208) == 1,
+          "empty category report omits result mark");
+    m.WriteU32(target + 4880, 1);
+    call(0x82b11a20);
+    check(m.ReadU32(target + 5092) == 1 && m.ReadU32(0xf9000 + 24) == 67,
+          "category vulnerability report");
+    m.WriteU32(target + 4880, 0);
+    m.WriteU32(target + 4888, 0x84);
+    call(0x82b11a20);
+    check(m.ReadU32(target + 5092) == 2 && m.ReadU32(0xf9000 + 24) == 77,
+          "highest flagged class report");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

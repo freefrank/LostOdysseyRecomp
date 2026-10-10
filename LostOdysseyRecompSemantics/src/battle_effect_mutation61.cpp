@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_evaluation_theft61.h"
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_resource_growth61.h"
@@ -24,6 +25,7 @@ using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
       !battle_script_runtime61::Apply(e, m, d, s) &&
+      !battle_evaluation_theft61::Apply(e, m, d, s) &&
       !battle_manager_access61::Apply(e, m, d, s) &&
       !battle_resource_growth61::Apply(e, m, d, s) &&
       !battle_resource_stats61::Apply(e, m, d, s) &&
@@ -55,6 +57,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b11a20:
+    frame = 160;
+    first = 25;
+    literal = 80;
+    break;
+  case 0x82b106b8:
   case 0x82b0f3e0:
   case 0x82b0fbd0:
   case 0x82b10368:
@@ -257,7 +265,156 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b12d08 && !m.ReadU32(owner + 108)) {
+  if (e == 0x82b11a20) {
+    bool randomStatus = m.ReadU32(owner + 108) == 0;
+    if (!eligible(randomStatus ? 2 : 1, randomStatus ? 0 : 1))
+      m.WriteU8(owner + 208, 0);
+    else {
+      unsigned report = 0;
+      bool markResult = true;
+      auto label = [&]() {
+        s.r[3] = m.ReadU32(0x832cb798);
+        s.r[4] = m.ReadU32(m.ReadU32(owner + 8) + 64);
+        Call(0x82aa1268, m, d, s);
+      };
+      if (randomStatus) {
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 0;
+        s.r[5] = 10;
+        s.r[6] = 106;
+        s.r[7] = m.ReadU32(m.ReadU32(owner + 8) + 64);
+        Call(0x82aa0740, m, d, s);
+        auto choice = Address(s.r[3]);
+        unsigned mask = 0;
+        if (choice <= 10) {
+          unsigned ids[] = {2, 4, 3, 5, 6, 8, 9, 10, 12, 14, 17};
+          unsigned codes[] = {54, 55, 56, 57, 58, 59, 60, 61, 62, 64, 65};
+          report = codes[choice];
+          s.r[3] = ids[choice];
+          Call(0x8238aab0, m, d, s);
+          mask = Address(s.r[3]);
+        }
+        m.WriteU32(m.ReadU32(owner + 8) + 5088, mask);
+        label();
+      } else {
+        label();
+        auto target = m.ReadU32(owner + 8);
+        m.WriteU32(target + 5092, 0);
+        auto category = m.ReadU32(target + 4880),
+             classes = m.ReadU32(target + 4888) & 255;
+        if (!category && !classes) {
+          report = 78;
+          markResult = false;
+        } else {
+          if (category && classes) {
+            s.r[3] = m.ReadU32(0x83264558);
+            s.r[4] = 1;
+            s.r[5] = 2;
+            s.r[6] = 106;
+            s.r[7] = m.ReadU32(target + 64);
+            Call(0x82aa0740, m, d, s);
+            m.WriteU32(m.ReadU32(owner + 8) + 5092, Address(s.r[3]));
+          } else
+            m.WriteU32(target + 5092, category ? 1 : 2);
+          target = m.ReadU32(owner + 8);
+          if (m.ReadU32(target + 5092) == 1) {
+            switch (m.ReadU32(target + 4880)) {
+            case 1:
+              report = 67;
+              break;
+            case 2:
+              report = 69;
+              break;
+            case 4:
+              report = 66;
+              break;
+            case 8:
+              report = 68;
+              break;
+            }
+          } else {
+            auto flags = m.ReadU32(target + 4888);
+            for (unsigned bit = 0; bit < 8; ++bit)
+              if (flags & (1u << bit))
+                report = 70 + bit;
+          }
+        }
+      }
+      auto manager = m.ReadU32(0x832cb798);
+      m.WriteU32(manager + 20, 0);
+      m.WriteU32(m.ReadU32(manager + 16) + 264, 0);
+      m.WriteU32(manager + 24, report);
+      m.WriteU32(m.ReadU32(manager + 16) + 268, report);
+      if (markResult)
+        mark();
+      m.WriteU8(owner + 208, 1);
+    }
+  } else if (e == 0x82b106b8) {
+    mark();
+    auto mode = m.ReadU32(owner + 108);
+    if (mode == 2) {
+      auto present = [&](unsigned id) {
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = id;
+        Call(0x8238e368, m, d, s);
+        return (Address(s.r[3]) & 255) != 0;
+      };
+      for (unsigned id : {161u, 162u})
+        if (present(id)) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = id;
+          Call(0x82ac9000, m, d, s);
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = id + 32;
+          s.r[5] = 1;
+          s.r[6] = 0;
+          Call(0x82ac9be0, m, d, s);
+        }
+      for (unsigned id : {32u, 33u, 37u, 38u, 35u})
+        if (present(id)) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = id;
+          Call(0x82ac9858, m, d, s);
+          auto value = Address(s.r[3]);
+          if (std::int32_t(value) > 0) {
+            s.r[3] = m.ReadU32(owner + 8);
+            s.r[4] = id;
+            Call(0x82ac9000, m, d, s);
+            s.r[3] = m.ReadU32(owner + 8);
+            s.r[4] = id + 32;
+            s.r[5] = value;
+            s.r[6] = 0;
+            Call(0x82ac8608, m, d, s);
+          }
+        }
+    } else if (mode == 1) {
+      auto target = m.ReadU32(owner + 8);
+      m.WriteU32(target + 4956,
+                 m.ReadU32(target + 4956) | m.ReadU32(owner + 112));
+      for (unsigned bit = 0; bit < 32; ++bit)
+        if (m.ReadU32(owner + 112) & (1u << bit))
+          m.WriteU32(m.ReadU32(owner + 8) + 4960 + 4 * bit,
+                     m.ReadU32(owner + 120));
+    } else if (!mode) {
+      if (!m.ReadU32(owner + 36)) {
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 0;
+        s.r[5] = m.ReadU32(m.ReadU32(owner + 40) + 20) - 1;
+        s.r[6] = 14;
+        s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+        Call(0x82aa0740, m, d, s);
+        m.WriteU32(owner + 188, Address(s.r[3]));
+      }
+      property(0x82ac91d8, 92, 100);
+      property(0x82ac91d8, 96, 104);
+      bool primary = m.ReadU32(owner + 36) == m.ReadU32(owner + 188);
+      property(0x82aca6f0, primary ? 92 : 96, primary ? 100 : 104);
+      s.r[3] = m.ReadU32(owner + (primary ? 100 : 104));
+      Call(0x82ac84b8, m, d, s);
+      if (!m.ReadU32(owner + (primary ? 92 : 96)))
+        m.WriteU32(owner + 168, Address(s.r[3]));
+    }
+  } else if (e == 0x82b12d08 && !m.ReadU32(owner + 108)) {
     mark();
     auto source = m.ReadU32(owner + 4);
     m.WriteU32(source + 124, m.ReadU32(source + 124) |

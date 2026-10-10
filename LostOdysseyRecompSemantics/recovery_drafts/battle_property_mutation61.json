@@ -233,6 +233,14 @@
       "instruction_count": 30,
       "body_sha256": "641b06effcd24a8d08be49c9381b8a514f2f7a40f686cc34adc4c5a0cfa826a0",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8608",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 5776,
+      "instruction_count": 116,
+      "body_sha256": "10649af544c9dac7b5e3ae07f1df88b674a2787265605f3440a62a4450c60a6e",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -265,7 +273,8 @@
       "82ACA830",
       "82ACA838",
       "82AC8988",
-      "82AC9548"
+      "82AC9548",
+      "82AC8608"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -291,6 +300,7 @@
     "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
     "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-    "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

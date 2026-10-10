@@ -679,3 +679,7 @@ Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exha
 ## Descriptor priced physical damage
 
 Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
+## Descriptor property transformations and reports
+
+Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.
