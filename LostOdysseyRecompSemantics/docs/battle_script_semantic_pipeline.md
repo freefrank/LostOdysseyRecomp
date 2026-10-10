@@ -325,3 +325,7 @@ Recovered six effect calculation stages and the status-result record setter. Tar
 ## Attack and defense bases
 
 Recovered and composed attack and defense base calculations using real numeric properties and guest-loaded floating constants. The initial amount stage no longer mocks either stat calculation. Focused checks cover nonnegative difference, negative defense stat adjustment, status-dependent floor and preserved nonvolatile FPRs. Fixtures use synthetic constants; bitwise floating-point, exception flags and native gameplay equivalence remain unvalidated.
+
+## Amount modifiers and aggregation
+
+Recovered side-dependent amount attenuation and final amount aggregation, including exemption gates, result-record marking, status overrides, critical multiplier, count scaling, optional random modifier, rounding and cancellation. Focused fixture checks attenuation/bypass and the aggregation stages with synthetic guest constants and real property helpers. No bitwise floating-point or native gameplay equivalence is claimed.

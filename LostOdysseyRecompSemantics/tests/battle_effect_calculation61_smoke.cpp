@@ -19,6 +19,9 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x8201f000, 0x1000});
+    regions.push_back({0x821ba000, 0x1000});
+    regions.push_back({0x832ae000, 0x1000});
     regions.push_back({0x8201d000, 0x1000});
     regions.push_back({0x82218000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
@@ -111,6 +114,44 @@ int main() {
     check(s.r[3] == 200);
     check(s.fpr_bits[29] == initial.fpr_bits[29] &&
           s.fpr_bits[30] == initial.fpr_bits[30]);
+    m.WriteU32(0x832aeb00, 0x76000);
+    m.WriteU32(0x73000 + 32, 0x75000);
+    m.WriteU32(0x73000 + 20, 0x42c80000);
+    m.WriteU8(0x76000 + 24, 1);
+    m.WriteU32(0x76000 + 12, 0x3e800000);
+    m.WriteU32(0x82000fb0, 0x3f800000);
+    m.WriteU32(0x82007784, 0x3f800000);
+    run(0x82b20ef0);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 75 &&
+          m.ReadU32(0x100000 + 4 * (116 + 3776)) == 1);
+    m.WriteU32(0x90000 + 124, 0x40000000);
+    run(0x82b20ef0);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 100);
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x73000 + 20, 0x412e6666);
+    m.WriteU32(0x73000 + 80, 0x3f800000);
+    m.WriteU32(0x73000 + 76, 0x40000000);
+    m.WriteU32(0x73000 + 72, 0x40400000);
+    m.WriteU32(0x73000 + 56, 2);
+    m.WriteU32(0x8201f9f0, 0x3f000000);
+    m.WriteU32(0x821baa74, 0x3f000000);
+    m.WriteU8(0x73000 + 64, 0);
+    m.WriteU32(0x80000 + 232, 0);
+    run(0x82b21148);
+    check(std::bit_cast<float>(m.ReadU32(0x73000 + 24)) == 32);
+    m.WriteU32(0x80000 + 232, 1u << 7);
+    run(0x82b21148);
+    check(std::bit_cast<float>(m.ReadU32(0x73000 + 24)) == 2);
+    m.WriteU8(0x73000 + 36, 1);
+    m.WriteU32(0x82000e1c, 0x40000000);
+    run(0x82b21148);
+    check(std::bit_cast<float>(m.ReadU32(0x73000 + 24)) == 64);
+    m.WriteU32(0x80000 + 3 * 272 + 232, 1);
+    run(0x82b21148);
+    check(std::bit_cast<float>(m.ReadU32(0x73000 + 24)) == 32);
+    m.WriteU8(0x73000 + 64, 1);
+    run(0x82b21148);
+    check(!m.ReadU32(0x73000 + 24));
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

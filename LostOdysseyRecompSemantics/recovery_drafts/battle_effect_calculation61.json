@@ -65,6 +65,22 @@
       "instruction_count": 109,
       "body_sha256": "fcdff9a489dd401fb8d3dc546cb4bcb9ee91972ac2b3371d15c01cd6595ebd3c",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B20EF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 11886,
+      "instruction_count": 84,
+      "body_sha256": "ba5edc8806fb5354580941e7c91e9cded5637bbe16fab299aef83c8c3a223f83",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B21148",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 12239,
+      "instruction_count": 114,
+      "body_sha256": "75270b67b70b61a635160e3f7bf5fdfd7fa8371bbfbc0ebe864c7e3ec5292d8e",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -76,7 +92,9 @@
       "82B21068",
       "82B20650",
       "82B1F830",
-      "82B1F918"
+      "82B1F918",
+      "82B20EF0",
+      "82B21148"
     ],
     "header": "include/lo_semantics/battle_effect_calculation61.h",
     "source": "src/battle_effect_calculation61.cpp",
@@ -91,6 +109,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "base_calculations": "Recovered and composed attack and defense base calculations using real numeric properties and guest-loaded floating constants. The initial amount stage no longer mocks either stat calculation. Focused checks cover nonnegative difference, negative defense stat adjustment, status-dependent floor and preserved nonvolatile FPRs. Fixtures use synthetic constants; bitwise floating-point, exception flags and native gameplay equivalence remain unvalidated."
+    "base_calculations": "Recovered and composed attack and defense base calculations using real numeric properties and guest-loaded floating constants. The initial amount stage no longer mocks either stat calculation. Focused checks cover nonnegative difference, negative defense stat adjustment, status-dependent floor and preserved nonvolatile FPRs. Fixtures use synthetic constants; bitwise floating-point, exception flags and native gameplay equivalence remain unvalidated.",
+    "amount_modifiers": "Recovered side-dependent amount attenuation and final amount aggregation, including exemption gates, result-record marking, status overrides, critical multiplier, count scaling, optional random modifier, rounding and cancellation. Focused fixture checks attenuation/bypass and the aggregation stages with synthetic guest constants and real property helpers. No bitwise floating-point or native gameplay equivalence is claimed."
   }
 }
