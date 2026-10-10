@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_result_application61.h"
 #include "lo_semantics/battle_property_mutation61.h"
+#include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -11,6 +12,7 @@ using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_result_application61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s) &&
+      !battle_random_range61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_script_actions61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
@@ -23,6 +25,216 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82acad40) {
+    auto old = Address(s.r[1]), resource = Address(s.r[4]),
+         element = Address(s.r[5]), excluded = Address(s.r[6]);
+    auto before = std::bit_cast<double>(s.fpr_bits[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 24; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 160;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto hp = std::bit_cast<float>(m.ReadU32(resource + 2588));
+    s.fpr_bits[0] = std::bit_cast<std::uint64_t>(double(hp));
+    auto removable = [&](unsigned id) {
+      auto p = 0x83213438 + 8 * id, mask = m.ReadU32(p + 4);
+      return !(excluded & mask) &&
+             (m.ReadU32(resource + 272 * m.ReadU32(p) + 232) & mask);
+    };
+    auto remove = [&](unsigned id) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      s.r[5] = 1;
+      Call(0x82ac8ee8, m, d, s);
+    };
+    bool wake = false;
+    if (before > hp) {
+      if (removable(11)) {
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 50;
+        s.r[5] = 50;
+        s.r[6] = m.ReadU32(resource + 64);
+        Call(0x82aa0838, m, d, s);
+        if (Address(s.r[3]) & 255)
+          remove(11);
+      }
+      if (removable(3)) {
+        remove(3);
+        wake = true;
+      }
+    }
+    if (element == 1) {
+      remove(2);
+      remove(16);
+    }
+    if (wake) {
+      m.WriteU32(resource + 92, 0);
+      m.WriteU32(resource + 88, 0);
+      m.WriteU32(resource + 60, 6);
+      m.WriteU32(resource + 100, m.ReadU32(resource + 100) & 0x7fffffffu);
+    }
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    s.r[1] += 160;
+    for (unsigned i = 24; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
+  if (e == 0x82b2b9e0 || e == 0x82b2b720 || e == 0x82b2b7f8 ||
+      e == 0x82b2b910) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]),
+         resource = Address(s.r[4]), mode = Address(s.r[6]);
+    bool dispatcher = e == 0x82b2b9e0, divide = e == 0x82b2b720,
+         quarter = e == 0x82b2b7f8;
+    unsigned frame = dispatcher ? 96 : 128, first = dispatcher ? 32
+                                                    : divide   ? 29
+                                                               : 30;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    if (!dispatcher && !divide)
+      recovery_abi::WriteU64(m, old - 32, s.fpr_bits[31]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto f = [&](unsigned reg, double v) {
+      s.fpr_bits[reg] = std::bit_cast<std::uint64_t>(v);
+    };
+    auto load = [&](unsigned p, unsigned reg) {
+      auto v = std::bit_cast<float>(m.ReadU32(p));
+      f(reg, v);
+      return v;
+    };
+    auto put = [&](unsigned p, float v) {
+      m.WriteU32(p, std::bit_cast<unsigned>(v));
+    };
+    auto trunc = [&](float value, unsigned reg) {
+      auto v = Trunc(value);
+      s.fpr_bits[reg] = std::bit_cast<std::uint64_t>(std::int64_t(v));
+      m.WriteU32(sp + 80, unsigned(v));
+      return v;
+    };
+    auto integer = [&](std::int32_t value, unsigned off, unsigned reg) {
+      recovery_abi::WriteU64(m, sp + off, std::uint64_t(std::int64_t(value)));
+      f(reg, float(value));
+      return float(value);
+    };
+    auto normalize = [&]() {
+      s.r[3] = owner;
+      s.r[4] = resource;
+      s.r[5] = 0;
+      Call(0x82b2b468, m, d, s);
+    };
+    auto count = [&](std::int32_t n) {
+      s.r[3] = m.ReadU32(0x83291dc0);
+      s.r[4] = 2;
+      s.r[5] = unsigned(n < 0 ? 0 : n);
+      Call(0x82ac34f8, m, d, s);
+    };
+    float input = float(std::bit_cast<double>(s.fpr_bits[1]));
+    if (dispatcher) {
+      auto adjusted = float(input + load(0x8201f9f0, 0));
+      auto zero = load(0x82000e50, 1);
+      auto value = integer(trunc(adjusted, 0), 80, 0);
+      if (mode == 0 || mode == 1 || mode == 6 || mode == 7 || mode == 8) {
+        f(1, value);
+        if (mode == 0)
+          s.r[6] = 1;
+        Call(mode == 0   ? 0x82b2b640
+             : mode == 1 ? 0x82b2b5e0
+             : mode == 6 ? 0x82b2b7f8
+             : mode == 7 ? 0x82b2b910
+                         : 0x82b2b720,
+             m, d, s);
+      } else if (mode == 2 || mode == 3) {
+        auto current = load(resource + 2616, 13);
+        auto updated =
+            mode == 2 ? float(current - value) : float(current + value);
+        f(13, updated);
+        put(resource + 2616, updated);
+        if (mode == 2) {
+          if (!(updated > zero))
+            put(resource + 2616, zero);
+        } else {
+          auto max = load(resource + 2620, 12);
+          if (updated > max)
+            put(resource + 2616, max);
+        }
+        f(1, value);
+      } else if (mode == 4 || mode == 5) {
+        unsigned off = mode == 4 ? 2588 : 2616;
+        put(owner + 28, load(resource + off, 13));
+        auto floor = float(load(resource + off + 4, 13) / value);
+        f(1, floor);
+        if (load(resource + off, 0) < floor)
+          put(resource + off, floor);
+      }
+    } else {
+      put(owner + 28, load(resource + 2588, 0));
+      if (divide) {
+        auto next = trunc(float(load(resource + 2588, 0) / input), 0);
+        auto hp = next > 0 ? integer(next, 80, 0) : load(0x82007784, 0);
+        put(resource + 2588, hp);
+        auto change =
+            trunc(float(load(owner + 28, 0) - load(resource + 2588, 13)), 0);
+        if (!(m.ReadU32(resource + 124) & 0x10000000u)) {
+          if (change < 0)
+            change = 0;
+          count(change);
+        }
+        normalize();
+        f(1, integer(change, 80, 0));
+      } else {
+        float cap;
+        if (quarter) {
+          cap = integer(
+              trunc(float(load(resource + 2592, 13) * load(0x82000b3c, 0)), 0),
+              88, 31);
+        } else {
+          cap = input;
+          f(31, cap);
+        }
+        if (load(resource + 2588, 0) > cap)
+          put(resource + 2588, cap);
+        normalize();
+        auto previous = load(owner + 28, quarter ? 0 : 13);
+        auto difference = float(previous - cap);
+        if (quarter) {
+          auto change = trunc(difference, 13);
+          if (change < 0)
+            change = 0;
+          if (!(m.ReadU32(resource + 124) & 0x10000000u))
+            count(trunc(float(previous - load(resource + 2588, 13)), 0));
+          f(1, integer(change, 88, 0));
+        } else {
+          auto zero = load(0x82000e50, 0);
+          if (difference < zero)
+            difference = zero;
+          f(31, difference);
+          if (!(m.ReadU32(resource + 124) & 0x10000000u))
+            count(trunc(float(previous - load(resource + 2588, 0)), 0));
+          f(1, std::bit_cast<double>(s.fpr_bits[31]));
+        }
+      }
+    }
+    s.r[1] += frame;
+    if (!dispatcher && !divide)
+      s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 32);
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   unsigned frame, first;
   switch (e) {
   case 0x82ac9618:

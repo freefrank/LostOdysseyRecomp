@@ -42,6 +42,9 @@ int main() {
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83291000, 0x1000});
+    regions.push_back({0x8201f000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -167,6 +170,62 @@ int main() {
     run(0x82b2bd50);
     check(get(0x90000 + 2588) == 70 &&
           std::bit_cast<double>(s.fpr_bits[1]) == 0);
+    m.WriteU32(0x83264558, 0x79000);
+    m.WriteU32(resource + 64, 24);
+    auto cleanup = [&](unsigned element, unsigned excluded, float prior) {
+      s.r[3] = owner;
+      s.r[4] = resource;
+      s.r[5] = element;
+      s.r[6] = excluded;
+      amount(prior);
+      run(0x82acad40);
+    };
+    m.WriteU32(resource + 232, (1u << 11) | 8 | 4 | 0x10000);
+    put(resource + 2588, 40);
+    m.WriteU32(resource + 88, 12);
+    m.WriteU32(resource + 92, 13);
+    m.WriteU32(resource + 100, 0x80000055);
+    cleanup(1, 0, 50);
+    check(m.ReadU32(resource + 232) == 0 && m.ReadU32(resource + 60) == 6 &&
+          !m.ReadU32(resource + 88) && !m.ReadU32(resource + 92) &&
+          m.ReadU32(resource + 100) == 0x55);
+    m.WriteU32(resource + 232, 8 | 4 | 0x10000);
+    m.WriteU32(resource + 60, 9);
+    cleanup(1, 8, 50);
+    check(m.ReadU32(resource + 232) == 8 && m.ReadU32(resource + 60) == 9);
+    cleanup(0, 0, 40);
+    check(m.ReadU32(resource + 232) == 8);
+    cleanup(0, 0, 41);
+    check(!m.ReadU32(resource + 232) && m.ReadU32(resource + 60) == 6);
+    put(0x8201f9f0, .5f);
+    auto modeRun = [&](unsigned mode, float input) {
+      s.r[3] = owner;
+      s.r[4] = resource;
+      s.r[6] = mode;
+      amount(input);
+      run(0x82b2b9e0);
+      return std::bit_cast<double>(s.fpr_bits[1]);
+    };
+    m.WriteU32(resource + 232, 0);
+    put(resource + 2588, 80);
+    put(resource + 2592, 100);
+    put(resource + 2616, 20);
+    put(resource + 2620, 60);
+    check(modeRun(1, 9.6f) == 10 && get(resource + 2588) == 90);
+    check(modeRun(0, 5.4f) == 5 && get(resource + 2588) == 85);
+    check(modeRun(2, 30) == 30 && get(resource + 2616) == 0);
+    check(modeRun(3, 70) == 70 && get(resource + 2616) == 60);
+    put(resource + 2588, 10);
+    check(modeRun(4, 2) == 50 && get(resource + 2588) == 50);
+    put(resource + 2616, 5);
+    check(modeRun(5, 3) == 20 && get(resource + 2616) == 20);
+    put(resource + 2588, 80);
+    check(modeRun(6, 9) == 55 && get(resource + 2588) == 25);
+    put(resource + 2588, 80);
+    check(modeRun(7, 30) == 50 && get(resource + 2588) == 30);
+    put(resource + 2588, 81);
+    check(modeRun(8, 2) == 41 && get(resource + 2588) == 40);
+    check(modeRun(99, 12) == 0 && get(resource + 2588) == 40);
     std::cout << "battle result application logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

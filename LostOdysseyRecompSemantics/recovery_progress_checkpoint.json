@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 221,
-    "distinct_entries": 913,
+    "distinct_entries": 918,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2547,10 +2547,16 @@
           "82B2B468",
           "82B2B5E0",
           "82B2B640",
-          "82B2BD50"
+          "82B2BD50",
+          "82ACAD40",
+          "82B2B9E0",
+          "82B2B720",
+          "82B2B7F8",
+          "82B2B910"
         ],
         "focused_smoke_paths": 1,
-        "validation": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI only"
+        "validation": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI only",
+        "resource_modes": "Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance."
       }
     ]
   },

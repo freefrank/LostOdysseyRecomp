@@ -41,6 +41,46 @@
       "instruction_count": 305,
       "body_sha256": "3c6eccd92ae94430776256dd2658c2c2483e314634106a5454bae9591e2d16dc",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACAD40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 11438,
+      "instruction_count": 88,
+      "body_sha256": "76b060872bca333058bdcf443271e389d91957f0309a0aee9976acc6be7948c4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B9E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 4404,
+      "instruction_count": 112,
+      "body_sha256": "3860e704cc10d68132eeabdf9c1cf3672ee9ca3283961017a7ff38b1cdf90446",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B720",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 3978,
+      "instruction_count": 54,
+      "body_sha256": "effd3c9930045677b671a4743f430bcac2c22442db074db5baa6e92eb2690d07",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B7F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 4113,
+      "instruction_count": 69,
+      "body_sha256": "c21e455bc1a299325c980071d309b05d51e492317ab071e0dad7fd095b6f1d91",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B910",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 4277,
+      "instruction_count": 51,
+      "body_sha256": "980b5a58ef10d8421fd5f186870dd697dd9450c7d281d5bad994ff84af3d6ec4",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -49,7 +89,12 @@
       "82B2B468",
       "82B2B5E0",
       "82B2B640",
-      "82B2BD50"
+      "82B2BD50",
+      "82ACAD40",
+      "82B2B9E0",
+      "82B2B720",
+      "82B2B7F8",
+      "82B2B910"
     ],
     "header": "include/lo_semantics/battle_result_application61.h",
     "source": "src/battle_result_application61.cpp",
@@ -63,6 +108,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "resource_modes": "Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance."
   }
 }
