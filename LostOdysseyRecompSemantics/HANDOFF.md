@@ -1,3 +1,7 @@
+## Root direct continuation: cloth serialization (2026-10-10 UTC)
+
+BA7760 now writes NXS/CLTH version3 streams for the two source topology types, including positions, indices, per-face data, auxiliary arrays and nested 32-byte constraint records with their distinct packed wire layouts. Four focused type/endian combinations verify key fields and exact 162/166-byte lengths. The cloth loader, topology generation and complete cooker remain pending; no native-asset or game-runtime acceptance is claimed.
+
 ## Root direct continuation: cloth cooking storage (2026-10-10 UTC)
 
 Started the adjacent NXS/CLTH cloth-cooking chain with concrete storage ownership: ten vector descriptors, nested mesh release, capacity-retaining clear, full destruction and a 32-bucket workspace. A focused lifecycle sample releases all tracked storage. Cloth serialization, topology and the cooking main entry are still pending; this does not claim simulation or gameplay support.
