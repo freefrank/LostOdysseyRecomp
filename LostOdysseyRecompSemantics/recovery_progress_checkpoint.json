@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 173,
-    "distinct_entries": 566,
+    "unit_count": 174,
+    "distinct_entries": 572,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1820,6 +1820,19 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused two-actor fixture checks self/ID lookup, enqueue and wait-until-start, two-stage wait-until-complete, priority barrier release and full-queue retry. The existing registered subroutine fixture also passes after composition into opcode dispatch. This validates bounded synthetic event transitions, not game battle behavior. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_control61",
+        "entries": [
+          "82A9E7D0",
+          "82A9D2B0",
+          "82A9D228",
+          "82A9D0D0",
+          "82A9D130",
+          "82A9D360"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks actor flag/status calls, the different low-bit versus nonzero interpretations, inclusive range and mask branches, tick accumulation, signed remainder, and the original upper-only game-counter cap. The lower-ID actor lookup chain remains a guest boundary and is source-reviewed only; actor effect services are fixture callbacks, not native battle acceptance. Logical/ABI only"
       }
     ]
   },
