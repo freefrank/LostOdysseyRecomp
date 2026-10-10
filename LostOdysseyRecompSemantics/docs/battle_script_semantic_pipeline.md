@@ -93,3 +93,7 @@ Runtime commands now resolve group/resource identifiers, find script actors boun
 ## Scene state and inline payloads
 
 Scene-state handlers now preserve inline text buffers and actor labels, dispatch object commands, queue flag changes and apply the original suppression/state predicates. Affordable action selection scans the twelve source candidates, retains cost-compatible entries and invokes the original random contract. A compact synthetic fixture checks these data and callback paths; native scene effects, concrete costs and text rendering remain unvalidated.
+
+## Resource mode dispatch
+
+Two multi-mode resource opcodes now update original flag/indexed fields, synchronize resource refresh data, query banked state, pass packed numeric scene arguments and select among up to four eligible same-side resources. The equipment-like slot update preserves its unconditional follow-on service call, including when the local slot list is full. A compact synthetic fixture passes; the original empty-candidate random call is retained without invented protection or runtime acceptance.
