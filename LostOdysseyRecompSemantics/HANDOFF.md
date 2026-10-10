@@ -1,3 +1,7 @@
+## Root direct continuation: cloth vertex permutation (2026-10-10 UTC)
+
+BB5518/BB7B48 now sort signed bucket/local-index keys and produce the original-to-packed vertex permutation. The first assigned bucket among the original three candidates wins; unassigned vertices sort before assigned ones. A five-vertex sample with three child lists validates local order, output shrinking, repeated reuse and complete cleanup. This connects output packing support; constraint scheduling and the complete cloth cooker remain pending.
+
 ## Root direct continuation: cloth tetrahedral constraints (2026-10-10 UTC)
 
 BABE50 now builds one 68-byte constraint per tetrahedron, retaining input vertex order, signed six-volume and six edge lengths. Sorted endpoint/cell records assign each shared edge to its first cell, with negative lengths in later cells. A two-cell shared-face sample checks output shrinking, repeated reuse and full cleanup. Reallocation is in-place in this fixture; this is logical/ABI recovery, not bitwise FP or full cloth cooking.

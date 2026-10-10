@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 148,
-    "distinct_entries": 459,
+    "unit_count": 149,
+    "distinct_entries": 461,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1538,6 +1538,15 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Two tetrahedra sharing a face validate ordered vertex IDs, positive signed six-volumes, three negative shared-edge lengths in the second cell, output shrinking, repeated reuse and complete cleanup. Reallocation fixture is in-place; moving allocation and degenerate geometry are source-reviewed only. Logical/ABI only"
+      },
+      {
+        "unit": "cloth_permutation61",
+        "entries": [
+          "82BB5518",
+          "82BB7B48"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A five-vertex, three-bucket sample validates unassigned vertices sorting first, first-bucket priority, local child order, original-to-packed permutation, shrinking and repeated reuse with full cleanup. Reallocation fixture is in-place; zero input and moving reallocation remain source-reviewed. Logical/ABI only"
       }
     ]
   },
