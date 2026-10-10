@@ -750,6 +750,25 @@ int main() {
     check(get(target + 2588) == 65 && get(source + 2616) == 23 &&
               get(target + 2616) == 0 && get(owner + 172) == 0,
           "mode eight heals before MP siphon");
+    m.WriteU32(owner + 108, 0);
+    m.WriteU32(owner + 112, 100);
+    call(0x82b12d08);
+    check((m.ReadU32(source + 124) & 128) && get(target + 2588) == 65,
+          "source-only action flag shortcut");
+    m.WriteU32(owner + 108, 1);
+    m.WriteU32(owner + 112, 1);
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(target + 4880, 0);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 112 + 3), 100);
+    m.WriteU32(0x93000 + 76, 30);
+    m.WriteU32(0x93000 + 185200, 100);
+    put(target + 2588, 100);
+    put(target + 2616, 10);
+    call(0x82b12d08);
+    check(get(target + 2588) == 80 && get(target + 2616) == 0 &&
+              get(owner + 172) == 20 && m.ReadU32(0x93000 + 76) == 0 &&
+              m.ReadU32(0x93000 + 185200) == 130,
+          "physical hit with MP siphon and profile spending");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
