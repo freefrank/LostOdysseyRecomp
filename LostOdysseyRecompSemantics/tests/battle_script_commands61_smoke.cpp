@@ -2,10 +2,12 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_script_commands61.h"
+#include "lo_semantics/recovery_abi.h"
+#include "battle_resource_growth_fixture.h"
 #include <iostream>
 struct CommandGuest final : manager_release_context61::GuestServices {
   unsigned calls = 0, last = 0, predicate = 1, mode = 0, expectedA = 0,
-           expectedB = 0, levels = 0;
+           expectedB = 0;
   void Need(bool x) {
     if (!x)
       throw std::runtime_error("battle command ABI");
@@ -13,19 +15,8 @@ struct CommandGuest final : manager_release_context61::GuestServices {
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     last = e;
-    if (e == 0x82380a18) {
+    if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
-      return;
-    }
-    if (e == 0x82ac0588 || e == 0x82ac3820) {
-      Need(s.r[3] == 0x74000 && s.r[4] == 0x80000 && s.r[5] == 9);
-      ++levels;
-      return;
-    }
-    if (e == 0x82ac25e8 || e == 0x82ac2468 || e == 0x82ac0620) {
-      Need(s.r[3] == 0x74000 && s.r[4] == 0x80000);
-      if (e == 0x82ac0620)
-        Need(s.r[5] == 1);
       return;
     }
     if (e == 0x82ab0110)
@@ -78,9 +69,11 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83291000, 0x1000});
+    growth_fixture::Regions(regions);
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    growth_fixture::Setup(m);
     CommandGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
@@ -152,10 +145,11 @@ int main() {
                (m.ReadU32(state + 28) & 0x10000000));
     m.WriteU32(resource + 64, 24);
     op(0x82afd038, 3);
-    guest.Need(guest.levels == 2);
+    guest.Need(m.ReadU32(resource + 5156) == 3 &&
+               m.ReadU32(resource + 140) == 9);
     m.WriteU32(vars, 100);
     op(0x82afd038, 3);
-    guest.Need(guest.levels == 2 && m.ReadU32(actor + 316) == 100);
+    guest.Need(m.ReadU32(resource + 140) == 9 && m.ReadU32(actor + 316) == 100);
     clear();
     le(code + 2, 0);
     le(code + 4, 1);

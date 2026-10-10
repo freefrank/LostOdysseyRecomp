@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle character and creature stat growth.",
+  "entries": [
+    {
+      "address": "82AC0588",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 23225,
+      "instruction_count": 35,
+      "body_sha256": "0925371f9febf55f429e6191b48bdf70467ea952036804c04ef72cfc75ad0830",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC25E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 28011,
+      "instruction_count": 263,
+      "body_sha256": "d5b3879e3e5b2cfa03b1d9ced05a8b9c5ca526e2e2d02020db65b3267b52fa7d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC3820",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 30834,
+      "instruction_count": 293,
+      "body_sha256": "00403e2be2e27dd3afbe7bd91a2eb8be73fa6113501f32bd3c70834c3b1d3fb3",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AC0588",
+      "82AC25E8",
+      "82AC3820"
+    ],
+    "header": "include/lo_semantics/battle_resource_growth61.h",
+    "source": "src/battle_resource_growth61.cpp",
+    "smoke": "tests/battle_resource_growth61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered character template-stat loading, level-dependent stat curves and rounding/clamping, and layered creature initialization with archetype selection, equipment/traits and initial skills. The script level-change command now composes real growth, equipment stat refresh and HP/MP recomputation. Focused synthetic growth and command integration checks pass; library builds. Private coefficient tables remain external guest data. This is logical coverage, not gameplay or bitwise floating-point/full volatile ABI acceptance."
+  }
+}

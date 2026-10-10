@@ -1,4 +1,6 @@
 #include "lo_semantics/battle_script_commands61.h"
+#include "lo_semantics/battle_resource_growth61.h"
+#include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/battle_script_parameters61.h"
@@ -35,7 +37,11 @@ struct Runtime {
     auto a = Actor();
     m.WriteU32(a + 52, W(a + 52) + n);
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_resource_growth61::Apply(e, m, d, s) &&
+        !battle_resource_stats61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   unsigned Manager(unsigned method) {
     Call(0x82380a18);
     Call(method);

@@ -493,3 +493,7 @@ Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pen
 ## Group gauge
 
 Recovered group gauge eligibility, roster HP aggregation and initialization, current-value clamping, ratio/rank thresholds, resource snapshot synchronization, two-group refresh and disabling. Binding and global script modes now compose these seven functions and existing inventory lookup. Focused gauge, binding and global-mode fixtures pass; library builds. Synthetic fixtures establish logical ABI behavior only, not gameplay, Full72, bitwise floating-point or full volatile-register equivalence.
+
+## Resource growth
+
+Recovered character template-stat loading, level-dependent stat curves and rounding/clamping, and layered creature initialization with archetype selection, equipment/traits and initial skills. The script level-change command now composes real growth, equipment stat refresh and HP/MP recomputation. Focused synthetic growth and command integration checks pass; library builds. Private coefficient tables remain external guest data. This is logical coverage, not gameplay or bitwise floating-point/full volatile ABI acceptance.
