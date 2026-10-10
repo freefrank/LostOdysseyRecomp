@@ -655,3 +655,7 @@ Recovered B0C4E8 physical damage through attack, defense, category, gauge, statu
 ## Descriptor missing HP damage
 
 Recovered B0C9E0 missing-HP damage with conditional physical fallback. Source HP below the configured fraction uses max-minus-current HP; the healthy branch uses attack/category/status/critical/variance helpers and the original repeated normalization. Reuses source-faithful blocked/healing/MP-first/half/shield damage modes and reports owner172. Focused checks cover unconditional missing HP, healthy fallback and low-HP threshold selection. Descriptor callback coverage now 68 of 83 distinct targets; remaining 15 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
+## Descriptor level damage
+
+Recovered B0D7F0 level-bounded random damage and B0D418 repeated level-scaled attack damage. Both use real effective-level lookup, side gating and shared damage-mode resolution. The repeated-attack variant preserves individual floating additions, creature coefficient, gauge/status reduction and its no-variance normalization. Focused checks cover bounded RNG damage, side rejection, repeated attack sum and creature coefficient. Descriptor callback coverage now 70 of 83 distinct targets; remaining 13 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.

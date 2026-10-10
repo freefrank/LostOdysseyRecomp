@@ -606,6 +606,35 @@ int main() {
     call(0x82b0c9e0);
     check(get(target + 2588) == 25 && get(owner + 172) == 75,
           "low source HP threshold");
+    m.WriteU32(source + 140, 10);
+    m.WriteU32(source + 4952, 0);
+    put(owner + 80, 2);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 10 + 3), 120);
+    m.WriteU32(0x831f3300 + 4 * 120, 5);
+    put(target + 2588, 100);
+    call(0x82b0d7f0);
+    check(get(target + 2588) == 94 && get(owner + 172) == 6,
+          "level-scaled bounded random damage");
+    m.WriteU8(owner + 200, 0);
+    m.WriteU32(target + 124, m.ReadU32(source + 124));
+    m.WriteU8(owner + 208, 1);
+    call(0x82b0d7f0);
+    check(!m.ReadU8(owner + 208) && get(target + 2588) == 94,
+          "level damage side gate");
+    m.WriteU8(owner + 200, 1);
+    m.WriteU32(owner + 108, 2);
+    m.WriteU32(source + 124, 0x50000000);
+    m.WriteU32(target + 124, 0x40000000);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 112 + 3), 100);
+    put(target + 2588, 100);
+    call(0x82b0d418);
+    check(get(target + 2588) == 90 && get(owner + 172) == 10,
+          "level repeated attack sum");
+    m.WriteU32(source + 124, 0x40000000);
+    put(0x821baa74, .5f);
+    call(0x82b0d418);
+    check(get(target + 2588) == 85 && get(owner + 172) == 5,
+          "creature level damage coefficient");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
