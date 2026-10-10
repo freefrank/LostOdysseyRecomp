@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 189,
-    "distinct_entries": 715,
+    "unit_count": 190,
+    "distinct_entries": 719,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2081,6 +2081,17 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One synthetic fixture covers all fifteen handlers plus the group-clearing helper: signed branch targets, phase start/completion, indexed enable/disable, consumed action result, global mode lookup, group assignment and clearing, target readiness, activation counter, low-byte predicate results and exact-one branching with suppression bypass. Concrete predicate services and game execution remain unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_marshaling61",
+        "entries": [
+          "82B00D08",
+          "82AFCB08",
+          "82AFCEC8",
+          "82AFCF60"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact fixture covers preparation modes 0 through 5, manager-state fallback, failed picker and absent resource, packed numeric scene ABI, boolean parameters, copied 32-unit inline labels and the source repeated-destination label quirk. Concrete pickers, preparation, scene services and gameplay are unvalidated. Logical/ABI only"
       }
     ]
   },

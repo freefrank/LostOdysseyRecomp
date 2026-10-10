@@ -1,3 +1,7 @@
+## Root direct continuation: battle script preparation and scene marshaling (2026-10-10 UTC)
+
+Four battle instructions now route preparation modes and marshal scene label and boolean commands. The original manager-state fallback, failure result, packed constant numeric arguments and 32-unit label copy are preserved. A separate source loop repeatedly overwrites its first label unit; recovery intentionally preserves this behavior. One synthetic fixture passes. Concrete preparation and scene services and native gameplay remain unvalidated.
+
 ## Root direct continuation: battle script status and predicate dispatch (2026-10-10 UTC)
 
 Fifteen further battle instructions now connect readiness checks, the 60-tick phase handshake, action-result consumption, indexed resource state, group clearing, actor activation and scene predicates. The source low-byte result and exact-one branch rules, signed jump targets and suppression bypass are preserved. One compact synthetic fixture passes; concrete scene services and native gameplay are not validated.
