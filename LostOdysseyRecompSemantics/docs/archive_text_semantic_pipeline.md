@@ -41,3 +41,7 @@ CPX block decoding now composes bit input, parameter tables, match lengths and l
 ## CPX context and block index
 
 CPX context recovery now owns the copied header/index, exposes block offsets and completion, reuses lazy 65552-byte scratch and releases its owned buffers. A two-block synthetic file runs indexed lookup through the recovered decoder with exact output and full cleanup. Lazy manager initialization remains an explicit guest boundary and preserves the requested allocation arguments. The asynchronous reader and registry integration remain pending.
+
+## Text banks and menu lookup
+
+The documented text-bank chain now decodes offset-based UTF-16/narrow string tables, constructs one-column and seven-column (84-byte) records, releases consumed input/temporary strings and resolves menu text IDs through 60-byte rows. Existing recovered string assignment is reused through allocator callbacks. Small fixtures verify ignored length fields, empty/disabled records, replacement ownership and menu fallback. This is logic recovery, not a completed localization importer or game-runtime integration.
