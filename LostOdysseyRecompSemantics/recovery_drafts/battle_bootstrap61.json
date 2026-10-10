@@ -49,6 +49,22 @@
       "instruction_count": 39,
       "body_sha256": "66d7c60cd5f7aef4475d012de9f84219a7238d17263b4487a129d43b1d38f9cb",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AD1378",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 26421,
+      "instruction_count": 524,
+      "body_sha256": "7b50e08d5ecb38594f50f663e66a0098a7cf41d2017ee39e28c76b2157c3bd1e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AD20C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 28282,
+      "instruction_count": 278,
+      "body_sha256": "c12e00916885f7508c8b50849860e05809fb705cdcc9cd5f0593dc669bcc1fff",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -58,7 +74,9 @@
       "82AC1B90",
       "82AD1C88",
       "82ACD398",
-      "822A7C58"
+      "822A7C58",
+      "82AD1378",
+      "82AD20C0"
     ],
     "header": "include/lo_semantics/battle_bootstrap61.h",
     "source": "src/battle_bootstrap61.cpp",
@@ -72,6 +90,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered battle manager baseline setup, position defaults, typed root lookup, small manager constructor and stats workspace reset. Manager setup composes real profile casting, releases two existing list buffers, reconnects embedded list headers and establishes source defaults. Focused fixture checks type success/failure, release ABI, workspace slots, descriptor defaults and untouched padding. Public synthetic inputs only; library builds without gameplay or full ABI acceptance."
+    "case_scope": "Recovered battle manager baseline setup, position defaults, typed root lookup, small manager constructor and stats workspace reset. Manager setup composes real profile casting, releases two existing list buffers, reconnects embedded list headers and establishes source defaults. Focused fixture checks type success/failure, release ABI, workspace slots, descriptor defaults and untouched padding. Public synthetic inputs only; library builds without gameplay or full ABI acceptance.",
+    "startup_orchestration": "Recovered battle startup AD20C0 and descriptor callback manager constructor AD1378. Startup allocates/registers ten managers and composes actual owner defaults, group/party rebuild, encounter population, both gauges, availability and stats reset. Constructor writes 167 callback slots with source hole 856 preserved; only 33 of its 83 distinct callback targets are currently recovered, so registration is not callback-completion credit. Focused empty-roster startup fixture passes manager allocations/registrations and composed state effects. Script startup and complex layout remain explicit service boundaries. No gameplay or full ABI acceptance."
   }
 }

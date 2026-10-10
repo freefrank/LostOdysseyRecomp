@@ -563,3 +563,7 @@ Recovered two-group construction AF60D8, shared profile restore ABFDD8 and party
 ## Battle initialization baselines
 
 Recovered battle manager baseline setup, position defaults, typed root lookup, small manager constructor and stats workspace reset. Manager setup composes real profile casting, releases two existing list buffers, reconnects embedded list headers and establishes source defaults. Focused fixture checks type success/failure, release ABI, workspace slots, descriptor defaults and untouched padding. Public synthetic inputs only; library builds without gameplay or full ABI acceptance.
+
+## Battle startup orchestration
+
+Recovered battle startup AD20C0 and descriptor callback manager constructor AD1378. Startup allocates/registers ten managers and composes actual owner defaults, group/party rebuild, encounter population, both gauges, availability and stats reset. Constructor writes 167 callback slots with source hole 856 preserved; only 33 of its 83 distinct callback targets are currently recovered, so registration is not callback-completion credit. Focused empty-roster startup fixture passes manager allocations/registrations and composed state effects. Script startup and complex layout remain explicit service boundaries. No gameplay or full ABI acceptance.

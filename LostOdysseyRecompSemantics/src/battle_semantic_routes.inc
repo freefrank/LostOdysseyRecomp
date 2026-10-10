@@ -142,7 +142,9 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82aab200u:
   case 0x82ac1b90u:
   case 0x82acd398u:
+  case 0x82ad1378u:
   case 0x82ad1c88u:
+  case 0x82ad20c0u:
   case 0x82b08a30u:
     return battle_bootstrap61::Apply(entry, memory, dependencies, state);
   case 0x82388b60u:
