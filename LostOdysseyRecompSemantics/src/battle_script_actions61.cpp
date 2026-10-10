@@ -1,5 +1,8 @@
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_script_actions61.h"
+#include "lo_semantics/battle_property_mutation61.h"
+#include "lo_semantics/battle_resource_stats61.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/battle_script_events61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -47,7 +50,13 @@ struct Actions {
     m.WriteU32(Actor() + 52, Address(s.r[3]));
   }
   void Call(unsigned e) {
-    if (!battle_action_eligibility61::Apply(e, m, d, s) &&
+    if (e == 0x82389b48) {
+      (void)battle_manager_access61::Apply(e, m, d, s);
+      return;
+    }
+    if (!battle_property_mutation61::Apply(e, m, d, s) &&
+        !battle_resource_stats61::Apply(e, m, d, s) &&
+        !battle_action_eligibility61::Apply(e, m, d, s) &&
         !battle_script_execution61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }

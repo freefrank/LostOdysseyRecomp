@@ -4,6 +4,18 @@
 namespace lo::semantic::gpu::battle_manager_access61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82389b48) {
+    auto old = Address(s.r[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    s.r[1] -= 96;
+    m.WriteU32(Address(s.r[1]), old);
+    (void)battle_manager_access61::Apply(0x82380a18, m, d, s);
+    (void)battle_manager_access61::Apply(0x82389b78, m, d, s);
+    s.r[3] = m.ReadU32(Address(s.r[3]) + 56) & 255;
+    s.r[1] += 96;
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ab01d0) {
     auto old = Address(s.r[1]);
     m.WriteU32(old - 8, Address(s.lr));

@@ -6,6 +6,10 @@
 struct StatsGuest final : manager_release_context61::GuestServices {
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x8238e2f8) {
+      s.r[3] = 0x71000;
+      return;
+    }
     if (e == 0x82380a18 || e == 0x82389b78 || e == 0x82ab0110) {
       s.r[3] = 0x70000;
       return;
@@ -57,7 +61,7 @@ int main() {
     m.WriteU32(0x822181e4, 0x42c80000);
     m.WriteU32(0x822182a0, 0x42c60000);
     auto run = [&](unsigned e, unsigned mode = 1) {
-      s.r[3] = 0x73000;
+      s.r[3] = (e == 0x82b1f1d0 || e == 0x82ab0b10) ? 0x80000 : 0x73000;
       s.r[4] = 0x80000;
       s.r[5] = mode;
       check(battle_resource_stats61::Apply(e, m, {g, native}, s));
@@ -195,6 +199,31 @@ int main() {
     check(m.ReadU32(0x80000 + 4 * (68 * 7 + 28 + 59)) == 80);
     check(m.ReadU32(0x80000 + 4 * (68 * 7 + 8 + 59)) == 30);
     check(s.fpr_bits[31] == initial.fpr_bits[31] && s.r[14] == initial.r[14]);
+    m.WriteU32(0x71000, 0x72000);
+    m.WriteU32(0x71004, 2);
+    m.WriteU32(0x72000, 0x80000);
+    m.WriteU32(0x72004, 0xa0000);
+    for (unsigned i = 0; i < 48; ++i)
+      m.WriteU32(0x83213368 + 4 * i, 0x12340000 + i);
+    run(0x82ac3118);
+    for (unsigned i = 0; i < 48; ++i) {
+      check(m.ReadU32(0x80000 + 75932 + 4 * i) == 0x12340000 + i);
+      check(m.ReadU32(0xa0000 + 75932 + 4 * i) == 0x12340000 + i);
+    }
+    for (auto current : {0u, 5u, 6u, 7u, 0xffffffffu}) {
+      m.WriteU32(0x80000 + 60, current);
+      run(0x82b1f1d0);
+      check(m.ReadU32(0x80000 + 60) == (current < 6 ? current + 1 : 0));
+    }
+    m.WriteU32(0x82000e50, 0x3f800000);
+    m.WriteU32(0x80000 + 100, 0xc0000007);
+    s.r[4] = 0x80000;
+    run(0x82acd530);
+    check(m.ReadU32(0x80000 + 100) == 0x80000007 && get(112) == 1 &&
+          get(116) == 1 && m.ReadU32(0x80000 + 60) == 1);
+    s.r[4] = 0x80000;
+    run(0x82acd530);
+    check(m.ReadU32(0x80000 + 60) == 1);
     std::cout << "battle resource stats logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

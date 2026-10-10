@@ -81,6 +81,30 @@
       "instruction_count": 69,
       "body_sha256": "0eaa0c47c14ce916c53d9ef9bdb3f9b05307f599ff29c4d18b03178d1bb1fc7b",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC3118",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 29699,
+      "instruction_count": 37,
+      "body_sha256": "1952011af0b62c74cca3d1f703281f7f6ef2b1d43ce2fd12c7d89b4b66a2fb78",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACD530",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 17173,
+      "instruction_count": 20,
+      "body_sha256": "d151edc7f33d173b45223e8e7df911217e46b80f7505ede5b63f7bdce1bac643",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB0B10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 8135,
+      "instruction_count": 5,
+      "body_sha256": "fe210458e04bfa4627f9ce6711c69b5cf772fc73bca5d94041934f92afc353fe",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +118,10 @@
       "82AC2468",
       "82AC0888",
       "82ACF108",
-      "82ACF280"
+      "82ACF280",
+      "82AC3118",
+      "82ACD530",
+      "82AB0B10"
     ],
     "header": "include/lo_semantics/battle_resource_stats61.h",
     "source": "src/battle_resource_stats61.cpp",
@@ -111,6 +138,7 @@
     "case_scope": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
     "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated.",
     "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.",
-    "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance."
+    "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance.",
+    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance."
   }
 }

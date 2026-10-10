@@ -124,6 +124,8 @@ int main() {
     check(run(0x82380a18) == 0 && g.created == 2);
     g.allocated = 0x70000;
     check(run(0x82380a18) == 0x70000 && g.created == 3);
+    m.WriteU32(0x832ca0e8 + 56, 0x123456ab);
+    check(run(0x82389b48) == 0xab);
     check(!battle_manager_access61::Apply(0, m, {g, native}, s));
     std::cout << "battle manager access logic smoke passed\n";
   } catch (const std::exception &e) {

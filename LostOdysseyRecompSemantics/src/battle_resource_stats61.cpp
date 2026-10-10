@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_resource_stats61.h"
+#include "lo_semantics/battle_action_effects61.h"
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/string_storage_context61.h"
@@ -22,6 +23,55 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82b1f1d0)
+    return battle_action_effects61::Apply(e, m, d, s);
+  if (e == 0x82ab0b10) {
+    auto resource = Address(s.r[3]), value = m.ReadU32(0x82000e50);
+    m.WriteU32(resource + 112, value);
+    m.WriteU32(resource + 116, value);
+    return battle_action_effects61::Apply(0x82b1f1d0, m, d, s);
+  }
+  if (e == 0x82acd530) {
+    auto old = Address(s.r[1]), resource = Address(s.r[4]);
+    m.WriteU32(old - 8, Address(s.lr));
+    recovery_abi::WriteU64(m, old - 16, s.r[31]);
+    s.r[1] -= 96;
+    m.WriteU32(Address(s.r[1]), old);
+    if (m.ReadU32(resource + 100) & 0x40000000) {
+      s.r[3] = resource;
+      (void)battle_resource_stats61::Apply(0x82ab0b10, m, d, s);
+      m.WriteU32(resource + 100, m.ReadU32(resource + 100) & ~0x40000000u);
+    }
+    s.r[1] += 96;
+    s.r[31] = recovery_abi::ReadU64(m, old - 16);
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
+  if (e == 0x82ac3118) {
+    auto old = Address(s.r[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 28; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 128;
+    m.WriteU32(Address(s.r[1]), old);
+    Call(0x82380a18, m, d, s);
+    Call(0x8238e2f8, m, d, s);
+    auto list = Address(s.r[3]);
+    for (unsigned i = 0;; ++i) {
+      Call(0x82380a18, m, d, s);
+      Call(0x8238e2f8, m, d, s);
+      if (std::int32_t(i) >= std::int32_t(m.ReadU32(Address(s.r[3]) + 4)))
+        break;
+      auto resource = m.ReadU32(m.ReadU32(list) + 4 * i);
+      for (unsigned off = 0; off < 192; off += 4)
+        m.WriteU32(resource + 75932 + off, m.ReadU32(0x83213368 + off));
+    }
+    s.r[1] += 128;
+    for (unsigned i = 28; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   auto trunc = [](double x) {
     return x > double(std::numeric_limits<std::int32_t>::max())
                ? std::numeric_limits<std::int32_t>::max()

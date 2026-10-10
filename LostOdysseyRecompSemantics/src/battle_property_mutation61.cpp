@@ -72,11 +72,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.lr = m.ReadU32(old - 8);
     return true;
   }
-  if (e == 0x82ac9be0 || e == 0x82ac9ee8) {
+  if (e == 0x82ac9be0 || e == 0x82ac9ee8 || e == 0x82aca1b8) {
     auto old = Address(s.r[1]), resource = Address(s.r[3]),
          id = Address(s.r[4]);
     auto argument5 = s.r[5], argument6 = s.r[6];
-    bool permissive = e == 0x82ac9ee8;
+    bool permissive = e == 0x82ac9ee8, scriptInsertion = e == 0x82aca1b8;
     m.WriteU32(old - 8, Address(s.lr));
     for (unsigned i = 24; i < 32; ++i)
       recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
@@ -111,10 +111,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         return;
       bool notify = false;
       if (id == 0) {
-        if (m.ReadU32(resource + 76348) & 0x80000000u)
+        if (!scriptInsertion && (m.ReadU32(resource + 76348) & 0x80000000u))
           return;
         auto immune = m.ReadU32(resource + 4876) & m.ReadU32(0x8321343c);
-        if (permissive ? bool(immune & 0xfffffffeu) : bool(immune))
+        if (!scriptInsertion &&
+            (permissive ? bool(immune & 0xfffffffeu) : bool(immune)))
           return;
         if (!permissive && (m.ReadU32(resource + 5088) & m.ReadU32(0x8321343c)))
           return;
@@ -122,10 +123,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       } else {
         if (bank == 0) {
           auto immune = m.ReadU32(resource + 4876);
-          if (immune & mask)
+          if (!scriptInsertion && (immune & mask))
             return;
           if (!permissive) {
-            if (id == 225 && (immune & m.ReadU32(0x832134b4)))
+            if (!scriptInsertion && id == 225 &&
+                (immune & m.ReadU32(0x832134b4)))
               return;
             if (m.ReadU32(resource + 5088) & mask)
               return;

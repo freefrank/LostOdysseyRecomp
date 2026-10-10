@@ -89,6 +89,14 @@
       "instruction_count": 70,
       "body_sha256": "5f9bb297d83727b7ef02f232cfae5aa2a1ccc474f0d8623c36bb46e86f2a2fae",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82389B48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 18702,
+      "instruction_count": 11,
+      "body_sha256": "60e22ce242494f1174daf51b79f2b1a987bf4fe3e4da96a06b15ae5ccb7f4d8b",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -103,7 +111,8 @@
       "82DF7558",
       "8229DFD8",
       "82389AA0",
-      "82AB01D0"
+      "82AB01D0",
+      "82389B48"
     ],
     "header": "include/lo_semantics/battle_manager_access61.h",
     "source": "src/battle_manager_access61.cpp",
@@ -119,6 +128,7 @@
     "focused_smoke_paths": 1,
     "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.",
     "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.",
-    "root_initialization": "Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance."
+    "root_initialization": "Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance.",
+    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance."
   }
 }

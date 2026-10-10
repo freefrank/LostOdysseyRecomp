@@ -5,7 +5,7 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct ActionsGuest final : manager_release_context61::GuestServices {
-  unsigned mode = 4, predicate = 0, reset = 0, effects = 0, ready = 0;
+  unsigned predicate = 0, ready = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
@@ -21,32 +21,12 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x71000;
       return;
     }
-    if (e == 0x82389b48) {
-      s.r[3] = mode;
-      return;
-    }
     if (e == 0x8238e308) {
       s.r[3] = 0x80000;
       return;
     }
     if (e == 0x82afde70) {
       s.r[3] = predicate;
-      return;
-    }
-    if (e == 0x82acd530) {
-      ++reset;
-      return;
-    }
-    if (e == 0x82b1f1d0)
-      return;
-    if (e == 0x82ac3118) {
-      ++reset;
-      return;
-    }
-    if (e == 0x82aca1b8 || e == 0x82ac9000) {
-      if (s.r[3] != 0x80000 || s.r[4] != 9)
-        throw std::runtime_error("target effect arguments");
-      ++effects;
       return;
     }
     throw std::runtime_error("action direct boundary");
@@ -88,6 +68,8 @@ int main() {
     m.WriteU32(0x73000 + 4 * 124, 0x123458);
     m.WriteU32(0x80000 + 132, 1);
     ActionsGuest guest;
+    m.WriteU32(0x832cb788, 0x70000);
+    m.WriteU32(0x832ca0e8 + 56, 4);
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
                        code = 0x64000, vars = 0x65000, resource = 0x80000;
@@ -134,18 +116,19 @@ int main() {
       throw std::runtime_error("available action branch");
     m.WriteU32(actor + 96, 5);
     m.WriteU32(actor + 64, 0x01000000);
-    m.WriteU32(resource + 100, 0x80000000);
+    m.WriteU32(resource + 100, 0xc0000000);
     op(0x8238c3e8);
     if (m.ReadU32(actor + 96) || (m.ReadU32(actor + 64) & 0x01000000) ||
-        !(m.ReadU32(resource + 124) & 512) || guest.reset != 1)
+        !(m.ReadU32(resource + 124) & 512) || m.ReadU32(resource + 60) != 1 ||
+        m.ReadU32(resource + 100) != 0x80000000)
       throw std::runtime_error("action preparation");
-    guest.mode = 0;
+    m.WriteU32(0x832ca0e8 + 56, 0);
     m.WriteU32(resource + 100, 0);
     m.WriteU32(actor + 64, 0x20000000);
     op(0x8238c3e8);
     if (m.ReadU32(actor + 52) != 100 || (m.ReadU32(actor + 64) & 0x20000000))
       throw std::runtime_error("prepare branch refresh");
-    guest.mode = 4;
+    m.WriteU32(0x832ca0e8 + 56, 4);
     le(code + 1, 0);
     le(code + 3, 1);
     m.WriteU32(vars, 0);
@@ -210,9 +193,12 @@ int main() {
     op(0x8238c018);
     if (m.ReadU32(vars + 4) != 512)
       throw std::runtime_error("property mask query");
+    m.WriteU32(resource + 232, 0);
     op(0x82af8458);
+    if (m.ReadU32(resource + 232) != 512)
+      throw std::runtime_error("script property insertion");
     op(0x82af8510);
-    if (guest.effects != 2)
+    if (m.ReadU32(resource + 232))
       throw std::runtime_error("resource effects");
     std::cout << "battle_script_actions61 smoke passed\n";
     return 0;

@@ -312,6 +312,25 @@ int main() {
     check(battle_property_mutation61::Apply(0x82ad0ad0, m, {g, native}, s) &&
           m.ReadU32(0x62000 + 64) == 12 && m.ReadU32(0x62000 + 468) == 77 &&
           s.r[1] == initial.r[1]);
+    // Script insertion ignores passive immunity and the special death lock,
+    // but still respects the active immunity mask.
+    m.WriteU32(resource + 232, 0);
+    m.WriteU32(resource + 4876, 0xffffffff);
+    m.WriteU32(resource + 76348, 0x80000000);
+    m.WriteU32(resource + 5088, 8);
+    insert(0x82aca1b8, 3);
+    check(!m.ReadU32(resource + 232));
+    m.WriteU32(resource + 5088, 0);
+    insert(0x82aca1b8, 3);
+    check(m.ReadU32(resource + 232) == 8);
+    m.WriteU32(0x62000 + 64, 0);
+    insert(0x82aca1b8, 0);
+    check(m.ReadU32(resource + 232) == 9);
+    m.WriteU32(resource + 232, 4);
+    m.WriteU32(resource + 6 * 272 + 232, 0);
+    insert(0x82aca1b8, 16);
+    check(m.ReadU32(resource + 232) == 0x10000 &&
+          m.ReadU32(resource + 4 * (59 + 16)) == 3);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;
