@@ -2885,5 +2885,17 @@
     "combined_vs_historical_denominator_percent": 9.25958452424673,
     "scope": "Combined implementation-address inventory only, not accepted mapping credit, runtime integration or gameplay completion. Historical catalog membership unavailable.",
     "normalized_historical_distinct": 5516
+  },
+  "battle_semantic_runtime_composition": {
+    "date": "2026-10-10",
+    "routed_units": 64,
+    "routed_distinct_entries": 511,
+    "source": "src/battle_semantic_runtime61.cpp",
+    "routes": "src/battle_semantic_routes.inc",
+    "generator": "tools/generate_battle_semantic_routes.py",
+    "fixture": "tests/battle_semantic_runtime61_smoke.cpp",
+    "library_validated": true,
+    "runtime_gameplay_validated": false,
+    "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged."
   }
 }

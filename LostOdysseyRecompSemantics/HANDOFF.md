@@ -1,3 +1,7 @@
+## Root direct continuation: battle graph composition (2026-10-10 UTC)
+
+Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.
+
 ## Root direct continuation: packed scene positions (2026-10-10 UTC)
 
 Recovered three-component guest D3D half packing 377168 and composed it into spatial scene requests. Preserves truncating mantissas, signed zero, subnormal shifts and the guest overflow/NaN sentinel 0x7fff, with guest flush-mode transitions. Replaces the last packed-position fixture boundary. Library and focused request-factory and scene-command checks pass; synthetic checks include XYZ, negative values, signed zero and overflow. Logical coverage only, not full VMX/volatile-register or runtime playback acceptance.
