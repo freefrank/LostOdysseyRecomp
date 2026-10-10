@@ -161,3 +161,7 @@ Recovered action storage is now composed into record creation and the reset-effe
 ## Action destruction
 
 Action record destruction now follows both 32-slot sections and their 16-string reverse cleanup loops through recovered code. Storage reset composes this path. A focused fixture checks callback order, empty loops, cleanup routing and ABI; storage and execution caller fixtures pass. String destruction and the exceptional cleanup continuation remain guest boundaries; native unwinding and gameplay are not validated.
+
+## String storage adapters
+
+String storage now has full-register logical adapters for construction, reset and release, reusing the accepted array and manager implementations. A compact fixture exercises empty/nonempty strings and local/heap conversion buffers. The conversion helper and allocator remain service boundaries, and action-chain composition is next. This is not native runtime or bitwise equivalence validation.

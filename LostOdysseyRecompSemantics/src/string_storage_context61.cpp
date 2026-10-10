@@ -1,0 +1,128 @@
+#include "lo_semantics/string_storage_context61.h"
+#include "lo_semantics/manager_facade.h"
+#include "lo_semantics/recovery_abi.h"
+namespace lo::semantic::gpu::string_storage_context61 {
+namespace {
+using recovery_abi::Address;
+struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
+  GuestMemory &m;
+  Dependencies d;
+  Registers &s;
+  Bridge(GuestMemory &memory, Dependencies deps, Registers &state)
+      : m(memory), d(deps), s(state) {}
+  std::uint64_t Direct(unsigned e) {
+    d.guest.CallDirect(e, m, s);
+    return s.r[3];
+  }
+  std::uint64_t Virtual(unsigned e) {
+    s.ctr = e;
+    d.guest.CallIndirect(e & ~3u, m, s);
+    return s.r[3];
+  }
+  std::uint64_t AllocateRaw(unsigned n) override {
+    s.r[3] = n;
+    return Direct(0x823acbd0);
+  }
+  std::uint64_t ConstructPrimary(std::uint64_t p) override {
+    s.r[3] = p;
+    return Direct(0x827c5970);
+  }
+  std::uint64_t ConstructFallback(std::uint64_t p,
+                                  GuestAddress manager) override {
+    s.r[3] = p;
+    s.r[4] = manager;
+    return Direct(0x827c4ed0);
+  }
+  std::uint64_t CallMethod(GuestAddress e, std::uint64_t p) override {
+    s.r[3] = p;
+    return Virtual(e);
+  }
+  std::uint64_t ReleaseStorage(GuestAddress e, std::uint64_t manager,
+                               std::uint64_t p) override {
+    s.r[3] = manager;
+    s.r[4] = p;
+    return Virtual(e);
+  }
+  std::uint64_t AllocateStorage(GuestAddress e, std::uint64_t manager,
+                                std::uint64_t bytes,
+                                std::uint64_t alignment) override {
+    s.r[3] = manager;
+    s.r[4] = bytes;
+    s.r[5] = alignment;
+    return Virtual(e);
+  }
+  GuestAddress ResizeStorage(GuestAddress e, GuestAddress manager,
+                             GuestAddress old, unsigned bytes,
+                             unsigned alignment) override {
+    s.r[3] = manager;
+    s.r[4] = old;
+    s.r[5] = bytes;
+    s.r[6] = alignment;
+    return Address(Virtual(e));
+  }
+  void InitializeManager() override { Direct(0x827c5f38); }
+};
+} // namespace
+bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  unsigned frame = 96, first = 31;
+  switch (e) {
+  case 0x82298938:
+  case 0x82298a98:
+    break;
+  case 0x822d02f8:
+    frame = 368;
+    first = 30;
+    break;
+  default:
+    return false;
+  }
+  auto old = Address(s.r[1]), header = Address(s.r[3]),
+       source = Address(s.r[4]);
+  m.WriteU32(old - 8, Address(s.lr));
+  for (unsigned i = first; i < 32; ++i)
+    recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+  s.r[1] -= frame;
+  auto sp = Address(s.r[1]);
+  m.WriteU32(sp, old);
+  s.r[31] = header;
+  Bridge b(m, d, s);
+  if (e == 0x82298938)
+    s.r[3] = ResetTwoByteArray(m, b, header, old);
+  else if (e == 0x82298a98)
+    s.r[3] = ReleaseTwoByteArray(m, b, header, old);
+  else {
+    s.r[30] = source;
+    unsigned count = 0;
+    if (m.ReadU8(source)) {
+      while (m.ReadU8(source + count))
+        ++count;
+      ++count;
+    }
+    m.WriteU32(header + 4, count);
+    m.WriteU32(header + 8, count);
+    m.WriteU32(header, 0);
+    ResizeArray(m, b, header, 2, 8);
+    if (m.ReadU32(header + 4)) {
+      s.r[3] = sp + 80;
+      s.r[4] = source;
+      b.Direct(0x823227c8);
+      auto temp = Address(s.r[3]);
+      s.r[3] = m.ReadU32(header);
+      s.r[4] = m.ReadU32(temp + 256);
+      s.r[5] = 2 * m.ReadU32(header + 4);
+      b.Direct(0x82b7a0b0);
+      auto storage = m.ReadU32(sp + 336);
+      if (storage && storage != sp + 80) {
+        s.r[3] = storage;
+        (void)manager_release_context61::Apply(0x823f3340, m, d, s);
+      }
+    }
+    s.r[3] = header;
+  }
+  s.r[1] += frame;
+  for (unsigned i = first; i < 32; ++i)
+    s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+  s.lr = m.ReadU32(old - 8);
+  return true;
+}
+} // namespace lo::semantic::gpu::string_storage_context61

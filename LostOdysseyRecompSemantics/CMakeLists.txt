@@ -315,6 +315,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_action_records61.cpp
     src/battle_action_effects61.cpp
     src/battle_action_destruction61.cpp
+    src/string_storage_context61.cpp
     src/battle_action_storage61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp
