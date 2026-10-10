@@ -86,10 +86,9 @@ int main()
     for (const auto flags : {0u, 0x7Fu, 0x80000000u, 0xFFFF007Fu})
     {
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30) == (flags | 0x200), "30 baseline");
-        Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 60) == (flags | 0x100), "60 interval and flags");
-        for (const auto fps : {90u, 120u, 0u, 144u})
+        for (const auto fps : {60u, 90u, 120u, 0u, 144u})
         {
-            Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, fps) == flags, "high refresh is immediate without an environment gate");
+            Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, fps) == flags, "60 and above are immediate without an environment gate");
             Require(MapPresentInterval(flags | 0x200, 0x1234, fps) == (flags | 0x200), "other callers untouched");
             for (const auto interval : {0u, 0x100u, 0x300u, 0x400u, 0xFF00u})
                 Require(MapPresentInterval(flags | interval, 0x827B4A4C, fps) == (flags | interval), "other intervals untouched");
