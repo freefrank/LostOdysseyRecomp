@@ -170,6 +170,36 @@ int main() {
     s.r[4] = 2;
     check(battle_action_eligibility61::Apply(0x82b121b0, m, {g, native}, s));
     check(m.ReadU32(0x73000 + 124) == 4 && m.ReadU32(0x73000 + 164) == 64);
+    auto relation = [&](unsigned kind, unsigned deadCheck,
+                        unsigned overrideFlag) {
+      s.r[3] = 0x70000;
+      s.r[4] = 0x80000;
+      s.r[5] = 0x90000;
+      s.r[6] = kind;
+      s.r[7] = deadCheck;
+      s.r[8] = overrideFlag;
+      check(battle_action_eligibility61::Apply(0x82ace408, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[24] == initial.r[24]);
+      return unsigned(s.r[3]);
+    };
+    m.WriteU32(0x90000 + 232, 0);
+    m.WriteU32(0x80000 + 232, 0);
+    for (unsigned left = 0; left < 2; ++left)
+      for (unsigned right = 0; right < 2; ++right) {
+        m.WriteU32(0x80000 + 124, left << 28);
+        m.WriteU32(0x90000 + 124, right << 28);
+        for (unsigned kind = 0; kind < 5; ++kind)
+          check(relation(kind, 1, 0) ==
+                unsigned(kind == 0 ||
+                         ((kind == 1 || kind == 3) && left != right) ||
+                         (kind == 2 && left == right)));
+      }
+    m.WriteU32(0x90000 + 232, 4);
+    check(!relation(0, 1, 0) && relation(0, 0, 0));
+    check(relation(4, 1, 1));
+    m.WriteU32(0x8321343c + 8 * 18, 8);
+    m.WriteU32(0x80000 + 7 * 272 + 232, 8);
+    check(relation(4, 1, 0));
     check(!battle_action_eligibility61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_eligibility61 smoke passed\n";
     return 0;

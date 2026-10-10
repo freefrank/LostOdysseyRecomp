@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_evaluation_effects61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
@@ -51,7 +52,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82ad0c10) {
     first = 27;
     frame = 144;
-  } else if (e == 0x82b14168) {
+  } else if (e == 0x82b14168 || e == 0x82ace408) {
     first = 24;
     frame = 160;
   } else if (e != 0x8238abe0 && e != 0x82b143b0 && e != 0x82b121b0)
@@ -65,7 +66,38 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
-  if (e == 0x82b121b0) {
+  if (e == 0x82ace408) {
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    auto bypass = Address(s.r[8]) & 255;
+    bool result = true;
+    if ((detail & 255) == 1) {
+      for (auto resource : {source, target}) {
+        s.r[3] = resource;
+        Call(0x8238abe0, m, d, s);
+        if (Address(s.r[3])) {
+          result = false;
+          break;
+        }
+      }
+    }
+    if (result) {
+      auto sourceSide = (m.ReadU32(source + 124) & 0x10000000u) != 0,
+           targetSide = (m.ReadU32(target + 124) & 0x10000000u) != 0;
+      result = kind == 0                ? true
+               : kind == 1 || kind == 3 ? sourceSide != targetSide
+               : kind == 2              ? sourceSide == targetSide
+                                        : false;
+    }
+    s.r[3] = source;
+    s.r[4] = 242;
+    (void)battle_action_readiness61::Apply(0x8238e368, m, d, s);
+    if (Address(s.r[3]) & 255)
+      result = true;
+    if (bypass)
+      result = true;
+    s.r[3] = result;
+    m.WriteU32(sp + 80, 0x8204a1d8);
+  } else if (e == 0x82b121b0) {
     // Parameter rows retain source field ordering, including untouched 84/164
     // fields on categories that never write them.
     auto category = source;

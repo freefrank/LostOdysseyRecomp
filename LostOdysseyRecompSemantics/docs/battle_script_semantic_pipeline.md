@@ -309,3 +309,7 @@ Recovered seven action-record result flag operations and the descriptor tail ada
 ## Property-derived chance gates
 
 Recovered numeric property lookup, target penalty and two chance gates using actual property/random helpers. Focused checks cover bonus subtraction, generic payload, override, rejection and threshold outcomes. These helpers are ready for upper descriptor composition; no full floating-point or gameplay equivalence is claimed.
+
+## Target relation eligibility
+
+Recovered source/target relation eligibility: unrestricted, same-side and opposing-side modes, optional property-zero exclusion, source property242 and explicit low-byte override. The focused fixture checks all side combinations and modes, rejection, bypass and property override with real property helpers. This helper supports subsequent effect descriptor composition; native gameplay remains unvalidated.
