@@ -3,6 +3,50 @@
 namespace lo::semantic::gpu::battle_manager_access61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x8229dfd8 || e == 0x82389aa0) {
+    auto old = Address(s.r[1]), object = Address(s.r[3]);
+    unsigned frame = e == 0x8229dfd8 ? 112 : 96;
+    m.WriteU32(old - 8, Address(s.lr));
+    if (e == 0x8229dfd8) {
+      recovery_abi::WriteU64(m, old - 24, s.r[30]);
+      recovery_abi::WriteU64(m, old - 16, s.r[31]);
+    }
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    if (e == 0x8229dfd8) {
+      s.r[3] = 0;
+      if (object) {
+        auto type = m.ReadU32(0x832c1764);
+        if (!type) {
+          s.r[3] = 0x821ab904;
+          d.guest.CallDirect(0x829086b0, m, s);
+          m.WriteU32(0x832c1764, Address(s.r[3]));
+          d.guest.CallDirect(0x82907948, m, s);
+          type = m.ReadU32(0x832c1764);
+        }
+        auto current = m.ReadU32(object + 52);
+        while (current && current != type)
+          current = m.ReadU32(current + 60);
+        s.r[3] = (current == type) ? object : 0;
+      }
+    } else {
+      s.r[3] = m.ReadU32(0x83315fb4);
+      auto method = m.ReadU32(m.ReadU32(Address(s.r[3])) + 352);
+      s.ctr = method;
+      d.guest.CallIndirect(method & ~3u, m, s);
+      (void)battle_manager_access61::Apply(0x8229dfd8, m, d, s);
+      if (s.r[3])
+        s.r[3] =
+            m.ReadU32(0x83264978 + 128) + 160 * m.ReadU32(Address(s.r[3]) + 68);
+    }
+    s.r[1] += frame;
+    if (e == 0x8229dfd8) {
+      s.r[30] = recovery_abi::ReadU64(m, old - 24);
+      s.r[31] = recovery_abi::ReadU64(m, old - 16);
+    }
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82380a18) {
     s.r[3] = m.ReadU32(0x832cb788);
     if (!s.r[3])

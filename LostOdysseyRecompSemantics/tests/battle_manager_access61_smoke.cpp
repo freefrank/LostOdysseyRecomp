@@ -7,14 +7,24 @@ struct AccessGuest final : manager_release_context61::GuestServices {
   unsigned created = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x829086b0) {
+      s.r[3] = 0x75000;
+      return;
+    }
+    if (e == 0x82907948)
+      return;
     if (e != 0x82ab01d0)
       throw std::runtime_error("access direct");
     ++created;
     s.r[3] = 0x70000;
     m.WriteU32(0x832cb788, 0x70000);
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &,
+                    manager_release_context61::Registers &s) override {
+    if (e == 0x123420) {
+      s.r[3] = 0x74000;
+      return;
+    }
     throw std::runtime_error("access indirect");
   }
 };
@@ -24,6 +34,9 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x832c1000, 0x1000});
+    regions.push_back({0x83315000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -63,6 +76,20 @@ int main() {
     m.WriteU32(0x80000 + 552, 3);
     m.WriteU32(0x90000 + 552, 4);
     check(run(0x82380d30, 0, 4) == 0x90000 && run(0x82380d30, 0, 9) == 0);
+    m.WriteU32(0x74000 + 52, 0x75100);
+    m.WriteU32(0x75100 + 60, 0x75000);
+    check(run(0x8229dfd8, 0) == 0 && run(0x8229dfd8, 0x74000) == 0x74000);
+    m.WriteU32(0x75100 + 60, 0);
+    check(run(0x8229dfd8, 0x74000) == 0);
+    m.WriteU32(0x74000 + 52, 0x75000);
+    m.WriteU32(0x83315fb4, 0x76000);
+    m.WriteU32(0x76000, 0x76100);
+    m.WriteU32(0x76100 + 352, 0x123420);
+    m.WriteU32(0x74000 + 68, 2);
+    m.WriteU32(0x83264978 + 128, 0x77000);
+    check(run(0x82389aa0) == 0x77140);
+    m.WriteU32(0x74000 + 52, 0);
+    check(run(0x82389aa0) == 0);
     check(!battle_manager_access61::Apply(0, m, {g, native}, s));
     std::cout << "battle manager access logic smoke passed\n";
   } catch (const std::exception &e) {

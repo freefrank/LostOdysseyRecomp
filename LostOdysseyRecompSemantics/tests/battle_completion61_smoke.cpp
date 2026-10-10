@@ -3,11 +3,12 @@
 #undef main
 #include "lo_semantics/battle_completion61.h"
 #include <iostream>
+#include "battle_profile_fixture.h"
 struct CompletionGuest final : manager_release_context61::GuestServices {
   unsigned freed = 0, ready = 1;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82380a18 || e == 0x82389aa0) {
+    if (e == 0x82380a18) {
       s.r[3] = 0x70000;
       return;
     }
@@ -15,6 +16,8 @@ struct CompletionGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (profile_fixture::Indirect(e, s))
+      return;
     if (e == 0x123408) {
       if (s.r[4] != 0x82000 || s.r[5] != 0 || s.r[6] != 8)
         throw std::runtime_error("array release arguments");
@@ -33,10 +36,14 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x832c1000, 0x1000});
+    regions.push_back({0x83315000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    profile_fixture::Setup(m, 0x70000);
     m.WriteU32(0x8330b608, 0x85000);
     m.WriteU32(0x85000, 0x85100);
     m.WriteU32(0x85108, 0x123408);

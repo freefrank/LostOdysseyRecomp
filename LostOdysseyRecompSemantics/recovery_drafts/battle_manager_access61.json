@@ -65,6 +65,22 @@
       "instruction_count": 2,
       "body_sha256": "e81fff02a7db4804efe907875b094ac5c7f514437ccf2bf6b8b77c8a172fe155",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8229DFD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 33171,
+      "instruction_count": 39,
+      "body_sha256": "36a8fb4dd3a4c2c100222ac075329fa367bcb26cf6fdc4b081c5104eb3735b02",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82389AA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 18597,
+      "instruction_count": 28,
+      "body_sha256": "4f61a82ca7f34322da5b2333b46b1f96e61bd44e4a31cba976ef9f106dda82e5",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -76,7 +92,9 @@
       "8238E308",
       "82AB0110",
       "83081540",
-      "82DF7558"
+      "82DF7558",
+      "8229DFD8",
+      "82389AA0"
     ],
     "header": "include/lo_semantics/battle_manager_access61.h",
     "source": "src/battle_manager_access61.cpp",
@@ -90,6 +108,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed."
+    "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.",
+    "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance."
   }
 }

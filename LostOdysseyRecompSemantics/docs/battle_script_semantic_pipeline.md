@@ -429,3 +429,7 @@ Recovered battle completion predicates, tracked-ID lookup and subordinate state 
 ## Array storage adapters
 
 Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.
+
+## Profile lookup
+
+Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.
