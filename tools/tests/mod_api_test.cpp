@@ -1,5 +1,6 @@
 #include <modding/image_mod.h>
 #include <modding/texture_mod.h>
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -304,6 +305,29 @@ void Texts(const fs::path& root) {
     fs::remove_all(root / "lang"); fs::remove_all(root / "overlay/text"); Reload();
     assert(ListTexts().empty());
 }
+void Languages(const fs::path& root) {
+    const std::string menu = "bin/xenon/loc/int/menu/menu_int.dat", name = "Portugu\xc3\xaas (Brasil)";
+    Reload(); assert(LanguagePacks().empty());
+    Write(root / "pt/language.ini", "\xef\xbb\xbf# A new language\nid=PT-BR\nname=" + name + "\nbase=INT\n");
+    Write(root / "pt/text" / (menu + ".json"), "{}");
+    Write(root / "pt/text/readme.txt", "x");
+    Write(root / "bad/language.ini", "id=bad\nname=Bad\n");
+    Write(root / "zz-copy/language.ini", "id=pt-br\nname=Copy\nbase=int\n");
+    Reload();
+    const auto packs = LanguagePacks();
+    assert(packs.size() == 1 && packs[0].id == "pt-br" && packs[0].name == name && packs[0].base == "int");
+    const auto diagnostics = Diagnostics();
+    assert(std::count_if(diagnostics.begin(), diagnostics.end(),
+        [](const Diagnostic& d) { return d.manifest.filename() == "language.ini"; }) == 2);
+    const auto texts = ListTexts(packs[0]);
+    assert(texts.size() == 1 && texts[0].id.key == menu && texts[0].modId == "pt-br");
+    assert(ListTexts().empty()); // A pack applies only when selected.
+    Env("LO_MODS_MODE", "overlay"); Reload(); assert(LanguagePacks().size() == 1);
+    Env("LO_MODS", "0"); Reload(); assert(LanguagePacks().empty() && ListTexts(packs[0]).empty());
+    Env("LO_MODS", nullptr); Env("LO_MODS_MODE", nullptr);
+    for (const auto* dir : {"pt", "bad", "zz-copy"}) fs::remove_all(root / dir);
+    Reload(); assert(LanguagePacks().empty());
+}
 }
 int main() {
     Environment environment;
@@ -314,6 +338,7 @@ int main() {
     Validation(root, temp.path / "outside");
     Textures(root);
     Texts(root);
+    Languages(root);
     Shutdown(); assert(!Resolve(request));
-    std::cout << "Mod API, image, texture and text contracts, manager isolation and reload tests passed\n";
+    std::cout << "Mod API, image, texture, text and language pack contracts, manager isolation and reload tests passed\n";
 }

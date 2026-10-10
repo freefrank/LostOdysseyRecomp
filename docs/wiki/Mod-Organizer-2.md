@@ -9,7 +9,7 @@ LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you
 3. Start MO2 and create a new instance. Pick **Lost Odyssey Recomp** and browse to the folder that holds `LostOdysseyRecomp.exe` (the extracted Windows ZIP). If that folder has no `mods/` subfolder yet, start the game once or create the folder.
 4. Install mod archives with MO2's install button, enable them, and start the game with MO2's **Run** button. Restart the game after you change mods.
 
-Both package layouts made by `lo_mod.py pack` install as they are, and so do texture and translation packs that hold an `overlay/` folder. The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`.
+Both package layouts made by `lo_mod.py pack` install as they are, and so do texture and translation packs that hold an `overlay/` folder and language packs (a folder with a `language.ini`). The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`. Download the plugin again if MO2 says a language pack has no valid game data: version 1.1.0 knows them.
 
 ## Export the original assets
 
@@ -68,7 +68,9 @@ The files come from your own copy of the game. Use them to make your mods, but d
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins.
 - **Standalone packages** (the default layout): each mod has its own folder and `mod.ini`. The `priority` in `mod.ini` decides between them, not MO2's order. An overlay file beats any standalone mod.
 
-To let MO2's order decide everything, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Standalone packages are then ignored.
+- **Language packs**: MO2's order does not matter. Only the pack picked in **Settings > System > Game language** is used.
+
+To let MO2's order decide everything, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Standalone packages are then ignored; language packs still show in Settings.
 
 ## What stays outside MO2
 

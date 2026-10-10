@@ -18,10 +18,21 @@ std::string TextValue(std::string text)
     while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) text.pop_back();
     return text.size() <= 256 && text.find_first_of("\r\n") == std::string::npos ? text : std::string{};
 }
+// A language pack id as the mods loader accepts it, in lower case; anything else selects no pack.
+std::string PackId(std::string text)
+{
+    for (auto &c : text) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+    const bool valid = text.size() <= 128 && text != "." && text != ".." &&
+        std::all_of(text.begin(), text.end(), [](char c) {
+            return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+        });
+    return valid ? text : std::string{};
+}
 Config Validate(Config value)
 {
     value.gpuDevice = TextValue(std::move(value.gpuDevice));
     value.displayName = TextValue(std::move(value.displayName));
+    value.gameLanguagePack = PackId(std::move(value.gameLanguagePack));
     if (value.displayName.empty() || value.displayIndex > 63) value.displayIndex = 0;
     if (value.internalResolution != 0 && value.internalResolution != InternalResolutionNative &&
         value.internalResolution != 720 && value.internalResolution != 1080 &&
@@ -136,9 +147,10 @@ Config Read()
         if (name == "aspect_ratio") hasAspectRatio = true;
         uint32_t number = 0;
         const auto digits = key.substr(equal + 1);
-        if (name == "gpu_device" || name == "display_name")
+        if (name == "gpu_device" || name == "display_name" || name == "game_language_pack")
         {
-            (name == "gpu_device" ? value.gpuDevice : value.displayName) = TextValue(digits);
+            (name == "gpu_device" ? value.gpuDevice : name == "display_name" ? value.displayName : value.gameLanguagePack) =
+                TextValue(digits);
             continue;
         }
         if (name == "display_brightness" || name == "dlss_nr_skin")
@@ -358,6 +370,16 @@ uint32_t GameLanguage()
     static const uint32_t language = GetConfig().gameLanguage;
     return language;
 }
+std::string GameLanguagePack()
+{
+    static const std::string pack = [] {
+        const auto id = GetConfig().gameLanguagePack;
+        for (const auto &choice : GameLanguageChoices())
+            if (!id.empty() && choice.pack == id && choice.id == GameLanguage()) return id;
+        return std::string{};
+    }();
+    return pack;
+}
 static bool WriteConfig(const Config &value)
 {
     const auto path = os::user_paths::SettingsPath();
@@ -366,6 +388,7 @@ static bool WriteConfig(const Config &value)
     const auto temporary = path.parent_path() / (path.filename().string() + ".tmp");
     std::ofstream output(temporary, std::ios::trunc);
     output << "ui_language=" << value.uiLanguage << "\ngame_language=" << value.gameLanguage
+           << "\ngame_language_pack=" << value.gameLanguagePack
            << "\nwidth=" << value.width << "\nheight=" << value.height << "\nwindow_mode=" << uint32_t(value.windowMode)
            << "\naspect_ratio=" << uint32_t(value.aspectRatio)
            << "\ndisplay_name=" << value.displayName << "\ndisplay_index=" << value.displayIndex

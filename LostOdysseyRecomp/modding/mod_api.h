@@ -24,6 +24,11 @@ struct ResolvedAsset {
     int32_t priority = 0;
 };
 struct Diagnostic { std::filesystem::path manifest; size_t line = 0; std::string message; };
+// A mods folder with a language.ini (id, name, base) is a language pack: its
+// text/ folder holds translation JSON in the --export-assets text/ layout. It
+// applies only while the player has it selected in Settings, in every mode.
+// id is lower case; base is a three-letter game language code (int, jpn...).
+struct LanguagePack { std::string id, name, base; std::filesystem::path folder; };
 class AssetProvider {
 public:
     virtual ~AssetProvider() = default;
@@ -50,6 +55,10 @@ bool HasTextureReplacements();
 // Every text replacement Resolve would return, one per member path (overlay
 // files first, then manifest entries by priority). Providers are not asked.
 std::vector<ResolvedAsset> ListTexts();
+// Installed language packs by folder name; a repeated id keeps the first.
+std::vector<LanguagePack> LanguagePacks();
+// The pack's text/ files, one per member path.
+std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack);
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
 // Providers are trusted host extensions, not DLLs loaded from mod packages.
 // Shared ownership keeps an in-flight callback alive during unregistration.

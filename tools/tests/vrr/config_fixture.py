@@ -32,6 +32,8 @@ std::filesystem::path ConfigDir() { return {}; }
 std::filesystem::path SettingsPath() { return "settings.ini"; }
 }
 #define LOG_INFO(...) ((void)0)
+#define LOG_NOTICE(...) ((void)0)
+namespace os::logger { void SetDebugLog(bool) {} }
 namespace settings { void LogSettingsSaved(const Config&) {} }
 '''
 test = r'''
@@ -88,6 +90,14 @@ int main() {
     Check(settings::Read().frameGenerationProvider==framegen::Provider::Xess,"XeSS has stable INI value 4");
     Write("frame_generation_provider=5\n");
     Check(settings::Read().frameGenerationProvider==framegen::Provider::Off,"unknown FG provider rejected");
+    Write("game_language_pack=PT-BR\n");
+    Check(settings::Read().gameLanguagePack=="pt-br","language pack id read in lower case");
+    Write("game_language_pack=../pt\n");
+    Check(settings::Read().gameLanguagePack.empty(),"invalid language pack id selects none");
+    {
+        auto config=settings::GetConfig(); config.gameLanguagePack="pt-br";
+        Check(settings::SaveConfig(config) && settings::Read().gameLanguagePack=="pt-br","language pack id saved");
+    }
     fs::current_path(previous);
     fs::remove_all(scratch);
     std::cout << "VRR production config parse/save/preview checks passed (isolated paths)\n";

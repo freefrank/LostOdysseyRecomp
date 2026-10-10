@@ -1066,9 +1066,12 @@ void Publish(uint8_t *base, uint32_t config)
     {
         std::vector<std::wstring> uiLanguages(std::begin(UiLanguageNames), std::end(UiLanguageNames));
         addChoices(L"Settings language", L"設定界面語言", std::move(uiLanguages), edit.uiLanguage);
+        const auto gameLanguageChoices = GameLanguageChoices();
         std::vector<std::wstring> gameLanguages;
-        for (const auto name : GameLanguageNames) gameLanguages.emplace_back(name);
-        addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages), GameLanguageIndex(edit.gameLanguage));
+        for (size_t i = 0; i < gameLanguageChoices.size(); ++i)
+            gameLanguages.push_back(i < GameLanguageNames.size() ? std::wstring(GameLanguageNames[i]) : Widen(gameLanguageChoices[i].name));
+        addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages),
+                   GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
         const bool logUpload = os::log_collection::Supported();
@@ -1106,8 +1109,11 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Controller vibration strength. Min turns it off. Applies immediately.",
                        L"控制器震動強度。調到最小即關閉。立即套用。");
     if (tab == 3 && row == SystemGameLanguageRow)
-        next.help = Tr(L"Game language takes effect after restarting. Requires matching language assets.",
-                       L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+        next.help = !edit.gameLanguagePack.empty()
+            ? Tr(L"A language pack from the mods folder. Voices and the rest stay in the language it is based on. Takes effect after restarting.",
+                 L"來自 mods 資料夾的語言包。語音等其餘內容沿用它所基於的語言。重新啟動後生效。")
+            : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
+                 L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
     if (tab == 0 && row == GamePromptRow)
         next.help = Tr(L"Which button icons the game shows. Auto follows the controller you use.",
                        L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。");
@@ -2766,7 +2772,13 @@ PPC_FUNC(sub_822F19B0)
             if (row == SystemUiLanguageRow)
                 edit.uiLanguage = cycle(edit.uiLanguage, 5);
             if (row == SystemGameLanguageRow)
-                edit.gameLanguage = GameLanguageIds[cycle(GameLanguageIndex(edit.gameLanguage), uint32_t(GameLanguageIds.size()))];
+            {
+                const auto choices = GameLanguageChoices();
+                const auto &choice = choices[cycle(GameLanguageChoiceIndex(choices, edit.gameLanguage, edit.gameLanguagePack),
+                                                   uint32_t(choices.size()))];
+                edit.gameLanguage = choice.id;
+                edit.gameLanguagePack = choice.pack;
+            }
             if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
             if (row == SystemDebugLogRow)
@@ -2825,6 +2837,7 @@ PPC_FUNC(sub_822F19B0)
         Config graphics = edit;
         graphics.uiLanguage = previousDisplay.uiLanguage;
         graphics.gameLanguage = previousDisplay.gameLanguage;
+        graphics.gameLanguagePack = previousDisplay.gameLanguagePack;
         graphics.automaticUpdates = previousDisplay.automaticUpdates;
         graphics.debugLog = previousDisplay.debugLog;
         if (graphics.frameGenerationProvider == framegen::Provider::Fsr || graphics.frameGenerationProvider == framegen::Provider::MetalFx)
@@ -2836,6 +2849,7 @@ PPC_FUNC(sub_822F19B0)
             graphics = GetConfig();
             graphics.uiLanguage = edit.uiLanguage;
             graphics.gameLanguage = edit.gameLanguage;
+            graphics.gameLanguagePack = edit.gameLanguagePack;
             graphics.automaticUpdates = edit.automaticUpdates;
             graphics.debugLog = edit.debugLog;
             edit = graphics;
@@ -2857,6 +2871,7 @@ PPC_FUNC(sub_822F19B0)
         Config languages = GetConfig();
         languages.uiLanguage = edit.uiLanguage;
         languages.gameLanguage = edit.gameLanguage;
+        languages.gameLanguagePack = edit.gameLanguagePack;
         languages.automaticUpdates = edit.automaticUpdates;
         languages.debugLog = edit.debugLog;
         const Config before = GetConfig();

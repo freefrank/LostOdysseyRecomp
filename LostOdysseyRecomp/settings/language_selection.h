@@ -1,11 +1,21 @@
 #pragma once
 
 #include <cstdint>
+#include <iterator>
+#include <string_view>
 
 namespace settings::language
 {
 inline constexpr uint32_t Registry = 0x8336A5F0;
 inline constexpr uint32_t Records = 0x832455F0;
+// The folder and file code of each language ID 1-9 (loc/<code>/, *_<code>.xxx).
+inline constexpr const char *Codes[] = {"", "int", "jpn", "deu", "fra", "spa", "ita", "kor", "chi", "sch"};
+constexpr uint32_t IdFromCode(std::string_view code)
+{
+    for (uint32_t id = 1; id < std::size(Codes); ++id)
+        if (code == Codes[id]) return id;
+    return 0;
+}
 // Native parser caps this U16 table at 16 entries (824822F8, +288..319).
 // A missing/invalid list is not a one-entry English list.
 inline constexpr uint32_t VoiceCapacity = 16;

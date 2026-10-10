@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "quit_text_hook.h"
 #include "config.h"
+#include "language_selection.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
 #include <modding/text_overlay.h>
@@ -11,7 +12,7 @@ extern "C" PPC_FUNC(__imp__sub_8230BA20);
 // keeps its own text; the rebuilt menu file already holds it.
 static bool PackTranslates(uint32_t id)
 {
-    static constexpr const char* codes[] = {"", "int", "jpn", "deu", "fra", "spa", "ita", "kor", "chi", "sch"};
+    const auto& codes = settings::language::Codes;
     const auto language = settings::GameLanguage();
     if (language == 0 || language >= std::size(codes))
         return false;

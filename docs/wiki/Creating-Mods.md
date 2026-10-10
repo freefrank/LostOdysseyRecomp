@@ -98,12 +98,39 @@ The default `--payload rgba8` stores uncompressed pixels, so 4x packs are large 
 
 ## 1e. Translate the game's text (experimental)
 
-1. Export the text of your discs: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text` (or tick Text in the MO2 tool). Translate from the English files (`int` in the paths): they are the same in the Asia and USA/Europe editions, and their fonts have every Latin-1 letter.
-2. Copy the files you translate into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. With Mod Organizer 2, make a mod whose folder holds `overlay/text/...`. A standalone mod lists each file in its `mod.ini` instead: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
-3. Translate the values and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Leave out entries you do not translate: they stay in the original language.
-4. Start the game with the same language setting as the files you translated (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
+A translation is either a new language that players pick in Settings (a language pack) or a change to a language the game already has.
 
-Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet, and a translation cannot yet be offered as its own language in Settings. See [Modding API](Modding-API#text-language-packs) for the file rules.
+### Make a language pack (a new language)
+
+1. Export the text of your discs: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text` (or tick Text in the [MO2 tool](Mod-Organizer-2.md#export-the-original-assets)). Translate from the English files (`int` in the paths): they are the same in the Asia and USA/Europe editions, and their fonts have every Latin-1 letter.
+2. Make a folder for the pack, for example `pt-br`, and put a text file named `language.ini` in it, saved as UTF-8:
+
+   ```ini
+   id=pt-br
+   name=Português (Brasil)
+   base=int
+   ```
+
+   `id`: a short name of letters, digits, `-`, `_` or `.`; no two packs may use the same one. `name`: what Settings shows. `base`: the language you translate from (`int` for English).
+3. Copy the files you translate from `my-export/text/` into a `text` folder in the pack, keeping their paths. `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` becomes `pt-br/text/bin/xenon/loc/int/menu/menu_int.dat.json`.
+4. Translate the values and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Leave out entries you do not translate: they stay English.
+5. Install the pack: put the folder in the game's `mods` folder, so the file is `mods/pt-br/language.ini`. With Mod Organizer 2, zip the `pt-br` folder and install the ZIP like any other mod.
+6. Start the game, open **Settings > System > Game language**, pick your language, choose **Save settings** and restart.
+
+The log shows `mods: language pack pt-br (Português (Brasil), base int)` at startup and `[mods] text: 574 translation files (574 from language pack pt-br)` when the game loads its text. If `language.ini` has a mistake, the log has a `mods:` warning that names the file.
+
+The game runs as the base language underneath: voices, artwork with words in it and everything you have not translated stay English. While the pack is selected, its files replace the same files from other text mods. Players who pick another language do not see the pack.
+
+### Change a language the game already has
+
+1. Export the text as in step 1 above.
+2. Copy the files you change into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. With Mod Organizer 2, make a mod whose folder holds `overlay/text/...`. A standalone mod lists each file in its `mod.ini` instead: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
+3. Change the values as in step 4 above.
+4. Start the game with the language of the files you changed (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
+
+### For both
+
+Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. Use only characters the game's font has (see [Modding API](Modding-API#text-language-packs)); languages that need other letters, such as Polish or Russian, are not possible yet. The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet.
 
 ## 2. Prepare artwork and a specification
 
