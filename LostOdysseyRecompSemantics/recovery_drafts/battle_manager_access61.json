@@ -1,0 +1,95 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle manager, resource and scene-object lookup.",
+  "entries": [
+    {
+      "address": "82380A18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.9.cpp",
+      "source_line": 44309,
+      "instruction_count": 5,
+      "body_sha256": "5cfa79fbf03ec87d71c43c707a319509c25986556458060bd087d3f84846b07b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82389B78",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 18734,
+      "instruction_count": 4,
+      "body_sha256": "2b7f595cc53f13fa95aa06cfbb021086dd2e274094407de937e0632aeb27f257",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82380D30",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.9.cpp",
+      "source_line": 44782,
+      "instruction_count": 23,
+      "body_sha256": "f21120c94218bb8c745cec7a6785564f388ce65142d0fe79d4cd81dc709b45a8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238E2F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 29431,
+      "instruction_count": 4,
+      "body_sha256": "a603af81c6a258a8462470c446638027d9d20e8ae9ec6b475813ac8d776a392e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238E308",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 29445,
+      "instruction_count": 24,
+      "body_sha256": "babcc5455d3e108abb93835f023fbc3c481f8da1e239dae41421eb8b485d54ce",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB0110",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 6645,
+      "instruction_count": 4,
+      "body_sha256": "fad490aa46c5e7f2672ceca2637c5f39576d0ceb5fe7707e4a77ddfe598c76f1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "83081540",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.227.cpp",
+      "source_line": 8435,
+      "instruction_count": 2,
+      "body_sha256": "6e23c2f5e3267207b41d162c831efb411b80b127a409825308447a899d5794fe",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82DF7558",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.203.cpp",
+      "source_line": 8024,
+      "instruction_count": 2,
+      "body_sha256": "e81fff02a7db4804efe907875b094ac5c7f514437ccf2bf6b8b77c8a172fe155",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82380A18",
+      "82389B78",
+      "82380D30",
+      "8238E2F8",
+      "8238E308",
+      "82AB0110",
+      "83081540",
+      "82DF7558"
+    ],
+    "header": "include/lo_semantics/battle_manager_access61.h",
+    "source": "src/battle_manager_access61.cpp",
+    "smoke": "tests/battle_manager_access61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed."
+  }
+}

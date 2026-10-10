@@ -67,6 +67,12 @@ int main() {
     m.WriteU32(0x832cb784, 0x77000);
     m.WriteU32(0x832ca0d8, 0x78000);
     m.WriteU32(0x832aeb00, 0x79000);
+    m.WriteU32(0x76000 + 20, 0x7c000);
+    m.WriteU32(0x7c000, 0x7c100);
+    m.WriteU32(0x7c004, 2);
+    m.WriteU32(0x7c100, 0x80000);
+    m.WriteU32(0x7c104, 0x90000);
+    m.WriteU32(0x832ca0e8 + 20, 0x7b000);
     m.WriteU32(0x832c9c54 + 44, 0x7d000);
     m.WriteU32(0x7d004, 0x7e000);
     m.WriteU32(0x7d00c, 1);
@@ -188,7 +194,7 @@ int main() {
     m.WriteU32(0xa0000 + 196, 8);
     s.r[3] = 0x73000;
     check(battle_effect_execution61::Apply(0x82b22870, m, {g, native}, s) &&
-          g.listQueries == 4 && s.r[1] == initial.r[1]);
+          g.listQueries == 0 && s.r[1] == initial.r[1]);
     check(!battle_effect_execution61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_execution61 smoke passed\n";
     return 0;

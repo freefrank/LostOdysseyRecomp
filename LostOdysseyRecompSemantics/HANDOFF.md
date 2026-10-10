@@ -1,3 +1,7 @@
+## Root direct continuation: manager access (2026-10-10 UTC)
+
+Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.
+
 ## Root direct continuation: special damage (2026-10-10 UTC)
 
 Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance.

@@ -326,6 +326,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_property_mutation61.cpp
     src/battle_preferred_target61.cpp
     src/battle_resource_stats61.cpp
+    src/battle_manager_access61.cpp
     src/battle_progression61.cpp
     src/battle_result_application61.cpp
     src/battle_effect_followups61.cpp

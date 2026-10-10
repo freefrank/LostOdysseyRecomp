@@ -9,12 +9,16 @@
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/battle_script_runtime61.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include <bit>
 #include <limits>
 namespace lo::semantic::gpu::battle_effect_execution61 {
 namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
+  if ((e == 0x8238e308 || e == 0x8238e2f8) &&
+      battle_manager_access61::Apply(e, m, d, s))
+    return;
   if (!battle_effect_execution61::Apply(e, m, d, s) &&
       !battle_effect_followups61::Apply(e, m, d, s) &&
       !battle_result_application61::Apply(e, m, d, s) &&
