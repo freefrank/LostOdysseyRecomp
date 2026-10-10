@@ -36,6 +36,6 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixture exercises the real calculation pipeline for ordinary hit, miss, guard response, cancellation, absorption and partial MP diversion, plus linked-list exclusion traversal and frame/FPR preservation. Effect descriptors now call recovered execution instead of mocking it. Result normalization, final resource application and notification remain explicit guest boundaries; special scene/refund paths are logical implementations without gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixture exercises the real calculation pipeline for ordinary hit, miss, guard response, cancellation, absorption and partial MP diversion, plus linked-list exclusion traversal and frame/FPR preservation. Effect descriptors now call recovered execution instead of mocking it. Result normalization, final resource application and notification remain explicit guest boundaries; special scene/refund paths are logical implementations without gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof. Follow-on result application recovery now composes 82B2BD50 and verifies actual HP/MP changes, including zero damage return for healing-only records. Status insertion, additional effects and notification remain guest services."
   }
 }

@@ -353,3 +353,7 @@ Recovered status-counter consumption and return-amount recording, composed with 
 ## Main effect execution
 
 Recovered and composed the main effect execution sequence and linked-target preparation. Real stat, hit, response, critical, element, bonus, aggregation, property and result-record stages execute together. Targeted hit/miss/guard/absorption/MP-diversion checks and existing descriptor/eligibility fixtures pass. Final resource application, result normalization and notification are still external dependencies; no native gameplay or full floating-point acceptance is claimed.
+
+## Battle result application
+
+Recovered result application from the battle effect pipeline into source and target HP/MP. Shield consumption, damage/heal normalization, survival-property removal and resource caps now execute through handwritten semantics. The execution fixture no longer mocks result application and verifies actual target HP/MP writes. Resource manager lookup, achievement counting, status insertion, additional effect handling and completion notification remain external services. Library build and focused application/execution/descriptor/eligibility checks pass; no gameplay, Full72 or bitwise floating-point acceptance is claimed.

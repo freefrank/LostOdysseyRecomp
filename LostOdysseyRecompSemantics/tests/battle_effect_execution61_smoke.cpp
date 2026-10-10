@@ -16,11 +16,15 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x7b000;
       return;
     }
-    if (e == 0x82b2bd50) {
-      auto response = m.ReadU32(0x73000 + 52);
-      auto offset = response == 3 || response == 8 ? 3730 : 3726;
-      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
-          double(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * offset))));
+    if (e == 0x8238e308) {
+      if (s.r[4] != 24 && s.r[4] != 25)
+        throw std::runtime_error("resource lookup ID");
+      s.r[3] = s.r[4] == 24 ? 0x80000 : 0x90000;
+      return;
+    }
+    if (e == 0x82ac34f8) {
+      if (s.r[4] != 2)
+        throw std::runtime_error("damage counter category");
       return;
     }
     if (e == 0x82b22100) {
@@ -55,7 +59,7 @@ int main() {
                                       cook_main_smoke::Regions.end());
     for (auto p :
          {0x8201d000u, 0x8201f000u, 0x8204f000u, 0x821ba000u, 0x82218000u,
-          0x82089000u, 0x83213000u, 0x83264000u, 0x832ae000u})
+          0x82089000u, 0x83291000u, 0x83213000u, 0x83264000u, 0x832ae000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
@@ -92,6 +96,7 @@ int main() {
     m.WriteU32(0x82007784, 0x3f800000);
     m.WriteU32(0x82000e1c, 0x40000000);
     m.WriteU32(0x8204fc20, 0x447a0000);
+    m.WriteU32(0x82000e40, 0xbf800000);
     auto reset = [&]() {
       g.applied = g.notified = g.guarded = 0;
       for (unsigned bank = 0; bank < 9; ++bank) {
@@ -100,6 +105,16 @@ int main() {
       }
       for (unsigned p = 0; p < 20000; p += 4)
         m.WriteU32(0x100000 + p, 0);
+      m.WriteU32(0x100000 + 36, 24);
+      m.WriteU32(0x100000 + 14884, 25);
+      for (auto off : {14u, 18u, 22u, 26u, 30u, 34u, 38u, 3726u, 3730u, 3734u,
+                       3738u, 3742u})
+        m.WriteU32(0x100000 + 4 * off, 0xbf800000);
+      for (auto who : {0x80000u, 0x90000u}) {
+        m.WriteU32(who + 2588, 0x43480000);
+        m.WriteU32(who + 2592, 0x43480000);
+        m.WriteU32(who + 2620, 0x42c80000);
+      }
       for (auto offset : {36u, 45u, 64u, 65u, 108u, 109u, 120u})
         m.WriteU8(0x73000 + offset, 0);
       for (auto offset : {40u, 52u, 84u, 88u, 92u, 104u})
@@ -124,7 +139,8 @@ int main() {
     reset();
     run();
     check(g.applied == 1 && g.notified == 1 && m.ReadU32(0x76000 + 192) == 90 &&
-          std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3726)) == 90);
+          std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3726)) == 90 &&
+          std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 110);
     reset();
     m.WriteU32(0x80000 + 2604, 0);
     m.WriteU32(0x90000 + 2608, 0x447a0000);
@@ -148,7 +164,9 @@ int main() {
     run();
     check(m.ReadU32(0x73000 + 52) == 8 &&
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3730)) == 90 &&
-          g.applied == 1);
+          g.applied == 1 &&
+          std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 200 &&
+          m.ReadU32(0x76000 + 192) == 0);
     reset();
     m.WriteU32(0x90000 + 4 * 272 + 232, 1u << 13);
     m.WriteU32(0x90000 + 232, 2);
@@ -156,7 +174,8 @@ int main() {
     check(m.ReadU32(0x73000 + 52) == 5 &&
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3734)) == 50 &&
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3726)) == 40 &&
-          m.ReadU32(0x76000 + 192) == 40);
+          m.ReadU32(0x76000 + 192) == 40 && m.ReadU32(0x90000 + 2616) == 0 &&
+          std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 160);
     m.WriteU32(0x73000 + 40, 1);
     m.WriteU32(0x90000 + 196, 7);
     m.WriteU32(0x90000 + 200, 0x80000000);

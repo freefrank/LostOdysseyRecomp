@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_effect_execution61.h"
+#include "lo_semantics/battle_result_application61.h"
 #include "lo_semantics/battle_effect_calculation61.h"
 #include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_action_records61.h"
@@ -13,6 +14,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_execution61::Apply(e, m, d, s) &&
+      !battle_result_application61::Apply(e, m, d, s) &&
       !battle_effect_calculation61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
       !battle_action_records61::Apply(e, m, d, s) &&

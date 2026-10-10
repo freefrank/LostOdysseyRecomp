@@ -1,0 +1,68 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Shield absorption, HP normalization, damage/heal helpers and source/target result application.",
+  "entries": [
+    {
+      "address": "82AC9618",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 8096,
+      "instruction_count": 84,
+      "body_sha256": "cdd52f556258a9d26f3c7762db5a813a0a44fa89d7cfcead5d895d0a7984b7a4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B468",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 3538,
+      "instruction_count": 83,
+      "body_sha256": "48fd0e7ebb8fda69070da333711e4ad1d8e12ef9d015f3b116a4eb588b36cd94",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B5E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 3773,
+      "instruction_count": 22,
+      "body_sha256": "d9459f615c475b7014d0cd014837a0e6c128d1ee6af7eeb3ff2e807d5418a167",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2B640",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 3835,
+      "instruction_count": 46,
+      "body_sha256": "af7cba47d8ee9ce359c16b776cc637c1f420d3cb9663b9e2da1d9349b46fc3e0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2BD50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 4987,
+      "instruction_count": 305,
+      "body_sha256": "3c6eccd92ae94430776256dd2658c2c2483e314634106a5454bae9591e2d16dc",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AC9618",
+      "82B2B468",
+      "82B2B5E0",
+      "82B2B640",
+      "82B2BD50"
+    ],
+    "header": "include/lo_semantics/battle_result_application61.h",
+    "source": "src/battle_result_application61.cpp",
+    "smoke": "tests/battle_result_application61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
