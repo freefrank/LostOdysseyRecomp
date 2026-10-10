@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_preferred_target61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
@@ -38,7 +39,8 @@ struct Runtime {
     m.WriteU32(a + 52, W(a + 52) + n);
   }
   void Call(unsigned e) {
-    if (!battle_preferred_target61::Apply(e, m, d, s) &&
+    if (!battle_random_range61::Apply(e, m, d, s) &&
+        !battle_preferred_target61::Apply(e, m, d, s) &&
         !battle_action_readiness61::Apply(e, m, d, s) &&
         !battle_action_adjustments61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);

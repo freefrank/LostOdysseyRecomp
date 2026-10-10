@@ -29,6 +29,8 @@ inline void SetupActionStorageFixture(lo::semantic::gpu::GuestMemory &m) {
   m.WriteU32(0x78108, 0x123400);
   m.WriteU32(0x82000e40, 0x3f800000);
   m.WriteU32(0x82000e50, 0);
+  for (unsigned i = 0; i < 32768; ++i)
+    m.WriteU32(0x831f3300 + 4 * i, i % 2);
   m.WriteU32(0x8324570c, 0x79000);
   m.WriteU32(0x83264558, 0x74000);
   m.WriteU32(0x83264984, 0x500000);

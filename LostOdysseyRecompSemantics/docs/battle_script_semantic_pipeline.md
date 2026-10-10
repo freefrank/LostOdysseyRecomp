@@ -241,3 +241,7 @@ Recovered preferred target selection and composed it into preparation. The flow 
 ## Battle probability wrapper
 
 Added the probability wrapper 82AA0838, preserving threshold >= a 0..99 draw. Preferred target selection composes it and the focused fixture verifies equality behavior and side-specific cursor tags.
+
+## Composed selection random state
+
+Preparation, target filtering/refinement, skill picking and item selection now compose the recovered random-range helper. Five focused fixtures pass using actual per-group/per-tag cursors and controlled synthetic table values instead of random-service stubs, including self-target retry and equal-range no-advance behavior. Four existing record/execution/effect fixtures also pass with the shared synthetic random table. Native random-table data, statistical behavior and gameplay remain unvalidated.

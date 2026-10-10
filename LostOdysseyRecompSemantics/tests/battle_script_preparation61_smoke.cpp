@@ -4,7 +4,6 @@
 #include "lo_semantics/battle_script_preparation61.h"
 #include <iostream>
 struct PreparationGuest final : manager_release_context61::GuestServices {
-  unsigned tag = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -17,13 +16,6 @@ struct PreparationGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = s.r[4] ? 0x80000 + 0x10000 * (unsigned(s.r[4]) - 24) : 0x80000;
-      return;
-    }
-    if (e == 0x82aa0740) {
-      if (s.r[3] != 0x72000 || s.r[4] != 0 || s.r[7] != 24)
-        throw std::runtime_error("preparation random ABI");
-      tag = unsigned(s.r[6]);
-      s.r[3] = tag == 83 ? 1 : 0;
       return;
     }
     throw std::runtime_error("unexpected preparation service");
@@ -45,6 +37,8 @@ int main() {
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    for (unsigned i = 0; i < 32768; ++i)
+      m.WriteU32(0x831f3300 + 4 * i, i % 2);
     PreparationGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
@@ -99,7 +93,8 @@ int main() {
     check(m.ReadU32(actor + 84) == 2 && m.ReadU8(targets) == 24 &&
           m.ReadU8(targets + 1) == 25 && m.ReadU32(actor + 336) == 1);
     run(3);
-    check(guest.tag == 80 && m.ReadU8(targets) == 26);
+    check(m.ReadU32(0x72000 + 4 * (128 * 15 + 80 + 3)) == 1 &&
+          m.ReadU8(targets) == 26);
     run(4);
     check(m.ReadU32(actor + 84) == 2 && m.ReadU32(actor + 336) == 4);
     for (unsigned mode : {5u, 7u, 9u, 11u}) {
@@ -131,7 +126,8 @@ int main() {
     check(!m.ReadU32(actor + 16) && m.ReadU32(actor + 84) == 1 &&
           m.ReadU8(targets) == 25 && m.ReadU8(targets + 1) == 2);
     run(17);
-    check(guest.tag == 83 && m.ReadU8(targets) == 25);
+    check(m.ReadU32(0x72000 + 4 * (128 * 15 + 83 + 3)) == 6 &&
+          m.ReadU8(targets) == 25);
     m.WriteU32(0x71004, 0);
     m.WriteU32(actor + 336, 77);
     run(5);

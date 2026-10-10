@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_targets61.h"
 #include <iostream>
 struct TargetsGuest final : manager_release_context61::GuestServices {
-  unsigned randoms = 0, randomTag = 84, randomMax = 2;
+  unsigned randomMax = 2;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78 || e == 0x8238e2f8) {
@@ -20,13 +20,6 @@ struct TargetsGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x82ac85e8) {
-      s.r[3] = randomMax ? 1 : 0;
-      return;
-    }
-    if (e == 0x82aa0740) {
-      if (s.r[4] || s.r[5] != randomMax || s.r[6] != randomTag || s.r[7] != 1)
-        throw std::runtime_error("target random arguments");
-      ++randoms;
       s.r[3] = randomMax ? 1 : 0;
       return;
     }
@@ -46,9 +39,12 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    m.WriteU32(0x83264558, 0x75000);
+    m.WriteU32(0x831f3300, 1);
     TargetsGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,
@@ -156,8 +152,8 @@ int main() {
     if (m.ReadU32(actor + 76) != 3)
       throw std::runtime_error("inventory availability filter");
     select(0, 0, 0, 1);
-    if (guest.randoms != 1 || m.ReadU32(actor + 76) != 1 ||
-        m.ReadU8(0x66000) != 2)
+    if (m.ReadU32(0x75000 + 4 * (128 * 9 + 84 + 3)) != 1 ||
+        m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 2)
       throw std::runtime_error("random target selection");
     select(5, 0, 0, 0);
     if (m.ReadU32(actor + 76))
@@ -167,7 +163,6 @@ int main() {
       entry = 0x8238d148;
       select(0, 0, 0, 0);
       entry = 0x82af86a8;
-      guest.randomTag = 85;
       select(filter, parameter, pool, selection);
     };
     m.WriteU32(0x88000 + 124, m.ReadU32(0x88000 + 124) | 0x10000000);
@@ -185,8 +180,8 @@ int main() {
         m.ReadU8(0x66001) != 2)
       throw std::runtime_error("refinement secondary stat threshold");
     refine(0, 0, 0, 1);
-    if (guest.randoms != 2 || m.ReadU32(actor + 76) != 1 ||
-        m.ReadU8(0x66000) != 2)
+    if (m.ReadU32(0x75000 + 4 * (128 * 9 + 85 + 3)) != 1 ||
+        m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 2)
       throw std::runtime_error("refinement random service tag");
     m.WriteU32(actor + 76, 0);
     entry = 0x82af86a8;
@@ -208,10 +203,9 @@ int main() {
         throw std::runtime_error("unavailable target pool and ABI");
     };
     unavailable(0);
-    guest.randomTag = 86;
     guest.randomMax = 0;
     unavailable(1);
-    if (guest.randoms != 3)
+    if (m.ReadU32(0x75000 + 4 * (128 * 9 + 86 + 3)) != 0)
       throw std::runtime_error("unavailable random service");
     std::cout << "battle_script_targets61 smoke passed\n";
     return 0;

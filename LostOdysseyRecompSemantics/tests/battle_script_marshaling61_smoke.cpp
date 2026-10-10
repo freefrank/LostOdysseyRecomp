@@ -5,8 +5,7 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct MarshalGuest final : manager_release_context61::GuestServices {
-  unsigned prepared = 0, picker = 0, ok = 1, kind = 0, detail = 0, labels = 0,
-           flags = 0;
+  unsigned prepared = 0, ok = 1, kind = 0, detail = 0, labels = 0, flags = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
@@ -41,13 +40,6 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82ad0c10) {
       s.r[3] = ok;
-      return;
-    }
-    if (e == 0x82aa0740) {
-      picker = s.r[6] == 100   ? 0x82aff8e0
-               : s.r[6] == 101 ? 0x82aff9e8
-                               : 0x82aff4e8;
-      s.r[3] = 0;
       return;
     }
     if (e == 0x82b08b80) {
@@ -182,7 +174,7 @@ int main() {
     m.WriteU32(0x70000 + 24, 1);
     m.WriteU32(vars, 4);
     op(0x82b00d08);
-    check(guest.picker == 0x82aff4e8 && guest.kind == 6);
+    check(guest.detail == 19 && guest.kind == 6);
     guest.ok = 0;
     auto executions = m.ReadU32(actor + 96);
     m.WriteU32(vars, 2);

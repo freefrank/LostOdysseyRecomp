@@ -5,20 +5,10 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct ItemGuest final : manager_release_context61::GuestServices {
-  unsigned random = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
       return;
-
-    if (e == 0x82aa0740) {
-      if (s.r[3] != 0x72000 || s.r[4] != 0 || s.r[5] != 1 || s.r[6] != 88 ||
-          s.r[7] != 24)
-        throw std::runtime_error("item random ABI");
-      ++random;
-      s.r[3] = 0;
-      return;
-    }
 
     if (e == 0x82af68d8)
       return;
@@ -114,7 +104,8 @@ int main() {
     check(m.ReadU32(actor + 92) == 3);
     m.WriteU32(vars + 12, 2);
     op();
-    check(m.ReadU32(actor + 92) == 2 && guest.random == 1);
+    check(m.ReadU32(actor + 92) == 2 &&
+          m.ReadU32(0x72000 + 4 * (128 * 15 + 88 + 3)) == 1);
     m.WriteU32(vars + 12, 3);
     auto prepared = m.ReadU32(actor + 336);
     op();

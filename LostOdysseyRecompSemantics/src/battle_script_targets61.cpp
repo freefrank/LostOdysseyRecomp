@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_script_targets61.h"
@@ -25,7 +26,8 @@ struct Targets {
     return Address(s.r[3]);
   }
   void Call(unsigned e) {
-    if (!battle_action_readiness61::Apply(e, m, d, s) &&
+    if (!battle_random_range61::Apply(e, m, d, s) &&
+        !battle_action_readiness61::Apply(e, m, d, s) &&
         !battle_action_adjustments61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
