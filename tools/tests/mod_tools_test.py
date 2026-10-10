@@ -40,6 +40,23 @@ class ModToolsTest(unittest.TestCase):
         self.assertEqual(mod.canonical_key(KEY.replace("#21:", "#00021:")), KEY)
         self.assertEqual(mod.overlay_path(KEY), "overlay/images/key-fnv1a64-5177565cdd08cbcf.lotex")
 
+    def test_language_clean(self):
+        menu = "bin/xenon/loc/int/menu/menu_int.dat.json"
+        pack, original = self.root / "pt-br", self.root / "original" / "text"
+        for folder, values in ((pack / "text", {"a": "Estado", "b": "Item"}), (original, {"a": "Status", "b": "Item"})):
+            for name, data in ((menu, values), ("bin/xenon/scr/mes/int/x.jmd.json", {"c": "Same"})):
+                (folder / name).parent.mkdir(parents=True, exist_ok=True)
+                (folder / name).write_text(json.dumps(data), encoding="utf-8")
+        (pack / "language.ini").write_text("id=pt-br\nname=Português\nbase=int\n", encoding="utf-8")
+        stats = mod.language_clean(pack, None, None)
+        share = self.root / "share" / "pt-br"
+        self.assertEqual((stats["files"], stats["entries"], stats["dropped_files"]), (1, 1, 1))
+        self.assertEqual(json.loads((share / "text" / menu).read_text(encoding="utf-8")), {"a": "Estado"})
+        self.assertFalse((share / "text/bin/xenon/scr").exists())
+        self.assertTrue((share / "language.ini").is_file())
+        with self.assertRaises(FileExistsError):
+            mod.language_clean(pack, None, None)
+
     def test_utf8_case(self):
         key = mod.make_key("BIN/纹理.xxx", 3, "图集")
         self.assertEqual(key, "bin/纹理.xxx#3:图集")

@@ -640,6 +640,53 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
     return stats
 
 
+def language_clean(pack: Path, original: Path | None, output: Path | None) -> dict[str, int]:
+    """Copy a language pack keeping only translated entries: values that differ
+    from the untranslated export (original/text beside the pack by default).
+    Untranslated entries would otherwise ship the game's own text and, from an
+    export without the DLC, put the discs' versions over the DLC's."""
+    pack = pack.resolve()
+    ini = pack / "language.ini"
+    if not ini.is_file():
+        raise ValueError(f"{pack} has no language.ini")
+    reference = (original or pack.parent / "original").resolve()
+    if (reference / "text").is_dir():
+        reference = reference / "text"
+    if not reference.is_dir():
+        raise ValueError(f"no untranslated export at {reference}; pass --original <export>/original")
+    target = (output or pack.parent / "share" / pack.name).resolve()
+    if target.exists() and any(target.iterdir()):
+        raise FileExistsError(f"{target} is not empty")
+    stats = {"files": 0, "entries": 0, "dropped_files": 0, "dropped_entries": 0, "unmatched_files": 0}
+    for source in sorted((pack / "text").rglob("*.json")):
+        relative_path = source.relative_to(pack / "text")
+        data = json.loads(source.read_text(encoding="utf-8"))
+        base_file = reference / relative_path
+        if base_file.is_file():
+            base = json.loads(base_file.read_text(encoding="utf-8"))
+            kept = {key: value for key, value in data.items() if base.get(key) != value}
+        else:
+            kept = data  # Nothing to compare with: keep it as it is.
+            stats["unmatched_files"] += 1
+        stats["dropped_entries"] += len(data) - len(kept)
+        if not kept:
+            stats["dropped_files"] += 1
+            continue
+        destination = target / "text" / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(kept, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        stats["files"] += 1
+        stats["entries"] += len(kept)
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ini, target / "language.ini")
+    settings = dict(line.split("=", 1) for line in ini.read_text(encoding="utf-8-sig").splitlines()
+                    if "=" in line and not line.lstrip().startswith(("#", ";")))
+    if settings.get("name", "").strip() == settings.get("id", "").strip():
+        print("warning: language.ini still has name= set to the id; Settings will show it as the language name")
+    stats["output"] = str(target)
+    return stats
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -687,6 +734,12 @@ def main(argv: list[str] | None = None) -> int:
     tex_parser.add_argument("--bc7-all", action="store_true", help="dds: use BC7 for DXT1 originals too (default BC1)")
     inspect_parser = sub.add_parser("inspect", help="validate a LOTEX1/LOTEX2 file and print its identity")
     inspect_parser.add_argument("file", type=Path)
+    clean_parser = sub.add_parser("language-clean",
+                                  help="copy a language pack with only the entries you translated, ready to share")
+    clean_parser.add_argument("pack", type=Path, help="the pack folder (holds language.ini and text/)")
+    clean_parser.add_argument("--original", type=Path,
+                              help="untranslated export (default: original/ beside the pack, from --export-language-pack)")
+    clean_parser.add_argument("--output", type=Path, help="new folder (default: share/<pack folder name> beside the pack)")
     args = parser.parse_args(argv)
     try:
         if args.command == "key":
@@ -755,6 +808,13 @@ def main(argv: list[str] | None = None) -> int:
             with args.file.open("rb") as file:
                 data = file.read(MAX_FILE + 1)
             print(json.dumps(inspect(data), ensure_ascii=False, indent=2))
+        elif args.command == "language-clean":
+            stats = language_clean(args.pack, args.original, args.output)
+            print(f"Kept {stats['entries']} translated entries in {stats['files']} files; dropped "
+                  f"{stats['dropped_entries']} untranslated entries and {stats['dropped_files']} files"
+                  + (f"; {stats['unmatched_files']} files had no original to compare and were kept"
+                     if stats["unmatched_files"] else "")
+                  + f": {stats['output']}")
         return 0
     except (OSError, ValueError, TypeError, KeyError, csv.Error, sqlite3.Error, zipfile.BadZipFile) as exc:
         print(f"lo_mod: {exc}", file=sys.stderr)

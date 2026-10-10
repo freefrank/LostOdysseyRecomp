@@ -31,7 +31,9 @@ The export tool copies the game's own textures, movies and text out of your game
      - **Textures**: every texture as a PNG image (about 5.3 GB).
      - **Movies**: the CG movies as the original WMV files (about 1.7 GB).
      - **Text**: all game text as JSON files, for translations (about 33 MB).
-   - **Filter** (optional): export only files whose path contains this text, for example `UI_MAIN` (the settings menu artwork) or `loc/int/` (English text only). Leave it empty to export everything.
+   - **Filter** (optional): export only files whose path contains this text, for example `UI_MAIN` (the settings menu artwork). Leave it empty to export everything.
+   - **Text language**: the language of the exported text. **All languages** exports every language on your discs.
+   - **Language pack**: leave it empty here. See [Make a language pack](#make-a-language-pack).
 4. Press **Start**. The bar shows the progress. A full export takes about a minute on an SSD.
 5. When it is done, MO2 asks whether to open the folder. Press **Yes**.
 
@@ -63,11 +65,21 @@ The tool reads the game folder directly, not through MO2, so it exports the orig
 
 The files come from your own copy of the game. Use them to make your mods, but do not share them or put them in a mod.
 
+### Make a language pack
+
+To translate the game into a new language:
+
+1. Open **Tools > Tool Plugins > Export Lost Odyssey assets** as above. If the window has no **Language pack** box, download the tool again (version 1.1.0 has it).
+2. In **Language pack**, type a short id for the language, for example `pt-br`. Letters, digits, `-`, `_` and `.` only.
+3. Leave **Text language** on **All languages** to translate from English, or pick the language to start from.
+4. Press **Start**. Only text is exported (a few seconds), whatever **Export** says.
+5. The output folder now holds a `pt-br` folder (`language.ini` and the text in `text/`) and an `original` folder. Follow [Creating mods](Creating-Mods.md#make-a-language-pack-a-new-language) from step 2 to name, translate and try it.
+6. To share it, open the tool again, press **Clean language pack...** and choose the `pt-br` folder. The lines you translated are copied to `share/pt-br` in the output folder; zip that folder and share the ZIP. **Clean** needs the `original` folder beside `pt-br`.
+
 ## Which mod wins
 
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins.
 - **Standalone packages** (the default layout): each mod has its own folder and `mod.ini`. The `priority` in `mod.ini` decides between them, not MO2's order. An overlay file beats any standalone mod.
-
 - **Language packs**: MO2's order does not matter. Only the pack picked in **Settings > System > Game language** is used.
 
 To let MO2's order decide everything, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Standalone packages are then ignored; language packs still show in Settings.
