@@ -32,12 +32,6 @@ struct RuntimeGuest final : manager_release_context61::GuestServices {
       ++commands;
       return;
     }
-    if (e == 0x82b035e0 || e == 0x82b04c50) {
-      if (s.r[3] != 0x832cc05c)
-        throw std::runtime_error("toggle object");
-      ++toggles;
-      return;
-    }
     throw std::runtime_error("runtime direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -146,12 +140,15 @@ int main() {
     op(0x82af6f58);
     if (m.ReadU32(vars + 4) != 1)
       throw std::runtime_error("missing target selection");
+    guest.predicate = 0;
     for (unsigned mode = 0; mode < 3; ++mode) {
       m.WriteU8(code + 1, mode);
       op(0x82afcc48);
     }
-    if (guest.toggles != 2 || m.ReadU8(0x832ca0e0 + 5764) != 1)
+    if (m.ReadU32(0x832cc05c + 116) != 0xffffffff ||
+        m.ReadU8(0x832ca0e0 + 5764) != 1)
       throw std::runtime_error("mode toggles");
+    guest.predicate = 1;
     m.WriteU8(code + 1, 0);
     le(code + 2, 0);
     le(code + 4, 100);

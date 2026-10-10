@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 227,
-    "distinct_entries": 976,
+    "unit_count": 228,
+    "distinct_entries": 979,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2676,6 +2676,16 @@
         "focused_smoke_paths": 1,
         "validation": "Recovered battle completion predicates, tracked-ID lookup and subordinate state checks. Script conditional branches now compose actual completion logic. Focused fixtures cover rank bounds, optional task gates, pending/completed states, missing IDs and stale row removal routing; library and completion/runtime fixtures pass. Array erasure and platform profile lookup remain guest boundaries. Logical recovery only, not gameplay or full ABI acceptance.",
         "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed."
+      },
+      {
+        "unit": "battle_scene_tasks61",
+        "entries": [
+          "82B035E0",
+          "82B04C50",
+          "82B1A560"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs."
       }
     ],
     "evaluator_descriptor_coverage": {

@@ -441,3 +441,7 @@ Recovered lazy battle-root initialization orchestration: temporary name conversi
 ## Scene state
 
 Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.
+
+## Scene task lifecycle
+
+Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs.
