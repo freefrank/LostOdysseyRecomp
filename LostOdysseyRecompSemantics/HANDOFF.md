@@ -1,3 +1,7 @@
+## Root direct continuation: archive index fields (2026-10-10 UTC)
+
+Using the 72a5abdb findings, archive_index_fields61 now recovers descriptor field swapping, recursive entry-tree swapping/relocation and CPX reserve sizing. Direct caller inspection distinguishes 48-byte archive descriptors from 24-byte entries; the ledger wording and search labels are corrected accordingly. A nested fixture checks both endian modes and untouched fields. Full loader/decompression remains pending.
+
 ## Root direct continuation: complete cloth cooking (2026-10-10 UTC)
 
 BAC6D0 now composes cloth descriptor validation, concrete import/topology, bounded scheduling, vertex permutation, inverse mapping, channel/index remapping and reversed tier output. B9CE98/B9D0A0 convert the public triangle/tetrahedral descriptors and cook/write CLTH with cleanup. Four type/endian combinations validate strided channels, duplicate triangle mapping, byte-identical stream roundtrip and readable public-entry output with complete ownership cleanup. This closes the synthetic cloth cooking logic chain; moving realloc, independent native assets and gameplay remain unvalidated.

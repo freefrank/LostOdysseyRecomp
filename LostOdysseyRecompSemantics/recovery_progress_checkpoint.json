@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 152,
-    "distinct_entries": 467,
+    "unit_count": 153,
+    "distinct_entries": 470,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1574,6 +1574,16 @@
         ],
         "focused_smoke_paths": 4,
         "validation": "Triangle and tetrahedral descriptors with strided positions and optional float/word channels cook through concrete imports, topology, scheduling and permutation. Both endian modes round-trip byte-for-byte through CLTH, and both public cook/write entries produce readable streams with exact cursor and complete cleanup. Duplicate triangle mapping and inverse/channel/index remaps are checked. In-place reallocation only; synthetic assets, no gameplay or bitwise FP proof. Logical/ABI only"
+      },
+      {
+        "unit": "archive_index_fields61",
+        "entries": [
+          "82853208",
+          "82853A10",
+          "828571B8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A small fixture validates descriptor endian fields and untouched bytes, recursive 24-byte entry relocation in both endian modes, and CPX reserve units. The caller advances archive descriptors by 48 bytes, distinct from entry stride24; this corrects the ledger wording from direct guest/caller inspection. No file-I/O/decompression/gameplay proof. Logical/ABI only"
       }
     ]
   },

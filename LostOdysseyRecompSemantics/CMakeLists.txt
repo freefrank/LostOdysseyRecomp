@@ -265,6 +265,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/cloth_schedule_support61.cpp
     src/cloth_schedule61.cpp
     src/cloth_cook61.cpp
+    src/archive_index_fields61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp
     src/cloth_topology_support61.cpp

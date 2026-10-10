@@ -214,14 +214,14 @@
     },
     {
       "address": "82853208",
-      "label": "FPI record byte-swap (archive)",
+      "label": "FPI archive descriptor field byte-swap",
       "category": "archive-io",
       "confidence": "documented",
       "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 36, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
     },
     {
       "address": "82853A10",
-      "label": "FPI record byte-swap (archive, second)",
+      "label": "FPI entry tree byte-swap and relocation",
       "category": "archive-io",
       "confidence": "documented",
       "evidence": [{"path": "docs/notes/guest-function-findings.md", "line": 37, "note": "Search label from a documented finding, not a recovered symbol. Sources: _keep/language-pack-re/formats-report.md:17 (#369)."}]
