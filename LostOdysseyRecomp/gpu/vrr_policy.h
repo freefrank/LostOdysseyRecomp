@@ -14,10 +14,10 @@ constexpr uint32_t OutputLimit(uint32_t refreshHz)
     // Refresh rates arrive rounded to whole Hz; leave room for fractional modes and pacing error.
     return refreshHz >= 24 && refreshHz <= 1000 ? refreshHz - kRefreshHeadroom : 0;
 }
-constexpr bool HostVsyncEnabled(uint32_t nativeFps, bool baselineVsync,
+constexpr bool HostVsyncEnabled(uint32_t nativeFps, bool vsync, bool baselineVsync,
     bool forceImmediate, bool requested)
 {
-    return frame_rate::HostVsyncEnabled(nativeFps, baselineVsync, forceImmediate || requested);
+    return frame_rate::HostVsyncEnabled(nativeFps, vsync, baselineVsync, forceImmediate || requested);
 }
 constexpr uint32_t PacingTarget(uint32_t nativeFps, bool requested,
     uint32_t refreshHz, uint32_t fixedMultiplier = 1)

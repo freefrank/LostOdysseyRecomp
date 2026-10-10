@@ -55,6 +55,16 @@ int main() {
     }
     Write("variable_refresh_rate=1\n");
     Check(settings::Read().variableRefreshRate, "VRR key parsed");
+    Write(""); Check(settings::Read().vsync, "a fresh profile syncs");
+    Write("frame_rate=60\n"); Check(settings::Read().vsync, "an old 60 FPS profile keeps display sync");
+    Write("frame_rate=120\n"); Check(!settings::Read().vsync, "an old 120 FPS profile stays unsynced");
+    Write("frame_rate=120\nvsync=1\n"); Check(settings::Read().vsync, "VSync key wins over the migration");
+    Write("frame_rate=30\nvsync=0\n"); Check(!settings::Read().vsync, "VSync Off parsed");
+    Write("frame_rate=30\nvsync=2\n"); Check(settings::Read().vsync, "invalid VSync input falls back to the migration");
+    for (bool vsync : {false,true}) {
+        auto config = settings::GetConfig(); config.vsync = vsync;
+        Check(settings::SaveConfig(config) && settings::Read().vsync == vsync, "VSync round trip");
+    }
     for (auto rate : gpu::frame_rate::kNativeRates) for (bool enabled : {false,true}) {
         auto config = settings::GetConfig();
         config.frameRate = rate; config.variableRefreshRate = enabled;

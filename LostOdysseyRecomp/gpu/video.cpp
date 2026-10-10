@@ -3858,8 +3858,9 @@ namespace gpu::video
             }
         }
 #else
-        const bool nativeVsync = vrr::HostVsyncEnabled(nativeTarget,
-            nativePolicy.nativeVsyncBaseline, forceImmediate, settings::GetConfig().variableRefreshRate);
+        const auto syncConfig = settings::GetConfig();
+        const bool nativeVsync = vrr::HostVsyncEnabled(nativeTarget, syncConfig.vsync,
+            nativePolicy.nativeVsyncBaseline, forceImmediate, syncConfig.variableRefreshRate);
 #endif
         if (nativeVsync != nativePolicy.nativeVsyncRequested) {
             // Plume marks Vulkan's swapchain for resize; the existing transaction
@@ -4829,7 +4830,8 @@ namespace gpu::video
         if (!PreparePresentation(displayTicket, menuWidth, menuHeight))
             return;
         renderer::SetOutputSize(menuWidth, menuHeight);
-        if (settings::GetConfig().variableRefreshRate) {
+        // Without display sync nothing else holds the paused menu to a frame rate.
+        if (const auto config = settings::GetConfig(); config.variableRefreshRate || !config.vsync) {
             static FramePacer overlayPacer;
             static DeadlineWait overlayWait;
             overlayWait.Until(overlayPacer.Schedule(std::chrono::steady_clock::now(), GetFramePacingTarget(60, true)));

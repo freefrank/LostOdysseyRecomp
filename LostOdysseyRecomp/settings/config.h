@@ -111,6 +111,9 @@ struct Config
     uint32_t shadowResolution = 1; // Shadow map width and height multiplier: 1/2/4.
     uint32_t ambientOcclusion = 0; // 0 Off, 1 SSAO, 2 GTAO.
     uint32_t frameRate = 30;
+    // Settings -> Graphics -> VSync: Off, On, or FreeSync / G-SYNC Compatible
+    // (variableRefreshRate, which wins over vsync). Applied live.
+    bool vsync = true;
     bool variableRefreshRate = false; // Opt-in VRR-friendly presentation; does not enable monitor/driver VRR.
     bool hdr = false; // HDR output preference; applied on the next process start.
     uint32_t hdrPaperWhiteNits = 203; // Content reference white; Metal maps this to the system SDR white.

@@ -124,13 +124,17 @@ Config Validate(Config value)
     if (uint32_t(value.aspectRatio) >= gpu::aspect_ratio::ModeCount)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
+#if LO_PLATFORM_MACOS
+    // Metal always keeps display sync; the menu offers only ProMotion there.
+    value.vsync = true;
+#endif
     return value;
 }
 Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
-    bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false;
+    bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
     std::string key;
@@ -252,6 +256,11 @@ Config Read()
             value.frameGenerationTargetFps = number;
         else if (key == "variable_refresh_rate")
             value.variableRefreshRate = number == 1;
+        else if (key == "vsync" && number <= 1)
+        {
+            value.vsync = number == 1;
+            hasVsync = true;
+        }
         else if (key == "frame_rate")
             value.frameRate = number;
         else if (key == "hdr" && number <= 1)
@@ -301,6 +310,8 @@ Config Read()
     // Before the Aspect ratio setting, a 21:9 output resolution was the
     // Widescreen switch; keep that shape.
     if (!hasAspectRatio) value.aspectRatio = gpu::aspect_ratio::Migrated(value.width, value.height);
+    // Before the VSync setting, 90/120 FPS presented without display sync.
+    if (!hasVsync) value.vsync = value.frameRate <= 60;
     return Validate(value);
 }
 Config &Current()
@@ -419,6 +430,7 @@ static bool WriteConfig(const Config &value)
            << "\ndlss_nr_intensity=" << value.dlssNrIntensity << "\ndlss_nr_global_tone=" << value.dlssNrGlobalTone
            << "\ndlss_nr_local_tone=" << value.dlssNrLocalTone << "\ndlss_nr_structure=" << value.dlssNrStructure
            << "\ndlss_nr_skin=" << value.dlssNrSkin << "\ndlss_nr_auto_mask=" << (value.dlssNrAutoMask ? 1 : 0)
+           << "\nvsync=" << (value.vsync ? 1 : 0)
            << "\nvariable_refresh_rate=" << (value.variableRefreshRate ? 1 : 0)
            << "\nhdr=" << (value.hdr ? 1 : 0)
            << "\nhdr_paper_white_nits=" << value.hdrPaperWhiteNits

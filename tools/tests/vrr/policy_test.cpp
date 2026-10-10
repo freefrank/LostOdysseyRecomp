@@ -11,8 +11,9 @@ int main() {
     for (auto rate : gpu::frame_rate::kNativeRates) {
         for (auto hz : {0u,60u,90u,120u,144u,165u,240u}) {
             Check(v::PacingTarget(rate,false,hz,4)==rate,"off preserves configured rate");
-            Check(v::HostVsyncEnabled(rate,true,false,false)==gpu::frame_rate::HostVsyncEnabled(rate,true),"off preserves original vsync");
-            Check(!v::HostVsyncEnabled(rate,true,false,true),"VRR asks for asynchronous presentation");
+            for (auto vsync : {false,true})
+                Check(v::HostVsyncEnabled(rate,vsync,true,false,false)==gpu::frame_rate::HostVsyncEnabled(rate,vsync,true),"off follows the VSync setting");
+            Check(!v::HostVsyncEnabled(rate,true,true,false,true),"VRR asks for asynchronous presentation");
             for (auto multiplier : {1u,2u,3u,4u,16u}) {
                 const auto paced=v::PacingTarget(rate,true,hz,multiplier);
                 Check(paced<=rate && paced>0,"never raises game target");

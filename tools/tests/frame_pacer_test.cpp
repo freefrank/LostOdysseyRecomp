@@ -77,15 +77,17 @@ int main()
     for (const auto fps : {30u, 60u, 90u, 120u, 0u, 144u})
     {
         const bool high = fps == 0 || fps > 60;
-        Require(rate::NeedsImmediate(fps) == high, "host and guest immediate policy agrees");
-        Require(rate::HostVsyncEnabled(fps, true) == !high, "high FPS disables host vsync");
-        Require(!rate::HostVsyncEnabled(fps, false), "low rates preserve a backend's disabled-vsync baseline");
-        Require(!rate::HostVsyncEnabled(fps, true, true), "FG immediate requirement survives every native cap");
+        Require(rate::NeedsImmediate(fps) == high, "guest immediate policy");
+        Require(rate::HostVsyncEnabled(fps, true, true) == (fps != 0), "VSync On syncs every capped rate");
+        Require(!rate::HostVsyncEnabled(fps, false, true), "VSync Off presents immediately");
+        Require(!rate::HostVsyncEnabled(fps, true, false), "a backend's disabled-vsync baseline is kept");
+        Require(!rate::HostVsyncEnabled(fps, true, true, true), "FG immediate requirement survives every native cap");
     }
     using gpu::MapPresentInterval;
     for (const auto flags : {0u, 0x7Fu, 0x80000000u, 0xFFFF007Fu})
     {
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30) == (flags | 0x200), "30 baseline");
+        Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30, true) == flags, "VSync Off or VRR: 30 is immediate");
         for (const auto fps : {60u, 90u, 120u, 0u, 144u})
         {
             Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, fps) == flags, "60 and above are immediate without an environment gate");

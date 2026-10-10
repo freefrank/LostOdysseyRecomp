@@ -81,13 +81,14 @@ private:
 // for the next and halve the frame rate. Host vsync is separate (frame_rate.h).
 // Zero is the existing LO_FPS uncapped diagnostic.
 // Do not scale the PPC timebase, engine delta, audio or virtual vblank clocks.
-constexpr uint32_t MapPresentInterval(uint32_t value, uint32_t caller, uint32_t fps, bool vrrRequested = false)
+constexpr uint32_t MapPresentInterval(uint32_t value, uint32_t caller, uint32_t fps, bool unsynced = false)
 {
     if (caller != 0x827B4A4C || (value & 0xFF00u) != 0x200u)
         return value;
-    // VRR owns its deadline even below 60; integer guest vblanks would quantize
-    // a 57 FPS ceiling. Other callers/intervals and every clock are unchanged.
-    if (vrrRequested) return value & ~0xFF00u;
+    // VSync Off and VRR own their deadline even at 30; integer guest vblanks
+    // would quantize a 57 FPS VRR ceiling. Other callers/intervals and every
+    // clock are unchanged.
+    if (unsynced) return value & ~0xFF00u;
     if (fps == frame_rate::kGuestRefreshHz || frame_rate::NeedsImmediate(fps))
         return value & ~0xFF00u;
     return value;
