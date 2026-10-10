@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 153,
-    "distinct_entries": 470,
+    "unit_count": 154,
+    "distinct_entries": 479,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1584,6 +1584,22 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A small fixture validates descriptor endian fields and untouched bytes, recursive 24-byte entry relocation in both endian modes, and CPX reserve units. The caller advances archive descriptors by 48 bytes, distinct from entry stride24; this corrects the ledger wording from direct guest/caller inspection. No file-I/O/decompression/gameplay proof. Logical/ABI only"
+      },
+      {
+        "unit": "cpx_decode61",
+        "entries": [
+          "82857088",
+          "828570E0",
+          "82857520",
+          "828575E0",
+          "828576E8",
+          "82857970",
+          "82857A38",
+          "82857B00",
+          "82857D90"
+        ],
+        "focused_smoke_paths": 8,
+        "validation": "Eight synthetic blocks cover stored copy/no-copy, overlapping back-references in all three distance modes for halfword and byte readers, output counts and context counters. Separate focused checks cover cross-word refill and alternate parameter tables. No native archive corpus, complete file stream or runtime acceptance. Logical/ABI only"
       }
     ]
   },

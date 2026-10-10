@@ -1,3 +1,7 @@
+## Root direct continuation: CPX block decoding (2026-10-10 UTC)
+
+CPX block decoding now composes bit input, parameter tables, match lengths and literal/overlapping-back-reference output in both halfword and byte modes. Eight tiny blocks validate stored/no-copy and all three distance modes, with byte counts and block counters. The complete archive streaming/in-place orchestration remains pending; native-asset and gameplay acceptance are not claimed.
+
 ## Root direct continuation: archive index fields (2026-10-10 UTC)
 
 Using the 72a5abdb findings, archive_index_fields61 now recovers descriptor field swapping, recursive entry-tree swapping/relocation and CPX reserve sizing. Direct caller inspection distinguishes 48-byte archive descriptors from 24-byte entries; the ledger wording and search labels are corrected accordingly. A nested fixture checks both endian modes and untouched fields. Full loader/decompression remains pending.

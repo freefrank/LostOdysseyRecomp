@@ -33,3 +33,7 @@ recovery draft metadata records body hashes and source locations.
 Follow the archive loader/member-read and CPX decoder chains, and the text-bank
 parser/consumer chain documented in the ledger. Verify each layout from the guest
 body and callers rather than assuming all documentary labels are exact symbols.
+
+## CPX block decoder
+
+CPX block decoding now composes bit input, parameter tables, match lengths and literal/overlapping-back-reference output in both halfword and byte modes. Eight tiny blocks validate stored/no-copy and all three distance modes, with byte counts and block counters. The complete archive streaming/in-place orchestration remains pending; native-asset and gameplay acceptance are not claimed.

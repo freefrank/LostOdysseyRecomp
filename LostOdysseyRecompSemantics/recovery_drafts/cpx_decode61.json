@@ -1,0 +1,104 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "CPX stored and LZ block decoding with byte/halfword bit input.",
+  "entries": [
+    {
+      "address": "82857088",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24142,
+      "instruction_count": 22,
+      "body_sha256": "cf366d69157ed9f07e02e5157a4f718127cf347a4fbe2d59df189374588df43e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828570E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24192,
+      "instruction_count": 21,
+      "body_sha256": "61f457a28507cdc636fcb80a1c18121b9877c79e2358fc7cc7b49760dc67ed3e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857520",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24855,
+      "instruction_count": 48,
+      "body_sha256": "cd7117860bc444299c226ef086cc49b6032aea178b489e421ce285114044976b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828575E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24959,
+      "instruction_count": 65,
+      "body_sha256": "93e561d2f49693122dc9110ad60b6d45599a30a9965c77a1805cca88f1d2aa65",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828576E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 25099,
+      "instruction_count": 78,
+      "body_sha256": "ddefccea46fe4af1bbc01e4b9cdd5d896ec2b1d85e646ca82531af8a48bdef6e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857970",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 25468,
+      "instruction_count": 49,
+      "body_sha256": "abce573985848fe8568a6da57049d8ebd7cf874ae504aaa1a831312df0b4239a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857A38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 25581,
+      "instruction_count": 49,
+      "body_sha256": "7eed6ed7cf0a1fa13fe73269b2fe2c59d763b125dc139430a3262ab6eacac684",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857B00",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 25694,
+      "instruction_count": 164,
+      "body_sha256": "0c68f838ab8cc19d9ccd36d9eebcfb3628f71d49ddffe18b75864fe1e388de67",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857D90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 26059,
+      "instruction_count": 174,
+      "body_sha256": "69d2c6874125f172d76a57c456f631dfd84b9761b24a9dddd6443ab3c03a5566",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82857088",
+      "828570E0",
+      "82857520",
+      "828575E0",
+      "828576E8",
+      "82857970",
+      "82857A38",
+      "82857B00",
+      "82857D90"
+    ],
+    "header": "include/lo_semantics/cpx_decode61.h",
+    "source": "src/cpx_decode61.cpp",
+    "smoke": "tests/cpx_decode61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 8,
+    "case_scope": "Eight synthetic blocks cover stored copy/no-copy, overlapping back-references in all three distance modes for halfword and byte readers, output counts and context counters. Separate focused checks cover cross-word refill and alternate parameter tables. No native archive corpus, complete file stream or runtime acceptance. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
