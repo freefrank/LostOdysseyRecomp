@@ -7,6 +7,96 @@
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b037c8) {
+    auto old = Address(s.r[1]), input = Address(s.r[4]),
+         output = Address(s.r[5]);
+    auto kind = std::int8_t(Address(s.r[3]));
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 28; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 544;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    for (auto off : {80u, 84u, 88u})
+      m.WriteU32(sp + off, 0);
+    struct Path {
+      unsigned kind, method, argument, base, count, temps[4], suffix[4];
+    };
+    const Path paths[] = {
+        {11,
+         356,
+         9,
+         176,
+         4,
+         {400, 144, 304, 432},
+         {0x82000ba4, 0x820c4b34, 0x82000ba4, input}},
+        {13,
+         356,
+         9,
+         368,
+         4,
+         {240, 464, 208, 336},
+         {0x82000ba4, 0x820c4b24, 0x82000ba4, input}},
+        {14,
+         360,
+         4,
+         160,
+         4,
+         {128, 112, 96, 272},
+         {0x82000ba4, 0x82041c10, 0x82000ba4, input}},
+        {15, 372, 1, 256, 2, {224, 192, 0, 0}, {0x82000ba4, input, 0, 0}},
+        {16, 364, 1, 352, 2, {320, 288, 0, 0}, {0x82000ba4, input, 0, 0}},
+        {17,
+         372,
+         4,
+         480,
+         3,
+         {448, 416, 384, 0},
+         {0x82000ba4, input, 0x820c4b18, 0}}};
+    auto call = [&](unsigned a) {
+      if (!string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    auto source = input;
+    for (const auto &path : paths)
+      if (unsigned(kind) == path.kind) {
+        s.r[3] = sp + path.base;
+        s.r[4] = m.ReadU32(0x83315fb4);
+        s.r[5] = path.argument;
+        auto method = m.ReadU32(m.ReadU32(Address(s.r[4])) + path.method);
+        s.ctr = method;
+        d.guest.CallIndirect(method & ~3u, m, s);
+        auto current = Address(s.r[3]);
+        for (unsigned i = 0; i < path.count; ++i) {
+          s.r[3] = sp + path.temps[i];
+          s.r[4] = current;
+          s.r[5] = path.suffix[i];
+          call(0x8232d418);
+          current = Address(s.r[3]);
+        }
+        s.r[3] = sp + 80;
+        s.r[4] = current;
+        call(0x822b3f50);
+        for (unsigned i = path.count; i > 0; --i) {
+          s.r[3] = sp + path.temps[i - 1];
+          call(0x82298938);
+        }
+        s.r[3] = sp + path.base;
+        call(0x82298938);
+        source = m.ReadU32(sp + 80);
+        break;
+      }
+    s.r[3] = output;
+    s.r[4] = source;
+    call(0x8230bac0);
+    s.r[3] = sp + 80;
+    call(0x82298938);
+    s.r[1] += 544;
+    for (unsigned i = 28; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b33570 || e == 0x82b040d0) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]), kind = Address(s.r[4]),
          arg5 = Address(s.r[5]), arg6 = Address(s.r[6]), text = Address(s.r[7]),

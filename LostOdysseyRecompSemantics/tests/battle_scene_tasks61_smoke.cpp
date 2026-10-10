@@ -7,7 +7,8 @@
 struct TasksGuest final : manager_release_context61::GuestServices {
   unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0,
            initialized = 0;
-  bool factoryMode = false;
+  bool factoryMode = false, pathMode = false;
+  unsigned nextPath = 0x200000;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18)
@@ -16,14 +17,9 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU16(unsigned(s.r[3])) != m.ReadU16(unsigned(s.r[4]));
       return;
     }
-    if (e == 0x82b037c8) {
-      m.WriteU16(unsigned(s.r[5]), 'X');
-      m.WriteU16(unsigned(s.r[5]) + 2, 0);
-      return;
-    }
     if (e == 0x82b33f70) {
       if (s.r[3] != 0x110000 || s.r[4] != 16 || s.r[5] != 7 || s.r[6] != 9 ||
-          m.ReadU16(unsigned(s.r[7])) != 'X' || s.r[8] != 16)
+          m.ReadU16(unsigned(s.r[7])) != 'P' || s.r[8] != 16)
         throw std::runtime_error("object initialization arguments");
       ++initialized;
       return;
@@ -37,8 +33,15 @@ struct TasksGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("tasks direct");
   }
-  void CallIndirect(GuestAddress e, GuestMemory &,
+  void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (e >= 0x123560 && e <= 0x12356c) {
+      auto header = unsigned(s.r[3]);
+      m.WriteU32(header, 0x120000);
+      m.WriteU32(header + 4, 2);
+      m.WriteU32(header + 8, 2);
+      return;
+    }
     if (profile_fixture::Indirect(e, s))
       return;
     if (e == 0x12340c) {
@@ -98,6 +101,13 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       if (s.r[5] == 0) {
         ++freed;
         s.r[3] = 0;
+      } else if (pathMode) {
+        if (s.r[4])
+          s.r[3] = s.r[4];
+        else {
+          s.r[3] = nextPath;
+          nextPath += 0x1000;
+        }
       } else
         s.r[3] = 0x90000;
       return;
@@ -110,8 +120,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p :
-         {0x832c1000u, 0x83315000u, 0x83264000u, 0x8330b000u, 0x821a8000u})
+    for (auto p : {0x832c1000u, 0x83315000u, 0x83264000u, 0x8330b000u,
+                   0x821a8000u, 0x820c4000u, 0x82041000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
@@ -298,6 +308,13 @@ int main() {
           m.ReadU32(0xf0000 + 18044 + 12) == 99 &&
           m.ReadU8(0xf0000 + 18044) == 1);
     g.factoryMode = true;
+    g.pathMode = true;
+    m.WriteU16(0x120000, 'P');
+    m.WriteU16(0x82000ba4, '/');
+    m.WriteU32(0x92100 + 356, 0x123560);
+    m.WriteU32(0x92100 + 360, 0x123564);
+    m.WriteU32(0x92100 + 364, 0x123568);
+    m.WriteU32(0x92100 + 372, 0x12356c);
     m.WriteU32(0x832cc05c + 4, 44);
     m.WriteU32(0x832cc05c + 8, 0x112000);
     m.WriteU32(0x832cc05c + 12, 0);
@@ -316,6 +333,23 @@ int main() {
           m.ReadU32(0x110000) == 0x8200341c && m.ReadU32(0x110000 + 40) == 45);
     check(m.ReadU32(0x832cc05c + 4) == 46 && m.ReadU8(0x110000 + 10) == 3 &&
           m.ReadU8(0x110000 + 11) == 0xaa && m.ReadU32(0x110000 + 76) == 4);
+    m.WriteU16(0x820c4b34, 'A');
+    m.WriteU16(0x820c4b24, 'B');
+    m.WriteU16(0x82041c10, 'C');
+    m.WriteU16(0x820c4b18, 'Z');
+    for (auto [kind, expected] :
+         {std::pair{11, "P/A/X"}, std::pair{13, "P/B/X"},
+          std::pair{14, "P/C/X"}, std::pair{15, "P/X"}, std::pair{16, "P/X"},
+          std::pair{17, "P/XZ"}, std::pair{12, "X"}}) {
+      s.r[3] = kind;
+      s.r[4] = 0x99000;
+      s.r[5] = 0x130000;
+      check(battle_scene_tasks61::Apply(0x82b037c8, m, {g, native}, s));
+      unsigned i = 0;
+      for (; expected[i]; ++i)
+        check(m.ReadU16(0x130000 + 2 * i) == unsigned(expected[i]));
+      check(!m.ReadU16(0x130000 + 2 * i) && s.r[1] == initial.r[1]);
+    }
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
