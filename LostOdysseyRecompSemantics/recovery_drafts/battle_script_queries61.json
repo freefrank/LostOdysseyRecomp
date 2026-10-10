@@ -1,0 +1,122 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Resource category counts, reverse action-target lookup, property/effect and inventory queries.",
+  "entries": [
+    {
+      "address": "82AFECC8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 25639,
+      "instruction_count": 149,
+      "body_sha256": "dbcc15aaed412f2b8067b38ea56aa38238ce7d0dc157c93eef6a30727372de01",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFEF20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 25996,
+      "instruction_count": 165,
+      "body_sha256": "9120e19ed8c497aff585e482515ff5a44b68f698d3e55be022cf0909444494b0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9F08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14024,
+      "instruction_count": 28,
+      "body_sha256": "4253452a2df58d45f1960655426eaaca0bcfc7679ceeed5a2938928897125967",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9980",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13178,
+      "instruction_count": 21,
+      "body_sha256": "2a90413439b6321c6dc679e365241cc1384da18c9937343d7ffdfefc9420efdd",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9F80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14092,
+      "instruction_count": 37,
+      "body_sha256": "b1056d82031bf28fe3c7cca61fcf224ff6a642875fcbfefe1a47d54da9846336",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA048",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14213,
+      "instruction_count": 33,
+      "body_sha256": "8218816790ecfefdc455a4115d8f46706c632387ee5704369a03729910ebc0ca",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA100",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14325,
+      "instruction_count": 31,
+      "body_sha256": "a27ab84fe029ff9b907bccdd86a942470789c0626bd8a165dcb89cb33724bbda",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF75A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7822,
+      "instruction_count": 19,
+      "body_sha256": "a512a22203dc0b94d98441c9c0c37f61ebb8234cd2b03b81ca55595783b2c2d8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF75F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7869,
+      "instruction_count": 25,
+      "body_sha256": "9679696e8de2d5dbb41e12dca1f2f2757244af5598c9d686ed11846e17af99a1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7658",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7929,
+      "instruction_count": 26,
+      "body_sha256": "5dd77095e293df3745cc8a06a604eb40bcbbbed137117a59b54b75b93ae83ee1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFF1B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 26367,
+      "instruction_count": 60,
+      "body_sha256": "c35021875cefe3e274de4cf22722965623eefb90cff5bb823ad8182d4e9bb4c9",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AFECC8",
+      "82AFEF20",
+      "82AF9F08",
+      "82AF9980",
+      "82AF9F80",
+      "82AFA048",
+      "82AFA100",
+      "82AF75A0",
+      "82AF75F0",
+      "82AF7658",
+      "82AFF1B8"
+    ],
+    "header": "include/lo_semantics/battle_script_queries61.h",
+    "source": "src/battle_script_queries61.cpp",
+    "smoke": "tests/battle_script_queries61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture checks four category/readiness count modes, deduplicated reverse action lookup and random tag87, the source rule rejecting a detail-only filter without a type, property/effect callbacks, first target and actor/resource fields, three inventory indexing cases, cursor and nonvolatile state. Concrete runtime resource lists, readiness services and inventory provider remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
