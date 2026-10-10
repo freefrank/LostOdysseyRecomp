@@ -7,16 +7,6 @@ struct AdjustmentGuest final : manager_release_context61::GuestServices {
   unsigned inactive = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82380a18 || e == 0x82389b78) {
-      s.r[3] = 0x70000;
-      return;
-    }
-    if (e == 0x8238e308) {
-      if (s.r[4] != 7)
-        throw std::runtime_error("adjustment peer");
-      s.r[3] = 0xa0000;
-      return;
-    }
     throw std::runtime_error("adjustment direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -118,6 +108,12 @@ int main() {
     run(0x82acd770, 0, 0);
     check(total() == 12);
     prop(252, false);
+    m.WriteU32(0x832cb788, 0x70000);
+    m.WriteU32(0x832ca0e8 + 20, 0x71000);
+    m.WriteU32(0x71000, 0x72000);
+    m.WriteU32(0x71004, 1);
+    m.WriteU32(0x72000, 0xa0000);
+    m.WriteU32(0xa0000 + 64, 7);
     prop(244, true);
     m.WriteU32(0x80000 + 4 * (20 + 567), 7);
     m.WriteU32(0xa0000, 0xa1000);

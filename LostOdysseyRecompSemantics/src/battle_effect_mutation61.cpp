@@ -61,6 +61,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b11878:
+    frame = 144;
+    first = 27;
+    literal = 80;
+    break;
+  case 0x82b0ef68:
   case 0x82b0fff0:
   case 0x82b12870:
     frame = 160;
@@ -280,7 +286,113 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0fff0 || e == 0x82b12870) {
+  if (e == 0x82b11878 || e == 0x82b0ef68) {
+    auto source = [&]() { return m.ReadU32(owner + 4); };
+    auto target = [&]() { return m.ReadU32(owner + 8); };
+    auto has = [&](unsigned id) {
+      s.r[3] = target();
+      s.r[4] = id;
+      Call(0x8238e368, m, d, s);
+      return (Address(s.r[3]) & 255) != 0;
+    };
+    auto mask = [&](unsigned id) {
+      s.r[3] = id;
+      Call(0x8238aab0, m, d, s);
+      return Address(s.r[3]);
+    };
+    auto timing = [&](unsigned predicate, unsigned method, bool swapped) {
+      s.r[3] = m.ReadU32(0x8324570c);
+      s.r[4] = target();
+      Call(predicate, m, d, s);
+      if (Address(s.r[3]) & 255) {
+        m.WriteU32(sp + 84, 0);
+        m.WriteU32(sp + 88, 0);
+        s.r[3] = m.ReadU32(0x8324570c);
+        s.r[4] = target();
+        s.r[5] = sp + (swapped ? 88 : 84);
+        s.r[6] = sp + (swapped ? 84 : 88);
+        s.r[7] = 1;
+        s.r[8] = 0;
+        Call(method, m, d, s);
+      }
+    };
+    if (e == 0x82b11878) {
+      if (!eligible(2, 0))
+        m.WriteU8(owner + 208, 0);
+      else {
+        if (!has(244) && m.ReadU32(source() + 64) != m.ReadU32(target() + 64)) {
+          mark();
+          for (unsigned side = 0; side < 2; ++side) {
+            s.r[3] = side ? source() : target();
+            s.r[4] = m.ReadU32(owner + (side ? 96 : 92));
+            s.r[5] = m.ReadU32(owner + (side ? 104 : 100));
+            s.r[6] = m.ReadU32(owner + 108);
+            s.r[7] = m.ReadU32(owner + 112);
+            s.r[8] = m.ReadU32(owner + 120);
+            Call(0x82ac8ec8, m, d, s);
+            auto peer = side ? target() : source();
+            s.r[3] = m.ReadU32(owner + (side ? 104 : 100));
+            Call(0x82ac84b8, m, d, s);
+            // The source uses the primary bank for both peer-ID payloads.
+            auto offset =
+                4 * (68 * m.ReadU32(owner + 92) + Address(s.r[3]) + 91);
+            m.WriteU32((side ? source() : target()) + offset,
+                       m.ReadU32(peer + 64));
+          }
+          timing(0x82ace208, 0x82acd998, false);
+        }
+        m.WriteU8(owner + 208, 1);
+      }
+    } else {
+      bool allowed = true;
+      if (!eligible(2) && m.ReadU32(owner + 92) == 5)
+        allowed = false;
+      if (allowed && !eligible(1) && m.ReadU32(owner + 92) == 6)
+        allowed = false;
+      if (!allowed)
+        m.WriteU8(owner + 208, 0);
+      else {
+        auto group = m.ReadU32(target() + 68);
+        bool immune = m.ReadU32(owner + 20) == 8 &&
+                      m.ReadU32(owner + 24) == 119 &&
+                      ((group >= 122 && group <= 128) ||
+                       (group >= 248 && group <= 252) || group == 304);
+        if (!immune && (m.ReadU32(owner + 92) != 6 || chance(0x82b08ea8))) {
+          bool changed = true;
+          for (unsigned id : {192u, 194u, 162u}) {
+            if (m.ReadU32(owner + 92) == (id == 162 ? 5u : 6u) &&
+                m.ReadU32(owner + 100) == mask(id) && has(id))
+              changed = false;
+          }
+          if (changed)
+            mark();
+          s.r[3] = target();
+          s.r[4] = m.ReadU32(owner + 92);
+          s.r[5] = m.ReadU32(owner + 100);
+          s.r[6] = m.ReadU32(owner + 108);
+          Call(0x82ac8ae8, m, d, s);
+          if (m.ReadU32(owner + 104)) {
+            s.r[3] = target();
+            s.r[4] = m.ReadU32(owner + 96);
+            s.r[5] = m.ReadU32(owner + 104);
+            Call(0x82ac91d8, m, d, s);
+          }
+          if (m.ReadU32(owner + 100) == mask(192)) {
+            if (changed)
+              timing(0x82ace208, 0x82acdaa0, false);
+          } else if (m.ReadU32(owner + 92) == 6 &&
+                     m.ReadU32(owner + 100) == mask(194)) {
+            if (changed)
+              timing(0x82ace260, 0x82acdc40, true);
+          } else if (m.ReadU32(owner + 92) == 5 &&
+                     m.ReadU32(owner + 100) == mask(162)) {
+            if (changed)
+              timing(0x82ace260, 0x82acdcf0, true);
+          }
+        }
+      }
+    }
+  } else if (e == 0x82b0fff0 || e == 0x82b12870) {
     auto source = [&]() { return m.ReadU32(owner + 4); };
     auto target = [&]() { return m.ReadU32(owner + 8); };
     auto different = [&]() {

@@ -882,6 +882,59 @@ int main() {
     call(0x82b12870);
     check((m.ReadU32(source + 124) & 0x40000) && !m.ReadU32(source + 188),
           "same-actor revival clears pending action");
+    m.WriteU32(target + 64, 25);
+    m.WriteU32(source, 0x76000);
+    m.WriteU32(0x76000 + 300, 0x123454);
+    m.WriteU32(owner + 92, 7);
+    m.WriteU32(owner + 100, 1u << 20);
+    m.WriteU32(owner + 96, 7);
+    m.WriteU32(owner + 104, 1u << 19);
+    m.WriteU32(owner + 108, 2);
+    m.WriteU32(owner + 112, 3);
+    m.WriteU32(owner + 120, 1);
+    m.WriteU32(target + 7 * 272 + 232, 0);
+    m.WriteU32(source + 7 * 272 + 232, 0);
+    m.WriteU32(target + 100, 0xc0000000);
+    m.WriteU32(0x600000, 2);
+    m.WriteU32(target + 88, 1);
+    m.WriteU32(target + 92, 5);
+    call(0x82b11878);
+    check(m.ReadU32(target + 2348) == 24 && m.ReadU32(source + 2344) == 25 &&
+              !m.ReadU32(target + 88) && m.ReadU32(target + 92) == 15 &&
+              !(m.ReadU32(target + 100) & 0x40000000) &&
+              m.ReadU8(owner + 208) == 1,
+          "linked properties store peer IDs and halve pending action timing");
+    m.WriteU32(owner + 92, 6);
+    m.WriteU32(owner + 100, 1);
+    m.WriteU32(owner + 104, 0);
+    m.WriteU32(owner + 108, 3);
+    m.WriteU32(owner + 20, 0);
+    m.WriteU32(owner + 184, 0);
+    put(owner + 88, 100);
+    m.WriteU32(target + 6 * 272 + 232, 0);
+    m.WriteU32(target + 88, 2);
+    m.WriteU32(target + 92, 0);
+    call(0x82b0ef68);
+    check((m.ReadU32(target + 6 * 272 + 232) & 1) &&
+              m.ReadU32(target + 88) == 2 && m.ReadU32(target + 92) == 15,
+          "new action-speed property scales pending action to 130 percent");
+    call(0x82b0ef68);
+    check(m.ReadU32(target + 88) == 2 && m.ReadU32(target + 92) == 15,
+          "existing action-speed property is not applied twice");
+    m.WriteU32(0x600000, 3);
+    m.WriteU32(owner + 100, 4);
+    m.WriteU32(target + 88, 2);
+    m.WriteU32(target + 92, 0);
+    call(0x82b0ef68);
+    check(m.ReadU32(target + 88) == 3 && !m.ReadU32(target + 92),
+          "item action-speed property scales pending action to 150 percent");
+    m.WriteU32(owner + 92, 5);
+    m.WriteU32(target + 5 * 272 + 232, 0);
+    m.WriteU32(target + 88, 2);
+    m.WriteU32(target + 92, 0);
+    call(0x82b0ef68);
+    check(m.ReadU32(target + 88) == 1 && !m.ReadU32(target + 92),
+          "item slow property halves pending action timing");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

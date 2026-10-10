@@ -393,6 +393,22 @@
       "instruction_count": 125,
       "body_sha256": "51a76481a72d01406a7c1ba18417a94da6076dbd74ba427400bdecbf342f5f76",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B11878",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 12629,
+      "instruction_count": 93,
+      "body_sha256": "a505ebb94d1600758a9a6fff477c721dc29a4032467001940e22fc6985cd1fb7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0EF68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 6543,
+      "instruction_count": 221,
+      "body_sha256": "f2ee9c2a2ed35a787eb300672afd7e18e9f662223886493b152c339cec36e07a",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -445,7 +461,9 @@
       "82B11A20",
       "82B0FF10",
       "82B0FFF0",
-      "82B12870"
+      "82B12870",
+      "82B11878",
+      "82B0EF68"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -484,6 +502,7 @@
     "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_priced_physical": "Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-    "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_linked_action_timing": "Recovered the final two descriptor callbacks B11878 and B0EF68, plus six action-state/timing helpers ACE208, ACE260, ACD998, ACDAA0, ACDC40 and ACDCF0. Linked properties preserve the source primary-bank peer-ID quirk and resolve live peer state before timing changes; existing ACD680 supplies timing arithmetic. Focused composition checks cover peer linking and half-time state transition, 130/150-percent action changes, duplicate suppression and item slow timing. All 83 distinct descriptor callback targets now have logical implementations. This table coverage is not whole-game completion or gameplay acceptance; unknown external boundaries remain explicit."
   }
 }

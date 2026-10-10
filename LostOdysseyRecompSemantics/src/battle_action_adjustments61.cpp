@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_property_mutation61.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -6,7 +7,8 @@ namespace lo::semantic::gpu::battle_action_adjustments61 {
 namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (!battle_property_mutation61::Apply(e, m, d, s) &&
+  if (!battle_manager_access61::Apply(e, m, d, s) &&
+      !battle_property_mutation61::Apply(e, m, d, s) &&
       !battle_action_adjustments61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
@@ -50,6 +52,16 @@ void Scale(GuestMemory &m, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82ace208 || e == 0x82ace260) {
+    auto resource = Address(s.r[4]);
+    s.r[3] = 0;
+    if (m.ReadU32(resource + 100) & 0x80000000u) {
+      auto kind = std::int32_t(m.ReadU32(m.ReadU32(resource + 14656)));
+      s.r[3] = e == 0x82ace208 ? (kind == 2 || (kind >= 6 && kind <= 9))
+                               : (kind == 3 || kind == 10);
+    }
+    return true;
+  }
   if (e == 0x82ac84b8) {
     auto mask = Address(s.r[3]);
     unsigned i = 0;
@@ -71,7 +83,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82acd770) {
     frame = 176;
     first = 22;
-  } else if (e != 0x82acdb50 && e != 0x82acdda0)
+  } else if (e == 0x82acd998) {
+    first = 24;
+  } else if (e != 0x82acdb50 && e != 0x82acdda0 && e != 0x82acdaa0 &&
+             e != 0x82acdc40 && e != 0x82acdcf0)
     return false;
   auto owner = Address(s.r[3]), resource = Address(s.r[4]),
        groupPtr = Address(s.r[5]), valuePtr = Address(s.r[6]),
@@ -85,7 +100,31 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(sp, old);
   m.WriteU32(sp + 80, 0x8204a1d8);
   unsigned rate = 0;
-  if (e == 0x82acdda0) {
+  if (e == 0x82acd998) {
+    if (!variant && Property(resource, 244, m, d, s)) {
+      auto id = m.ReadU32(resource + 4 * (Index(m, 244) + 567));
+      Call(0x82380a18, m, d, s);
+      Call(0x82389b78, m, d, s);
+      s.r[4] = id;
+      Call(0x8238e308, m, d, s);
+      auto peer = Address(s.r[3]);
+      s.ctr = m.ReadU32(m.ReadU32(peer) + 300);
+      d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+      if (Address(s.r[3])) {
+        s.r[3] = resource;
+        s.r[4] = 244;
+        Call(0x82ac9000, m, d, s);
+        s.r[3] = peer;
+        s.r[4] = 243;
+        Call(0x82ac9000, m, d, s);
+      } else
+        rate = 50;
+    }
+  } else if (e == 0x82acdaa0 || e == 0x82acdc40 || e == 0x82acdcf0) {
+    auto id = e == 0x82acdaa0 ? 192u : e == 0x82acdc40 ? 194u : 162u;
+    if (!variant && Property(resource, id, m, d, s))
+      rate = e == 0x82acdaa0 ? 130 : e == 0x82acdc40 ? 150 : 50;
+  } else if (e == 0x82acdda0) {
     if (Property(resource, 2, m, d, s))
       rate = 200;
   } else if (!variant && e == 0x82acdb50) {
