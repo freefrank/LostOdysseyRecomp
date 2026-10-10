@@ -50,7 +50,11 @@ void PutLe32(std::vector<uint8_t> &out, size_t at, uint32_t value)
 
 // The decoded bytes in CPX stored blocks (FF 00, then the block size - 1 as
 // u16 LE, then the bytes), as the discs store incompressible data. Header
-// bytes 3-5 (a loader field and the bit width) are the original file's.
+// bytes 4-5 (bit width) are the original file's. Byte 3 is the loader's
+// reserve in 2048-byte units: it decodes in place with the stream placed at
+// buffer + decoded + reserve - stored (sub_8284E6B8, sub_828571B8), and a
+// stored stream is 16 + 8 per block bytes longer than its output, so the
+// reserve has to cover that or block output overwrites the next block header.
 std::vector<uint8_t> StoreCpx(std::span<const uint8_t> payload, std::span<const uint8_t> original)
 {
     const size_t blocks = (payload.size() + cpx::kBlockSize - 1) / cpx::kBlockSize;
@@ -58,6 +62,9 @@ std::vector<uint8_t> StoreCpx(std::span<const uint8_t> payload, std::span<const 
     std::vector<uint8_t> out(16 + 4 * blocks, 0);
     std::copy_n("cpx", 3, out.begin());
     std::copy_n(original.begin() + 3, 3, out.begin() + 3);
+    const size_t reserve = (16 + 8 * blocks + fpi::kSector - 1) / fpi::kSector;
+    if (reserve > 0xff) throw std::runtime_error("text file too large for CPX");
+    out[3] = std::max(out[3], uint8_t(reserve));
     out[6] = uint8_t(blocks);
     out[7] = uint8_t(blocks >> 8);
     for (size_t i = 0; i < blocks; ++i)
