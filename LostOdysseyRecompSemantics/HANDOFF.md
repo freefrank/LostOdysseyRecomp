@@ -1,3 +1,7 @@
+## Root direct continuation: CPX context and block index (2026-10-10 UTC)
+
+CPX context recovery now owns the copied header/index, exposes block offsets and completion, reuses lazy 65552-byte scratch and releases its owned buffers. A two-block synthetic file runs indexed lookup through the recovered decoder with exact output and full cleanup. Lazy manager initialization remains an explicit guest boundary and preserves the requested allocation arguments. The asynchronous reader and registry integration remain pending.
+
 ## Root direct continuation: CPX block decoding (2026-10-10 UTC)
 
 CPX block decoding now composes bit input, parameter tables, match lengths and literal/overlapping-back-reference output in both halfword and byte modes. Eight tiny blocks validate stored/no-copy and all three distance modes, with byte counts and block counters. The complete archive streaming/in-place orchestration remains pending; native-asset and gameplay acceptance are not claimed.

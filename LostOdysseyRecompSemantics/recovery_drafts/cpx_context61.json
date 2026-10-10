@@ -1,0 +1,86 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "CPX owned header/index, block ranges, scratch and lifetime.",
+  "entries": [
+    {
+      "address": "828571C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24325,
+      "instruction_count": 14,
+      "body_sha256": "0660b29076bcd9b54af176fa0552985ef0ac60beff61c061970f70ef57d68ac3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857200",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24362,
+      "instruction_count": 36,
+      "body_sha256": "4d088e6d307f234f0f32590afed87f0c26eea63eac238003841113663c7d2f90",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857290",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24452,
+      "instruction_count": 29,
+      "body_sha256": "ed64b7bd7a03b5b2f48ac0f7743218c8e6e4d20fd7b0aaeddc2fa6b250f53377",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857308",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24526,
+      "instruction_count": 40,
+      "body_sha256": "47d1bc33d0264bd9f781486abab95bee994f398d1c26cbac7bd0031973fbef77",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857438",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24712,
+      "instruction_count": 18,
+      "body_sha256": "dbf7e1af235820506f3224fb3cd17e4601b0a1c5cae18ddd39dfc9b7479d3884",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82857480",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24758,
+      "instruction_count": 10,
+      "body_sha256": "15bd0c4ef3339c147646d962b7ead86997cdacaa34d29bce25c42f893b83f1ee",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828574A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 24787,
+      "instruction_count": 30,
+      "body_sha256": "75030e05accfff58e59902a20a2b68e234dfc86d2add2ca18b56a9e0cc95122f",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "828571C8",
+      "82857200",
+      "82857290",
+      "82857308",
+      "82857438",
+      "82857480",
+      "828574A8"
+    ],
+    "header": "include/lo_semantics/cpx_context61.h",
+    "source": "src/cpx_context61.cpp",
+    "smoke": "tests/cpx_context61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A two-block synthetic CPX file validates little-endian header/index ownership, lazy manager initialization with argument clobber, lazy 65552-byte scratch reuse, implicit current-block ranges, composed stored-block decode, completion counters and owned-buffer cleanup. Context manager/allocator calls remain explicit guest boundaries; whole-file I/O and native assets are not validated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

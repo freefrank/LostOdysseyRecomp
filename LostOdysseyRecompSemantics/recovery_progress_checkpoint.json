@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 154,
-    "distinct_entries": 479,
+    "unit_count": 155,
+    "distinct_entries": 486,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1600,6 +1600,20 @@
         ],
         "focused_smoke_paths": 8,
         "validation": "Eight synthetic blocks cover stored copy/no-copy, overlapping back-references in all three distance modes for halfword and byte readers, output counts and context counters. Separate focused checks cover cross-word refill and alternate parameter tables. No native archive corpus, complete file stream or runtime acceptance. Logical/ABI only"
+      },
+      {
+        "unit": "cpx_context61",
+        "entries": [
+          "828571C8",
+          "82857200",
+          "82857290",
+          "82857308",
+          "82857438",
+          "82857480",
+          "828574A8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A two-block synthetic CPX file validates little-endian header/index ownership, lazy manager initialization with argument clobber, lazy 65552-byte scratch reuse, implicit current-block ranges, composed stored-block decode, completion counters and owned-buffer cleanup. Context manager/allocator calls remain explicit guest boundaries; whole-file I/O and native assets are not validated. Logical/ABI only"
       }
     ]
   },
