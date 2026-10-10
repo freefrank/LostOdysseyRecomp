@@ -7,6 +7,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <thread>
 
@@ -117,9 +118,11 @@ void Resolution(const fs::path& root) {
     assert(Resolve(request)->modId == "first");
     provider->throws = false;
 
+    // Top-level overlay folders are checked at Initialize, files per request.
     const auto overlay = root / OverlayRelativePath(request.id);
     Write(overlay, Lotex(key));
-    assert(Resolve(request)->modId == "@overlay");
+    assert(Resolve(request)->modId == "provider");
+    Reload(); assert(Resolve(request)->modId == "@overlay");
     Env("LO_MODS_MODE", "overlay"); Reload();
     const auto calls = provider->calls;
     assert(Mode() == ResolutionMode::Overlay && Resolve(request)->modId == "@overlay");
@@ -149,7 +152,7 @@ void Resolution(const fs::path& root) {
 void Validation(const fs::path& root, const fs::path& outside) {
     Write(outside / "outside.lotex", Lotex(key));
     Write(root / "escape/mod.ini", "api_version=1\nid=escape\npriority=999\nimage:" + key + "=../../outside/outside.lotex\n");
-    Write(root / "bad-version/mod.ini", "api_version=2\nid=bad-version\n");
+    Write(root / "bad-version/mod.ini", "api_version=3\nid=bad-version\n");
     Write(root / "no-version/mod.ini", "id=no-version\n");
     Write(root / "duplicate/mod.ini", "api_version=1\nid=x\nid=y\n");
     Write(root / "huge/mod.ini", std::string(1024 * 1024 + 1, 'x'));
@@ -274,6 +277,7 @@ void Textures(const fs::path& root) {
     assert(!ReadTextureReplacement(fingerprint, 18, 2, 2, 15, &error));
     const auto overlay = root / OverlayRelativePath(texture.id);
     Write(overlay, Lotex2(fingerprint, 18, 2, 2, pixels.substr(1)));
+    Reload();
     assert(Resolve(texture)->modId == "@overlay" && !ReadTextureReplacement(fingerprint, 18, 2, 2, UINT64_MAX, &error));
     fs::remove_all(root / "tex"); fs::remove_all(overlay.parent_path());
     BlockCompressedTextures(root, fingerprint);
@@ -296,6 +300,7 @@ void Texts(const fs::path& root) {
     Write(root / "overlay/text" / (menu + ".json"), "{}");
     Write(root / "overlay/text" / (jmd + ".json"), "{}");
     Write(root / "overlay/text/readme.txt", "x");
+    Reload();
     texts = ListTexts();
     assert(texts.size() == 2 && texts[0].modId == "@overlay" && texts[1].id.key == jmd && Resolve(text)->modId == "@overlay");
     Env("LO_MODS_MODE", "standalone"); Reload();
@@ -328,6 +333,165 @@ void Languages(const fs::path& root) {
     for (const auto* dir : {"pt", "bad", "zz-copy"}) fs::remove_all(root / dir);
     Reload(); assert(LanguagePacks().empty());
 }
+std::string ReadAll(const fs::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+const ModInfo* Find(const std::vector<ModInfo>& mods, std::string_view id) {
+    for (const auto& mod : mods) if (mod.id == id) return &mod;
+    return nullptr;
+}
+// api_version=2 mod folders with their own overlay/, mod-list.ini and the manager API.
+// Earlier tests leave a (id first, priority 3), b (second, 1) and c (disabled, 200).
+void FormatV2(const fs::path& root, const fs::path& list) {
+    const AssetRequest texture{{AssetKind::Texture, "00000000000000ab"}, {}};
+    const auto tex = Lotex2(0xab, 18, 2, 2, std::string(16, 'p'));
+    const auto texName = OverlayRelativePath(texture.id);
+    const std::string hdIni = "name=4x HD Texture Pack\napi_version=2\nid=hd\npriority=10\nversion=1.0\n"
+        "author=dotSlash\ndescription=Upscaled \xe9\xab\x98\xe6\xb8\x85\n";
+    Write(root / "hd/mod.ini", hdIni);
+    Write(root / "hd" / texName, tex);
+    Write(root / "hd/overlay/textures/FP-00000000000000CD.LOTEX2", tex); // names match case-insensitively
+    Write(root / "hd/overlay/textures/readme.txt", "x");
+    Write(root / "hd/overlay/notes/fp-00000000000000ef.lotex2", tex);    // not a kind folder
+    Write(root / "hd" / OverlayRelativePath(request.id), Lotex(key));     // hashed image name
+    Write(root / "hd/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json", "{}");
+    Initialize(root, list);
+    assert(ModListPath() == list);
+    {
+        const auto mods = ListMods();
+        const auto* hd = Find(mods, "hd");
+        assert(hd && hd->apiVersion == 2 && hd->active && hd->name == "4x HD Texture Pack" && hd->version == "1.0" &&
+               hd->author == "dotSlash" && hd->description == "Upscaled \xe9\xab\x98\xe6\xb8\x85" && hd->priority == 10);
+        assert(hd->overlayFiles == 4 && hd->manifestEntries == 0 && hd->problems.empty() && hd->folder == root / "hd");
+    }
+    assert(HasTextureReplacements() && Resolve(texture)->modId == "hd" && Resolve(texture)->path == root / "hd" / texName);
+    assert(ReadTextureReplacement(0xab, 18, 2, 2, UINT64_MAX));
+    assert(Resolve({{AssetKind::Texture, "00000000000000cd"}, {}})->modId == "hd");
+    assert(!Resolve({{AssetKind::Texture, "00000000000000ef"}, {}}));
+    assert(Resolve(request)->modId == "hd" && ReadImageReplacement(request, 2, 1)); // priority 10 over first (3)
+    const AssetRequest text{{AssetKind::Text, "bin/xenon/loc/int/menu/menu_int.dat"}, {}};
+    auto texts = ListTexts();
+    assert(texts.size() == 1 && texts[0].modId == "hd" && Resolve(text)->modId == "hd");
+
+    // v1 manifests keep v1 rules: no overlay/ discovery, no display metadata.
+    Write(root / "old/mod.ini", "api_version=1\nid=old\npriority=100\n");
+    Write(root / "old/overlay/textures/fp-00000000000000ee.lotex2", tex);
+    // Within a mod an explicit line beats the discovered file of the same identity.
+    Write(root / "hd/custom.lotex2", tex);
+    Write(root / "hd/mod.ini", hdIni + "texture:00000000000000ab=custom.lotex2\n");
+    // Rejected manifests stay listed, inactive, with their problem.
+    Write(root / "long/mod.ini", "api_version=2\nname=" + std::string(129, 'n') + "\n");
+    Write(root / "badutf/mod.ini", "api_version=2\nauthor=\xff\xfe\n");
+    Write(root / "v1meta/mod.ini", "api_version=1\nname=Old\n");
+    Write(root / "unknown/mod.ini", "api_version=2\nhomepage=x\n");
+    Write(root / "max/mod.ini", "api_version=2\nname=" + std::string(128, 'n') + "\n");
+    Reload();
+    {
+        const auto mods = ListMods();
+        assert(Find(mods, "old")->active && Find(mods, "old")->overlayFiles == 0);
+        assert(Find(mods, "hd")->manifestEntries == 1 && Find(mods, "max")->apiVersion == 2);
+        for (const auto* id : {"long", "badutf", "v1meta", "unknown"}) {
+            const auto* mod = Find(mods, id);
+            assert(mod && mod->apiVersion == 0 && !mod->active && !mod->problems.empty());
+        }
+    }
+    assert(!Resolve({{AssetKind::Texture, "00000000000000ee"}, {}}));
+    assert(Resolve(texture)->path == root / "hd/custom.lotex2");
+    for (const auto* dir : {"long", "badutf", "v1meta", "unknown", "max", "old"}) fs::remove_all(root / dir);
+
+    // Order: without a list, priority; listed mods come first, in list order.
+    Write(root / "zz/mod.ini", "api_version=2\nid=zz\npriority=5\n");
+    Write(root / "zz" / texName, tex);
+    Reload(); assert(Resolve(texture)->modId == "hd");
+    Write(list, "\xef\xbb\xbf# order\nmissing=on\nzz=on\n; comment\nhd=on\n");
+    Reload();
+    {
+        const auto mods = ListMods();
+        assert(mods.size() >= 5 && mods[0].id == "zz" && mods[1].id == "hd" && mods[2].id == "disabled" && mods[3].id == "first");
+    }
+    assert(Resolve(texture)->modId == "zz" && Diagnostics().empty());
+    // off disables; mod.ini enabled=false wins over on.
+    Write(list, "zz=off\ndisabled=on\n");
+    Reload();
+    {
+        const auto mods = ListMods();
+        assert(mods[0].id == "zz" && !mods[0].listEnabled && !mods[0].active);
+        assert(mods[1].id == "disabled" && !mods[1].manifestEnabled && mods[1].listEnabled && !mods[1].active);
+    }
+    assert(Resolve(texture)->modId == "hd" && (ModIds() == std::vector<std::string>{"first", "hd", "second"}));
+    // Bad lines are reported and skipped; the first line of an id counts.
+    Write(list, "zz=maybe\nbad id=on\nzz\nzz=on\nzz=off\n");
+    Reload();
+    assert(Diagnostics().size() == 4 && Resolve(texture)->modId == "zz");
+
+    // The top-level overlay beats mod folders; modes.
+    const auto overlay = root / texName;
+    Write(overlay, tex);
+    Reload(); assert(Resolve(texture)->modId == "@overlay");
+    Env("LO_MODS_MODE", "standalone"); Reload(); assert(Resolve(texture)->modId == "zz");
+    Env("LO_MODS_MODE", "overlay"); Reload();
+    {
+        const auto mods = ListMods();
+        assert(Resolve(texture)->modId == "@overlay" && !Resolve({{AssetKind::Texture, "00000000000000cd"}, {}}));
+        assert(Find(mods, "hd") && std::none_of(mods.begin(), mods.end(), [](const ModInfo& m) { return m.active; }));
+        assert(ModIds().empty() && ListTexts().empty());
+    }
+    Env("LO_MODS_MODE", nullptr);
+    fs::remove_all(overlay.parent_path());
+
+    // SaveModList keeps lines of ids it was not given right after their predecessor.
+    Write(list, "# keep me\nzz=on\nmissing=off\nhd=on\n");
+    std::string error;
+    assert(SaveModList({{"hd", true}, {"zz", false}}, &error) && error.empty());
+    assert(ReadAll(list) == "# keep me\nhd=on\nzz=off\nmissing=off\n");
+    assert(!fs::exists(fs::path(list) += ".tmp"));
+    Reload();
+    assert(Resolve(texture)->modId == "hd" && !Find(ListMods(), "zz")->listEnabled);
+    assert(!SaveModList({{"bad id", true}}, &error) && !error.empty());
+    error.clear();
+    assert(!SaveModList({{"hd", true}, {"hd", false}}, &error) && !error.empty());
+    assert(ReadAll(list) == "# keep me\nhd=on\nzz=off\nmissing=off\n");
+    fs::remove(list);
+    assert(SaveModList({{"zz", true}}) && ReadAll(list).front() == '#' && ReadAll(list).find("\nzz=on\n") != std::string::npos);
+    Reload(); assert(Resolve(texture)->modId == "zz");
+    Initialize(root); assert(ModListPath().empty() && !SaveModList({}, &error));
+
+    fs::remove_all(root / "hd"); fs::remove_all(root / "zz"); fs::remove(list);
+    Reload(); assert(!HasTextureReplacements());
+}
+// LO_MOD_TEST_INDEX_FILES=<n>: time Initialize over one mod with n texture files.
+void IndexBench(const fs::path& root) {
+    const char* value = std::getenv("LO_MOD_TEST_INDEX_FILES");
+    if (!value || !*value) return;
+    const int count = std::atoi(value);
+    const auto folder = root / "bench/overlay/textures";
+    fs::create_directories(folder);
+    Write(root / "bench/mod.ini", "api_version=2\nid=bench\n");
+    for (int i = 0; i != count; ++i) {
+        char name[32];
+        std::snprintf(name, sizeof(name), "fp-%016x.lotex2", i);
+        std::ofstream(folder / name, std::ios::binary).put('x');
+    }
+    using clock = std::chrono::steady_clock;
+    for (int run = 0; run != 3; ++run) {
+        const auto start = clock::now();
+        Reload();
+        const auto ms = std::chrono::duration<double, std::milli>(clock::now() - start).count();
+        std::cout << "index: " << Find(ListMods(), "bench")->overlayFiles << " files, Initialize " << ms << " ms\n";
+    }
+    const auto start = clock::now();
+    size_t hits = 0;
+    for (int i = 0; i != count; ++i) {
+        char hex[17];
+        std::snprintf(hex, sizeof(hex), "%016x", i);
+        hits += Resolve({{AssetKind::Texture, hex}, {}}).has_value();
+    }
+    const auto us = std::chrono::duration<double, std::micro>(clock::now() - start).count();
+    std::cout << "resolve: " << hits << " hits, " << us / std::max(count, 1) << " us each\n";
+    fs::remove_all(root / "bench");
+    Reload();
+}
 }
 int main() {
     Environment environment;
@@ -339,6 +503,8 @@ int main() {
     Textures(root);
     Texts(root);
     Languages(root);
+    FormatV2(root, temp.path / "mod-list.ini");
+    IndexBench(root);
     Shutdown(); assert(!Resolve(request));
-    std::cout << "Mod API, image, texture, text and language pack contracts, manager isolation and reload tests passed\n";
+    std::cout << "Mod API, image, texture, text and language pack contracts, mod folders and mod list, manager isolation and reload tests passed\n";
 }
