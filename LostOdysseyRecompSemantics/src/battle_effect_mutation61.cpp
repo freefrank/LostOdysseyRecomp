@@ -64,6 +64,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     frame = 128;
     first = 29;
     break;
+  case 0x82b0e798:
   case 0x82b10e98:
     frame = 144;
     first = 27;
@@ -194,7 +195,65 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0ad38) {
+  if (e == 0x82b0e798) {
+    if (!eligible(1) && !m.ReadU32(owner + 92))
+      m.WriteU8(owner + 208, 0);
+    else if (chance(0x82b08ea8)) {
+      bool proceed = true;
+      if (m.ReadU32(owner + 20) == 3 && m.ReadU32(owner + 24) == 18) {
+        auto target = m.ReadU32(owner + 8), flags = m.ReadU32(target + 124);
+        if (flags & 4096)
+          proceed = false;
+        else
+          m.WriteU32(target + 124, flags | 4096);
+      }
+      if (proceed) {
+        auto mask = m.ReadU32(owner + 100);
+        unsigned count = std::popcount(mask);
+        if (count > 1) {
+          s.r[3] = m.ReadU32(0x83264558);
+          s.r[4] = 1;
+          s.r[5] = count;
+          s.r[6] = 11;
+          s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+          Call(0x82aa0740, m, d, s);
+          auto ordinal = Address(s.r[3]);
+          for (unsigned bit = 0; bit < 32; ++bit)
+            if (mask & (1u << bit)) {
+              if (!--ordinal) {
+                mask = 1u << bit;
+                break;
+              }
+            }
+        }
+        m.WriteU32(owner + 196, 0);
+        auto add = [&](unsigned bank, unsigned bits) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = bank;
+          s.r[5] = bits;
+          s.r[6] = m.ReadU32(owner + 120) != 0;
+          Call(0x82aca6f0, m, d, s);
+          return (Address(s.r[3]) & 255) == 1;
+        };
+        if (add(m.ReadU32(owner + 92), mask)) {
+          s.r[3] = mask;
+          Call(0x82ac84b8, m, d, s);
+          if (!m.ReadU32(owner + 92))
+            m.WriteU32(owner + 168, Address(s.r[3]));
+          mark();
+          if (!m.ReadU32(owner + 92))
+            m.WriteU32(owner + 196, m.ReadU32(owner + 100));
+        }
+        auto secondary = m.ReadU32(owner + 104);
+        if (secondary && add(m.ReadU32(owner + 96), secondary)) {
+          mark();
+          if (!m.ReadU32(owner + 96))
+            m.WriteU32(owner + 196,
+                       m.ReadU32(owner + 196) | m.ReadU32(owner + 100));
+        }
+      }
+    }
+  } else if (e == 0x82b0ad38) {
     m.WriteU8(owner + 203, 0);
     if (!eligible(2, 0))
       m.WriteU8(owner + 208, 0);

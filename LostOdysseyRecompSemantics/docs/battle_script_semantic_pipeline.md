@@ -623,3 +623,7 @@ Recovered B10E98 shared-party property assignment or random target category sele
 ## Descriptor HP MP transfer
 
 Recovered B0AD38 HP/MP transfer from source to target. Preserves same-ID and zero-available skips, truncated integer ratio with whole-available fallback, target restoration before source depletion, paired result slots and final effect mark. Focused integration covers both HP and MP transfers through the real result pipeline and same-ID suppression. Descriptor callback coverage now 61 of 83 distinct targets; remaining 22 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
+## Descriptor random insertion
+
+Recovered B0E798 random single-bit primary property insertion plus optional secondary mask, eligibility/chance gating and the source single-use target flag. Preserves original-mask bookkeeping in owner196 and primary selected-bit index. Focused integration checks random primary choice, secondary application and repeated-use suppression. Descriptor callback coverage now 62 of 83 distinct targets; remaining 21 unclaimed. Logical ABI checks only, not gameplay acceptance.

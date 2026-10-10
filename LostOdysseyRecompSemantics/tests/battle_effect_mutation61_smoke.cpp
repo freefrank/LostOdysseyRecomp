@@ -439,6 +439,24 @@ int main() {
     call(0x82b0ad38);
     check(get(source + 2588) == 50 && get(target + 2588) == 70,
           "same ID transfer skipped");
+    m.WriteU32(owner + 184, 0);
+    put(owner + 88, 100);
+    m.WriteU32(owner + 20, 3);
+    m.WriteU32(owner + 24, 18);
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 100, 6);
+    m.WriteU32(owner + 96, 4);
+    m.WriteU32(owner + 104, 16);
+    m.WriteU32(target + 3 * 272 + 232, 0);
+    m.WriteU32(target + 4 * 272 + 232, 0);
+    call(0x82b0e798);
+    check(m.ReadU32(target + 3 * 272 + 232) == 2 &&
+              m.ReadU32(target + 4 * 272 + 232) == 16 &&
+              (m.ReadU32(target + 124) & 4096),
+          "random primary property and secondary application");
+    m.WriteU32(target + 3 * 272 + 232, 0);
+    call(0x82b0e798);
+    check(!m.ReadU32(target + 3 * 272 + 232), "single-use effect target flag");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
