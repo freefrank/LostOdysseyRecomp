@@ -1,8 +1,74 @@
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/string_storage_context61.h"
 namespace lo::semantic::gpu::battle_manager_access61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ab01d0) {
+    auto old = Address(s.r[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 29; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 144;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto call = [&](unsigned a) {
+      if (!string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    s.r[3] = sp + 88;
+    s.r[4] = 0x820bdc70;
+    call(0x822d02f8);
+    auto name = m.ReadU32(sp + 92) ? m.ReadU32(sp + 88) : 0x821a83d0;
+    s.r[3] = m.ReadU32(0x83315f9c);
+    if (!s.r[3]) {
+      s.r[3] = 0x8218c210;
+      call(0x82410b90);
+      m.WriteU32(0x83315f9c, Address(s.r[3]));
+      call(0x82410c48);
+      s.r[3] = m.ReadU32(0x83315f9c);
+    }
+    s.r[4] = std::uint64_t(-1);
+    s.r[5] = name;
+    s.r[6] = 0;
+    call(0x8229c7b8);
+    unsigned result = 0;
+    if (Address(s.r[3])) {
+      auto manager = m.ReadU32(0x832c9c44);
+      m.WriteU32(sp + 80, 0);
+      m.WriteU32(sp + 84, 0);
+      if (!manager) {
+        s.r[3] = 0x8202050c;
+        call(0x82a9b5a8);
+        m.WriteU32(0x832c9c44, Address(s.r[3]));
+        call(0x82a9b2c0);
+        manager = m.ReadU32(0x832c9c44);
+      }
+      call(0x82300100);
+      s.r[4] = s.r[3];
+      s.r[3] = manager;
+      s.r[5] = recovery_abi::ReadU64(m, sp + 80);
+      s.r[6] = 0;
+      s.r[7] = 0;
+      s.r[8] = m.ReadU32(0x8330b5f4);
+      s.r[9] = 0;
+      s.r[10] = 0;
+      call(0x82401a10);
+      m.WriteU32(0x832cb788, Address(s.r[3]));
+      if (Address(s.r[3])) {
+        call(0x82400a08);
+        result = m.ReadU32(0x832cb788);
+      }
+    }
+    s.r[3] = sp + 88;
+    call(0x82298938);
+    s.r[3] = result;
+    s.r[1] += 144;
+    for (unsigned i = 29; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x8229dfd8 || e == 0x82389aa0) {
     auto old = Address(s.r[1]), object = Address(s.r[3]);
     unsigned frame = e == 0x8229dfd8 ? 112 : 96;
@@ -50,7 +116,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82380a18) {
     s.r[3] = m.ReadU32(0x832cb788);
     if (!s.r[3])
-      d.guest.CallDirect(0x82ab01d0, m, s);
+      (void)battle_manager_access61::Apply(0x82ab01d0, m, d, s);
   } else if (e == 0x82389b78) {
     s.r[3] = 0x832ca0e8;
   } else if (e == 0x83081540 || e == 0x82df7558) {

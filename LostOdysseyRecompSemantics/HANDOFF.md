@@ -1,3 +1,7 @@
+## Root direct continuation: root initialization (2026-10-10 UTC)
+
+Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance.
+
 ## Root direct continuation: profile lookup (2026-10-10 UTC)
 
 Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.

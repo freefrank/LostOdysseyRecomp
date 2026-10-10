@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_manager_access61.h"
 #include <iostream>
 struct AccessGuest final : manager_release_context61::GuestServices {
-  unsigned created = 0;
+  unsigned created = 0, found = 1, allocated = 0x70000;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x829086b0) {
@@ -13,11 +13,35 @@ struct AccessGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82907948)
       return;
-    if (e != 0x82ab01d0)
-      throw std::runtime_error("access direct");
-    ++created;
-    s.r[3] = 0x70000;
-    m.WriteU32(0x832cb788, 0x70000);
+    if (e == 0x82410b90) {
+      s.r[3] = 0x78000;
+      return;
+    }
+    if (e == 0x82410c48 || e == 0x82a9b2c0 || e == 0x82400a08)
+      return;
+    if (e == 0x8229c7b8) {
+      if (s.r[4] != std::uint64_t(-1) || s.r[5] != 0x821a83d0 || s.r[6])
+        throw std::runtime_error("root type lookup");
+      s.r[3] = found;
+      return;
+    }
+    if (e == 0x82a9b5a8) {
+      s.r[3] = 0x78100;
+      return;
+    }
+    if (e == 0x82300100) {
+      s.r[3] = 0x79000;
+      return;
+    }
+    if (e == 0x82401a10) {
+      if (s.r[3] != 0x78100 || s.r[4] != 0x79000 || s.r[5] || s.r[6] ||
+          s.r[7] || s.r[9] || s.r[10])
+        throw std::runtime_error("root creation arguments");
+      ++created;
+      s.r[3] = allocated;
+      return;
+    }
+    throw std::runtime_error("access direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
@@ -34,6 +58,8 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x820bd000, 0x1000});
+    regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x832c1000, 0x1000});
     regions.push_back({0x83315000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
@@ -90,6 +116,14 @@ int main() {
     check(run(0x82389aa0) == 0x77140);
     m.WriteU32(0x74000 + 52, 0);
     check(run(0x82389aa0) == 0);
+    m.WriteU32(0x832cb788, 0);
+    g.found = 0;
+    check(run(0x82380a18) == 0 && g.created == 1);
+    g.found = 1;
+    g.allocated = 0;
+    check(run(0x82380a18) == 0 && g.created == 2);
+    g.allocated = 0x70000;
+    check(run(0x82380a18) == 0x70000 && g.created == 3);
     check(!battle_manager_access61::Apply(0, m, {g, native}, s));
     std::cout << "battle manager access logic smoke passed\n";
   } catch (const std::exception &e) {

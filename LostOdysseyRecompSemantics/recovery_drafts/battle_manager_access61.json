@@ -81,6 +81,14 @@
       "instruction_count": 28,
       "body_sha256": "4f61a82ca7f34322da5b2333b46b1f96e61bd44e4a31cba976ef9f106dda82e5",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB01D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 6755,
+      "instruction_count": 70,
+      "body_sha256": "5f9bb297d83727b7ef02f232cfae5aa2a1ccc474f0d8623c36bb46e86f2a2fae",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +102,8 @@
       "83081540",
       "82DF7558",
       "8229DFD8",
-      "82389AA0"
+      "82389AA0",
+      "82AB01D0"
     ],
     "header": "include/lo_semantics/battle_manager_access61.h",
     "source": "src/battle_manager_access61.cpp",
@@ -109,6 +118,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.",
-    "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance."
+    "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.",
+    "root_initialization": "Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance."
   }
 }
