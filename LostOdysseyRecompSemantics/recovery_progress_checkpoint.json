@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 216,
-    "distinct_entries": 864,
+    "unit_count": 217,
+    "distinct_entries": 872,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2457,6 +2457,21 @@
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks all ten adapters, source mode-write timing before or after preparation, mutable manager reloading, operand ABI and optional property or numeric side effects. Entries are composed into the real descriptor dispatcher; preparation/application and secondary services remain explicit guest boundaries. Native gameplay is unvalidated. Logical/ABI only",
         "effect_preparation": "Recovered and composed effect preparation: source/target and argument bindings, byte/word resets, secondary manager snapshots, target HP capture and source actor flag extraction. All ten effect adapters now initialize actual state before the remaining application callback. Focused fixture checks setup output, descriptor16 classification, low-byte input truncation and preservation of adjacent bytes. No full floating-point equivalence or native gameplay claim."
+      },
+      {
+        "unit": "battle_action_results61",
+        "entries": [
+          "82B2B248",
+          "82B2B270",
+          "82B2B298",
+          "82B2B2C0",
+          "82B2B2E8",
+          "82B2B310",
+          "82B2B438",
+          "82B11230"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Focused fixture checks all seven record flag operations and the global-manager tail adapter, row/index address calculation, exact store values and neighboring word preservation. The descriptor adapter is composed into evaluator dispatch. Runtime gameplay remains unvalidated. Logical/ABI only"
       }
     ]
   },

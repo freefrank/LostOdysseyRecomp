@@ -1,3 +1,7 @@
+## Root direct continuation: battle action result flags (2026-10-10 UTC)
+
+Recovered seven action-record result flag operations and the descriptor tail adapter that selects the global result manager. Focused checks cover exact row/index stores and preserved neighbors; descriptor dispatch composition and the eligibility fixture pass. No full-equivalence or native gameplay acceptance is claimed.
+
 ## Root direct continuation: special descriptor gates (2026-10-10 UTC)
 
 Recovered special target property admission with same-resource exclusion and opposing-side exception, plus category-specific manager restrictions. The special property check composes actual property state semantics; only the manager accessor and target virtual method remain service boundaries. Focused fixture covers category routes, manager flag, self-target exclusion and side exception. Logical/ABI recovery only; native gameplay remains unvalidated.

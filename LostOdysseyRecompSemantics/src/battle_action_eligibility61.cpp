@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_evaluation_effects61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
 #include "lo_semantics/battle_script_party61.h"
@@ -39,7 +40,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     auto callback =
         m.ReadU32(receiver + 4 * (m.ReadU32(record + offset) + 124));
     s.ctr = callback;
-    if (!battle_evaluation_effects61::Apply(callback, m, d, s) &&
+    if (!battle_action_results61::Apply(callback, m, d, s) &&
+        !battle_evaluation_effects61::Apply(callback, m, d, s) &&
         !battle_evaluation_gates61::Apply(callback, m, d, s) &&
         !battle_script_party61::Apply(callback, m, d, s))
       d.guest.CallIndirect(callback, m, s);
