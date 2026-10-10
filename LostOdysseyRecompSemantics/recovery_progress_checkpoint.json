@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 239,
-    "distinct_entries": 1187,
+    "unit_count": 240,
+    "distinct_entries": 1188,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -3040,6 +3040,14 @@
         "validation": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance.",
         "battle_phase_machine": "Recovered AAA7C8 battle phase machine: forced transitions, numbered phase progression, turn counter, actor refresh, encounter-specific randomized categories, side countdown, profile restore and terminal-state routing. Focused checks cover force/range gates, progression, phase reset callback, periodic-effect call ABI and terminal handling. Existing semantic helpers are composed directly; periodic effect sweep ACB120 and victory finalization AC6D88 remain explicit guest boundaries. No claim that all phase branches or the complete battle restart are runtime accepted.",
         "battle_restart": "Recovered AD40D0 battle restart orchestration: retain or remove roster entries, select replacement actions, reset formation/resources, clear both gauges, rebuild stats/action timing, restart script events and force phase zero. Focused service-spy checks validate roster mutation, release flag, replacement action, service arguments/counts and final manager state. Nested services route through the composed runtime; the restart check is isolated orchestration validation, not full nested runtime or gameplay acceptance."
+      },
+      {
+        "unit": "battle_periodic_effects61",
+        "entries": [
+          "82ACB120"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed."
       }
     ],
     "evaluator_descriptor_coverage": {
@@ -3124,8 +3132,8 @@
   },
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
-    "routed_units": 75,
-    "routed_distinct_entries": 672,
+    "routed_units": 76,
+    "routed_distinct_entries": 673,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3133,8 +3141,8 @@
     "library_validated": true,
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
-    "routed_battle_units": 72,
-    "routed_battle_entries": 643,
+    "routed_battle_units": 73,
+    "routed_battle_entries": 644,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3180,6 +3188,7 @@
     "phase_support": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance.",
     "battle_phase_machine": "Recovered AAA7C8 battle phase machine: forced transitions, numbered phase progression, turn counter, actor refresh, encounter-specific randomized categories, side countdown, profile restore and terminal-state routing. Focused checks cover force/range gates, progression, phase reset callback, periodic-effect call ABI and terminal handling. Existing semantic helpers are composed directly; periodic effect sweep ACB120 and victory finalization AC6D88 remain explicit guest boundaries. No claim that all phase branches or the complete battle restart are runtime accepted.",
     "battle_restart": "Recovered AD40D0 battle restart orchestration: retain or remove roster entries, select replacement actions, reset formation/resources, clear both gauges, rebuild stats/action timing, restart script events and force phase zero. Focused service-spy checks validate roster mutation, release flag, replacement action, service arguments/counts and final manager state. Nested services route through the composed runtime; the restart check is isolated orchestration validation, not full nested runtime or gameplay acceptance.",
-    "periodic_effect_prerequisites": "Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed."
+    "periodic_effect_prerequisites": "Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed.",
+    "periodic_effects": "Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed."
   }
 }

@@ -1,0 +1,32 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Periodic status and regeneration processing.",
+  "entries": [
+    {
+      "address": "82ACB120",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 11997,
+      "instruction_count": 1405,
+      "body_sha256": "249360a3061aa963c1476c219b8f52dd9105119edf96dde936fdf904184ba02c",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82ACB120"
+    ],
+    "header": "include/lo_semantics/battle_periodic_effects61.h",
+    "source": "src/battle_periodic_effects61.cpp",
+    "smoke": "tests/battle_effect_mutation61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed."
+  }
+}

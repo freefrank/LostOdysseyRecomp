@@ -2,6 +2,7 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_effect_mutation61.h"
+#include "lo_semantics/battle_periodic_effects61.h"
 #include "lo_semantics/battle_semantic_runtime61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "battle_resource_growth_fixture.h"
@@ -52,6 +53,7 @@ int main() {
     regions.push_back({0x83315000, 0x1000});
     regions.push_back({0x832c1000, 0x1000});
     regions.push_back({0x8330b000, 0x1000});
+    regions.push_back({0x82218000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -935,6 +937,52 @@ int main() {
     call(0x82b0ef68);
     check(m.ReadU32(target + 88) == 1 && !m.ReadU32(target + 92),
           "item slow property halves pending action timing");
+    // Exercise the periodic sweep through real recovered lower helpers.
+    m.WriteU32(0x71004, 1);
+    m.WriteU32(0x72000, target);
+    m.WriteU32(target + 64, 25);
+    m.WriteU32(target + 124, 0x10000000);
+    m.WriteU32(target + 76348, 0);
+    m.WriteU32(target + 4952, 0);
+    m.WriteU32(target + 14656, 0x600000);
+    m.WriteU32(0x76000 + 268, 0x123454);
+    for (unsigned bank = 0; bank < 8; ++bank)
+      m.WriteU32(target + 272 * bank + 232, 0);
+    m.WriteU32(target + 232, 1u << 4);
+    m.WriteU32(target + 7 * 272 + 232, (1u << 2) | (1u << 4));
+    m.WriteU32(target + 4 * (2 + 535), 1); // one-turn status expires
+    m.WriteU32(target + 4 * (4 + 535), 3);
+    m.WriteU32(target + 4 * (4 + 567), 10);
+    m.WriteU32(target + 4956, 3);
+    m.WriteU32(target + 4960, 1);
+    m.WriteU32(target + 4964, 99);
+    put(target + 2588, 100);
+    put(target + 2592, 100);
+    put(target + 2616, 20);
+    put(target + 2620, 60);
+    put(0x82000b3c, .25f);
+    put(0x82000da4, .1f);
+    put(0x82218384, .01f);
+    s.r[3] = 0x60000;
+    s.r[4] = 1;
+    check(battle_periodic_effects61::Apply(0x82acb120, m, {guest, native}, s),
+          "periodic sweep entry");
+    check(get(target + 2588) == 85 && get(0x600000 + 56) == 25 &&
+              get(0x600000 + 72) == 10,
+          "periodic damage followed by HP regeneration");
+    check(!(m.ReadU32(target + 7 * 272 + 232) & 4) &&
+              m.ReadU32(target + 4 * (4 + 535)) == 2 &&
+              m.ReadU32(target + 4956) == 2 && m.ReadU32(target + 4964) == 99,
+          "periodic status expiry and permanent duration sentinel");
+    check(m.ReadU32(0x600000 + 25 * 2192 + 29732) == 85 &&
+              s.r[1] == initial.r[1] && s.r[14] == initial.r[14] &&
+              s.fpr_bits[28] == initial.fpr_bits[28],
+          "periodic result snapshot and preserved state");
+    s.r[3] = 0x60000;
+    s.r[4] = 0;
+    check(battle_periodic_effects61::Apply(0x82acb120, m, {guest, native}, s) &&
+              get(target + 2588) == 85,
+          "phase-zero sweep only refreshes gauges");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

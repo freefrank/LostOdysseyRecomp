@@ -707,3 +707,7 @@ Recovered AD40D0 battle restart orchestration: retain or remove roster entries, 
 ## Periodic effect prerequisites
 
 Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed.
+
+## Periodic battle effects
+
+Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed.
