@@ -60,6 +60,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 28;
     literal = 80;
     break;
+  case 0x82b10e98:
+    frame = 144;
+    first = 27;
+    literal = 80;
+    break;
   case 0x82b0f920:
     frame = 192;
     first = 24;
@@ -185,7 +190,55 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0f920) {
+  if (e == 0x82b10e98) {
+    if (chance(0x82b08e28)) {
+      mark();
+      if (!m.ReadU32(owner + 108)) {
+        auto source = m.ReadU32(owner + 4);
+        m.WriteU32(source + 4880, m.ReadU32(owner + 124));
+        for (unsigned id : {258u, 259u, 260u, 261u}) {
+          s.r[3] = m.ReadU32(owner + 4);
+          s.r[4] = id;
+          Call(0x82aca838, m, d, s);
+        }
+        s.r[3] = m.ReadU32(owner + 4);
+        s.r[4] = m.ReadU32(owner + 92);
+        s.r[5] = m.ReadU32(owner + 100);
+        s.r[6] = m.ReadU32(owner + 120);
+        Call(0x82aca830, m, d, s);
+      } else {
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 0;
+        s.r[5] = 3;
+        s.r[6] = 15;
+        s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+        Call(0x82aa0740, m, d, s);
+        unsigned bitMask = 1;
+        for (std::int32_t count = std::int32_t(Address(s.r[3])); count > 0;
+             --count)
+          bitMask <<= 1;
+        m.WriteU32(m.ReadU32(owner + 8) + 4880, bitMask);
+        unsigned selected = 0;
+        for (unsigned i = 0; i < 4; ++i)
+          if (bitMask & (1u << i))
+            selected = 198 + i;
+        for (unsigned id : {198u, 199u, 200u, 201u}) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = id;
+          Call(0x82ac9000, m, d, s);
+          s.r[3] = id;
+          Call(0x82ac84e8, m, d, s);
+          m.WriteU32(m.ReadU32(owner + 8) + 4 * (Address(s.r[3]) + 467), 0);
+        }
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = selected;
+        Call(0x82ac8988, m, d, s);
+        s.r[3] = selected;
+        Call(0x82ac84e8, m, d, s);
+        m.WriteU32(m.ReadU32(owner + 8) + 4 * (Address(s.r[3]) + 467), 5);
+      }
+    }
+  } else if (e == 0x82b0f920) {
     bool allowed = eligible(2) || m.ReadU32(owner + 92) != 2;
     if (allowed)
       allowed = eligible(1) || m.ReadU32(owner + 92) != 1;

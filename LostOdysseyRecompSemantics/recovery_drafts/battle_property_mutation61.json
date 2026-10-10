@@ -193,6 +193,38 @@
       "instruction_count": 51,
       "body_sha256": "e10f41de37255fc47babc686df8940d79b9c31cddf96d06d2920f90b34841f5f",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACA710",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 10494,
+      "instruction_count": 72,
+      "body_sha256": "f827d353803519787f69456d9e38dc6247b2750d9340a54c71daf28dd82349a6",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACA830",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 10658,
+      "instruction_count": 2,
+      "body_sha256": "0903add02774e79a28c5d7941758dba2f29d0af36f8e2efdfcc95b10d8bf8348",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACA838",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 10668,
+      "instruction_count": 64,
+      "body_sha256": "cb3ce3ba4cdd23da55c6ef89f9bde5a9d732c2415485056c84b11d7db35654c1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8988",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6278,
+      "instruction_count": 25,
+      "body_sha256": "e07afd9f9365af4b3c82a03c14f88071e419de63a43c9947129ece14dab6cb5d",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -220,7 +252,11 @@
       "82AC8968",
       "82AC85E8",
       "82ACA1B8",
-      "82AC91E0"
+      "82AC91E0",
+      "82ACA710",
+      "82ACA830",
+      "82ACA838",
+      "82AC8988"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -244,6 +280,7 @@
     "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.",
     "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
     "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
-    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

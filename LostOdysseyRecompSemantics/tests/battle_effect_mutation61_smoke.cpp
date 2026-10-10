@@ -394,6 +394,32 @@ int main() {
     check(m.ReadU32(target + 3 * 272 + 232) == 4 &&
               !m.ReadU32(0x200000 + 14888),
           "empty eligible property selection cancels mark");
+    m.WriteU32(0x832ca0e8 + 48, 0xde000);
+    m.WriteU32(0xde000, 0xe0000);
+    m.WriteU32(0xe0000, 0xe1000);
+    m.WriteU32(0xe0004, 0xf1000);
+    m.WriteU32(owner + 108, 0);
+    m.WriteU32(owner + 124, 9);
+    m.WriteU32(owner + 92, 8);
+    m.WriteU32(owner + 100, 4);
+    m.WriteU32(owner + 120, 7);
+    auto shared = 0xe1000 + 72;
+    m.WriteU32(shared + 12288, 0);
+    m.WriteU32(shared + 4 * (3073 + 2), 99);
+    call(0x82b10e98);
+    check(m.ReadU32(source + 4880) == 9 && m.ReadU32(shared + 12288) == 4 &&
+              m.ReadU32(shared + 4 * (3073 + 2)) == 7,
+          "shared party property assignment");
+    m.WriteU32(owner + 108, 1);
+    m.WriteU32(target + 6 * 272 + 232, 0x3c0);
+    for (unsigned i = 6; i < 10; ++i)
+      m.WriteU32(target + 4 * (467 + i), 99);
+    call(0x82b10e98);
+    check(m.ReadU32(target + 4880) == 1 &&
+              m.ReadU32(target + 6 * 272 + 232) == 64 &&
+              m.ReadU32(target + 4 * 473) == 5 &&
+              m.ReadU32(target + 4 * 474) == 0,
+          "random target category and duration reset");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

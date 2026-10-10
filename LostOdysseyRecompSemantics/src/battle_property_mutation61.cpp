@@ -5,11 +5,91 @@
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include <bit>
 #include <initializer_list>
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ac8988) {
+    auto resource = Address(s.r[3]);
+    auto id = std::int32_t(Address(s.r[4]));
+    if (id <= 262) {
+      auto quotient = id / 32, remainder = id - quotient * 32;
+      auto table = 0x83213438u + 8 * unsigned(remainder);
+      auto slot =
+          resource + 272 * (m.ReadU32(table) + unsigned(quotient)) + 232;
+      m.WriteU32(slot, m.ReadU32(slot) | m.ReadU32(table + 4));
+    }
+    return true;
+  }
+  if (e == 0x82aca830) {
+    s.r[7] = 1;
+    return battle_property_mutation61::Apply(0x82aca710, m, d, s);
+  }
+  if (e == 0x82aca710 || e == 0x82aca838) {
+    bool clear = e == 0x82aca838;
+    auto old = Address(s.r[1]), resource = Address(s.r[3]),
+         bankOrId = Address(s.r[4]), mask = Address(s.r[5]),
+         payload = Address(s.r[6]), mode = Address(s.r[7]) & 255;
+    unsigned frame = clear ? 112 : 144, first = clear ? 30 : 25;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    unsigned result = 0;
+    if (!clear || std::int32_t(bankOrId) <= 262) {
+      (void)battle_manager_access61::Apply(0x82380a18, m, d, s);
+      (void)battle_manager_access61::Apply(0x82ab0110, m, d, s);
+      auto list = m.ReadU32(Address(s.r[3]));
+      auto group =
+          m.ReadU32(list + ((m.ReadU32(resource + 124) >> 26) & 4)) + 72;
+      auto flagsAddress = group + 12288, flags = m.ReadU32(flagsAddress);
+      auto index = [](unsigned bits) {
+        unsigned bit = 0;
+        while (bit < 31 && !(bits & (1u << bit)))
+          ++bit;
+        return bit;
+      };
+      if (clear) {
+        auto id = std::int32_t(bankOrId), remainder = id - (id / 32) * 32;
+        auto bitMask = m.ReadU32(0x8321343cu + 8 * unsigned(remainder));
+        // The original returns early for an already-set flag.
+        if (!(flags & bitMask)) {
+          m.WriteU32(flagsAddress, flags & ~bitMask);
+          auto bit = index(bitMask);
+          m.WriteU32(group + 4 * (bit + 3073), 0);
+          m.WriteU32(group + 4 * (bit + 3105), 0);
+        }
+      } else if (std::int32_t(bankOrId) >= 8) {
+        for (unsigned bit = 0; bit < 31; ++bit) {
+          auto bitMask = 1u << bit;
+          if (!(mask & bitMask))
+            continue;
+          bool unique = m.ReadU32(0x83213538 + 4 * (32 * bankOrId + bit)) == 1;
+          if (unique && (flags & bitMask))
+            continue;
+          result = 1;
+          if (mode == 1) {
+            m.WriteU32(flagsAddress, m.ReadU32(flagsAddress) | bitMask);
+            // Source stores every payload at the first bit of the complete
+            // mask.
+            auto slot = index(mask);
+            m.WriteU32(group + 4 * (slot + 3073), payload);
+            m.WriteU32(group + 4 * (slot + 3105), 0);
+          }
+        }
+      }
+    }
+    if (!clear)
+      s.r[3] = result;
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac91e0) {
     auto old = Address(s.r[1]), resource = Address(s.r[3]),
          bank = Address(s.r[4]), ordinal = Address(s.r[5]);

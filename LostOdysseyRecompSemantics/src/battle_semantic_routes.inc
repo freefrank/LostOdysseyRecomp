@@ -216,6 +216,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b104a8u:
   case 0x82b10548u:
   case 0x82b10dd8u:
+  case 0x82b10e98u:
   case 0x82b110b8u:
   case 0x82b11660u:
   case 0x82b11758u:
@@ -317,6 +318,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82ac87d8u:
   case 0x82ac8968u:
   case 0x82ac8978u:
+  case 0x82ac8988u:
   case 0x82ac89f0u:
   case 0x82ac8ae8u:
   case 0x82ac8af8u:
@@ -335,6 +337,9 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82aca468u:
   case 0x82aca6f0u:
   case 0x82aca700u:
+  case 0x82aca710u:
+  case 0x82aca830u:
+  case 0x82aca838u:
   case 0x82ad0ad0u:
     return battle_property_mutation61::Apply(entry, memory, dependencies, state);
   case 0x82aa0740u:

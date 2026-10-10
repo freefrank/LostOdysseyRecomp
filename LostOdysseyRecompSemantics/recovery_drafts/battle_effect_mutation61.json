@@ -209,6 +209,14 @@
       "instruction_count": 110,
       "body_sha256": "eb880e5f8abd0540e9465461e30e5f3bd5d3d3d110bbb59a8807ca3d491f42cc",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B10E98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 11172,
+      "instruction_count": 124,
+      "body_sha256": "0dee0ad9a6e8364ca14e7100b70c09a9d9313a39b74b6cead72e35a535c19a33",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -238,7 +246,8 @@
       "82B13220",
       "82B0DB98",
       "82B0AA70",
-      "82B0F920"
+      "82B0F920",
+      "82B10E98"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -260,6 +269,7 @@
     "descriptor_cost": "Recovered descriptor B13220 with eligibility and chance gates, the real scaling/critical/variance/normalization pipeline, HP result application and profile balance consumption. The spent total increases by the amount actually available when requested cost exceeds balance. Focused integration covers regular and balance-capped costs and the source-specific result-record offset. Descriptor callback coverage now 56 of 83 distinct targets; remaining 27 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_cleansing": "Recovered B0AA70 cleansing restoration: HP healing through real scaling and result application, optional MP restoration reusing the critical decision, followed by primary and optional secondary property-bank clearing. Focused integration checks HP/MP changes, both cleared masks, the zero-MP branch and preserved FPR31. Descriptor callback coverage now 58 of 83 distinct targets; remaining 25 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

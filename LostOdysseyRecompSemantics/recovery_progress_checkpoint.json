@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 238,
-    "distinct_entries": 1129,
+    "distinct_entries": 1134,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2422,7 +2422,11 @@
           "82AC8968",
           "82AC85E8",
           "82ACA1B8",
-          "82AC91E0"
+          "82AC91E0",
+          "82ACA710",
+          "82ACA830",
+          "82ACA838",
+          "82AC8988"
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI only",
@@ -2435,7 +2439,8 @@
         "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.",
         "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
         "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
-        "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
+        "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+        "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_preferred_target61",
@@ -2921,7 +2926,8 @@
           "82B13220",
           "82B0DB98",
           "82B0AA70",
-          "82B0F920"
+          "82B0F920",
+          "82B10E98"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
@@ -2932,7 +2938,8 @@
         "descriptor_cost": "Recovered descriptor B13220 with eligibility and chance gates, the real scaling/critical/variance/normalization pipeline, HP result application and profile balance consumption. The spent total increases by the amount actually available when requested cost exceeds balance. Focused integration covers regular and balance-capped costs and the source-specific result-record offset. Descriptor callback coverage now 56 of 83 distinct targets; remaining 27 unclaimed. Logical ABI checks only, not gameplay acceptance.",
         "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_cleansing": "Recovered B0AA70 cleansing restoration: HP healing through real scaling and result application, optional MP restoration reusing the critical decision, followed by primary and optional secondary property-bank clearing. Focused integration checks HP/MP changes, both cleared masks, the zero-MP branch and preserved FPR31. Descriptor callback coverage now 58 of 83 distinct targets; remaining 25 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-        "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
+        "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+        "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance."
       },
       {
         "unit": "battle_effect_scaling61",
@@ -3031,7 +3038,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 74,
-    "routed_distinct_entries": 614,
+    "routed_distinct_entries": 619,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3040,7 +3047,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 71,
-    "routed_battle_entries": 585,
+    "routed_battle_entries": 590,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3063,6 +3070,7 @@
     "descriptor_cost": "Recovered descriptor B13220 with eligibility and chance gates, the real scaling/critical/variance/normalization pipeline, HP result application and profile balance consumption. The spent total increases by the amount actually available when requested cost exceeds balance. Focused integration covers regular and balance-capped costs and the source-specific result-record offset. Descriptor callback coverage now 56 of 83 distinct targets; remaining 27 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_cleansing": "Recovered B0AA70 cleansing restoration: HP healing through real scaling and result application, optional MP restoration reusing the critical decision, followed by primary and optional secondary property-bank clearing. Focused integration checks HP/MP changes, both cleared masks, the zero-MP branch and preserved FPR31. Descriptor callback coverage now 58 of 83 distinct targets; remaining 25 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }
