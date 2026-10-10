@@ -28,15 +28,14 @@ struct StorageGuest final : manager_release_context61::GuestServices {
       ++frees;
       return;
     }
-    if (e == 0x828ae428) {
-      Need(p == 0x100000 + 124208 * destroyed);
-      ++destroyed;
-      return;
-    }
     throw std::runtime_error("unexpected storage boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x82298938) {
+      ++destroyed;
+      return;
+    }
     Need(e == 0x123400 && s.r[3] == 0x70000 && s.r[6] == 8);
     ++allocations;
     bytes = unsigned(s.r[5]);
@@ -84,7 +83,7 @@ int main() {
     s.r[3] = header;
     s.r[4] = 33;
     g.Need(battle_action_storage61::Apply(0x82a9b698, m, {g, native}, s));
-    g.Need(g.destroyed == 2 && g.allocations == 1 && !m.ReadU32(header + 4));
+    g.Need(g.destroyed == 2048 && g.allocations == 1 && !m.ReadU32(header + 4));
     s.r[3] = header;
     s.r[4] = 0;
     g.Need(battle_action_storage61::Apply(0x82a9b698, m, {g, native}, s));

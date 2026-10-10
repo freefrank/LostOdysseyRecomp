@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Action record and slot destruction, reverse array callback loop and cleanup routing.",
+  "entries": [
+    {
+      "address": "828AE428",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.103.cpp",
+      "source_line": 7668,
+      "instruction_count": 26,
+      "body_sha256": "8c21428969804bb9be184af2d4b69c957ff4c84fb2538df9cd8810cdf94bf67e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828AE120",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.103.cpp",
+      "source_line": 7150,
+      "instruction_count": 17,
+      "body_sha256": "537f88c59e90982fcfef127f26aea0ebfb6a971573c5b82aa22c0a7b31d77272",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B7AEF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 7309,
+      "instruction_count": 32,
+      "body_sha256": "9c173aac6faed15b59e2a5998af998d2cdd0e9443e6f4dfeec1e0fb1cb01bcbb",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B7AFA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.175.cpp",
+      "source_line": 7482,
+      "instruction_count": 26,
+      "body_sha256": "bdf14f0c5a212a98994044af6a1ea072136ddf865697b95a319c26a49e7f824e",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "828AE428",
+      "828AE120",
+      "82B7AEF0",
+      "82B7AFA8"
+    ],
+    "header": "include/lo_semantics/battle_action_destruction61.h",
+    "source": "src/battle_action_destruction61.cpp",
+    "smoke": "tests/battle_action_destruction61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused fixture checks both 32-slot record sections, sixteen reverse-order string callbacks per slot, generic reverse and empty loops, cleanup routing and nonvolatile preservation. Storage reset composes these implementations, and storage plus execution caller fixtures pass. String destruction and exceptional cleanup continuation 82B7AE18 remain service boundaries. Native runtime and unwinding are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
