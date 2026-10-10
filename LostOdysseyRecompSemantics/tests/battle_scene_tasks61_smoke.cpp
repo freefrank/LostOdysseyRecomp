@@ -6,7 +6,7 @@
 #include <iostream>
 struct TasksGuest final : manager_release_context61::GuestServices {
   unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0,
-           initialized = 0;
+           handlesReleased = 0, ownedReleased = 0;
   bool factoryMode = false, pathMode = false;
   unsigned nextPath = 0x200000;
   void CallDirect(GuestAddress e, GuestMemory &m,
@@ -17,11 +17,12 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU16(unsigned(s.r[3])) != m.ReadU16(unsigned(s.r[4]));
       return;
     }
-    if (e == 0x82b33f70) {
-      if (s.r[3] != 0x110000 || s.r[4] != 16 || s.r[5] != 7 || s.r[6] != 9 ||
-          m.ReadU16(unsigned(s.r[7])) != 'P' || s.r[8] != 16)
-        throw std::runtime_error("object initialization arguments");
-      ++initialized;
+    if (e == 0x82be1b80) {
+      ++handlesReleased;
+      return;
+    }
+    if (e == 0x82400a18) {
+      ++ownedReleased;
       return;
     }
     if (e == 0x82b1a7f0) {
@@ -311,6 +312,7 @@ int main() {
     g.pathMode = true;
     m.WriteU16(0x120000, 'P');
     m.WriteU16(0x82000ba4, '/');
+    m.WriteU16(0x820c4b24, 'B');
     m.WriteU32(0x92100 + 356, 0x123560);
     m.WriteU32(0x92100 + 360, 0x123564);
     m.WriteU32(0x92100 + 364, 0x123568);
@@ -328,11 +330,11 @@ int main() {
     s.r[7] = 0x99000;
     s.r[8] = 3;
     check(battle_scene_tasks61::Apply(0x82b040d0, m, {g, native}, s) &&
-          s.r[3] == 45 && g.initialized == 1);
+          s.r[3] == 45 && m.ReadU8(0x110000 + 5) == 1);
     check(m.ReadU32(0x112000) == 0x110000 &&
           m.ReadU32(0x110000) == 0x8200341c && m.ReadU32(0x110000 + 40) == 45);
     check(m.ReadU32(0x832cc05c + 4) == 46 && m.ReadU8(0x110000 + 10) == 3 &&
-          m.ReadU8(0x110000 + 11) == 0xaa && m.ReadU32(0x110000 + 76) == 4);
+          m.ReadU8(0x110000 + 11) == 0xaa && m.ReadU32(0x110000 + 76) == 16);
     m.WriteU16(0x820c4b34, 'A');
     m.WriteU16(0x820c4b24, 'B');
     m.WriteU16(0x82041c10, 'C');
@@ -350,6 +352,45 @@ int main() {
         check(m.ReadU16(0x130000 + 2 * i) == unsigned(expected[i]));
       check(!m.ReadU16(0x130000 + 2 * i) && s.r[1] == initial.r[1]);
     }
+    check(m.ReadU32(0x110000 + 16) == 1 && m.ReadU32(0x110000 + 28) == 1);
+    check(m.ReadU8(m.ReadU32(0x110000 + 12)) == 7 &&
+          m.ReadU32(m.ReadU32(0x110000 + 24)) == 9 &&
+          m.ReadU8(0x110000 + 7) == 2);
+    const char *full = "P/B/X";
+    for (unsigned i = 0; i < 6; ++i)
+      m.WriteU16(0x150000 + 2 * i, full[i]);
+    s.r[3] = 0x110000;
+    s.r[4] = 13;
+    s.r[5] = 2;
+    s.r[6] = 99;
+    s.r[7] = 0x150000;
+    s.r[8] = 16;
+    check(battle_scene_tasks61::Apply(0x82b33f70, m, {g, native}, s));
+    check(m.ReadU8(0x110000 + 7) == 1 &&
+          m.ReadU16(m.ReadU32(0x110000 + 56)) == 'X' &&
+          m.ReadU32(0x110000 + 60) == 2);
+    s.r[3] = 0x110000;
+    s.r[4] = 2;
+    s.r[5] = 99;
+    check(battle_scene_tasks61::Apply(0x82b33488, m, {g, native}, s) &&
+          s.r[3] == 0);
+    m.WriteU32(0x110000 + 68, 6);
+    m.WriteU8(0x110000 + 4, 1);
+    m.WriteU8(0x110000 + 6, 0);
+    m.WriteU32(0x110000 + 88, 0x180000);
+    m.WriteU32(0x110000 + 92, 0x181000);
+    m.WriteU32(0x110000 + 96, 2);
+    m.WriteU32(0x110000 + 100, 2);
+    m.WriteU32(0x181000, 0x182000);
+    run(0x82b339d0, 0x110000);
+    check(g.handlesReleased == 1 && g.ownedReleased == 2 &&
+          !m.ReadU32(0x110000 + 92) && !m.ReadU32(0x110000 + 16) &&
+          m.ReadU32(0x110000 + 68) == 0xffffffff);
+    m.WriteU8(0x110000 + 5, 1);
+    m.WriteU32(0x110000 + 80, 0x183000);
+    run(0x82b339d0, 0x110000);
+    check(g.rawFreed == 2 && !m.ReadU32(0x110000 + 80) &&
+          s.r[1] == initial.r[1]);
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

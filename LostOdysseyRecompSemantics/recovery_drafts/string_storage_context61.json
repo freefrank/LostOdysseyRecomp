@@ -137,6 +137,30 @@
       "instruction_count": 33,
       "body_sha256": "ff1749e159b7ee1355261632abaf1ad96a2a31b914f62ece5784ee8c873a60bf",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACC7A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 15129,
+      "instruction_count": 31,
+      "body_sha256": "03af378c029e23bba60612fc3a8d165902fd542cf8a6ffaa6d616093898526a7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "824C0658",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.27.cpp",
+      "source_line": 34017,
+      "instruction_count": 18,
+      "body_sha256": "712881f2cd40ad48b11434c19fb26f5140e9726f69f63af86012254018768175",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "823577E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.8.cpp",
+      "source_line": 1103,
+      "instruction_count": 20,
+      "body_sha256": "778bcad79dbdc15c21dd814dda8e7309c0e5e6ab06c86ca3cc2926d0400eea94",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -157,7 +181,10 @@
       "822A06C0",
       "822B3F50",
       "8232D378",
-      "8232D418"
+      "8232D418",
+      "82ACC7A0",
+      "824C0658",
+      "823577E8"
     ],
     "header": "include/lo_semantics/string_storage_context61.h",
     "source": "src/string_storage_context61.cpp",
@@ -179,6 +206,7 @@
     "array_storage_adapters": "Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.",
     "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
     "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
-    "string_concatenation": "Recovered UTF-16 header copy/assignment, append, concatenation and shared array growth context entries. These compose existing memory copy and allocator-backed resize semantics while preserving terminators, self-assignment and empty-append behavior. Library and focused storage checks pass; allocator remains an explicit service boundary. These helpers support the next scene-path composition step; no runtime or full ABI acceptance is claimed. Array growth delegates to the existing battle_action_storage61 implementation."
+    "string_concatenation": "Recovered UTF-16 header copy/assignment, append, concatenation and shared array growth context entries. These compose existing memory copy and allocator-backed resize semantics while preserving terminators, self-assignment and empty-append behavior. Library and focused storage checks pass; allocator remains an explicit service boundary. These helpers support the next scene-path composition step; no runtime or full ABI acceptance is claimed. Array growth delegates to the existing battle_action_storage61 implementation.",
+    "task_initialization": "Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed."
   }
 }

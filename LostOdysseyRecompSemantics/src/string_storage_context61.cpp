@@ -69,6 +69,61 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x823577e8) {
+    auto count = Address(s.r[5]);
+    if (!count) {
+      s.r[3] = 0;
+      return true;
+    }
+    while (count > 1) {
+      auto left = m.ReadU16(Address(s.r[3]));
+      if (!left || left != m.ReadU16(Address(s.r[4])))
+        break;
+      --count;
+      s.r[3] += 2;
+      s.r[4] += 2;
+    }
+    auto difference = std::int32_t(m.ReadU16(Address(s.r[3]))) -
+                      std::int32_t(m.ReadU16(Address(s.r[4])));
+    s.r[3] = std::uint64_t(std::int64_t(difference));
+    return true;
+  }
+  if (e == 0x82acc7a0 || e == 0x824c0658) {
+    auto old = Address(s.r[1]), header = Address(s.r[4]),
+         before = m.ReadU32(header + 4);
+    unsigned frame = e == 0x82acc7a0 ? 112 : 96,
+             first = e == 0x82acc7a0 ? 30 : 31;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    if (e == 0x82acc7a0) {
+      auto count = before + 1;
+      m.WriteU32(header + 4, count);
+      if (std::int32_t(count) > std::int32_t(m.ReadU32(header + 8))) {
+        m.WriteU32(header + 8,
+                   count + unsigned(std::int32_t(count + count * 2) / 8) + 32);
+        s.r[3] = header;
+        s.r[4] = 1;
+        s.r[5] = 8;
+        (void)string_storage_context61::Apply(0x8229f678, m, d, s);
+      }
+      s.r[3] = m.ReadU32(header) + before;
+    } else {
+      s.r[3] = header;
+      s.r[4] = 1;
+      s.r[5] = 4;
+      s.r[6] = 8;
+      (void)battle_action_storage61::Apply(0x822c42d8, m, d, s);
+      s.r[3] = m.ReadU32(header) + 4 * Address(s.r[3]);
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x822c42d8)
     return battle_action_storage61::Apply(e, m, d, s);
   if (e == 0x822a06c0 || e == 0x822b3f50 || e == 0x8232d378 ||

@@ -7,6 +7,170 @@
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b33488) {
+    auto object = Address(s.r[3]), key = Address(s.r[5]);
+    auto tag = std::int8_t(Address(s.r[4]));
+    s.r[3] = std::uint64_t(-1);
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(m.ReadU32(object + 16));
+         ++i)
+      if (std::int8_t(m.ReadU8(m.ReadU32(object + 12) + i)) == tag &&
+          m.ReadU32(m.ReadU32(object + 24) + 4 * i) == key) {
+        s.r[3] = i;
+        break;
+      }
+    return true;
+  }
+  if (e == 0x82b339d0 || e == 0x82b33f70) {
+    auto old = Address(s.r[1]), object = Address(s.r[3]),
+         kind = Address(s.r[4]), tag = Address(s.r[5]), key = Address(s.r[6]),
+         text = Address(s.r[7]), argument = Address(s.r[8]);
+    unsigned frame = e == 0x82b339d0 ? 144 : 192,
+             first = e == 0x82b339d0 ? 26 : 25;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s) &&
+          !string_storage_context61::Apply(a, m, d, s) &&
+          !manager_release_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    if (e == 0x82b339d0) {
+      auto handle = m.ReadU32(object + 68);
+      if (handle != 0xffffffff) {
+        s.r[3] = handle;
+        call(0x82be1b80);
+      }
+      m.WriteU32(object + 68, 0xffffffff);
+      if (!m.ReadU8(object + 4)) {
+        auto data = m.ReadU32(object + 80);
+        if (data && m.ReadU8(object + 5)) {
+          s.r[3] = data;
+          call(0x82388b58);
+        }
+      } else if (m.ReadU8(object + 5) && !m.ReadU8(object + 6)) {
+        auto data = m.ReadU32(object + 88);
+        if (data) {
+          s.r[3] = data;
+          call(0x82400a18);
+        }
+        for (unsigned i = 0;
+             std::int32_t(i) < std::int32_t(m.ReadU32(object + 96)); ++i) {
+          data = m.ReadU32(m.ReadU32(object + 92) + 4 * i);
+          if (data) {
+            s.r[3] = data;
+            call(0x82400a18);
+          }
+          m.WriteU32(m.ReadU32(object + 92) + 4 * i, 0);
+        }
+      }
+      for (auto off : {84u, 80u, 88u})
+        m.WriteU32(object + off, 0);
+      for (auto off : {5u, 4u, 6u})
+        m.WriteU8(object + off, 0);
+      auto clear = [&](unsigned off, unsigned stride) {
+        auto header = object + off, capacity = m.ReadU32(header + 8);
+        m.WriteU32(header + 4, 0);
+        if (capacity) {
+          auto data = m.ReadU32(header);
+          m.WriteU32(header + 8, 0);
+          if (data) {
+            s.r[3] = header;
+            s.r[4] = stride;
+            s.r[5] = 8;
+            call(0x8229f678);
+          }
+        }
+      };
+      clear(92, 4);
+      m.WriteU8(object + 9, 255);
+      for (auto off : {44u, 56u}) {
+        s.r[3] = object + off;
+        s.r[4] = 0;
+        call(0x823562a8);
+      }
+      m.WriteU32(object + 72, 0);
+      m.WriteU32(object + 76, 0);
+      clear(12, 1);
+      clear(24, 4);
+      m.WriteU8(object + 8, 0);
+      m.WriteU32(object + 36, 0);
+      m.WriteU8(object + 7, 0);
+    } else {
+      call(0x82b339d0);
+      m.WriteU8(object + 7, 2);
+      s.r[3] = object;
+      s.r[4] = tag;
+      s.r[5] = key;
+      call(0x82b33488);
+      if (std::int32_t(Address(s.r[3])) < 0) {
+        s.r[3] = 1;
+        s.r[4] = object + 12;
+        call(0x82acc7a0);
+        if (Address(s.r[3]))
+          m.WriteU8(Address(s.r[3]), tag);
+        s.r[3] = 4;
+        s.r[4] = object + 24;
+        call(0x824c0658);
+        if (Address(s.r[3]))
+          m.WriteU32(Address(s.r[3]), key);
+      }
+      m.WriteU8(object + 9, kind);
+      for (auto off : {44u, 56u}) {
+        s.r[3] = object + off;
+        s.r[4] = text;
+        call(0x8229f5e0);
+      }
+      m.WriteU32(object + 76, argument);
+      m.WriteU8(object + 10, 0);
+      m.WriteU8(object + 8, 0);
+      m.WriteU32(object + 36, 0);
+      m.WriteU8(object + 5, 1);
+      s.r[3] = sp + 112;
+      s.r[4] = m.ReadU32(0x83315fb4);
+      s.r[5] = 9;
+      auto method = m.ReadU32(m.ReadU32(Address(s.r[4])) + 356);
+      s.ctr = method;
+      d.guest.CallIndirect(method & ~3u, m, s);
+      s.r[4] = s.r[3];
+      s.r[3] = sp + 96;
+      s.r[5] = 0x82000ba4;
+      call(0x8232d418);
+      s.r[4] = s.r[3];
+      s.r[3] = sp + 80;
+      s.r[5] = 0x820c4b24;
+      call(0x8232d418);
+      s.r[3] = sp + 96;
+      call(0x82298938);
+      s.r[3] = sp + 112;
+      call(0x82298938);
+      auto count = m.ReadU32(sp + 84),
+           prefix = count ? m.ReadU32(sp + 80) : 0x821a83d0,
+           length = count ? count - 1 : text;
+      s.r[3] = m.ReadU32(object + 60) ? m.ReadU32(object + 56) : 0x821a83d0;
+      s.r[4] = prefix;
+      s.r[5] = length;
+      call(0x823577e8);
+      if (!Address(s.r[3])) {
+        auto original =
+            m.ReadU32(object + 48) ? m.ReadU32(object + 44) : 0x821a83d0;
+        s.r[3] = object + 56;
+        s.r[4] = original + 2 * (length + 1);
+        call(0x8229f5e0);
+        m.WriteU8(object + 7, 1);
+      }
+      s.r[3] = sp + 80;
+      call(0x82298938);
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b037c8) {
     auto old = Address(s.r[1]), input = Address(s.r[4]),
          output = Address(s.r[5]);

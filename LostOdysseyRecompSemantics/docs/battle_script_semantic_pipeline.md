@@ -477,3 +477,7 @@ Recovered UTF-16 header copy/assignment, append, concatenation and shared array 
 ## Scene resource path
 
 Recovered scene resource-path construction for six type-specific platform roots and direct-copy fallback. Generic scene task creation now uses actual UTF-16 concatenation, header assignment, temporary release and final copy instead of a path-building mock. Focused scene-task checks cover types11/13/14/15/16/17 and type12 fallback with synthetic guest strings; library passes. Platform root lookup and task-specific initialization remain service boundaries; no private strings or runtime acceptance are included.
+
+## Task initialization
+
+Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed.
