@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_script61.h"
 #include "lo_semantics/battle_script_parameters61.h"
+#include "lo_semantics/battle_script_dispatch61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <cmath>
@@ -16,7 +17,8 @@ struct Script {
   unsigned State() { return W(owner + 44); }
   unsigned Call(unsigned e, unsigned a) {
     s.r[3] = a;
-    if (!battle_script_parameters61::Apply(e, m, d, s))
+    if (!battle_script_parameters61::Apply(e, m, d, s) &&
+        !battle_script_dispatch61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
     return Address(s.r[3]);
   }

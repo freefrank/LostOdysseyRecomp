@@ -118,7 +118,7 @@ int main() {
     if (m.ReadU32(script + 16) != 2 || guest.steps != 2)
       throw std::runtime_error("integer tick step");
     m.WriteU32(owner + 24, actors);
-    auto records = guest.Allocate(24);
+    auto records = guest.Allocate(384);
     m.WriteU32(actors + 40, records);
     m.WriteU32(records + 8, 0xffffffff);
     auto variables = guest.Allocate(4), bytecode = guest.Allocate(4);
@@ -141,11 +141,13 @@ int main() {
     wait();
     if (m.ReadU32(actors + 52) != 3 || m.ReadU32(records + 8) != 0xffffffff)
       throw std::runtime_error("wait negative advances opcode");
+    guest.Free(bytecode);
+    m.WriteU32(actors + 36, 0);
     m.WriteU32(script + 12, 2);
     m.WriteU32(actors + 472 + 64, 0x80000000);
     auto calls = guest.callbacks;
     update(1.0 / 60);
-    if (guest.callbacks - calls != 4 || m.ReadU32(owner + 24) != actors + 472)
+    if (guest.callbacks - calls != 2 || m.ReadU32(owner + 24) != actors + 472)
       throw std::runtime_error("actor update scheduling");
     s.r[3] = owner;
     (void)battle_script61::Apply(0x82a9e3b8, m, {guest, native}, s);
