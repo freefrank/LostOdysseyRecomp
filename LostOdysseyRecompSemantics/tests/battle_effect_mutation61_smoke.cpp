@@ -587,6 +587,25 @@ int main() {
     call(0x82b0c4e8);
     check(get(target + 2588) == 75 && get(owner + 32) == 0,
           "damage becomes healing");
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(owner + 120, 0);
+    put(source + 2588, 50);
+    put(target + 2588, 100);
+    call(0x82b0c9e0);
+    check(get(target + 2588) == 50 && get(owner + 172) == 50,
+          "missing source HP damage");
+    m.WriteU32(owner + 120, 1);
+    m.WriteU32(owner + 116, 2);
+    put(source + 2588, 75);
+    put(target + 2588, 100);
+    call(0x82b0c9e0);
+    check(get(target + 2588) == 80,
+          "healthy source uses physical damage fallback");
+    put(source + 2588, 25);
+    put(target + 2588, 100);
+    call(0x82b0c9e0);
+    check(get(target + 2588) == 25 && get(owner + 172) == 75,
+          "low source HP threshold");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

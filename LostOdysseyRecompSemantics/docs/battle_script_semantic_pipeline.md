@@ -651,3 +651,7 @@ Recovered seven shared damage helpers: attack magnitude and cap, target defense 
 ## Descriptor physical damage
 
 Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
+## Descriptor missing HP damage
+
+Recovered B0C9E0 missing-HP damage with conditional physical fallback. Source HP below the configured fraction uses max-minus-current HP; the healthy branch uses attack/category/status/critical/variance helpers and the original repeated normalization. Reuses source-faithful blocked/healing/MP-first/half/shield damage modes and reports owner172. Focused checks cover unconditional missing HP, healthy fallback and low-HP threshold selection. Descriptor callback coverage now 68 of 83 distinct targets; remaining 15 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.

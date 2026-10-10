@@ -273,6 +273,14 @@
       "instruction_count": 217,
       "body_sha256": "795981f5b0aecbe275de0e53ade635c8df9de0d08abfc17508c9f5d9526dcbb4",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0C9E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 797,
+      "instruction_count": 222,
+      "body_sha256": "24d2ed833ad9ed2e4ed78d0673b883585f0597d900f9764c2a6ea40d0534174a",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -310,7 +318,8 @@
       "82B12A98",
       "82B0F3E0",
       "82B10AA8",
-      "82B0C4E8"
+      "82B0C4E8",
+      "82B0C9E0"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -340,6 +349,7 @@
     "descriptor_profile_damage": "Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_action_rebuild": "Recovered B0F3E0 paired-property effect with side-mode eligibility, single-use target flags, special immunity cancellation, queued-action rewriting and property-triggered stat reconstruction. Focused integration exercises action-record replacement, flag/counter resets, paired payload insertion, repeat suppression and the real growth/skills/equipment/derived-stats chain. Descriptor callback coverage now 65 of 83 distinct targets; remaining 18 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_drain": "Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_physical_damage": "Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "descriptor_physical_damage": "Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "descriptor_missing_hp": "Recovered B0C9E0 missing-HP damage with conditional physical fallback. Source HP below the configured fraction uses max-minus-current HP; the healthy branch uses attack/category/status/critical/variance helpers and the original repeated normalization. Reuses source-faithful blocked/healing/MP-first/half/shield damage modes and reports owner172. Focused checks cover unconditional missing HP, healthy fallback and low-HP threshold selection. Descriptor callback coverage now 68 of 83 distinct targets; remaining 15 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
   }
 }
