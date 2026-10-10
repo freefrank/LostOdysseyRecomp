@@ -1,0 +1,203 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Writable script operands and core control/arithmetic/bit opcode handlers.",
+  "entries": [
+    {
+      "address": "8238C210",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24595,
+      "instruction_count": 118,
+      "body_sha256": "755f94cd81e943cd3b95a9ae37e535f460567d7fb670fd809d092e881144e1e0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C648",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25238,
+      "instruction_count": 47,
+      "body_sha256": "e32204c1f19326c2c59bd807183128ef38685569143801a06c3173250166dd4b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C618",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25211,
+      "instruction_count": 11,
+      "body_sha256": "68098a93f99345767ed92a8c901d120aec95cdef00cc5cdfaf8bcf83c44ba3ca",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238BB90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 23585,
+      "instruction_count": 169,
+      "body_sha256": "32a9b7b4a599d764bfd66d16ff079c65b9b7c4a235db5201ac6225a207573d21",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C5C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25157,
+      "instruction_count": 22,
+      "body_sha256": "3607c423ee253b587bb05c94900d84391b1b3a16b37aee36590e98f719a1b90d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D5F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13895,
+      "instruction_count": 15,
+      "body_sha256": "c76b7d53a75492d8c7ff194d94b7e91c42ef3b4157c1a2740feaa1739bbff199",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C048",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10738,
+      "instruction_count": 15,
+      "body_sha256": "898d74ffe3c1ed9bd12b6a335c0e5a0acde1008e85bc5058f6de870ae29f0968",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C088",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10777,
+      "instruction_count": 25,
+      "body_sha256": "31407f6c4e6acfbc6abc3ba23b52c22b9ccd71fb2c069a4d9b0d6d3ed8bc3565",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C0F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10838,
+      "instruction_count": 25,
+      "body_sha256": "4f93c829002d1861b24d4fb30137417f22f2d30295ad7043ba71825d0b4756fb",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C158",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10899,
+      "instruction_count": 32,
+      "body_sha256": "4e5b494745b630a83772eb4d4ae316c1b1f61de4a4535d6d23f8bf0fe5389de2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C1D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10975,
+      "instruction_count": 32,
+      "body_sha256": "c970bf7c5562e2c7ec6f0704a5d5c6d23087593a3aff1b09d16b1daef8d6e3ee",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C258",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11051,
+      "instruction_count": 21,
+      "body_sha256": "af992ccb85e1c99e0734eef91bca058035991afd44ce21f268a404379b0e4b69",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C2B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11103,
+      "instruction_count": 21,
+      "body_sha256": "b812eab94ef822e7337ba834153d21bcd77c41f5510bd8db0ae642b5d5c6f279",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C308",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11155,
+      "instruction_count": 25,
+      "body_sha256": "3a47a08e3c5ee795e6d581a89045f9fae6429bdfe9ed8669e86e9612e048d155",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C370",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11216,
+      "instruction_count": 25,
+      "body_sha256": "362acb98eefb7b57eb73e3b8e8093caf35f17c1fd326f27b8e7a426276ff71c5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C3D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11277,
+      "instruction_count": 25,
+      "body_sha256": "34931774de2edaa0c17892f229d74f0a270dd7ebf2e5f1d0de41d8a226387709",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C440",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11338,
+      "instruction_count": 28,
+      "body_sha256": "ba0385f88ca1ba4a2da9e11e5b701b58e1dfb817b52a0cb4b8065c7ab31cd910",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C4B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11405,
+      "instruction_count": 28,
+      "body_sha256": "0c333ce56cc342683fcf4a6e0e7756070ad07a0f53e8c5a35526bdf44c232fa5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C520",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11474,
+      "instruction_count": 20,
+      "body_sha256": "2bd1a7209307d360e1b6a133540db5318401050d2676091bea2fc6181c07640b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C570",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11524,
+      "instruction_count": 30,
+      "body_sha256": "6c1f90c9ad2ef8b59e63e9a2b81c00f6bee11e359a82f2f2694f5d18db4fac82",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238C210",
+      "8238C648",
+      "8238C618",
+      "8238BB90",
+      "8238C5C0",
+      "82A9D5F8",
+      "82A9C048",
+      "82A9C088",
+      "82A9C0F0",
+      "82A9C158",
+      "82A9C1D8",
+      "82A9C258",
+      "82A9C2B0",
+      "82A9C308",
+      "82A9C370",
+      "82A9C3D8",
+      "82A9C440",
+      "82A9C4B0",
+      "82A9C520",
+      "82A9C570"
+    ],
+    "header": "include/lo_semantics/battle_script_core61.h",
+    "source": "src/battle_script_core61.cpp",
+    "smoke": "tests/battle_script_core61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture checks sixteen arithmetic/bit/random operations, eleven conditional comparison modes, writable operand classes and their original limits, and a composed assignment/add/condition/wait/end program. The existing dispatch fixture also passes. Opcode identities were cross-checked against constructor 82A9FA40, including its stack-spilled function-address bases. Random generation remains an explicit guest service; invalid random bounds and exceptional operands are not hardened or validated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
