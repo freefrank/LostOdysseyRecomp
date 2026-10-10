@@ -394,3 +394,8 @@ BAA130 now reads CLTH into owned guest vectors, retaining existing capacity acro
 ### Cloth topology support
 
 Cloth topology support now sorts 16-byte records by two or three keys and 12-byte triples by three keys, performs the original unique-pair lookup, and exports borrowed triangle/tetrahedral mesh descriptors. A focused fixture exercises each sort, successful and ambiguous lookup, and both descriptor layouts. These are prerequisites for topology generation; no full cloth-cooking or simulation claim.
+
+
+### Cloth canonical face mapping
+
+BA8208 canonicalizes each triangle by sorted vertex IDs, sorts the resulting key/face records and maps duplicate faces to the lowest original face ID. The owned output vector is resized and shrunk through SDK callbacks. A five-face sample validates orientation-independent duplicate classes, repeated reuse and complete cleanup. This connects one concrete topology step; the complete cloth cooker is still pending.

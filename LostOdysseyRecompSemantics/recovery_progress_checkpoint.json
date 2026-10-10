@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 144,
-    "distinct_entries": 454,
+    "unit_count": 145,
+    "distinct_entries": 455,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1505,6 +1505,14 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused sample exercises all three record sorts, a successful triple lookup, the original adjacent-pair ambiguity rejection, and triangle/tetrahedral descriptor layouts. Lookup retains the original nonempty valid-range contract; invalid and underflowing search ranges are not accepted as validated. Logical/ABI only"
+      },
+      {
+        "unit": "cloth_face_map61",
+        "entries": [
+          "82BA8208"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Five faces with two duplicate classes map to their lowest original face IDs (0/0/2/0/2), across repeated invocation and complete cleanup. The fixture exercises in-place shrinking realloc; empty and invalid input, moving realloc and gameplay remain unvalidated. Logical/ABI only"
       }
     ]
   },
