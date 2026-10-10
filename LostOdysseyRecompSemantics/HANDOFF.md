@@ -1,3 +1,7 @@
+## Root direct continuation: special damage (2026-10-10 UTC)
+
+Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance.
+
 ## Root direct continuation: actor result publication (2026-10-10 UTC)
 
 Recovered actor result publication and its guarded target adapter, including pending/blocked flags, result payload and result-kind bitfield. Main effect execution now applies actual actor flags rather than a notification stub. Library and focused runtime/execution checks pass; no runtime gameplay or full ABI acceptance is claimed.

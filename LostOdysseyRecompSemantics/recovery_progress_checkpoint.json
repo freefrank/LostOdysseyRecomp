@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 225,
-    "distinct_entries": 948,
+    "distinct_entries": 951,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2537,7 +2537,8 @@
           "82B096E8",
           "82B21480",
           "82AA0DB0",
-          "82AA0E98"
+          "82AA0E98",
+          "82B09D98"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI only",
@@ -2548,7 +2549,8 @@
         "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
         "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.",
         "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated.",
-        "trait_probability": "Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration."
+        "trait_probability": "Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration.",
+        "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance."
       },
       {
         "unit": "battle_effect_execution61",
@@ -2620,12 +2622,15 @@
           "82AC0170",
           "82AC0388",
           "82AC2468",
-          "82AC0888"
+          "82AC0888",
+          "82ACF108",
+          "82ACF280"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI only",
         "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated.",
-        "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance."
+        "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.",
+        "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {

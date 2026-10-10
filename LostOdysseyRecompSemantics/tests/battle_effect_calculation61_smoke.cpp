@@ -7,10 +7,22 @@ struct CalculationGuest final : manager_release_context61::GuestServices {
   unsigned defense = 5, attack = 20;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82380a18 || e == 0x82389b78) {
+      s.r[3] = 0x70000;
+      return;
+    }
     throw std::runtime_error("calculation direct");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (e == 0x123408) {
+      s.r[3] = m.ReadU32(unsigned(s.r[3]) + 156);
+      return;
+    }
+    if (e == 0x123480) {
+      s.r[3] = m.ReadU32(unsigned(s.r[3]) + 160);
+      return;
+    }
     throw std::runtime_error("calculation indirect");
   }
 };
@@ -388,6 +400,63 @@ int main() {
     s.r[5] = 0;
     check(battle_effect_calculation61::Apply(0x82aa0e98, m, {g, native}, s) &&
           s.r[3] == 0);
+    m.WriteU32(0x832ca0cc, 0x77000);
+    m.WriteU32(0x77004, 0x80000);
+    m.WriteU32(0x78004, 0x80000);
+    m.WriteU32(0x78000 + 108, 17);
+    m.WriteU32(0x8201f9f0, 0x3f000000);
+    m.WriteU32(0x8201dd2c, 0x42c80000);
+    m.WriteU32(0x82000d7c, 0x3c23d70a);
+    auto special = [&](unsigned mode, double input) {
+      m.WriteU32(0x78000 + 64, mode);
+      s.r[3] = 0x78000;
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(input);
+      check(battle_effect_calculation61::Apply(0x82b09d98, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.fpr_bits[31] == initial.fpr_bits[31]);
+      return std::bit_cast<double>(s.fpr_bits[1]);
+    };
+    check(special(1, 10) == 10 && m.ReadU8(0x77000 + 36) == 1);
+    check(special(6, 10) == 10 && m.ReadU32(0x77000 + 56) == 17);
+    check(special(9, 10) == 5 && special(0, 10.125) == 10.125);
+    m.WriteU32(0x80000 + 5156, 3);
+    m.WriteU32(0x80000 + 5160, 1);
+    m.WriteU32(0x80000 + 5164, 2);
+    m.WriteU32(0x80000 + 5168, 0);
+    m.WriteU32(0x83264978 + 72, 0x190000);
+    m.WriteU32(0x190000 + 104 + 88, 10);
+    m.WriteU32(0x190000 + 208 + 88, 20);
+    check(special(3, 100) == 130 && special(4, 100) == 150);
+    m.WriteU32(0x70000 + 148, 3u << 7);
+    check(special(7, 10) == 30);
+    // Capacity-two roster checks use real side counters and virtual predicates.
+    m.WriteU32(0x832c9c54 + 44, 0x72000);
+    m.WriteU32(0x70000 + 20, 0x71000);
+    m.WriteU32(0x71000, 0x71100);
+    m.WriteU32(0x71004, 3);
+    for (unsigned i = 0; i < 3; ++i) {
+      auto a = 0x80000 + 0x10000 * i;
+      m.WriteU32(0x71100 + 4 * i, a);
+      m.WriteU32(a, 0x7f000);
+      m.WriteU32(a + 132, 1);
+      m.WriteU32(a + 156, 0);
+      m.WriteU32(a + 160, 0);
+      m.WriteU32(a + 124, i == 0 ? 0x18000000 : 0);
+    }
+    m.WriteU32(0x7f000 + 308, 0x123408);
+    m.WriteU32(0x7f000 + 380, 0x123480);
+    check(special(2, 100) == 150 && m.ReadU32(0x70000 + 24) == 1 &&
+          m.ReadU32(0x70000 + 28) == 2);
+    m.WriteU32(0x90000 + 156, 1);
+    check(special(2, 100) == 100 && m.ReadU32(0x70000 + 28) == 1);
+    m.WriteU32(0x80000 + 504, (1u << 15) | (1u << 5));
+    m.WriteU32(0x80000 + 4 * (127 + 15), 2);
+    m.WriteU32(0x80000 + 4 * (195 + 15), 0);
+    m.WriteU32(0x80000 + 4 * (127 + 5), 1);
+    m.WriteU32(0x80000 + 4 * (195 + 5), 0);
+    m.WriteU32(0x80000 + 2596, 0x42c80000);
+    m.WriteU32(0x80000 + 2536, 0x41a00000);
+    check(special(5, 1) == 156 && special(8, 1) == 156 &&
+          m.ReadU32(0x77000 + 56) == 17);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

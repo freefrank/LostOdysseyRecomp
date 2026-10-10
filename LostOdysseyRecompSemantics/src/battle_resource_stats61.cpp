@@ -28,6 +28,59 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
            : !(x >= -2147483648.) ? std::numeric_limits<std::int32_t>::min()
                                   : std::int32_t(x);
   };
+  if (e == 0x82acf108 || e == 0x82acf280) {
+    auto owner = Address(s.r[3]), old = Address(s.r[1]);
+    bool allied = e == 0x82acf108;
+    unsigned frame = allied ? 160 : 144, first = allied ? 24 : 25;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    auto scene = [&]() { return m.ReadU32(m.ReadU32(0x832c9c54 + 44) + 28); };
+    unsigned result = 1;
+    if ((scene() & 0x1800000) != (allied ? 0x1000000u : 0x800000u)) {
+      Call(0x82380a18, m, d, s);
+      Call(0x82389b78, m, d, s);
+      auto flags = m.ReadU16(Address(s.r[3]) + 148);
+      unsigned total = 0, inactive = 0;
+      bool allOrdinary = true;
+      for (unsigned i = 0;
+           std::int32_t(i) < std::int32_t(m.ReadU32(m.ReadU32(owner + 20) + 4));
+           ++i) {
+        auto resource = m.ReadU32(m.ReadU32(m.ReadU32(owner + 20)) + 4 * i);
+        if (bool(m.ReadU32(resource + 124) & 0x8000000) != allied ||
+            !m.ReadU32(resource + 132))
+          continue;
+        ++total;
+        s.r[3] = resource;
+        d.guest.CallIndirect(m.ReadU32(m.ReadU32(resource) + 308), m, s);
+        if (Address(s.r[3])) {
+          ++inactive;
+          if (allied) {
+            resource = m.ReadU32(m.ReadU32(m.ReadU32(owner + 20)) + 4 * i);
+            s.r[3] = resource;
+            d.guest.CallIndirect(m.ReadU32(m.ReadU32(resource) + 380), m, s);
+            if (Address(s.r[3]))
+              allOrdinary = false;
+          }
+        }
+      }
+      m.WriteU32(owner + (allied ? 24 : 28), total - inactive);
+      result = total == inactive;
+      if (allied) {
+        if ((allOrdinary && (flags & 2)) || (flags & 8) || (scene() & 0x200000))
+          result = 0;
+      } else if ((flags & 4) || (scene() & 0x400000))
+        result = 0;
+    }
+    s.r[3] = result;
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac0888) {
     auto old = Address(s.r[1]), resource = Address(s.r[4]);
     m.WriteU32(old - 8, Address(s.lr));

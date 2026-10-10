@@ -5,6 +5,7 @@
 #include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_resource_stats61.h"
 #include <bit>
 #include <limits>
 namespace lo::semantic::gpu::battle_effect_calculation61 {
@@ -16,7 +17,8 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s) &&
-      !battle_random_range61::Apply(e, m, d, s))
+      !battle_random_range61::Apply(e, m, d, s) &&
+      !battle_resource_stats61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
 std::int32_t Trunc(double x) {
@@ -27,6 +29,99 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82b09d98) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]);
+    unsigned frame = 128;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 29; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    recovery_abi::WriteU64(m, old - 40, s.fpr_bits[31]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto load = [&](unsigned p) { return std::bit_cast<float>(m.ReadU32(p)); };
+    auto convert = [&](unsigned n) {
+      auto v = std::int32_t(n);
+      recovery_abi::WriteU64(m, sp + 80, std::uint64_t(std::int64_t(v)));
+      return float(v);
+    };
+    auto manager = [&]() {
+      Call(0x82380a18, m, d, s);
+      Call(0x82389b78, m, d, s);
+      return Address(s.r[3]);
+    };
+    {
+      auto value = std::bit_cast<double>(s.fpr_bits[1]);
+      auto mode = m.ReadU32(owner + 64);
+      if (mode == 1) {
+        m.WriteU8(m.ReadU32(0x832ca0cc) + 36, 1);
+      } else if (mode == 2) {
+        auto a = manager();
+        Call(0x82acf108, m, d, s);
+        auto left = m.ReadU32(a + 24);
+        auto b = manager();
+        Call(0x82acf280, m, d, s);
+        auto right = m.ReadU32(b + 28);
+        bool party = m.ReadU32(m.ReadU32(owner + 4) + 124) & 0x10000000;
+        if (party ? std::int32_t(left) < std::int32_t(right)
+                  : std::int32_t(right) < std::int32_t(left)) {
+          auto delta = convert(party ? right - left : left - right);
+          auto scale = float(delta * load(0x8201f9f0));
+          value = float(double(scale) * double(value) + double(value));
+        }
+      } else if (mode == 3 || mode == 4) {
+        auto resource = m.ReadU32(owner + 4),
+             count = m.ReadU32(resource + 5156);
+        unsigned sum = 0;
+        for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i) {
+          auto id = m.ReadU32(resource + 5160 + 4 * i);
+          if (mode == 3)
+            sum += m.ReadU32(m.ReadU32(0x83264978 + 72) + 104 * id + 88);
+          else if (!id)
+            ++sum;
+        }
+        if (sum) {
+          if (mode == 3) {
+            auto scaled = float(convert(sum) * value);
+            value = float(double(scaled) * double(load(0x82000d7c)) +
+                          double(value));
+          } else {
+            auto groups = std::int32_t(sum) / 10;
+            if (!groups)
+              groups = 1;
+            auto scaled = float(value * load(0x8201f9f0));
+            value = float(double(scaled) * double(convert(unsigned(groups))) +
+                          double(value));
+          }
+        }
+      } else if (mode == 5 || mode == 8) {
+        s.r[3] = m.ReadU32(0x832ca0cc);
+        Call(0x82b1f830, m, d, s);
+        auto n = Address(s.r[3]);
+        if (mode == 8)
+          m.WriteU32(m.ReadU32(0x832ca0cc) + 56, m.ReadU32(owner + 108));
+        value = convert(n);
+      } else if (mode == 6) {
+        m.WriteU32(m.ReadU32(0x832ca0cc) + 56, m.ReadU32(owner + 108));
+      } else if (mode == 7) {
+        auto a = manager();
+        auto n = std::rotl(m.ReadU32(a + 148), 25) & 15;
+        value = float(convert(n) * value);
+      } else if (mode == 9)
+        value = float(value * load(0x8201f9f0));
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(value));
+    }
+    s.r[1] += frame;
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 40);
+    for (unsigned i = 29; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82aa0db0) {
     auto resource = Address(s.r[4]), value = Address(s.r[5]),
          category = Address(s.r[6]);

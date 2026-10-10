@@ -131,6 +131,12 @@ int main() {
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3726)) == 90 &&
           std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 110);
     reset();
+    m.WriteU8(0x73000 + 45, 1);
+    m.WriteU32(0x78000 + 64, 9);
+    run();
+    check(m.ReadU32(0x76000 + 192) == 45 &&
+          std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 155);
+    reset();
     m.WriteU32(0x80000 + 2604, 0);
     m.WriteU32(0x90000 + 2608, 0x447a0000);
     run();
