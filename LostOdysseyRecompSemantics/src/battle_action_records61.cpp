@@ -143,6 +143,61 @@ struct Runtime {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82afd2f0) {
+    auto old = Address(s.r[1]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 21; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 176;
+    m.WriteU32(Address(s.r[1]), old);
+    auto roster = [&]() {
+      d.guest.CallDirect(0x82380a18, m, s);
+      d.guest.CallDirect(0x8238e2f8, m, s);
+      return Address(s.r[3]);
+    };
+    auto list = roster();
+    for (unsigned i = 0;
+         std::int32_t(i) < std::int32_t(m.ReadU32(roster() + 4)); ++i) {
+      auto resource = m.ReadU32(m.ReadU32(list) + 4 * i);
+      bool ordered = m.ReadU32(resource + 212) != 0;
+      for (unsigned row = 0;
+           std::int32_t(row) < std::int32_t(m.ReadU32(resource + 14660));
+           ++row) {
+        auto record = m.ReadU32(resource + 14656) + 124208 * row;
+        m.WriteU32(record + 36, m.ReadU32(resource + 64));
+        for (unsigned j = 0; j < 31; ++j)
+          m.WriteU32(record + 500 + 464 * j, 0xffffffff);
+        auto destination = record + 500;
+        if (ordered ? m.ReadU32(resource + 216) != 0
+                    : m.ReadU32(resource + 204) == 0)
+          continue;
+        auto candidates = roster();
+        unsigned next = 1;
+        for (unsigned j = 0;
+             std::int32_t(j) < std::int32_t(m.ReadU32(roster() + 4)); ++j) {
+          auto candidate = m.ReadU32(m.ReadU32(candidates) + 4 * j);
+          bool include;
+          if (ordered)
+            include = m.ReadU32(candidate + 212) == m.ReadU32(resource + 212) &&
+                      m.ReadU32(candidate + 216) == next;
+          else
+            include = m.ReadU32(candidate + 64) != m.ReadU32(resource + 64) &&
+                      m.ReadU32(candidate + 204) == m.ReadU32(resource + 204);
+          if (include) {
+            m.WriteU32(destination, m.ReadU32(candidate + 64));
+            destination += 464;
+            if (ordered)
+              ++next;
+          }
+        }
+      }
+    }
+    s.r[1] += 176;
+    for (unsigned i = 21; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ab0b28 || e == 0x82ab0b98) {
     Runtime{m, d, s, Address(s.r[3])}.Run(e);
     return true;

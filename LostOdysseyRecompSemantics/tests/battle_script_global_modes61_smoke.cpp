@@ -31,8 +31,8 @@ struct ModeGuest final : manager_release_context61::GuestServices {
       ++copies;
       return;
     }
-    if (e == 0x82abdfd0 || e == 0x82aab870 || e == 0x82af5ba8 ||
-        e == 0x82afd2f0 || e == 0x8285ff08 || e == 0x8285f9b8 ||
+    if (e == 0x82abdfd0 || e == 0x82af5ba8 ||
+        e == 0x8285ff08 || e == 0x8285f9b8 ||
         e == 0x8285fea8)
       return;
     throw std::runtime_error("unexpected global mode service");
@@ -53,6 +53,7 @@ int main() {
           test::Region{0x832ae000, 0x1000}, test::Region{0x83315000, 0x1000}})
       regions.push_back(r);
     regions.push_back({0x8201d000, 0x1000});
+    regions.push_back({0x832c3000,0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();

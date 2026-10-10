@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 231,
-    "distinct_entries": 1055,
+    "distinct_entries": 1057,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2169,10 +2169,12 @@
       {
         "unit": "battle_script_global_modes61",
         "entries": [
-          "82B00E98"
+          "82B00E98",
+          "82AAB870"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A compact fixture runs all39 modes plus an out-of-range mode, checks resource and actor flags, source first-matching-group early exits, buffer list transitions, descriptor vector callbacks, state mode bits and recovered group-controller routing. Concrete scene and action service implementations and native gameplay remain unvalidated. Logical/ABI only"
+        "validation": "A compact fixture runs all39 modes plus an out-of-range mode, checks resource and actor flags, source first-matching-group early exits, buffer list transitions, descriptor vector callbacks, state mode bits and recovered group-controller routing. Concrete scene and action service implementations and native gameplay remain unvalidated. Logical/ABI only",
+        "record_group_rebuild": "Recovered AFD2F0 linked-resource record rebuilding: owner IDs, cleared companion slots, ordered group membership and unordered peer groups across every record. Added AAB870 paired mode-bit update. Global script modes now compose both actual implementations. Focused group-record and global-mode checks pass, preserving the source single-pass order rather than sorting members. Library builds; logical ABI coverage only, not gameplay acceptance."
       },
       {
         "unit": "battle_script_execution61",
@@ -2226,10 +2228,12 @@
           "82AB36C8",
           "82AB38F0",
           "82AB0B28",
-          "82AB0B98"
+          "82AB0B98",
+          "82AFD2F0"
         ],
         "focused_smoke_paths": 1,
-        "validation": "The recovered execution layer now calls the resource action-record implementations directly. The chain writes real record metadata and target lists, including linked-member flags and extra-target deduplication, instead of stopping at mocked emission callbacks. The four affected opcode/execution fixtures pass; their remaining synthetic record-array initialization is explicitly isolated. Guest allocation/reset, command configuration and finalization services are still unvalidated boundaries, and there is no native gameplay claim."
+        "validation": "The recovered execution layer now calls the resource action-record implementations directly. The chain writes real record metadata and target lists, including linked-member flags and extra-target deduplication, instead of stopping at mocked emission callbacks. The four affected opcode/execution fixtures pass; their remaining synthetic record-array initialization is explicitly isolated. Guest allocation/reset, command configuration and finalization services are still unvalidated boundaries, and there is no native gameplay claim.",
+        "record_group_rebuild": "Recovered AFD2F0 linked-resource record rebuilding: owner IDs, cleared companion slots, ordered group membership and unordered peer groups across every record. Added AAB870 paired mode-bit update. Global script modes now compose both actual implementations. Focused group-record and global-mode checks pass, preserving the source single-pass order rather than sorting members. Library builds; logical ABI coverage only, not gameplay acceptance."
       },
       {
         "unit": "battle_action_effects61",
@@ -2889,7 +2893,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 67,
-    "routed_distinct_entries": 540,
+    "routed_distinct_entries": 542,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -2898,7 +2902,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 64,
-    "routed_battle_entries": 511,
+    "routed_battle_entries": 513,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending."

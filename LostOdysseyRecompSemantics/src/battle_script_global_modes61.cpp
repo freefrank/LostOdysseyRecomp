@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_script_global_modes61.h"
 #include "lo_semantics/battle_group_gauge61.h"
+#include "lo_semantics/battle_action_records61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/battle_script_runtime61.h"
@@ -36,6 +37,11 @@ struct Runtime {
     m.WriteU32(a + 52, W(a + 52) + n);
   }
   void Call(unsigned e) {
+    if(e==0x82afd2f0){(void)battle_action_records61::Apply(e,m,d,s);return;}
+    if (e == 0x82aab870) {
+      (void)battle_script_global_modes61::Apply(e, m, d, s);
+      return;
+    }
     if (!battle_group_gauge61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
@@ -264,6 +270,16 @@ struct Runtime {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82aab870) {
+    auto peer = m.ReadU32(0x832c34e0);
+    if (peer) {
+      auto value = Address(s.r[4]) & 255;
+      m.WriteU8(Address(s.r[3]) + 5737, value);
+      auto flags = m.ReadU8(peer + 465);
+      m.WriteU8(peer + 465, value ? flags & ~1u : flags | 1u);
+    }
+    return true;
+  }
   if (e != 0x82b00e98)
     return false;
   unsigned first = 28, frame = 128;

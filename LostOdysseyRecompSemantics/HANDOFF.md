@@ -1,3 +1,7 @@
+## Root direct continuation: record group rebuilding (2026-10-10 UTC)
+
+Recovered AFD2F0 linked-resource record rebuilding: owner IDs, cleared companion slots, ordered group membership and unordered peer groups across every record. Added AAB870 paired mode-bit update. Global script modes now compose both actual implementations. Focused group-record and global-mode checks pass, preserving the source single-pass order rather than sorting members. Library builds; logical ABI coverage only, not gameplay acceptance.
+
 ## Root direct continuation: shared runtime support (2026-10-10 UTC)
 
 Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.

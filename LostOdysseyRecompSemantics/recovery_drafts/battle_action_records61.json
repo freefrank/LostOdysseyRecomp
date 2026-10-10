@@ -33,6 +33,14 @@
       "instruction_count": 40,
       "body_sha256": "0e7b89e1b85579790b64896b32cbf3abaafe1d5ee8b70a8999529af0d48056fb",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD2F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 21855,
+      "instruction_count": 141,
+      "body_sha256": "194e2ed2fc61da5ef89ea099105851e08a7c6629ada26f099c268489d8a6d141",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -40,7 +48,8 @@
       "82AB36C8",
       "82AB38F0",
       "82AB0B28",
-      "82AB0B98"
+      "82AB0B98",
+      "82AFD2F0"
     ],
     "header": "include/lo_semantics/battle_action_records61.h",
     "source": "src/battle_action_records61.cpp",
@@ -55,6 +64,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "The compact record fixture covers both writers, append, source flags, actor mode metadata, linked member insertion and duplicate target rejection. The model is now composed into the execution layer; four affected caller fixtures pass with assertions on actual records and isolated synthetic allocation/reset. Command configuration and finalization remain explicit service boundaries. Logical/ABI only, not native gameplay acceptance.",
-    "integration_status": "composed_into_battle_script_execution61"
+    "integration_status": "composed_into_battle_script_execution61",
+    "record_group_rebuild": "Recovered AFD2F0 linked-resource record rebuilding: owner IDs, cleared companion slots, ordered group membership and unordered peer groups across every record. Added AAB870 paired mode-bit update. Global script modes now compose both actual implementations. Focused group-record and global-mode checks pass, preserving the source single-pass order rather than sorting members. Library builds; logical ABI coverage only, not gameplay acceptance."
   }
 }
