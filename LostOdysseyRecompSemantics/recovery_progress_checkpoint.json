@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 157,
-    "distinct_entries": 496,
+    "unit_count": 158,
+    "distinct_entries": 499,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1638,6 +1638,16 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A synthetic guest alphabet/pool fixture validates base-40 name expansion, ASCII folding, guest suffix/extension lookup, path segmentation, case-insensitive archive prefixes, low-byte candidate ordering and exact-match early exit. Guest alphabet/suffix tables remain borrowed and are not published. This is not full member lookup or native archive acceptance. Logical/ABI only"
+      },
+      {
+        "unit": "archive_metadata61",
+        "entries": [
+          "828527A0",
+          "82BE2F60",
+          "82852DB8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks packed date fields and the original weekday accumulation, guest time-field argument order, success copy and failure-output preservation, and case-insensitive guest suffix rewriting. The kernel time conversion/error services remain explicit guest boundaries; the fixture supplies their results, not a recovered kernel calendar implementation. Logical/ABI only"
       }
     ]
   },

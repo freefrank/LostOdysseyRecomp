@@ -1,3 +1,7 @@
+## Root direct continuation: archive metadata (2026-10-10 UTC)
+
+Archive metadata now decodes the packed year/month/day/time fields, bridges them to the guest FILETIME conversion and applies the original guest-pattern suffix rewrite. The weekday calculation preserves the source single month-table load; the bridge intentionally omits that weekday field. A focused fixture checks field order, success/failure output handling and suffix matching. Kernel calendar/error services remain explicit guest boundaries.
+
 ## Root direct continuation: packed archive names (2026-10-10 UTC)
 
 Archive names now expand packed base-40 halfwords through the guest alphabet, fold ASCII case and append descriptor suffixes/extensions. Prefix candidate selection preserves path boundaries, exact-match early exit and the original low-byte insertion ordering. A synthetic guest-table fixture validates the connected path without publishing private tables. Full member lookup and native archives remain pending.

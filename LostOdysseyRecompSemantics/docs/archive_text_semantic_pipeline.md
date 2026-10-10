@@ -50,3 +50,7 @@ The documented text-bank chain now decodes offset-based UTF-16/narrow string tab
 
 Archive names now expand packed base-40 halfwords through the guest alphabet, fold ASCII case and append descriptor suffixes/extensions. Prefix candidate selection preserves path boundaries, exact-match early exit and the original low-byte insertion ordering. A synthetic guest-table fixture validates the connected path without publishing private tables. Full member lookup and native archives remain pending.
 The name pool is packed base-40 data, not a UTF-16 string array. Name descriptors use a low 18-bit pool index, a 5-bit suffix index at bit 18 and a 5-bit extension index at bit 23. Alphabet and suffix data remain guest-owned.
+
+## Archive metadata
+
+Archive metadata now decodes the packed year/month/day/time fields, bridges them to the guest FILETIME conversion and applies the original guest-pattern suffix rewrite. The weekday calculation preserves the source single month-table load; the bridge intentionally omits that weekday field. A focused fixture checks field order, success/failure output handling and suffix matching. Kernel calendar/error services remain explicit guest boundaries.
