@@ -529,6 +529,30 @@ int main() {
     call(0x82b0f3e0);
     check(m.ReadU32(target + 4952) == 2 && get(target + 2592) > 0,
           "property-triggered full stats rebuild");
+    m.WriteU32(owner + 108, 0);
+    m.WriteU32(owner + 120, 6);
+    put(owner + 80, 10);
+    put(source + 2588, 40);
+    put(source + 2592, 100);
+    put(source + 2616, 10);
+    put(source + 2620, 100);
+    put(target + 2588, 100);
+    put(target + 2592, 100);
+    put(target + 2616, 30);
+    put(target + 2620, 100);
+    m.WriteU32(target + 2136, 1);
+    m.WriteU32(target + 2140, 5);
+    call(0x82b10aa8);
+    check(get(source + 2588) == 50 && get(target + 2588) == 95 &&
+              get(source + 2616) == 16 && get(target + 2616) == 24 &&
+              get(owner + 172) == 5,
+          "HP MP drain preserves healing before shield absorption");
+    m.WriteU32(owner + 108, 1);
+    call(0x82b10aa8);
+    check(get(source + 2616) == 16 && get(target + 2616) == 18 &&
+              s.fpr_bits[30] == initial.fpr_bits[30] &&
+              s.fpr_bits[31] == initial.fpr_bits[31],
+          "MP-only damage mode and preserved floating registers");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

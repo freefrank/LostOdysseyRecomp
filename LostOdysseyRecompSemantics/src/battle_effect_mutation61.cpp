@@ -62,6 +62,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 28;
     literal = 80;
     break;
+  case 0x82b10aa8:
+    frame = 176;
+    first = 27;
+    literal = 80;
+    break;
   case 0x82b12a98:
     frame = 160;
     first = 27;
@@ -155,11 +160,14 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  unsigned savedFp = e == 0x82b0a7a0                        ? 40
-                     : (e == 0x82b0aa70 || e == 0x82b12a98) ? 56
-                                                            : 0;
+  unsigned savedFp = e == 0x82b0a7a0 ? 40
+                     : (e == 0x82b0aa70 || e == 0x82b12a98 || e == 0x82b10aa8)
+                         ? 56
+                         : 0;
   if (savedFp)
     recovery_abi::WriteU64(m, old - savedFp, s.fpr_bits[31]);
+  if (e == 0x82b10aa8)
+    recovery_abi::WriteU64(m, old - 64, s.fpr_bits[30]);
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -203,7 +211,100 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0f3e0) {
+  if (e == 0x82b10aa8) {
+    bool special = m.ReadU32(owner + 108) != 0, allowed = true;
+    if (!special) {
+      s.r[3] = m.ReadU32(owner + 8);
+      s.r[4] = 142;
+      Call(0x8238e368, m, d, s);
+      allowed = (Address(s.r[3]) & 255) != 1;
+    }
+    if (allowed) {
+      mark();
+      fp();
+      auto zero = std::bit_cast<float>(m.ReadU32(0x82000e50));
+      auto multiplier = std::bit_cast<float>(m.ReadU32(0x82000e1c));
+      auto calculate = [&](float amount, bool skipStat, bool decide) {
+        fp();
+        s.fpr_bits[1] = std::bit_cast<std::uint64_t>(double(amount));
+        s.r[3] = owner;
+        s.r[5] = skipStat;
+        Call(0x82b09b30, m, d, s);
+        fp();
+        m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
+                                   std::bit_cast<double>(s.fpr_bits[1]))));
+        if (decide) {
+          s.r[3] = owner;
+          Call(0x82b097a0, m, d, s);
+        }
+        if (m.ReadU8(owner + 79) == 1) {
+          fp();
+          auto value = std::bit_cast<float>(m.ReadU32(owner + 28));
+          m.WriteU32(owner + 28,
+                     std::bit_cast<unsigned>(float(value * multiplier)));
+        }
+        s.r[3] = owner;
+        Call(0x82b0a188, m, d, s);
+        fp();
+        m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
+                                   std::bit_cast<double>(s.fpr_bits[1]))));
+        s.r[3] = owner;
+        Call(0x82b0a3b0, m, d, s);
+      };
+      auto apply = [&](unsigned resourceOffset, unsigned mode,
+                       unsigned offset) {
+        auto result = m.ReadU32(0x832cb790);
+        s.r[3] = result;
+        s.r[4] = m.ReadU32(owner + resourceOffset);
+        s.r[6] = mode;
+        fp();
+        s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
+            double(std::bit_cast<float>(m.ReadU32(owner + 32))));
+        Call(0x82b2b9e0, m, d, s);
+        fp();
+        auto index =
+            116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + offset;
+        m.WriteU32(m.ReadU32(result + 20) + 4 * index,
+                   std::bit_cast<unsigned>(
+                       float(std::bit_cast<double>(s.fpr_bits[1]))));
+      };
+      if (!special) {
+        auto input = std::bit_cast<float>(m.ReadU32(owner + 80));
+        if (input != zero) {
+          calculate(input, false, true);
+          apply(4, 1, 18);
+          m.WriteU32(sp + 96, 0x8204a1d8);
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[5] = sp + 84;
+          s.r[6] = sp + 88;
+          fp();
+          s.fpr_bits[1] = std::bit_cast<std::uint64_t>(
+              double(std::bit_cast<float>(m.ReadU32(owner + 32))));
+          Call(0x82ac9618, m, d, s);
+          fp();
+          m.WriteU32(owner + 32, m.ReadU32(sp + 84));
+          if (std::bit_cast<float>(m.ReadU32(sp + 88)) != zero) {
+            auto result = m.ReadU32(0x832cb790);
+            auto index =
+                116 * m.ReadU32(result + 12) + m.ReadU32(result + 24) + 3742;
+            m.WriteU32(m.ReadU32(result + 20) + 4 * index, m.ReadU32(sp + 88));
+          }
+          m.WriteU32(sp + 96, 0x8204a1d8);
+          apply(8, 0, 3726);
+          m.WriteU32(owner + 172, m.ReadU32(owner + 32));
+        }
+      }
+      auto amount = std::int32_t(m.ReadU32(owner + 120));
+      if (special || amount) {
+        recovery_abi::WriteU64(m, sp + 96, std::uint64_t(std::int64_t(amount)));
+        fp();
+        calculate(float(amount), true, false);
+        if (!special)
+          apply(4, 3, 26);
+        apply(8, 2, 3734);
+      }
+    }
+  } else if (e == 0x82b0f3e0) {
     bool allowed = eligible(2) || m.ReadU32(owner + 116) != 0;
     if (allowed)
       allowed = eligible(1) || m.ReadU32(owner + 116) != 1;
@@ -1054,6 +1155,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (literal)
     m.WriteU32(sp + literal, 0x8204a1d8);
   s.r[1] += frame;
+  if (e == 0x82b10aa8)
+    s.fpr_bits[30] = recovery_abi::ReadU64(m, old - 64);
   if (savedFp)
     s.fpr_bits[31] = recovery_abi::ReadU64(m, old - savedFp);
   for (unsigned i = first; i < 32; ++i)

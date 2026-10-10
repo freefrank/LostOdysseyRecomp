@@ -639,3 +639,7 @@ Recovered B12A98 profile-aggregate damage: selects the actor statistics page, ap
 ## Descriptor action rebuild
 
 Recovered B0F3E0 paired-property effect with side-mode eligibility, single-use target flags, special immunity cancellation, queued-action rewriting and property-triggered stat reconstruction. Focused integration exercises action-record replacement, flag/counter resets, paired payload insertion, repeat suppression and the real growth/skills/equipment/derived-stats chain. Descriptor callback coverage now 65 of 83 distinct targets; remaining 18 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
+## Descriptor HP MP drain
+
+Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
