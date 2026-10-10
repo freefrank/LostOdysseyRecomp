@@ -272,6 +272,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/archive_names61.cpp
     src/archive_metadata61.cpp
     src/archive_member61.cpp
+  src/archive_lookup61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp
     src/cloth_topology_support61.cpp

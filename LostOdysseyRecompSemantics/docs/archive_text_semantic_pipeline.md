@@ -58,3 +58,7 @@ Archive metadata now decodes the packed year/month/day/time fields, bridges them
 ## Archive member lookup
 
 Archive lookup now composes candidate prefix selection with recursive 24-byte entry matching, decoded names, packed timestamps and output metadata. Focused synthetic checks cover regular files, directories (type 16), exact archive matches (type 17), loose members (type 0 with flag 4), path append and misses. Guest time conversion remains an explicit boundary; no archive file I/O or gameplay acceptance is claimed.
+
+## Overlay archive lookup
+
+The archive lookup entry now normalizes case, slash and hyphen spelling, searches overlay archives in configured order under guest lock boundaries, and falls back to the base archive. It composes the recovered prefix/member lookup and preserves the original 240-byte output initialization. Synthetic overlay success and miss-to-base cases pass. Overlay root formatting and kernel locking/time services remain guest boundaries, not recovered filesystem behavior.
