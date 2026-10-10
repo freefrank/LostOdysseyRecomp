@@ -7,6 +7,17 @@ struct SceneGuest final : manager_release_context61::GuestServices {
   unsigned expected = 0, result = 1, calls = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82b5cf80) { s.r[3]=1; return; }
+    if (e == 0x82b5f528) { m.WriteU32(unsigned(s.r[4]),0); s.r[3]=123; return; }
+    if (e == 0x82b5ebc8) { s.r[3]=2; return; }
+    if (e == 0x82b62048) {
+      bool stop = expected == 0x82b1a048;
+      if (s.r[3]!=0x71000 || s.r[4]!=123 || s.r[5]!=(stop?2u:0u) ||
+          s.r[6]!=(stop?0u:0xfffffffeu) ||
+          std::bit_cast<double>(s.fpr_bits[1])!=(stop?-1.:20.))
+        throw std::runtime_error("composed scene parameter");
+      ++calls; s.r[3]=1; return;
+    }
     if (e != expected)
       throw std::runtime_error("scene service target");
     if (e == 0x82b04720 &&
@@ -20,11 +31,6 @@ struct SceneGuest final : manager_release_context61::GuestServices {
          s.r[6] != (std::uint64_t(std::bit_cast<unsigned>(20.f)) << 32) ||
          s.r[7] || s.r[8] != 60 || s.r[9] != 1))
       throw std::runtime_error("packed XYZ callback");
-    if (e == 0x82b1a048 && std::bit_cast<double>(s.fpr_bits[1]) != -1.)
-      throw std::runtime_error("float scene parameter");
-    if (e == 0x82b19c00 &&
-        (s.r[3] != 0xffffffff || std::bit_cast<double>(s.fpr_bits[1]) != 20.))
-      throw std::runtime_error("two-argument scene parameter");
     if (e == 0x82b1b2e8 &&
         (m.ReadU16(s.r[3]) != 0x3042 || m.ReadU16(s.r[3] + 64) ||
          s.r[4] != 0xffffffff || s.r[5] != 255 || s.r[6] != 0x33301 ||
@@ -44,9 +50,12 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832ca000, 0x2000});
+    for(auto p:{0x832d2000u,0x832cc000u,0x83213000u,0x820c7000u})regions.push_back({p,0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    m.WriteU32(0x832d268c,0x71000);m.WriteU32(0x832d2810,0x72000);
+    m.WriteU8(0x832cc0f8,1);m.WriteU32(0x820c7518,std::bit_cast<unsigned>(2.f));
     SceneGuest guest;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     constexpr unsigned owner = 0x60000, actor = 0x62000, state = 0x63000,

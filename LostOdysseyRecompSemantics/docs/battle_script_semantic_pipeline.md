@@ -501,3 +501,7 @@ Recovered character template-stat loading, level-dependent stat curves and round
 ## Facing sectors
 
 Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance.
+
+## Active scene handles
+
+Recovered active scene-handle selection B63828, status probe B19CC0, cached parameter update B19C00 and conditional immediate/timed stop B1A048. Scene script commands now compose these paths. Backend handle enumeration, status and submission remain service boundaries. Library builds; focused scene-handle lifecycle, scene commands and existing task fixtures pass. Logical ABI coverage only, not runtime playback/gameplay or complete volatile-register acceptance.

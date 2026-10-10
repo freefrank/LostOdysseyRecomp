@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 230,
-    "distinct_entries": 1038,
+    "distinct_entries": 1042,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2740,7 +2740,11 @@
           "82B35EC0",
           "82B36258",
           "82B36330",
-          "82388700"
+          "82388700",
+          "82B63828",
+          "82B19CC0",
+          "82B19C00",
+          "82B1A048"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs.",
@@ -2752,7 +2756,8 @@
         "scene_object_factory": "Recovered generic scene task reuse/create selection and object default initialization. Secondary row activation now composes duplicate reuse, parameter update, signed priority selection, wrapped ID search, pointer-list growth and actual manager allocation. Focused scene-task checks pass existing-object and new-object paths, constructor defaults and preserved padding. Path building and task-specific initialization remain services; no gameplay or full ABI acceptance is claimed.",
         "scene_path": "Recovered scene resource-path construction for six type-specific platform roots and direct-copy fallback. Generic scene task creation now uses actual UTF-16 concatenation, header assignment, temporary release and final copy instead of a path-building mock. Focused scene-task checks cover types11/13/14/15/16/17 and type12 fallback with synthetic guest strings; library passes. Platform root lookup and task-specific initialization remain service boundaries; no private strings or runtime acceptance are included.",
         "task_initialization": "Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed.",
-        "tracked_factory": "Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance."
+        "tracked_factory": "Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance.",
+        "active_scene_handle": "Recovered active scene-handle selection B63828, status probe B19CC0, cached parameter update B19C00 and conditional immediate/timed stop B1A048. Scene script commands now compose these paths. Backend handle enumeration, status and submission remain service boundaries. Library builds; focused scene-handle lifecycle, scene commands and existing task fixtures pass. Logical ABI coverage only, not runtime playback/gameplay or complete volatile-register acceptance."
       },
       {
         "unit": "battle_group_gauge61",

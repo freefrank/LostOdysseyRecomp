@@ -265,6 +265,38 @@
       "instruction_count": 166,
       "body_sha256": "b16a5982063b96bd7911240d19a97c35dbef39f170d38c95b179cd853d5960fc",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B63828",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.173.cpp",
+      "source_line": 15895,
+      "instruction_count": 39,
+      "body_sha256": "11082b1d10c50e8c26d6f98f9ae99f74dba05b50011abd1e2f29366d6371de71",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B19CC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 33022,
+      "instruction_count": 32,
+      "body_sha256": "aae835eaa96d31ad513a9cc0df28b275fa8c3b3839711bc518cda2a25dface63",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B19C00",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 32909,
+      "instruction_count": 48,
+      "body_sha256": "d907790d26e1d81729c5f28d8314094376664a292957460622faae5e128e3669",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1A048",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 33552,
+      "instruction_count": 45,
+      "body_sha256": "35f9608184ac3b5a5bfc51103a5a59287472a28496996ea98a4a924099224c4c",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -301,7 +333,11 @@
       "82B35EC0",
       "82B36258",
       "82B36330",
-      "82388700"
+      "82388700",
+      "82B63828",
+      "82B19CC0",
+      "82B19C00",
+      "82B1A048"
     ],
     "header": "include/lo_semantics/battle_scene_tasks61.h",
     "source": "src/battle_scene_tasks61.cpp",
@@ -324,6 +360,8 @@
     "scene_object_factory": "Recovered generic scene task reuse/create selection and object default initialization. Secondary row activation now composes duplicate reuse, parameter update, signed priority selection, wrapped ID search, pointer-list growth and actual manager allocation. Focused scene-task checks pass existing-object and new-object paths, constructor defaults and preserved padding. Path building and task-specific initialization remain services; no gameplay or full ABI acceptance is claimed.",
     "scene_path": "Recovered scene resource-path construction for six type-specific platform roots and direct-copy fallback. Generic scene task creation now uses actual UTF-16 concatenation, header assignment, temporary release and final copy instead of a path-building mock. Focused scene-task checks cover types11/13/14/15/16/17 and type12 fallback with synthetic guest strings; library passes. Platform root lookup and task-specific initialization remain service boundaries; no private strings or runtime acceptance are included.",
     "task_initialization": "Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed.",
-    "tracked_factory": "Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance."
+    "tracked_factory": "Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance.",
+    "active_scene_handle_fixture": "tests/battle_scene_handle61_smoke.cpp",
+    "active_scene_handle": "Recovered active scene-handle selection B63828, status probe B19CC0, cached parameter update B19C00 and conditional immediate/timed stop B1A048. Scene script commands now compose these paths. Backend handle enumeration, status and submission remain service boundaries. Library builds; focused scene-handle lifecycle, scene commands and existing task fixtures pass. Logical ABI coverage only, not runtime playback/gameplay or complete volatile-register acceptance."
   }
 }

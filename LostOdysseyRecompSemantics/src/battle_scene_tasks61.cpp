@@ -4,9 +4,135 @@
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/memory_fill.h"
 #include <utility>
+#include <bit>
+#include <limits>
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b63828 || e == 0x82b19cc0 || e == 0x82b19c00 ||
+      e == 0x82b1a048) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]);
+    unsigned frame = e == 0x82b63828   ? 144
+                     : e == 0x82b19cc0 ? 96
+                     : e == 0x82b19c00 ? 128
+                                       : 112;
+    unsigned first = e == 0x82b63828 ? 27 : e == 0x82b19c00 ? 30 : 31;
+    bool floating = e == 0x82b19c00 || e == 0x82b1a048;
+    unsigned fOffset = e == 0x82b19c00 ? 32 : 24;
+    auto incoming = s.fpr_bits[1];
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    if (floating)
+      recovery_abi::WriteU64(m, old - fOffset, s.fpr_bits[31]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    if (floating)
+      s.fpr_bits[31] = incoming;
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    auto manager = [&]() { return m.ReadU32(0x832d268c); };
+    if (e == 0x82b63828) {
+      s.r[3] = manager();
+      s.r[4] = 3;
+      call(0x82b5cf80);
+      m.WriteU32(sp + 80, Address(s.r[3]));
+      unsigned firstMatch = 0;
+      bool currentFound = false;
+      while (m.ReadU32(sp + 80)) {
+        s.r[3] = manager();
+        s.r[4] = sp + 80;
+        call(0x82b5f528);
+        auto handle = Address(s.r[3]);
+        s.r[3] = manager();
+        s.r[4] = handle;
+        s.r[5] = 10;
+        call(0x82b5ebc8);
+        if (Address(s.r[3]) == 2) {
+          if (!firstMatch)
+            firstMatch = handle;
+          if (handle == m.ReadU32(owner))
+            currentFound = true;
+        }
+      }
+      if (!currentFound)
+        m.WriteU32(owner, firstMatch);
+      s.r[3] = m.ReadU32(owner);
+    } else {
+      if (e == 0x82b19cc0)
+        m.WriteU8(0x832cc0f8, 0);
+      s.r[3] = m.ReadU32(0x832d2810);
+      call(0x82b63828);
+      auto handle = Address(s.r[3]);
+      s.r[4] = handle;
+      if (e == 0x82b19cc0) {
+        unsigned result = 0;
+        if (handle) {
+          s.r[3] = manager();
+          call(0x8236c728);
+          if (std::int32_t(Address(s.r[3])) >= 0)
+            result = 1;
+        }
+        m.WriteU8(0x832cc0f8, result);
+        s.r[3] = result;
+      } else if (!handle)
+        m.WriteU8(0x832cc0f8, 0);
+      else if (e == 0x82b19c00) {
+        if (m.ReadU32(0x83213c38) != owner) {
+          if (s.cached_fp_control & 0x8040) {
+            s.cached_fp_control &= ~0x8040u;
+            d.fp.SetHostFpControl(s.cached_fp_control);
+          }
+          recovery_abi::WriteU64(
+              m, sp + 80, std::uint64_t(std::int64_t(std::int32_t(owner))));
+          float scaled = float(float(std::int32_t(owner)) *
+                               std::bit_cast<float>(m.ReadU32(0x820c7518)));
+          auto converted =
+              scaled > double(std::numeric_limits<std::int32_t>::max())
+                  ? std::numeric_limits<std::int32_t>::max()
+              : !(scaled >= -2147483648.)
+                  ? std::numeric_limits<std::int32_t>::min()
+                  : std::int32_t(scaled);
+          m.WriteU32(sp + 80, unsigned(converted));
+          s.r[3] = manager();
+          s.r[4] = handle;
+          s.r[5] = 0;
+          s.r[6] = unsigned(converted);
+          s.fpr_bits[1] = incoming;
+          call(0x82b62048);
+          m.WriteU32(0x83213c38, owner);
+        }
+        m.WriteU8(0x832cc0f8, 1);
+      } else if (m.ReadU8(0x832cc0f8) && !m.ReadU8(0x832cb780)) {
+        if (s.cached_fp_control & 0x8040) {
+          s.cached_fp_control &= ~0x8040u;
+          d.fp.SetHostFpControl(s.cached_fp_control);
+        }
+        s.r[3] = manager();
+        s.r[4] = handle;
+        if (std::bit_cast<double>(incoming) ==
+            double(std::bit_cast<float>(m.ReadU32(0x82000e50))))
+          call(0x8236c7d8);
+        else {
+          s.r[5] = 2;
+          s.r[6] = 0;
+          s.fpr_bits[1] = incoming;
+          call(0x82b62048);
+        }
+        m.WriteU8(0x832cc0f8, 0);
+      }
+    }
+    s.r[1] += frame;
+    if (floating)
+      s.fpr_bits[31] = recovery_abi::ReadU64(m, old - fOffset);
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82388700 || e == 0x82b35ec0 || e == 0x82b36258 ||
       e == 0x82b36330 || e == 0x82b1a7f0) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]), tag = Address(s.r[4]),
