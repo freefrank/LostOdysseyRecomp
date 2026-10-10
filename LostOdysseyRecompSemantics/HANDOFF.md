@@ -1,3 +1,7 @@
+## Root direct continuation: battle action readiness (2026-10-10 UTC)
+
+Recovered resource property lookup and action-unavailability predicates, including the distinct standard and extended property sets. A compact synthetic fixture checks all predicate branches and the resource flag fallback. Execution and target-picker integration is next; no native status-name or gameplay inference is made.
+
 ## Root direct continuation: battle random ranges (2026-10-10 UTC)
 
 Recovered the shared battle random-range helper, preserving resource-group and call-tag cursor selection and wrap behavior. One compact fixture checks synthetic table values and endpoint paths. Composition into action and picker callers is next; native random-table data and gameplay behavior are unvalidated.
