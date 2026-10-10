@@ -3,6 +3,8 @@
 #include "lo_semantics/manager_facade.h"
 #include "lo_semantics/registered_metadata_string.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/memory_move.h"
+#include "lo_semantics/battle_action_storage61.h"
 namespace lo::semantic::gpu::string_storage_context61 {
 namespace {
 using recovery_abi::Address;
@@ -67,6 +69,88 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x822c42d8)
+    return battle_action_storage61::Apply(e, m, d, s);
+  if (e == 0x822a06c0 || e == 0x822b3f50 || e == 0x8232d378 ||
+      e == 0x8232d418) {
+    auto old = Address(s.r[1]), header = Address(s.r[3]),
+         source = Address(s.r[4]), arg5 = Address(s.r[5]);
+    unsigned frame = e == 0x8232d418 ? 128 : 112,
+             first = e == 0x8232d378 ? 29 : 30;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto call = [&](unsigned a) {
+      if (!string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    if (e == 0x822a06c0 || e == 0x822b3f50) {
+      if (e == 0x822a06c0 || header != source) {
+        auto count = m.ReadU32(source + 4);
+        if (e == 0x822a06c0)
+          m.WriteU32(header, 0);
+        m.WriteU32(header + 4, count);
+        m.WriteU32(header + 8, count);
+        s.r[3] = header;
+        s.r[4] = 2;
+        s.r[5] = 8;
+        call(0x8229f678);
+        count = m.ReadU32(header + 4);
+        if (count) {
+          auto data = (e == 0x822a06c0 || m.ReadU32(source + 4))
+                          ? m.ReadU32(source)
+                          : 0x821a83d0;
+          s.r[3] = CopyGuestMemory(m, m.ReadU32(header), data, 2 * count, sp);
+        }
+      }
+      s.r[3] = header;
+    } else if (e == 0x8232d378) {
+      if (m.ReadU16(source)) {
+        auto before = m.ReadU32(header + 4);
+        s.r[3] = source;
+        call(0x82296830);
+        auto length = Address(s.r[3]);
+        s.r[3] = header;
+        s.r[4] = length + (before ? 0 : 1);
+        s.r[5] = 2;
+        s.r[6] = 8;
+        call(0x822c42d8);
+        s.r[3] = m.ReadU32(header) + 2 * (before ? before - 1 : 0);
+        s.r[4] = source;
+        call(0x8230bac0);
+      }
+      s.r[3] = header;
+    } else {
+      s.r[3] = sp + 80;
+      s.r[4] = source;
+      call(0x822a06c0);
+      s.r[4] = arg5;
+      call(0x8232d378);
+      s.r[4] = s.r[3];
+      s.r[3] = header;
+      call(0x822a06c0);
+      auto capacity = m.ReadU32(sp + 88);
+      m.WriteU32(sp + 84, 0);
+      if (capacity) {
+        m.WriteU32(sp + 88, 0);
+        s.r[3] = sp + 80;
+        s.r[4] = 2;
+        s.r[5] = 8;
+        call(0x8229f678);
+      }
+      s.r[3] = sp + 80;
+      call(0x82298a98);
+      s.r[3] = header;
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x823562a8) {
     auto header = Address(s.r[3]), capacity = Address(s.r[4]);
     auto previous = m.ReadU32(header + 8);

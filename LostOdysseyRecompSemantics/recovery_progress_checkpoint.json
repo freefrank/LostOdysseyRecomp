@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 228,
-    "distinct_entries": 1003,
+    "distinct_entries": 1007,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2281,7 +2281,11 @@
           "822D03D8",
           "823562A8",
           "82320328",
-          "82474348"
+          "82474348",
+          "822A06C0",
+          "822B3F50",
+          "8232D378",
+          "8232D418"
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture checks empty and nonempty construction, local and heap conversion temporaries, UTF-16 copy extent, reset/release, zero-capacity owned storage and preserved nonvolatile registers. Existing ResizeArray, ResetTwoByteArray, ReleaseTwoByteArray and manager release implementations are reused. Byte-to-UTF16 conversion 823227C8 and copy/allocator services remain boundaries; caller composition is pending. Logical/ABI only",
@@ -2291,7 +2295,8 @@
         "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.",
         "array_storage_adapters": "Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.",
         "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
-        "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance."
+        "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
+        "string_concatenation": "Recovered UTF-16 header copy/assignment, append, concatenation and shared array growth context entries. These compose existing memory copy and allocator-backed resize semantics while preserving terminators, self-assignment and empty-append behavior. Library and focused storage checks pass; allocator remains an explicit service boundary. These helpers support the next scene-path composition step; no runtime or full ABI acceptance is claimed. Array growth delegates to existing battle_action_storage61."
       },
       {
         "unit": "string_conversion_context61",

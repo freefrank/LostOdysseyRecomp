@@ -105,6 +105,38 @@
       "instruction_count": 21,
       "body_sha256": "8f31095e3a5614094c64033d6ec3f5c8369f459e1128f5b41dcefeb129cc6714",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "822A06C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 39235,
+      "instruction_count": 29,
+      "body_sha256": "1e65c087ed2b3cf8cf14354e6866581c8979fe6d12e970f9ca3bc86dc6a177fc",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "822B3F50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 44805,
+      "instruction_count": 35,
+      "body_sha256": "cc5cf404ba126459b4ebbe4fe8fbb395aad012273160bd04d17980434cf39147",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8232D378",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.6.cpp",
+      "source_line": 15049,
+      "instruction_count": 39,
+      "body_sha256": "7d49e44715e1897a3798554d30613cfd0836e7d3cd4c1a8a1a3c124d2c287041",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8232D418",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.6.cpp",
+      "source_line": 15146,
+      "instruction_count": 33,
+      "body_sha256": "ff1749e159b7ee1355261632abaf1ad96a2a31b914f62ece5784ee8c873a60bf",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -121,7 +153,11 @@
       "822D03D8",
       "823562A8",
       "82320328",
-      "82474348"
+      "82474348",
+      "822A06C0",
+      "822B3F50",
+      "8232D378",
+      "8232D418"
     ],
     "header": "include/lo_semantics/string_storage_context61.h",
     "source": "src/string_storage_context61.cpp",
@@ -142,6 +178,7 @@
     "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.",
     "array_storage_adapters": "Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.",
     "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
-    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance."
+    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
+    "string_concatenation": "Recovered UTF-16 header copy/assignment, append, concatenation and shared array growth context entries. These compose existing memory copy and allocator-backed resize semantics while preserving terminators, self-assignment and empty-append behavior. Library and focused storage checks pass; allocator remains an explicit service boundary. These helpers support the next scene-path composition step; no runtime or full ABI acceptance is claimed. Array growth delegates to the existing battle_action_storage61 implementation."
   }
 }

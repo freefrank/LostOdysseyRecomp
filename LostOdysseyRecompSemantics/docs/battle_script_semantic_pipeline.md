@@ -469,3 +469,7 @@ Recovered secondary scene-row creation, zero/default initialization and activati
 ## Scene object factory
 
 Recovered generic scene task reuse/create selection and object default initialization. Secondary row activation now composes duplicate reuse, parameter update, signed priority selection, wrapped ID search, pointer-list growth and actual manager allocation. Focused scene-task checks pass existing-object and new-object paths, constructor defaults and preserved padding. Path building and task-specific initialization remain services; no gameplay or full ABI acceptance is claimed.
+
+## String concatenation
+
+Recovered UTF-16 header copy/assignment, append, concatenation and shared array growth context entries. These compose existing memory copy and allocator-backed resize semantics while preserving terminators, self-assignment and empty-append behavior. Library and focused storage checks pass; allocator remains an explicit service boundary. These helpers support the next scene-path composition step; no runtime or full ABI acceptance is claimed.

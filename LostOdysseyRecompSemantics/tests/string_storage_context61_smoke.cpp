@@ -49,6 +49,30 @@ struct StringGuest final : manager_release_context61::GuestServices {
     throw std::runtime_error("unexpected string virtual");
   }
 };
+struct ConcatGuest final : manager_release_context61::GuestServices {
+  unsigned next = 0x140000, allocations = 0, frees = 0;
+  void CallDirect(GuestAddress, GuestMemory &,
+                  manager_release_context61::Registers &) override {
+    throw std::runtime_error("concat direct");
+  }
+  void CallIndirect(GuestAddress e, GuestMemory &,
+                    manager_release_context61::Registers &s) override {
+    if (e != 0x123400 || s.r[6] != 8)
+      throw std::runtime_error("concat resize");
+    if (!s.r[5]) {
+      ++frees;
+      s.r[3] = 0;
+      return;
+    }
+    ++allocations;
+    if (s.r[4])
+      s.r[3] = s.r[4];
+    else {
+      s.r[3] = next;
+      next += 0x1000;
+    }
+  }
+};
 int main() {
   try {
     using namespace cook_main_smoke;
@@ -129,6 +153,38 @@ int main() {
     if (!string_storage_context61::Apply(0x82474348, m, {g, native}, s) ||
         m.ReadU32(0xc0000) || m.ReadU32(0xc1000) || s.r[1] != initial.r[1])
       throw std::runtime_error("nested string array cleanup");
+    ConcatGuest concat;
+    m.WriteU32(0xd0000, 0xd1000);
+    m.WriteU32(0xd0004, 2);
+    m.WriteU32(0xd0008, 2);
+    m.WriteU16(0xd1000, 'A');
+    m.WriteU16(0xd2000, 'B');
+    auto stringRun = [&](unsigned e, unsigned out, unsigned in,
+                         unsigned suffix = 0) {
+      s.r[3] = out;
+      s.r[4] = in;
+      s.r[5] = suffix;
+      if (!string_storage_context61::Apply(e, m, {concat, native}, s) ||
+          s.r[1] != initial.r[1])
+        throw std::runtime_error("concat ABI");
+    };
+    stringRun(0x822a06c0, 0xd3000, 0xd0000);
+    stringRun(0x8232d378, 0xd3000, 0xd2000);
+    auto data = m.ReadU32(0xd3000);
+    if (m.ReadU32(0xd3004) != 3 || m.ReadU16(data) != 'A' ||
+        m.ReadU16(data + 2) != 'B' || m.ReadU16(data + 4))
+      throw std::runtime_error("string append");
+    stringRun(0x8232d418, 0xd4000, 0xd3000, 0xd2000);
+    stringRun(0x822b3f50, 0xd5000, 0xd4000);
+    data = m.ReadU32(0xd5000);
+    if (m.ReadU32(0xd5004) != 4 || m.ReadU16(data + 4) != 'B' ||
+        m.ReadU16(data + 6) || concat.frees != 1)
+      throw std::runtime_error("concat and header assignment");
+    auto concatAllocations = concat.allocations;
+    stringRun(0x822b3f50, 0xd5000, 0xd5000);
+    stringRun(0x8232d378, 0xd5000, 0xd2002);
+    if (concat.allocations != concatAllocations)
+      throw std::runtime_error("empty append or self assignment");
     std::cout << "string_storage_context61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {
