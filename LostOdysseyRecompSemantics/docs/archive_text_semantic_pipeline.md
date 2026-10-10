@@ -45,3 +45,8 @@ CPX context recovery now owns the copied header/index, exposes block offsets and
 ## Text banks and menu lookup
 
 The documented text-bank chain now decodes offset-based UTF-16/narrow string tables, constructs one-column and seven-column (84-byte) records, releases consumed input/temporary strings and resolves menu text IDs through 60-byte rows. Existing recovered string assignment is reused through allocator callbacks. Small fixtures verify ignored length fields, empty/disabled records, replacement ownership and menu fallback. This is logic recovery, not a completed localization importer or game-runtime integration.
+
+## Packed archive names and candidate selection
+
+Archive names now expand packed base-40 halfwords through the guest alphabet, fold ASCII case and append descriptor suffixes/extensions. Prefix candidate selection preserves path boundaries, exact-match early exit and the original low-byte insertion ordering. A synthetic guest-table fixture validates the connected path without publishing private tables. Full member lookup and native archives remain pending.
+The name pool is packed base-40 data, not a UTF-16 string array. Name descriptors use a low 18-bit pool index, a 5-bit suffix index at bit 18 and a 5-bit extension index at bit 23. Alphabet and suffix data remain guest-owned.
