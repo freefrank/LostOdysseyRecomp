@@ -1,0 +1,131 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Resource vector state, action-history records, group flags and completion handlers.",
+  "entries": [
+    {
+      "address": "82AF7198",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7215,
+      "instruction_count": 68,
+      "body_sha256": "cf7efc10480f0e9462ba9bc01ec1eb4c5c3be4dc1a47248407b9680185fb94d0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF72A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7375,
+      "instruction_count": 61,
+      "body_sha256": "993d73ee572e5f75174dd239230dff809a58c62b8281d1622d11639d7853635b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9800",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 12947,
+      "instruction_count": 28,
+      "body_sha256": "604931e9457a6a248d59b7267691debf72a12ed276c70eaa4f83fbe3bc87bc20",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF73A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7518,
+      "instruction_count": 28,
+      "body_sha256": "5b53d6267e9ebd6ee8cc0b567deae40083f86cfa85be39a080881dab7b174f55",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9CB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13657,
+      "instruction_count": 22,
+      "body_sha256": "94315922c7013d7d897cbeb21a384fd1b3876e1a9621cce61f13feb9f22f45bc",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7588,
+      "instruction_count": 65,
+      "body_sha256": "52011f2f99a7a3aa9715fc500c9b42c9f73dfc9b0fe3089debbca8eb9b6ecf96",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9D08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13712,
+      "instruction_count": 88,
+      "body_sha256": "e7a010bfc6ed3bcbfc886200d4f526f11ca6dadb883135c00cb34e4d32062172",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9E68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13929,
+      "instruction_count": 39,
+      "body_sha256": "86557bdc465bc5933a92f0fe28d54f91f64deb5ce88a00887f8ac303387d92c4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFEBC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 25483,
+      "instruction_count": 66,
+      "body_sha256": "a89b57790afe4909fb49b014c1449b03376e821290613c766dbf796673057dda",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF85B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 10241,
+      "instruction_count": 58,
+      "body_sha256": "90ca516b500c7992fd99cee1a89fe5832f7ad2ea40829243d749e82685ae4a6c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7518",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7740,
+      "instruction_count": 10,
+      "body_sha256": "c4ff4e3b8123d985cb9933fc86ea8ad7fc095e86b5b6a0cb2c3b03d69770ca3f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7540",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7765,
+      "instruction_count": 23,
+      "body_sha256": "2378083cd3223ffa1c93aeb2709a941620e00d05fb9d73cd2d63b2025b47f44b",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AF7198",
+      "82AF72A8",
+      "82AF9800",
+      "82AF73A0",
+      "82AF9CB0",
+      "82AF7410",
+      "82AF9D08",
+      "82AF9E68",
+      "82AFEBC0",
+      "82AF85B8",
+      "82AF7518",
+      "82AF7540"
+    ],
+    "header": "include/lo_semantics/battle_script_history61.h",
+    "source": "src/battle_script_history61.cpp",
+    "smoke": "tests/battle_script_history61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One compact fixture checks a scaled vector roundtrip with synthetic constants, halfword and word flags, resource numeric state, eight-record clear/latest-record extraction, original descending search with slot0 excluded and repeated-match replacement, resource group cleanup, action-completion callback and nonvolatile state. Concrete runtime resource lists and action-completion services remain guest boundaries. History count/index bounds are not newly hardened. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

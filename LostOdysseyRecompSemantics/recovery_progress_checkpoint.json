@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 182,
-    "distinct_entries": 642,
+    "unit_count": 183,
+    "distinct_entries": 654,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1959,6 +1959,25 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One compact fixture checks readiness branches, preparation/reset flags, three event action routing targets, default target selection, query result writeback, conditional resource counters, indexed resource reset, actor record extraction and guest-table property masks, plus target effect callbacks and stack preservation. Concrete action execution, resource lookup and effects remain explicit guest services. Signed table indexing and original permissive resource assumptions are retained rather than hardened. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_history61",
+        "entries": [
+          "82AF7198",
+          "82AF72A8",
+          "82AF9800",
+          "82AF73A0",
+          "82AF9CB0",
+          "82AF7410",
+          "82AF9D08",
+          "82AF9E68",
+          "82AFEBC0",
+          "82AF85B8",
+          "82AF7518",
+          "82AF7540"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One compact fixture checks a scaled vector roundtrip with synthetic constants, halfword and word flags, resource numeric state, eight-record clear/latest-record extraction, original descending search with slot0 excluded and repeated-match replacement, resource group cleanup, action-completion callback and nonvolatile state. Concrete runtime resource lists and action-completion services remain guest boundaries. History count/index bounds are not newly hardened. Logical/ABI only"
       }
     ]
   },
