@@ -6,6 +6,111 @@
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ac9be0 || e == 0x82ac9ee8) {
+    auto old = Address(s.r[1]), resource = Address(s.r[3]),
+         id = Address(s.r[4]);
+    auto argument5 = s.r[5], argument6 = s.r[6];
+    bool permissive = e == 0x82ac9ee8;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 24; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 160;
+    m.WriteU32(Address(s.r[1]), old);
+    auto manager = [&]() {
+      d.guest.CallDirect(0x82380a18, m, s);
+      d.guest.CallDirect(0x82389b78, m, s);
+      return Address(s.r[3]);
+    };
+    auto table = [&](unsigned value) {
+      auto n = std::int32_t(value), q = n / 32;
+      return 0x83213438u + 8 * unsigned(n - q * 32);
+    };
+    auto flags = [&](unsigned value) {
+      return resource +
+             272 * (m.ReadU32(table(value)) +
+                    unsigned(std::int32_t(value) / 32)) +
+             232;
+    };
+    auto present = [&](unsigned value) {
+      return (m.ReadU32(flags(value)) & m.ReadU32(table(value) + 4)) != 0;
+    };
+    auto execute = [&]() {
+      if (std::int32_t(id) > 262)
+        return;
+      if (id == 1 && (m.ReadU16(manager() + 148) & 1))
+        return;
+      auto slot = flags(id), mask = m.ReadU32(table(id) + 4),
+           bank = m.ReadU32(table(id)) + unsigned(std::int32_t(id) / 32);
+      if (m.ReadU32(slot) & mask)
+        return;
+      bool notify = false;
+      if (id == 0) {
+        if (m.ReadU32(resource + 76348) & 0x80000000u)
+          return;
+        auto immune = m.ReadU32(resource + 4876) & m.ReadU32(0x8321343c);
+        if (permissive ? bool(immune & 0xfffffffeu) : bool(immune))
+          return;
+        if (!permissive && (m.ReadU32(resource + 5088) & m.ReadU32(0x8321343c)))
+          return;
+        notify = true;
+      } else {
+        if (bank == 0) {
+          auto immune = m.ReadU32(resource + 4876);
+          if (immune & mask)
+            return;
+          if (!permissive) {
+            if (id == 225 && (immune & m.ReadU32(0x832134b4)))
+              return;
+            if (m.ReadU32(resource + 5088) & mask)
+              return;
+          }
+        }
+        if (id == 16) {
+          if (!present(2) || present(198))
+            return;
+          s.r[3] = resource;
+          s.r[4] = 2;
+          s.r[5] = 1;
+          (void)battle_property_mutation61::Apply(0x82ac8ee8, m, d, s);
+          s.r[3] = 16;
+          (void)battle_action_adjustments61::Apply(0x82ac84e8, m, d, s);
+          m.WriteU32(resource + 4 * (Address(s.r[3]) + 59), 3);
+        } else if (id == 2 && (present(16) || present(198)))
+          return;
+        slot = flags(id);
+        mask = m.ReadU32(table(id) + 4);
+        m.WriteU32(slot, m.ReadU32(slot) | mask);
+        notify = id == 15 && !(m.ReadU32(resource + 124) & 0x10000000u);
+      }
+      if (notify) {
+        s.r[3] = 0x832c9c54;
+        s.r[4] = resource;
+        (void)battle_script_runtime61::Apply(0x82a9bdb0, m, d, s);
+        auto actor = Address(s.r[3]);
+        if (actor) {
+          auto state = m.ReadU32(actor + 64);
+          if (state & 0x800000)
+            m.WriteU32(actor + 64, state | 0x400000);
+          else {
+            auto p = resource +
+                     272 * m.ReadU32(id == 0 ? 0x83213438 : 0x832134b0) + 232;
+            m.WriteU32(p, m.ReadU32(p) | m.ReadU32(0x8321343c));
+          }
+        }
+        manager();
+        s.r[4] = resource;
+        s.r[5] = argument5;
+        s.r[6] = argument6;
+        d.guest.CallDirect(0x82ad0ad0, m, s);
+      }
+    };
+    execute();
+    s.r[1] += 160;
+    for (unsigned i = 24; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac85a0) {
     auto flags = m.ReadU32(Address(s.r[3]) + 272 * Address(s.r[4]) + 232);
     unsigned result = 0;

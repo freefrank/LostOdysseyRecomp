@@ -165,7 +165,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
           s.r[4] = 0;
           s.r[5] = 1;
           s.r[6] = 1;
-          d.guest.CallDirect(0x82ac9be0, m, s);
+          (void)battle_property_mutation61::Apply(0x82ac9be0, m, d, s);
         } else {
           m.WriteU32(target + 132, 0);
           m.WriteU32(target + 124,

@@ -16,8 +16,9 @@ struct EffectGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x76000;
       return;
     }
-    if (e == 0x82ac9be0) {
-      check(s.r[3] == 0x90000 && s.r[4] == 0 && s.r[5] == 1 && s.r[6] == 1);
+    if (e == 0x82ad0ad0) {
+      check(s.r[3] == 0x76000 && s.r[4] == 0x90000 && s.r[5] == 1 &&
+            s.r[6] == 1);
       ++side;
       return;
     }
@@ -145,10 +146,13 @@ int main() {
     m.WriteU32(0x90000 + 124, 0);
     m.WriteU32(0x90000 + 232, 0);
     m.WriteU32(0x80000 + 232, 0);
+    m.WriteU32(0x8321343c, 1);
     g.side = 0;
     s.r[3] = 0x73000;
     check(battle_evaluation_effects61::Apply(0x82b11248, m, {g, native}, s) &&
-          g.side == 1 && (m.ReadU32(0x90000 + 124) & 0x04000000));
+          g.side == 1 && (m.ReadU32(0x90000 + 124) & 0x04000000) &&
+          (m.ReadU32(0x90000 + 232) & 1));
+    m.WriteU32(0x90000 + 232, 0);
     m.WriteU32(0x90000 + 124, 0);
     m.WriteU32(0x90000 + 132, 1);
     s.r[3] = 0x73000;

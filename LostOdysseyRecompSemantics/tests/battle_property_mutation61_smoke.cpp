@@ -214,6 +214,66 @@ int main() {
     m.WriteU32(bankFlags, 0);
     check(stateRun(0x82ac8ec8, 2, 4, 21, 31, 0, 0) &&
           m.ReadU32(payload) == 21 && m.ReadU32(other) == 31);
+    for (unsigned i = 0; i < 32; ++i) {
+      m.WriteU32(0x83213438 + 8 * i, 0);
+      m.WriteU32(0x8321343c + 8 * i, 1u << i);
+    }
+    auto insert = [&](unsigned e, unsigned id) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      s.r[5] = s.r[6] = 1;
+      check(battle_property_mutation61::Apply(e, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[24] == initial.r[24]);
+    };
+    m.WriteU32(resource + 232, 0);
+    m.WriteU32(resource + 5088, 0);
+    m.WriteU32(resource + 4876, 1);
+    m.WriteU32(0x62000 + 64, 0);
+    insert(0x82ac9be0, 0);
+    check(m.ReadU32(resource + 232) == 0 && g.notifications == 1);
+    insert(0x82ac9ee8, 0);
+    check(m.ReadU32(resource + 232) == 1 && g.notifications == 2);
+    insert(0x82ac9ee8, 0);
+    check(g.notifications == 2);
+    m.WriteU32(resource + 232, 0);
+    m.WriteU32(resource + 4876, 0);
+    m.WriteU32(resource + 5088, 1);
+    insert(0x82ac9be0, 0);
+    check(!m.ReadU32(resource + 232));
+    m.WriteU32(0x62000 + 64, 0x800000);
+    insert(0x82ac9ee8, 0);
+    check(!m.ReadU32(resource + 232) && m.ReadU32(0x62000 + 64) == 0xc00000 &&
+          g.notifications == 3);
+    m.WriteU32(resource + 5088, 0);
+    m.WriteU16(0x70000 + 148, 1);
+    insert(0x82ac9be0, 1);
+    check(!m.ReadU32(resource + 232));
+    m.WriteU16(0x70000 + 148, 0);
+    insert(0x82ac9be0, 1);
+    check(m.ReadU32(resource + 232) == 2);
+    m.WriteU32(resource + 232, 4);
+    m.WriteU32(resource + 6 * 272 + 232, 0);
+    insert(0x82ac9be0, 16);
+    check(m.ReadU32(resource + 232) == 0x10000 &&
+          m.ReadU32(resource + 4 * (59 + 16)) == 3);
+    insert(0x82ac9ee8, 2);
+    check(m.ReadU32(resource + 232) == 0x10000);
+    m.WriteU32(resource + 232, 4);
+    m.WriteU32(resource + 6 * 272 + 232, 1u << 6);
+    insert(0x82ac9ee8, 16);
+    check(m.ReadU32(resource + 232) == 4);
+    m.WriteU32(resource + 6 * 272 + 232, 0);
+    m.WriteU32(resource + 232, 0);
+    m.WriteU32(resource + 5088, 8);
+    insert(0x82ac9be0, 3);
+    check(!m.ReadU32(resource + 232));
+    insert(0x82ac9ee8, 3);
+    check(m.ReadU32(resource + 232) == 8);
+    m.WriteU32(resource + 5088, 0);
+    m.WriteU32(resource + 124, 0);
+    m.WriteU32(0x62000 + 64, 0);
+    insert(0x82ac9be0, 15);
+    check(m.ReadU32(resource + 232) == 0x8009 && g.notifications == 4);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

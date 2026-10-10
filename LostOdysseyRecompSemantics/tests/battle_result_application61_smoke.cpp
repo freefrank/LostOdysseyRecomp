@@ -7,15 +7,9 @@ struct ApplicationGuest final : manager_release_context61::GuestServices {
   unsigned low = 0, dead = 0, counter = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82ac9be0) {
-      if (s.r[4] != 1 || s.r[5] != 1 || s.r[6] != 0)
-        throw std::runtime_error("low HP args");
-      ++low;
-      return;
-    }
-    if (e == 0x82ac9ee8) {
-      if (s.r[4] != 0 || s.r[5] != 1 || s.r[6] != 1)
-        throw std::runtime_error("death args");
+    if (e == 0x82ad0ad0) {
+      if (s.r[4] != 0x80000 || s.r[5] != 1 || s.r[6] != 1)
+        throw std::runtime_error("death notification args");
       ++dead;
       return;
     }
@@ -46,6 +40,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83291000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -77,6 +72,11 @@ int main() {
     put(0x82007784, 1);
     put(0x82000b3c, .25f);
     auto resource = 0x80000u, owner = 0x73000u;
+    m.WriteU32(0x832c9c54 + 44, 0x77000);
+    m.WriteU32(0x77000 + 4, 0x78000);
+    m.WriteU32(0x77000 + 12, 1);
+    m.WriteU32(0x78000 + 8, 24);
+    m.WriteU32(resource + 64, 24);
     auto shield = [&](int capacity, float value) {
       m.WriteU32(resource + 7 * 272 + 232, 1);
       m.WriteU32(resource + 4 * 535, unsigned(capacity));
@@ -107,7 +107,8 @@ int main() {
     check(get(resource + 2588) == 100 && get(owner + 28) == 80 &&
           std::bit_cast<double>(s.fpr_bits[1]) == 40);
     invoke(0x82b2b640, 80);
-    check(get(resource + 2588) == 20 && g.low == 1 && g.counter == 1);
+    check(get(resource + 2588) == 20 && (m.ReadU32(resource + 232) & 2) &&
+          g.counter == 1);
     m.WriteU32(resource + 76348, 0x80000000);
     invoke(0x82b2b640, 50);
     check(get(resource + 2588) == 20 && g.counter == 1);

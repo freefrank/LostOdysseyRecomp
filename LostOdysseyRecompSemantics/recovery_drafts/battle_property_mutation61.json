@@ -137,6 +137,22 @@
       "instruction_count": 2,
       "body_sha256": "e59de8ebd6607ade11bfabfb2bbfad76317bc22906c01d3aea6982afa6fd1bab",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC9BE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 8926,
+      "instruction_count": 193,
+      "body_sha256": "540089447999942bfd3ac1126102c60ecedba1c41a18fe8b890a2f6e58d25e10",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC9EE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 9346,
+      "instruction_count": 180,
+      "body_sha256": "9a96e7429496284210f01cb1b0e276eb81ac7883b0824c293a9054886cbffb0b",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -157,7 +173,9 @@
       "82AC8ED8",
       "82ACA6F0",
       "82AC8AE8",
-      "82AC91D8"
+      "82AC91D8",
+      "82AC9BE0",
+      "82AC9EE8"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -175,6 +193,7 @@
     "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.",
     "payload_operations": "Recovered typed property payload comparison, maximum update, additive update and insertion. Source semantics retain the first original-mask bit for payload addressing, signed comparisons, last processed eligibility result and low-31-bit scan. The read-only adapter clears both mutation flags. Paired payload evaluators now use actual bank state; focused property and evaluator fixtures pass. Logical recovery only, not native gameplay acceptance.",
     "status_admission": "Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated.",
-    "property_state": "Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim."
+    "property_state": "Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim.",
+    "status_insertion": "Recovered strict and permissive property insertion, including manager-gated low-HP state, duplicate suppression, immunity differences, property2/16 transitions and actor-aware death/property15 notification. HP normalization and the evaluator death callback now use real status mutation rather than mocking insertion. Focused checks verify actual flags, actor bits, payload initialization and notification arguments. The manager notification remains an external service; gameplay, Full72 and full ABI acceptance remain unvalidated."
   }
 }
