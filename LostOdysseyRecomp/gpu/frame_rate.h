@@ -17,9 +17,11 @@ constexpr bool NeedsImmediate(uint32_t fps)
 {
     return fps == 0 || fps > kGuestRefreshHz;
 }
-constexpr bool HostVsyncEnabled(uint32_t fps, bool baselineVsync, bool forceImmediate = false)
+// Display sync follows the VSync setting at every native rate and keeps a
+// backend's disabled-vsync baseline. LO_FPS=0 (uncapped) never waits for it.
+constexpr bool HostVsyncEnabled(uint32_t fps, bool vsync, bool baselineVsync, bool forceImmediate = false)
 {
-    return baselineVsync && !forceImmediate && !NeedsImmediate(fps);
+    return vsync && baselineVsync && !forceImmediate && fps != 0;
 }
 
 constexpr bool Supported(uint32_t fps)

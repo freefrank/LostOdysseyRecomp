@@ -22,6 +22,8 @@ Graphics中新增`FreeSync / G-SYNC Compatible`开关；默认Off，选择On后�
 
 D3D12复用Plume已有的flip-discard、能力查询、创建/ResizeBuffers时的`ALLOW_TEARING`。此次补上Present时的实际全屏状态检查：只在窗口/无边框、允许tearing且SyncInterval=0时传入`DXGI_PRESENT_ALLOW_TEARING`，独占全屏不传该标志。Vulkan沿用Plume的异步模式选择；不支持immediate时接受现有后端回退并发出警告，不循环重建交换链。窗口系统或驱动仍可限制呈现节奏。
 
+2026-10-10 更新：Windows／Linux／Android 上这个开关并入 Graphics → VSync，成为第三个选项（关／开／FreeSync / G-SYNC Compatible）；配置仍是`variable_refresh_rate=1`，它优先于新增的`vsync=0/1`。VRR 选项本身的行为不变。macOS 仍是单独的 ProMotion 开关。详见[原生90/120 FPS](native-90-120fps.md)。
+
 ## 限帧与FG
 
 本项目采用当前模式刷新率减3的输出预算，为整数刷新率报告、分数刷新率和调度误差留余量。这是工程策略，不是AMD/NVIDIA规定，也不是绝对不越界保证。

@@ -501,9 +501,10 @@ int main(int argc, char* argv[])
     {
         const auto& c = settings::GetConfig();
         LOG_NOTICE("settings: backend={} output={}x{} window={} render_resolution={} aa={} upscaler={} dlss_quality={} dlss_model={} "
-                   "fsr_quality={} frame_rate={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
+                   "fsr_quality={} frame_rate={} vsync={} vrr={} fg_provider={} fg_multiplier={} hdr={} ao={} shadow_resolution={} debug_log={}",
                    int(c.graphicsBackend), c.width, c.height, int(c.windowMode), c.internalResolution, c.antialiasing,
-                   int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, int(c.frameGenerationProvider),
+                   int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, c.vsync,
+                   c.variableRefreshRate, int(c.frameGenerationProvider),
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
         const auto pack = settings::GameLanguagePack();
         modding::text_overlay::SelectLanguagePack(pack);

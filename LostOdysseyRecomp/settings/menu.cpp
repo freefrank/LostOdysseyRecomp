@@ -1165,8 +1165,12 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
             L"自適應同步（ProMotion）", onOff(), edit.variableRefreshRate ? 0 : 1));
 #else
-        placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"FreeSync / G-SYNC Compatible",
-            L"FreeSync / G-SYNC Compatible", onOff(), edit.variableRefreshRate ? 0 : 1));
+        // The long FreeSync name needs the full value column.
+        auto vsync = makeChoices(L"VSync", L"垂直同步",
+            {Tr(L"Off", L"關"), Tr(L"On", L"開"), L"FreeSync / G-SYNC Compatible"},
+            edit.variableRefreshRate ? 2 : edit.vsync ? 1 : 0);
+        vsync.singleValue = true;
+        placeGraphics(GraphicsRow::VariableRefreshRate, std::move(vsync));
 #endif
         std::vector<std::wstring> providers;
         uint32_t selected = 0;
@@ -1446,8 +1450,8 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"Shows each frame for one game frame so ProMotion and adaptive-sync displays follow the game's frame rate. Display sync stays on.",
                            L"每個影格至少顯示一個遊戲影格的時間，讓 ProMotion 與自適應同步螢幕跟隨遊戲影格率；顯示同步保持開啟。");
 #else
-            next.help = Tr(L"VRR-friendly pacing. Enable adaptive sync in your display/driver. Actual VRR is not detected.",
-                           L"VRR 友善限幀；請在螢幕與驅動程式啟用自適應同步。無法偵測實際 VRR 狀態。");
+            next.help = Tr(L"Off: each frame shows as soon as it is ready, with the lowest latency, but the picture can tear. On: frames wait for the display to refresh, without tearing. FreeSync / G-SYNC Compatible: for adaptive-sync displays; turn it on in the display and driver too. Applies immediately after saving.",
+                           L"關：畫面完成即顯示，延遲最低，但可能出現畫面撕裂。開：等待螢幕刷新再顯示，不會撕裂。FreeSync / G-SYNC Compatible：適用於自適應同步螢幕，需同時在螢幕與驅動程式中啟用。儲存後立即套用。");
 #endif
             break;
         case GraphicsRow::FrameGeneration:
@@ -2997,7 +3001,16 @@ PPC_FUNC(sub_822F19B0)
                 break;
             }
             case GraphicsRow::VariableRefreshRate:
+#if LO_PLATFORM_MACOS
                 edit.variableRefreshRate = !edit.variableRefreshRate;
+#else
+            {
+                // Off, On, FreeSync / G-SYNC Compatible.
+                const auto sync = cycle(edit.variableRefreshRate ? 2 : edit.vsync ? 1 : 0, 3);
+                edit.variableRefreshRate = sync == 2;
+                if (sync < 2) edit.vsync = sync == 1;
+            }
+#endif
                 break;
             case GraphicsRow::FrameGeneration:
             {

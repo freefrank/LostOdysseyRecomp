@@ -76,7 +76,7 @@
 | 显示 | 窗口或全屏，可选显示器和 GPU，16:9 和 21:9 分辨率（16:10 等更高的屏幕会被画面铺满），[HDR](#hdr) 和**亮度 / Gamma**。 |
 | 抗锯齿与超分 | FXAA、SMAA、TAA、DLSS、FSR 3.1、XeSS（Windows Direct3D 12）和 MetalFX（macOS）。 |
 | 图像选项 | 阴影分辨率 1×／2×／4×、SSAO／GTAO、各向异性过滤、景深和泛光。 |
-| 帧率 | 30／60／90／120 FPS，以及 FreeSync／G-SYNC Compatible VRR。 |
+| 帧率 | 30／60／90／120 FPS；垂直同步可选关、开或 FreeSync／G-SYNC Compatible VRR。 |
 | 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。 |
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。 |

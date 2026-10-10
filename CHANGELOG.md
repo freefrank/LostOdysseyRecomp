@@ -9,10 +9,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 ### English
 
 - At 60 FPS, scenes that can't quite hold 60 no longer drop straight to 30, for example on Steam Deck.
+- New VSync setting in Settings → Graphics: Off, On or FreeSync / G-SYNC Compatible. It replaces the FreeSync / G-SYNC Compatible switch.
 
 ### 简体中文
 
 - 60 FPS 下，跑不满 60 的场景不再直接掉到 30（例如 Steam Deck）。
+- 设置 → 图形新增“垂直同步”：关、开或 FreeSync / G-SYNC Compatible，取代原来的 FreeSync / G-SYNC Compatible 开关。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 

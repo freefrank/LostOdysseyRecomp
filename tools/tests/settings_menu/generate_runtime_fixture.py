@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
     settings::savedConfig.frameGenerationMultiplier=4;
     settings::savedConfig.frameGenerationTargetFps=144;
     settings::edit=settings::savedConfig;
-    settings::row=int(GraphicsRow::VariableRefreshRate);settings::edit.variableRefreshRate=false;
+    settings::row=int(GraphicsRow::VariableRefreshRate);settings::edit.variableRefreshRate=false;settings::edit.vsync=true;
     const auto beforeVrr=settings::GetConfig();
     auto fgPreferenceRetained=[&]{const auto saved=settings::GetConfig();return
         saved.frameGenerationProvider==beforeVrr.frameGenerationProvider &&
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
         saved.frameGenerationTargetFps==beforeVrr.frameGenerationTargetFps;};
     tick(8);Check(settings::edit.variableRefreshRate,"VRR toggles on");
     Check(settings::GetConfig()==beforeVrr,"unsaved VRR does not change runtime settings");
-    Check(settings::snapshot.rows[int(GraphicsRow::VariableRefreshRate)].value==L"On","VRR preference published");
+    Check(settings::snapshot.rows[int(GraphicsRow::VariableRefreshRate)].value==L"FreeSync / G-SYNC Compatible","VRR preference published");
     Check(!settings::restart::Required(beforeVrr,settings::edit),"VRR does not require restart");
     settings::row=int(GraphicsRow::Save);tick(0x1000);
     Check(settings::GetConfig().variableRefreshRate,"Save applies VRR preference");
@@ -282,6 +282,16 @@ int main(int argc, char** argv) {
     settings::row=int(GraphicsRow::Save);tick(0x1000);
     Check(!settings::GetConfig().variableRefreshRate,"Save restores ordinary pacing");
     Check(fgPreferenceRetained(),"VRR-off Save preserves Dynamic MFG preference");
+    Check(settings::edit.vsync && settings::snapshot.rows[int(GraphicsRow::VariableRefreshRate)].value==L"On","VRR off returns to VSync On");
+    settings::row=int(GraphicsRow::VariableRefreshRate);tick(4);
+    Check(!settings::edit.vsync && !settings::edit.variableRefreshRate,"VSync turns off");
+    Check(settings::snapshot.rows[int(GraphicsRow::VariableRefreshRate)].value==L"Off","VSync Off published");
+    settings::row=int(GraphicsRow::Save);tick(0x1000);
+    Check(!settings::GetConfig().vsync,"Save applies VSync Off");
+    settings::row=int(GraphicsRow::VariableRefreshRate);tick(8);
+    Check(settings::edit.vsync && !settings::edit.variableRefreshRate,"VSync turns back on");
+    settings::row=int(GraphicsRow::Save);tick(0x1000);
+    Check(settings::GetConfig().vsync,"Save applies VSync On");
     // AF changes only after Save, does not require a restart, and survives all levels.
     settings::row=int(GraphicsRow::AnisotropicFiltering);settings::edit.anisotropicFiltering=0;
     const auto afSaved=settings::GetConfig();

@@ -328,9 +328,9 @@ namespace settings
 {
     inline void LogSettingsSaved(const Config& value)
     {
-        LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} backend={}({}) AA={} frame_rate={} vrr_requested={} upscaler={}({}) dlss_quality={}({}) language={} (backend/game language apply at restart) gpu=\"{}\" display=\"{}\"#{} aspect_ratio={}",
+        LOG_INFO("settings saved: {}x{} internal_resolution={} mode={} backend={}({}) AA={} frame_rate={} vsync={} vrr_requested={} upscaler={}({}) dlss_quality={}({}) language={} (backend/game language apply at restart) gpu=\"{}\" display=\"{}\"#{} aspect_ratio={}",
             value.width, value.height, value.internalResolution, uint32_t(value.windowMode),
-            gpu::backend::Name(value.graphicsBackend), uint32_t(value.graphicsBackend), value.antialiasing, value.frameRate, value.variableRefreshRate,
+            gpu::backend::Name(value.graphicsBackend), uint32_t(value.graphicsBackend), value.antialiasing, value.frameRate, value.vsync, value.variableRefreshRate,
             gpu::frame_plan::UpscalerName(value.upscaler), uint32_t(value.upscaler),
             gpu::frame_plan::DlssQualityName(value.dlssQuality), uint32_t(value.dlssQuality), value.gameLanguage,
             value.gpuDevice, value.displayName, value.displayIndex, uint32_t(value.aspectRatio));
