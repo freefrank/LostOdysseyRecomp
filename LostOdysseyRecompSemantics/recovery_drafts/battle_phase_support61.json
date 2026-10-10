@@ -57,6 +57,14 @@
       "instruction_count": 76,
       "body_sha256": "809bf9900acbb8f26336a6ffdb7b485a0b3d8e00cbde5b658aefb6c94580445f",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AAA7C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 30701,
+      "instruction_count": 394,
+      "body_sha256": "30734947f14b7c187eafc51bd01d61aa1cf9f1e07d786502c49a3992453c5353",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -67,7 +75,8 @@
       "82389B10",
       "82A9F160",
       "82ACE978",
-      "82AF6B48"
+      "82AF6B48",
+      "82AAA7C8"
     ],
     "header": "include/lo_semantics/battle_phase_support61.h",
     "source": "src/battle_phase_support61.cpp",
@@ -81,6 +90,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance."
+    "case_scope": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance.",
+    "battle_phase_machine": "Recovered AAA7C8 battle phase machine: forced transitions, numbered phase progression, turn counter, actor refresh, encounter-specific randomized categories, side countdown, profile restore and terminal-state routing. Focused checks cover force/range gates, progression, phase reset callback, periodic-effect call ABI and terminal handling. Existing semantic helpers are composed directly; periodic effect sweep ACB120 and victory finalization AC6D88 remain explicit guest boundaries. No claim that all phase branches or the complete battle restart are runtime accepted."
   }
 }

@@ -695,3 +695,7 @@ Recovered the final two descriptor callbacks B11878 and B0EF68, plus six action-
 ## Battle phase support
 
 Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance.
+
+## Battle phase machine
+
+Recovered AAA7C8 battle phase machine: forced transitions, numbered phase progression, turn counter, actor refresh, encounter-specific randomized categories, side countdown, profile restore and terminal-state routing. Focused checks cover force/range gates, progression, phase reset callback, periodic-effect call ABI and terminal handling. Existing semantic helpers are composed directly; periodic effect sweep ACB120 and victory finalization AC6D88 remain explicit guest boundaries. No claim that all phase branches or the complete battle restart are runtime accepted.

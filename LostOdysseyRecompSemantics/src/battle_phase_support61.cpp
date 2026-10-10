@@ -2,13 +2,20 @@
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_bootstrap61.h"
 #include "lo_semantics/battle_script61.h"
+#include "lo_semantics/battle_resource_stats61.h"
+#include "lo_semantics/battle_roster_persistence61.h"
+#include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 namespace lo::semantic::gpu::battle_phase_support61 {
 namespace {
 using recovery_abi::Address;
 void Call(unsigned entry, GuestMemory &m, Dependencies d, Registers &s) {
-  if (!battle_manager_access61::Apply(entry, m, d, s) &&
+  if (!battle_phase_support61::Apply(entry, m, d, s) &&
+      !battle_resource_stats61::Apply(entry, m, d, s) &&
+      !battle_roster_persistence61::Apply(entry, m, d, s) &&
+      !battle_random_range61::Apply(entry, m, d, s) &&
+      !battle_manager_access61::Apply(entry, m, d, s) &&
       !battle_bootstrap61::Apply(entry, m, d, s) &&
       !battle_script61::Apply(entry, m, d, s))
     d.guest.CallDirect(entry, m, s);
@@ -48,6 +55,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned first, frame;
   switch (e) {
+  case 0x82aaa7c8:
+    first = 24;
+    frame = 160;
+    break;
   case 0x82a9f160:
     first = 31;
     frame = 96;
@@ -75,7 +86,194 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[1] -= frame;
     m.WriteU32(Address(s.r[1]), old);
   }
-  if (e == 0x82389b10) {
+  if (e == 0x82aaa7c8) {
+    auto request = Address(s.r[4]), forced = Address(s.r[5]) & 255;
+    auto phase = m.ReadU32(owner + 56);
+    auto setPhase = [&](unsigned value) {
+      m.WriteU32(owner + 144, value);
+      m.WriteU32(owner + 56, value);
+    };
+    auto timer = [&]() {
+      s.r[3] = owner + 104;
+      Call(0x82b08a60, m, d, s);
+    };
+    auto transition = [&](unsigned value) {
+      setPhase(value);
+      timer();
+    };
+    auto manager = [&]() {
+      Call(0x82380a18, m, d, s);
+      Call(0x82389b78, m, d, s);
+    };
+    auto roster = [&]() {
+      manager();
+      Call(0x82af5810, m, d, s);
+    };
+    auto visit = [&](bool activeOnly) {
+      for (unsigned i = 0;
+           std::int32_t(i) < std::int32_t(m.ReadU32(m.ReadU32(owner + 20) + 4));
+           ++i) {
+        auto resource = m.ReadU32(m.ReadU32(m.ReadU32(owner + 20)) + 4 * i);
+        s.r[3] = resource;
+        if (activeOnly) {
+          if ((m.ReadU32(resource + 60) & 255) == 1)
+            Call(0x82ab0b10, m, d, s);
+        } else {
+          s.ctr = m.ReadU32(m.ReadU32(resource) + 440);
+          d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        }
+      }
+    };
+    auto virtualPhase = [&]() {
+      s.r[3] = owner;
+      s.ctr = m.ReadU32(m.ReadU32(owner) + 12);
+      d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+    };
+    auto outcome = [&]() {
+      s.r[3] = owner;
+      Call(0x82acf108, m, d, s);
+      if (Address(s.r[3]) & 255) {
+        setPhase(12);
+        return true;
+      }
+      s.r[3] = owner;
+      Call(0x82acf280, m, d, s);
+      if (Address(s.r[3]) & 255) {
+        setPhase(11);
+        s.r[3] = m.ReadU32(0x83291dc0);
+        Call(0x82ac6d88, m, d, s);
+        return true;
+      }
+      return false;
+    };
+    auto effects = [&](unsigned offset, unsigned mode) {
+      auto p = Address(s.r[1]) + offset;
+      m.WriteU32(p, 0x8204a1d8);
+      s.r[3] = p;
+      s.r[4] = mode;
+      Call(0x82acb120, m, d, s);
+      m.WriteU32(p, 0x8204a1d8);
+    };
+    if (forced)
+      transition(request);
+    else
+      switch (phase) {
+      case 0:
+        if (request == 1)
+          transition(1);
+        break;
+      case 1:
+        if (request != 2)
+          break;
+        if (m.ReadU32(0x832cb778) == 255 || m.ReadU32(0x832cb778) == 256) {
+          manager();
+          s.r[4] = 20;
+          Call(0x8238e308, m, d, s);
+          auto resource = Address(s.r[3]);
+          for (unsigned i = 0; i < 2; ++i) {
+            s.r[3] = m.ReadU32(0x83264558);
+            s.r[4] = 0;
+            s.r[5] = i ? 7 : 3;
+            s.r[6] = 1;
+            s.r[7] = 32;
+            Call(0x82aa0740, m, d, s);
+            auto choice = Address(s.r[3]);
+            if (choice <= (i ? 7u : 3u))
+              m.WriteU32(resource + (i ? 4888 : 4880), 1u << choice);
+          }
+        }
+        Call(0x82380a18, m, d, s);
+        Call(0x82389b10, m, d, s);
+        transition(2);
+        virtualPhase();
+        s.r[3] = m.ReadU32(0x8324570c);
+        Call(0x82acd398, m, d, s);
+        for (unsigned side : {1u, 0u}) {
+          s.r[3] = m.ReadU32(0x8324570c);
+          s.r[4] = side;
+          Call(0x82ace978, m, d, s);
+        }
+        roster();
+        s.r[3] = 0x832c9c54;
+        Call(0x82af6b48, m, d, s);
+        visit(false);
+        break;
+      case 2:
+        if (request == 3) {
+          transition(3);
+          m.WriteU32(owner + 52, m.ReadU32(owner + 52) + 1);
+        }
+        break;
+      case 3:
+        if (request == 4) {
+          transition(4);
+          visit(true);
+        } else if (request == 2) {
+          timer();
+          setPhase(2);
+          virtualPhase();
+        }
+        break;
+      case 4:
+        if (request == 5)
+          transition(5);
+        break;
+      case 5:
+        if (request == 6) {
+          transition(6);
+          effects(80, 0);
+        }
+        break;
+      case 6:
+        if (request == 7) {
+          timer();
+          if (!outcome())
+            setPhase(7);
+        }
+        break;
+      case 7:
+        if (request == 8) {
+          transition(8);
+          roster();
+          visit(false);
+        }
+        break;
+      case 8:
+        if (request == 9)
+          transition(9);
+        break;
+      case 9:
+        if (request == 10) {
+          roster();
+          timer();
+          if (!outcome()) {
+            visit(false);
+            setPhase(10);
+            effects(84, 1);
+            roster();
+          }
+        }
+        break;
+      case 10:
+        if (request == 1) {
+          timer();
+          if (!outcome())
+            setPhase(1);
+        }
+        break;
+      case 11:
+      case 12:
+        if (request == 13)
+          transition(13);
+        break;
+      case 13:
+        Call(0x82380a18, m, d, s);
+        Call(0x82389b10, m, d, s);
+        break;
+      default:
+        break;
+      }
+  } else if (e == 0x82389b10) {
     s.r[3] = m.ReadU32(0x83315fb4);
     s.ctr = m.ReadU32(m.ReadU32(Address(s.r[3])) + 352);
     d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);

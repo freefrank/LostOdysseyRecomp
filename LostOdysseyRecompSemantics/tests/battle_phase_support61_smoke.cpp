@@ -4,12 +4,23 @@
 #include "lo_semantics/battle_phase_support61.h"
 #include "lo_semantics/recovery_abi.h"
 struct PhaseGuest final : manager_release_context61::GuestServices {
-  void CallDirect(GuestAddress, GuestMemory &,
-                  manager_release_context61::Registers &) override {
+  unsigned periodicCalls = 0, phaseCalls = 0;
+  void CallDirect(GuestAddress e, GuestMemory &m,
+                  manager_release_context61::Registers &s) override {
+    if (e == 0x82acb120) {
+      if (m.ReadU32(unsigned(s.r[3])) != 0x8204a1d8 || s.r[4] != 0)
+        throw std::runtime_error("periodic effect ABI");
+      ++periodicCalls;
+      return;
+    }
     throw std::runtime_error("unexpected phase direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123430) {
+      ++phaseCalls;
+      return;
+    }
     if (e != 0x123420)
       throw std::runtime_error("unexpected phase virtual boundary");
     s.r[3] = 0x93000;
@@ -96,6 +107,40 @@ int main() {
     check(m.ReadU32(0x200000 + 200) == (200u ^ 0xabcdef) &&
           m.ReadU32(0x200000 + 8460 + 4100 + 4092) ==
               ((8460u + 4100 + 4092) ^ 0xabcdef));
+    m.WriteU32(0x80000, 0x82000);
+    m.WriteU32(0x82000 + 12, 0x123430);
+    m.WriteU32(0x80000 + 20, 0x83000);
+    m.WriteU32(0x83004, 0);
+    auto phase = [&](unsigned from, unsigned to, unsigned force) {
+      m.WriteU32(0x80000 + 56, from);
+      s.r[4] = to;
+      s.r[5] = force;
+      run(0x82aaa7c8, 0x80000);
+    };
+    phase(99, 4, 0);
+    check(m.ReadU32(0x80000 + 56) == 99);
+    phase(99, 2, 1);
+    check(m.ReadU32(0x80000 + 56) == 2 && m.ReadU32(0x80000 + 144) == 2);
+    phase(0, 1, 0);
+    check(m.ReadU32(0x80000 + 56) == 1);
+    m.WriteU32(0x80000 + 52, 7);
+    phase(2, 3, 0);
+    check(m.ReadU32(0x80000 + 52) == 8);
+    phase(3, 2, 0);
+    check(g.phaseCalls == 1 && m.ReadU32(0x80000 + 56) == 2);
+    phase(3, 4, 0);
+    check(m.ReadU32(0x80000 + 56) == 4);
+    phase(4, 5, 0);
+    phase(5, 6, 0);
+    check(g.periodicCalls == 1 && m.ReadU32(0x80000 + 56) == 6);
+    phase(8, 9, 0);
+    check(m.ReadU32(0x80000 + 56) == 9);
+    phase(11, 13, 0);
+    check(m.ReadU32(0x80000 + 56) == 13);
+    phase(12, 13, 0);
+    check(m.ReadU32(0x80000 + 56) == 13);
+    phase(13, 0, 0);
+    check(m.ReadU32(0x80000 + 56) == 13 && s.r[3] == 0x93000);
     std::puts("phase support smoke passed");
     return 0;
   } catch (const std::exception &e) {
