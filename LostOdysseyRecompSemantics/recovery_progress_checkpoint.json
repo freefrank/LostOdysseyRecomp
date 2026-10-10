@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 178,
-    "distinct_entries": 603,
+    "unit_count": 179,
+    "distinct_entries": 611,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1892,6 +1892,21 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture checks zero-offset getter/setter aliases, negative signed immediate, original prefix bit and LR retention, registered extended skip followed by event end, flag reset on the next opcode and nine-byte skip. Prefix dispatch reuses the existing local handler routing, preserving guest fallback for unrecovered targets. No invalid-bytecode guard or arbitrary opcode completion claim is added. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_scene61",
+        "entries": [
+          "82AF7EA0",
+          "82AFC9C8",
+          "82AFC8A0",
+          "82AFC790",
+          "82AFC4F0",
+          "82AFC418",
+          "82AF7C98",
+          "82AF7C20"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One compact fixture covers both predicate wrappers and negative branches, signed-byte command arguments, packed scaled XYZ register payload, returned identifier writeback, global predicate and invalid-mode cursor preservation, float parameters, inline UTF16 payload/flag expansion and preserved FPR31/stack. Other mode arms are source-reviewed, not individually runtime tested. Concrete scene services and actual presentation remain guest boundaries. Logical/ABI only"
       }
     ]
   },

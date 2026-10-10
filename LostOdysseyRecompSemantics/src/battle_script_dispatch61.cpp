@@ -9,6 +9,7 @@
 #include "lo_semantics/battle_script_text61.h"
 #include "lo_semantics/battle_script_services61.h"
 #include "lo_semantics/battle_script_extensions61.h"
+#include "lo_semantics/battle_script_scene61.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_script_dispatch61 {
 namespace {
@@ -120,7 +121,8 @@ void DispatchOpcode(GuestAddress target, GuestMemory &m, Dependencies d,
            !battle_script_party61::Apply(target & ~3u, m, d, s) &&
            !battle_script_text61::Apply(target & ~3u, m, d, s) &&
            !battle_script_services61::Apply(target & ~3u, m, d, s) &&
-           !battle_script_extensions61::Apply(target & ~3u, m, d, s))
+           !battle_script_extensions61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_scene61::Apply(target & ~3u, m, d, s))
     d.guest.CallIndirect(target & ~3u, m, s);
 }
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {

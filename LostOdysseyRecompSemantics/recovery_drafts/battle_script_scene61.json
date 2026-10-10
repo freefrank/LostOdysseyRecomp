@@ -1,0 +1,95 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Script scene-service branch, command, packed vector, numeric parameter and inline text handlers.",
+  "entries": [
+    {
+      "address": "82AF7EA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9152,
+      "instruction_count": 29,
+      "body_sha256": "ec100bd33965c169af13bbf1eddea1880929b076ae11751c4908de6f72ecac45",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC9C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 20469,
+      "instruction_count": 80,
+      "body_sha256": "895ae648f6603b76c798b507b75a064a69616ecd83bc2414d34878772c5822c3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC8A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 20294,
+      "instruction_count": 74,
+      "body_sha256": "b110331dc561bd80115303c08cfd0de4f9f6a8ea7dd872661fccc2855993cc97",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC790",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 20138,
+      "instruction_count": 67,
+      "body_sha256": "5065b27e517bda059b30b7596c0a23eca06ad2b21546d8a1510bbdc95ac595d9",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC4F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 19743,
+      "instruction_count": 121,
+      "body_sha256": "95b63264555a4f8c48a367fdf2e1f41447fc0dba5fb439ce8854a67d647cde92",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC418",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 19618,
+      "instruction_count": 53,
+      "body_sha256": "739b150e40eeed42a400b4fd73e559a27ab4b221866c52922edecfedc1cb033e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7C98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8854,
+      "instruction_count": 95,
+      "body_sha256": "30e688ec9c8ba68ac67ded1880df300d22e6775ad150c8534a21d36d0a18b443",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7C20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8783,
+      "instruction_count": 29,
+      "body_sha256": "e4b752dd131f90b3347a7134ec7f1f3401a30cf45b384f3f49145c085225a119",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AF7EA0",
+      "82AFC9C8",
+      "82AFC8A0",
+      "82AFC790",
+      "82AFC4F0",
+      "82AFC418",
+      "82AF7C98",
+      "82AF7C20"
+    ],
+    "header": "include/lo_semantics/battle_script_scene61.h",
+    "source": "src/battle_script_scene61.cpp",
+    "smoke": "tests/battle_script_scene61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One compact fixture covers both predicate wrappers and negative branches, signed-byte command arguments, packed scaled XYZ register payload, returned identifier writeback, global predicate and invalid-mode cursor preservation, float parameters, inline UTF16 payload/flag expansion and preserved FPR31/stack. Other mode arms are source-reviewed, not individually runtime tested. Concrete scene services and actual presentation remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
