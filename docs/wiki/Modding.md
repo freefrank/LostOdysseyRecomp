@@ -1,6 +1,6 @@
 # Modding LostOdysseyRecomp
 
-These pages document the API v1 implementation developed in PR #68. A published Wiki page does not mean the feature is included in an existing release. Use a build containing that PR's changes.
+These pages document the mod API (mod format v1 from PR #68 and v2, mod folders with their own overlay files). A published Wiki page does not mean the feature is included in an existing release.
 
 ## What works today
 
@@ -11,7 +11,8 @@ These pages document the API v1 implementation developed in PR #68. A published 
 | Textures drawn by the game | Replaced at upload by fingerprint from `.lotex2` files, at the original size or 2x/4x/8x larger (experimental; uncompressed RGBA8 or BC1/BC4/BC7 DDS). See [Creating mods](Creating-Mods.md) and [Modding API](Modding-API.md). |
 | Game text | Translations replace the game's text by key from the JSON files the export writes, including longer text (experimental). A language pack adds a new choice to Settings > System > Game language. See [Creating mods](Creating-Mods.md#1e-translate-the-games-text-experimental). |
 | Font files/metrics, models and movies | Resource kinds and provider extension points reserved; no runtime consumers yet. |
-| External manager overlay | Implemented deterministic paths and isolated resolution mode. |
+| Mod folders | One folder per mod: `mods/<id>/mod.ini` with a name, version and author, plus its own `overlay/` files found by name. The order in `mod-list.ini` (next to `settings.ini`), then `priority`, decides between mods. See [Creating mods](Creating-Mods.md#mod-folders-recommended). |
+| External manager overlay | Deterministic top-level `overlay/` paths that a manager orders, and an isolated resolution mode. |
 | Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys), movies and text (JSON per game text file, the starting point for translations), also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md). |
 | Mod Organizer 2 | Game plugin in `tools/modding/mo2`; MO2 maps mods onto `mods/`. See [Mod Organizer 2](Mod-Organizer-2.md). |
 
@@ -27,8 +28,8 @@ Mods are supported on the Windows build only. The Linux, macOS and Android build
 
 ## Installation essentials
 
-The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. ZIPs produced by the packer contain a top-level `mods/` folder; deploy the contents of that folder into the selected root, without adding another `mods/` level.
+The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. ZIPs produced by the packer contain a top-level `mods/` folder (`mods/<id>/...` for a mod folder); deploy the contents of that folder into the selected root, without adding another `mods/` level.
 
-With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after changing installed mods. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
+With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after changing installed mods or `mod-list.ini`. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
 
 Use only artwork you may distribute. Do not bundle the original game archives, executable, extraction catalog or unrelated extracted artwork with a mod.

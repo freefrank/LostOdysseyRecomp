@@ -81,8 +81,8 @@ class ModCatalogTest(unittest.TestCase):
                 if layout == "overlay":
                     self.assertEqual(name, "mods/" + item["overlay_path"])
                 else:
-                    self.assertIn("image:" + item["key"] + "=images/",
-                                  archive.read("mods/catalog-demo/mod.ini").decode())
+                    self.assertEqual(name, "mods/catalog-demo/" + item["overlay_path"])
+                    self.assertIn("api_version=2\n", archive.read("mods/catalog-demo/mod.ini").decode())
 
     def test_variants_require_explicit_selection_even_with_equal_dimensions(self):
         self.asset()

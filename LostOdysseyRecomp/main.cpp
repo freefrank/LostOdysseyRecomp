@@ -370,13 +370,15 @@ int main(int argc, char* argv[])
         // existing data directory to map its virtual files onto.
         std::error_code ec;
         std::filesystem::create_directories(modsRoot, ec);
-        modding::Initialize(modsRoot);
+        // The in-game mod order lives beside settings.ini, outside the folder
+        // a manager may virtualize (MO2 sends writes there to its Overwrite).
+        modding::Initialize(modsRoot, std::filesystem::absolute(os::user_paths::SettingsPath(), ec).parent_path() / "mod-list.ini");
         if (modding::Enabled())
         {
             std::string ids;
             for (const auto& id : modding::ModIds()) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", id);
             const auto mode = modding::Mode();
-            LOG_NOTICE("mods: {} (mode {}), standalone mods: {}, overlay folder: {}",
+            LOG_NOTICE("mods: {} (mode {}), mod folders (highest first): {}, overlay folder: {}",
                 FileSystem::PathUtf8(modding::Root()),
                 mode == modding::ResolutionMode::Overlay ? "overlay"
                     : mode == modding::ResolutionMode::Standalone ? "standalone" : "combined",

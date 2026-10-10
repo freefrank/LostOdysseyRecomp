@@ -2,6 +2,39 @@
 
 Read [current support](Modding.md) first. Start with the native settings-menu atlas `UI_MAIN_00`; an arbitrary exported Texture2D is not necessarily consumed by the native menu. The catalog lists native font-page candidates, but they are not confirmed `init` consumers and do not change character mapping or font metrics.
 
+## Mod folders (recommended)
+
+Ship a mod as one folder with its own `overlay/`:
+
+```text
+mods/<id>/mod.ini
+mods/<id>/overlay/textures/fp-<fingerprint>.lotex2
+mods/<id>/overlay/images/key-fnv1a64-<16 hex digits>.lotex
+mods/<id>/overlay/text/<member path>.json
+```
+
+```ini
+api_version=2
+id=my-textures
+name=My Texture Pack
+version=1.0
+author=Your name
+description=One line about the mod.
+```
+
+The game finds the files under `overlay/` by name, so `mod.ini` needs no file list. `name`, `version`, `author` and `description` are optional. `texture-pack --layout standalone` and `pack` (its default layout) write this layout. A translation that adds a new language is a language pack instead, a folder with a `language.ini` ([1e](#1e-translate-the-games-text-experimental)); both kinds of folder sit side by side in `mods/`.
+
+Zip it with `mods/` at the top of the archive: `mods/<id>/mod.ini`, `mods/<id>/overlay/...`. Players extract the archive into the game folder; Mod Organizer 2 installs it as it is. Mod folders never conflict with each other. When two of them replace the same file, the in-game mod order decides, then `priority` in `mod.ini` (see [Modding API](Modding-API.md#order-and-mod-listini)). Changes take effect after a restart.
+
+To turn a top-level `overlay/` folder (an overlay pack) into a mod folder without packing it again:
+
+```sh
+python tools/modding/lo_mod.py overlay-to-mod mods --id my-textures --name "My Texture Pack" --version 1.0 --dry-run
+python tools/modding/lo_mod.py overlay-to-mod mods --id my-textures --name "My Texture Pack" --version 1.0
+```
+
+This moves `mods/overlay/textures` (and `images`, `text` and the other kind folders) into `mods/my-textures/overlay/` and writes `mod.ini`. Folders are renamed, not copied, so even a large pack moves at once; across drives the command fails instead of copying. It refuses when `mods/my-textures` exists, and `--dry-run` only prints what it would do. For a mod already installed in Mod Organizer 2, pass that mod's folder (the one that holds `overlay/`).
+
 ## 1. Select an actual resource
 
 Run these commands from a source checkout containing the Mod API. Python 3.10+ is required; Pillow is needed only for PNG conversion. The preferred source is the completed asset-inventory SQLite catalog. The older CSV manifest remains supported for compatibility. The verified `UI_MAIN_00` native atlas is 512x1024 in each of the five language packages.
@@ -82,9 +115,11 @@ Pack the results with `texture-pack` (next section) to use them in game.
 # Overlay layout: files go to <output>/overlay/textures/fp-<fingerprint>.lotex2
 python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods
 
-# Standalone layout: <output>/<id>/mod.ini with texture: lines plus <id>/textures/
-python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods --layout standalone --id my-textures
+# Mod folder: <output>/<id>/mod.ini (api_version=2) plus <id>/overlay/textures/
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods --layout standalone --id my-textures --name "My Texture Pack" --version 1.0
 ```
+
+- `--name`, `--version`, `--author` and `--description` go into the mod folder's new `mod.ini`. Packing into an existing mod folder keeps its `mod.ini`, which must say `api_version=2`.
 
 - `--images-index` maps keys to PNG files (default: `index.csv` in the `--images` folder).
 - `--filter <text>` keeps keys that contain the text. `--fingerprints <log.csv>` keeps only fingerprints a game run logged.
@@ -116,7 +151,7 @@ The game runs as the base language underneath: voices, artwork with words in it 
 ### Change a language the game already has
 
 1. Export the text: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text --export-language int` (or tick Text in the MO2 tool). Without `--export-language` you get every language on your discs.
-2. Copy the files you change into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. With Mod Organizer 2, make a mod whose folder holds `overlay/text/...`. A standalone mod lists each file in its `mod.ini` instead: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
+2. Copy the files you change into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. To share the change, put the files in a [mod folder](#mod-folders-recommended) instead, under `mods/<id>/overlay/text/...` next to its `mod.ini`. A v1 mod lists each file in its `mod.ini`: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
 3. Change the values as in step 4 above. Entries you leave out keep the original text.
 4. Start the game with the language of the files you changed (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
 
@@ -136,14 +171,14 @@ python tools/modding/lo_mod.py init --database catalog.sqlite --object UI_MAIN_0
 
 `--image` is relative to the new specification, not the shell's working directory. `init` requires exactly one identity and one content variant, and refuses to overwrite an existing specification. A zero-match result requires checking the object/package/key filters; multiple content variants require `--content-sha256` to select one. The same `--database`/`--manifest`, filter, and `--allow-unwired` rules apply to `init`.
 
-The generated `mod.json` contains `api_version`, `id`, `priority` and an `images` array. Each image has `key`, `source`, `width` and `height`. Add more image records using keys and original dimensions from the catalog. Sources must stay inside the specification directory; absolute paths, `..` and escaping symlinks are rejected.
+The generated `mod.json` contains `api_version`, `id`, `priority` and an `images` array; you may add `name`, `version`, `author` and `description`. Each image has `key`, `source`, `width` and `height`. Add more image records using keys and original dimensions from the catalog. Sources must stay inside the specification directory; absolute paths, `..` and escaping symlinks are rejected.
 
 ## 3. Build an installable ZIP
 
-Standalone package:
+Mod folder package (default):
 
 ```sh
-python tools/modding/lo_mod.py pack my-menu/mod.json --output my-menu-standalone.zip
+python tools/modding/lo_mod.py pack my-menu/mod.json --output my-menu.zip --name "My menu art" --version 1.0
 ```
 
 External-manager package:
@@ -154,14 +189,14 @@ python tools/modding/lo_mod.py pack my-menu/mod.json --layout overlay --output m
 
 The tool compiles non-animated PNGs into identity-bearing LOTEX1 files. The game does not decode mod PNG files directly. Incorrect dimensions, duplicate identities and invalid input fail the build. Existing output ZIPs are never overwritten; select a new name or deliberately remove the previous build.
 
-Standalone ZIP layout:
+Mod folder ZIP layout:
 
 ```text
 mods/my-menu/mod.ini
-mods/my-menu/images/key-fnv1a64-<16 lowercase hex digits>.lotex
+mods/my-menu/overlay/images/key-fnv1a64-<16 lowercase hex digits>.lotex
 ```
 
-The generated `mod.ini` includes `api_version=1`, `id`, `priority`, `enabled=true` and one `image:<canonical-key>=<relative-file>` entry per image. `mod.json` is an authoring input; the runtime reads `mod.ini`, not JSON.
+The generated `mod.ini` has `api_version=2`, `id`, the optional `name`, `version`, `author` and `description`, `priority` and `enabled=true`. The metadata comes from the same fields in `mod.json` or from `--name`, `--version`, `--author` and `--description`, which win. `mod.json` is an authoring input; the runtime reads `mod.ini`, not JSON.
 
 Overlay ZIP layout:
 
@@ -173,9 +208,9 @@ No shared manifest is included in an overlay ZIP. Competing mods deliberately pr
 
 ## 4. Install and verify
 
-For a portable standalone installation, extract the ZIP beside the executable so that `mods/my-menu/mod.ini` is under the runtime's mod root. For another layout, copy the ZIP's `mods/` contents to `LO_MODS_DIR` or the application's selected mods directory.
+For a portable installation, extract the ZIP beside the executable so that `mods/my-menu/mod.ini` is under the runtime's mod root. For another layout, copy the ZIP's `mods/` contents to `LO_MODS_DIR` or the application's selected mods directory.
 
-Use `LO_MODS_MODE=standalone` to ignore merged overlays during a standalone test. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's manifest and restart to verify restoration. Removing the mod folder also uninstalls it.
+Use `LO_MODS_MODE=standalone` to ignore the top-level overlay while testing a mod folder. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's manifest and restart to verify restoration. Removing the mod folder also uninstalls it.
 
 To inspect an extracted payload:
 

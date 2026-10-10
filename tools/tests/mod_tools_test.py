@@ -2,11 +2,13 @@
 import csv
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 from PIL import Image
 
 SPEC = importlib.util.spec_from_file_location("lo_mod", Path(__file__).parents[1] / "modding/lo_mod.py")
@@ -76,14 +78,28 @@ class ModToolsTest(unittest.TestCase):
         output = self.root / "standalone.zip"
         self.assertEqual(mod.pack(self.spec, output, "standalone"), 1)
         with zipfile.ZipFile(output) as archive:
-            manifest = archive.read("mods/test/mod.ini").decode()
-            self.assertIn("api_version=1", manifest)
-            self.assertIn("image:" + KEY + "=images/", manifest)
-            payload = next(name for name in archive.namelist() if name.endswith(".lotex"))
-            self.assertEqual(mod.inspect(archive.read(payload))["key"], KEY)
+            # Mod folder (format v2): files under the mod's own overlay/, found by name.
+            self.assertEqual(sorted(archive.namelist()), ["mods/test/mod.ini", "mods/test/" + mod.overlay_path(KEY)])
+            self.assertEqual(archive.read("mods/test/mod.ini").decode(),
+                             "api_version=2\nid=test\npriority=10\nenabled=true\n")
+            self.assertEqual(mod.inspect(archive.read("mods/test/" + mod.overlay_path(KEY)))["key"], KEY)
         with self.assertRaises(FileExistsError):
             mod.pack(self.spec, output, "standalone")
         self.assertTrue(output.exists())
+
+    def test_metadata(self):
+        self.data.update({"name": "Menu art", "author": "spec author"})
+        self.save()
+        output = self.root / "meta.zip"
+        self.assertEqual(mod.main(["pack", str(self.spec), "--output", str(output), "--author", "Ünïcode 作者",
+                                   "--version", "1.2"]), 0)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.read("mods/test/mod.ini").decode(),
+                             "api_version=2\nid=test\nname=Menu art\nversion=1.2\nauthor=Ünïcode 作者\npriority=10\nenabled=true\n")
+        for field, value in (("name", "n" * 129), ("description", "a\nb"), ("author", " "), ("version", "\x85")):
+            with self.assertRaises(ValueError):
+                mod.manifest("x", 0, {field: value})
+        self.assertIn("name=" + "é" * 64 + "\n", mod.manifest("x", 0, {"name": "é" * 64}))  # 128 bytes
 
     def test_overlay(self):
         output = self.root / "overlay.zip"
@@ -183,13 +199,71 @@ class ModToolsTest(unittest.TestCase):
         self.assertEqual(len(list((out / "overlay" / "textures").iterdir())), 1)
         out4 = self.root / "nearest4"
         self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--layout", "standalone",
-                                   "--id", "t4", "--test", "nearest4"]), 0)
-        info = mod.inspect((out4 / "t4" / "textures" / "fp-00000000000000ab.lotex2").read_bytes())
+                                   "--id", "t4", "--test", "nearest4", "--name", "Nearest 4x"]), 0)
+        info = mod.inspect((out4 / "t4" / "overlay" / "textures" / "fp-00000000000000ab.lotex2").read_bytes())
         self.assertEqual((info["scale"], info["payload"]), (4, "8x8"))
-        self.assertIn("texture:00000000000000ab=textures/fp-00000000000000ab.lotex2",
-                      (out4 / "t4" / "mod.ini").read_text())
+        ini = (out4 / "t4" / "mod.ini").read_text()
+        self.assertEqual(ini, "api_version=2\nid=t4\nname=Nearest 4x\npriority=0\nenabled=true\n")
+        # Adding to the folder keeps its mod.ini; a v1 mod.ini is refused (v1 mods do not load overlay/).
+        (out4 / "t4" / "overlay" / "textures" / "fp-00000000000000ab.lotex2").unlink()
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--layout", "standalone",
+                                   "--id", "t4", "--name", "Other"]), 0)
+        self.assertEqual((out4 / "t4" / "mod.ini").read_text(), ini)
+        (out4 / "v1").mkdir()
+        (out4 / "v1" / "mod.ini").write_text("api_version=1\nid=v1\n")
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--layout", "standalone", "--id", "v1"]), 2)
+        self.assertFalse((out4 / "v1" / "overlay").exists())
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--name", "x"]), 2)  # overlay layout
         with self.assertRaises(ValueError):
             mod.inspect(data + b"\0")
+
+    def make_overlay(self) -> Path:
+        mods = self.root / "mods"
+        (mods / "overlay" / "textures").mkdir(parents=True)
+        (mods / "overlay" / "textures" / "fp-00000000000000ab.lotex2").write_bytes(b"tex")
+        (mods / "overlay" / "text" / "bin").mkdir(parents=True)
+        (mods / "overlay" / "text" / "bin" / "a.dat.json").write_text("{}")
+        return mods
+
+    def test_overlay_to_mod(self):
+        mods = self.make_overlay()
+        args = ["overlay-to-mod", str(mods), "--id", "hd", "--name", "4x HD Texture Pack", "--version", "1.0"]
+        self.assertEqual(mod.main(args + ["--dry-run"]), 0)
+        self.assertFalse((mods / "hd").exists())
+        self.assertTrue((mods / "overlay" / "textures" / "fp-00000000000000ab.lotex2").exists())
+        self.assertEqual(mod.main(args), 0)
+        self.assertEqual((mods / "hd" / "overlay" / "textures" / "fp-00000000000000ab.lotex2").read_bytes(), b"tex")
+        self.assertTrue((mods / "hd" / "overlay" / "text" / "bin" / "a.dat.json").exists())
+        self.assertEqual((mods / "hd" / "mod.ini").read_text(),
+                         "api_version=2\nid=hd\nname=4x HD Texture Pack\nversion=1.0\npriority=0\nenabled=true\n")
+        self.assertFalse((mods / "overlay").exists())  # Empty after the move.
+        # Refusals: the mod folder exists, no overlay/, reserved id, nothing to move, bad metadata.
+        self.make_overlay()
+        self.assertEqual(mod.main(args), 2)
+        self.assertEqual(mod.main(["overlay-to-mod", str(self.root / "missing"), "--id", "x"]), 2)
+        self.assertEqual(mod.main(["overlay-to-mod", str(mods), "--id", "overlay"]), 2)
+        self.assertEqual(mod.main(["overlay-to-mod", str(mods), "--id", "x", "--name", "n" * 129]), 2)
+        empty = self.root / "empty"
+        (empty / "overlay" / "other").mkdir(parents=True)
+        self.assertEqual(mod.main(["overlay-to-mod", str(empty), "--id", "x"]), 2)
+        self.assertFalse((mods / "x").exists() or (empty / "x").exists())
+
+    def test_overlay_to_mod_rolls_back(self):
+        mods = self.make_overlay()
+        real = os.rename
+        calls = []
+
+        def fail_second(old, new):
+            calls.append(old)
+            if len(calls) == 2:
+                raise OSError("simulated failure")
+            real(old, new)
+        with mock.patch.object(mod.os, "rename", fail_second):
+            with self.assertRaises(OSError):
+                mod.overlay_to_mod(mods, "hd")
+        self.assertFalse((mods / "hd").exists())
+        self.assertTrue((mods / "overlay" / "textures" / "fp-00000000000000ab.lotex2").exists())
+        self.assertTrue((mods / "overlay" / "text" / "bin" / "a.dat.json").exists())
 
     @unittest.skipUnless(mod.DEFAULT_TEXCONV.is_file(), "texconv not available")
     def test_texture_pack_dds(self):
