@@ -233,6 +233,14 @@
       "instruction_count": 130,
       "body_sha256": "a77610501cbe7ce30294fbc2aec191a9b4acbceda5cb72ff7fd4e672d3dc7619",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FBD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8338,
+      "instruction_count": 59,
+      "body_sha256": "612f38be6312d488865033f3cbbbcc750bc4b0bb3de91a1c21e83c20b97535cf",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -265,7 +273,8 @@
       "82B0F920",
       "82B10E98",
       "82B0AD38",
-      "82B0E798"
+      "82B0E798",
+      "82B0FBD0"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -290,6 +299,7 @@
     "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_shared_properties": "Recovered B10E98 shared-party property assignment or random target category selection, with ACA710/ACA830 shared-bank mutation, ACA838 shared payload clearing and AC8988 direct category insertion. Preserves source early return for already-set shared flags and first-full-mask payload indexing. Focused integration covers actual shared group lookup, source category and payload assignment, target category replacement and duration resets. Descriptor callback coverage now 60 of 83 distinct targets; remaining 23 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_transfer": "Recovered B0AD38 HP/MP transfer from source to target. Preserves same-ID and zero-available skips, truncated integer ratio with whole-available fallback, target restoration before source depletion, paired result slots and final effect mark. Focused integration covers both HP and MP transfers through the real result pipeline and same-ID suppression. Descriptor callback coverage now 61 of 83 distinct targets; remaining 22 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-    "descriptor_random_add": "Recovered B0E798 random single-bit primary property insertion plus optional secondary mask, eligibility/chance gating and the source single-use target flag. Preserves original-mask bookkeeping in owner196 and primary selected-bit index. Focused integration checks random primary choice, secondary application and repeated-use suppression. Descriptor callback coverage now 62 of 83 distinct targets; remaining 21 unclaimed. Logical ABI checks only, not gameplay acceptance."
+    "descriptor_random_add": "Recovered B0E798 random single-bit primary property insertion plus optional secondary mask, eligibility/chance gating and the source single-use target flag. Preserves original-mask bookkeeping in owner196 and primary selected-bit index. Focused integration checks random primary choice, secondary application and repeated-use suppression. Descriptor callback coverage now 62 of 83 distinct targets; remaining 21 unclaimed. Logical ABI checks only, not gameplay acceptance.",
+    "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

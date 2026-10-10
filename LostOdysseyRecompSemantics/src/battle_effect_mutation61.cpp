@@ -55,6 +55,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 30, literal = 0;
   switch (e) {
+  case 0x82b0fbd0:
   case 0x82b10368:
     frame = 128;
     first = 28;
@@ -195,7 +196,30 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0e798) {
+  if (e == 0x82b0fbd0) {
+    if (!eligible(3) || chance(0x82b08ea8)) {
+      s.r[3] = 7;
+      Call(0x8238aab0, m, d, s);
+      auto target = m.ReadU32(owner + 8);
+      bool allowed = !(m.ReadU32(target + 4876) & Address(s.r[3]));
+      if (!allowed) {
+        s.r[3] = target;
+        s.r[4] = 7;
+        Call(0x8238e368, m, d, s);
+        allowed = (Address(s.r[3]) & 255) != 0;
+      }
+      if (allowed) {
+        mark();
+        property(0x82ac9548, 92, 100);
+        s.r[3] = m.ReadU32(owner + 100);
+        Call(0x82ac84b8, m, d, s);
+        if (!m.ReadU32(owner + 92))
+          m.WriteU32(owner + 168, Address(s.r[3]));
+        if (m.ReadU32(owner + 104))
+          property(0x82ac9548, 96, 104);
+      }
+    }
+  } else if (e == 0x82b0e798) {
     if (!eligible(1) && !m.ReadU32(owner + 92))
       m.WriteU8(owner + 208, 0);
     else if (chance(0x82b08ea8)) {

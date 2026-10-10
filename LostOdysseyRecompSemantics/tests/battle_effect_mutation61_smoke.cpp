@@ -457,6 +457,26 @@ int main() {
     m.WriteU32(target + 3 * 272 + 232, 0);
     call(0x82b0e798);
     check(!m.ReadU32(target + 3 * 272 + 232), "single-use effect target flag");
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 100, 6);
+    m.WriteU32(owner + 96, 4);
+    m.WriteU32(owner + 104, 16);
+    m.WriteU32(target + 3 * 272 + 232, 2);
+    m.WriteU32(target + 4 * 272 + 232, 16);
+    m.WriteU32(target + 4876, 0);
+    m.WriteU32(target + 5088, 0);
+    call(0x82b0fbd0);
+    check(m.ReadU32(target + 3 * 272 + 232) == 4 &&
+              !m.ReadU32(target + 4 * 272 + 232),
+          "dual property toggle");
+    m.WriteU32(target + 4876, 2);
+    m.WriteU32(owner + 104, 0);
+    call(0x82b0fbd0);
+    check(!m.ReadU32(target + 3 * 272 + 232),
+          "toggle addition respects immunity");
+    m.WriteU32(target + 4876, 128);
+    call(0x82b0fbd0);
+    check(!m.ReadU32(target + 3 * 272 + 232), "passive property seven gate");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

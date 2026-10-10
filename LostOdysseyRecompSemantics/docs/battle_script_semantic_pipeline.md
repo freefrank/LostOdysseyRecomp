@@ -627,3 +627,7 @@ Recovered B0AD38 HP/MP transfer from source to target. Preserves same-ID and zer
 ## Descriptor random insertion
 
 Recovered B0E798 random single-bit primary property insertion plus optional secondary mask, eligibility/chance gating and the source single-use target flag. Preserves original-mask bookkeeping in owner196 and primary selected-bit index. Focused integration checks random primary choice, secondary application and repeated-use suppression. Descriptor callback coverage now 62 of 83 distinct targets; remaining 21 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
+## Descriptor property toggling
+
+Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.
