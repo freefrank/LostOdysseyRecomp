@@ -1,0 +1,141 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle mesh construction, owned array allocation, lazy normal view and layered destruction.",
+  "entries": [
+    {
+      "address": "82BC5AB8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40552,
+      "instruction_count": 26,
+      "body_sha256": "6259d348eda68528c4d8db53603cc5214768c42501eb46b77244701c948cb0a1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5BE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40734,
+      "instruction_count": 22,
+      "body_sha256": "c524db96aa559052aa71e715773205bc2db801946d153ceae4dddc253ddae9a8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5C38",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40787,
+      "instruction_count": 22,
+      "body_sha256": "27a17c93aa1312d31895baeedc9d01adaa9f9dab49401960bc4e6584ad7dad17",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5C90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40840,
+      "instruction_count": 28,
+      "body_sha256": "4c7d68f0d2aa155fb66945d4fe7925b072832100191a8f604cf88fe5d865c359",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5D00",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40906,
+      "instruction_count": 28,
+      "body_sha256": "ee31b107c8b3547b37a8417e3d7ad2e2f5ecb0e8ae4469479e9c6904c852040a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5D70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 40972,
+      "instruction_count": 30,
+      "body_sha256": "fc9dc87d519002be211c4d883feed64c4a7d4bbed944cf92664a0d0b1e3ce60a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC5FA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41307,
+      "instruction_count": 117,
+      "body_sha256": "3fe9fd359ece35fcc523189d8313f4f6e944c169f48dfdc44953106fdf6bf94b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC6178",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 41577,
+      "instruction_count": 13,
+      "body_sha256": "d4954a9326cf6120d441b1443992a04390a020abc479edb506ad68f5daf26bcd",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9D358",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 5632,
+      "instruction_count": 46,
+      "body_sha256": "5cbdb5867f4a5778b0ea913882ff64729148c1d6529ae2feb7bf99942a6cc0da",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9E0D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7606,
+      "instruction_count": 41,
+      "body_sha256": "cfc857500732b877098e6f0fbea45899d7a03473d2c72cd143ff17aee60f2102",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9E220",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7813,
+      "instruction_count": 19,
+      "body_sha256": "766a0aebb2bde167f8de011b05ff09ae2ce0b06f51efa63e75b60d7315dbcde7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9E2D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 7933,
+      "instruction_count": 44,
+      "body_sha256": "e166616541da3b88ae565e7cbefca565085bd8ea3f32035e6d6431e3467c0149",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B9E388",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 8044,
+      "instruction_count": 28,
+      "body_sha256": "079047f048d0a96b3b60de01b8e292ab8caed2d1c7630742f0022118bb9b399f",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BC5AB8",
+      "82BC5BE0",
+      "82BC5C38",
+      "82BC5C90",
+      "82BC5D00",
+      "82BC5D70",
+      "82BC5FA0",
+      "82BC6178",
+      "82B9D358",
+      "82B9E0D8",
+      "82B9E220",
+      "82B9E2D8",
+      "82B9E388"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_storage61.h",
+    "source": "src/mesh_triangle_storage61.cpp",
+    "smoke": "tests/mesh_triangle_storage61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 2,
+    "case_scope": "Constructor/default fields, empty material allocation, vertex/triangle/material/remap storage, positive-winding angle-weighted normals, isolated-vertex Y fallback, repeated cached view without allocation, nested prefixed-link cleanup and sentinel1 behavior. Both non-deleting and deleting teardown leave zero tracked allocations with preserved stack/low LR. High-level logical recovery; u16/nonindexed/negative-winding and allocation-failure branches are source-reviewed only. No Full72, bitwise floating-point or gameplay acceptance.",
+    "private_constants": "Existing LO_MESH_MATH_CONSTANTS 184-byte guest atan2 input remains external; no extracted game data published."
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Guest atan2 corner-angle weighting, face normals, vertex accumulation and first-face/Y-axis zero fallback.",
+  "entries": [
+    {
+      "address": "82BCA2E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 51499,
+      "instruction_count": 74,
+      "body_sha256": "28f220b2a0c6b2372b3af7f42c79fc856a77e11eb212c34d9545dfe598d0075e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BCC470",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 56462,
+      "instruction_count": 438,
+      "body_sha256": "c31ff2221ae63c780497afbeb9999087c656e07ec180988f9c8369142be69a92",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BCA2E8",
+      "82BCC470"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_normals61.h",
+    "source": "src/mesh_triangle_normals61.cpp",
+    "smoke": "tests/mesh_triangle_storage61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 2,
+    "case_scope": "Constructor/default fields, empty material allocation, vertex/triangle/material/remap storage, positive-winding angle-weighted normals, isolated-vertex Y fallback, repeated cached view without allocation, nested prefixed-link cleanup and sentinel1 behavior. Both non-deleting and deleting teardown leave zero tracked allocations with preserved stack/low LR. High-level logical recovery; u16/nonindexed/negative-winding and allocation-failure branches are source-reviewed only. No Full72, bitwise floating-point or gameplay acceptance.",
+    "private_constants": "Existing LO_MESH_MATH_CONSTANTS 184-byte guest atan2 input remains external; no extracted game data published."
+  }
+}

@@ -1,3 +1,7 @@
+## Root direct continuation: triangle mesh storage and normals (2026-10-10 UTC)
+
+Triangle mesh recovery now includes construction/defaults, vertex/triangle/material/remap arrays, layered release and deleting teardown in mesh_triangle_storage61. BC5D70/B9E0D8 lazily provide normals through mesh_triangle_normals61: BCA2E8 uses recovered guest atan2 for corner weights, BCC470 computes oriented faces, accumulates weighted vertices and retains first-face/Y-axis fallback. Two focused lifecycle paths validate normal values, cache reuse, prefixed nested links, sentinel ownership and complete tracked cleanup. Existing F2B308/BC3EC0/empty leaves are reused without duplicate credit. Floating-point/volatile equivalence and full triangle cooking/loading are not yet claimed.
+
 ## Root direct continuation: optional support-map load connected (2026-10-10 UTC)
 
 BC8438/BC62D8 close ICE/GAUS counts and ICE/SUPM combined dual-byte-table input. Both byte orders round-trip with original owned-buffer aliases and concrete cleanup. A 40-point Fibonacci-sphere input now exercises actual support sampling, emits 8568 bytes, loads completely, scales by two, exports and reloads with doubled positions and zero tracked allocations. Three smaller indexed/plain/inflated paths also pass. Fixture bump-allocation window and fixed output capacity were enlarged to accommodate the longer sample; no production guard or failure policy was added. Prior optional-support load boundary is now concrete. Legacy format branches, bitwise floating-point and gameplay remain unverified.
