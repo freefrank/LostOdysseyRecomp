@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 143,
-    "distinct_entries": 449,
+    "unit_count": 144,
+    "distinct_entries": 454,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1493,6 +1493,18 @@
         ],
         "focused_smoke_paths": 4,
         "validation": "Both topology types and both endian modes round-trip writer output twice into the same owned object. Checks include exact cursor, vector bytes/counts, inverse permutation, nested records, type1 sentinel halves, complete cleanup and ABI. Uses an in-place SDK realloc fixture; moving realloc, malformed streams and independent native assets remain unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "cloth_topology_support61",
+        "entries": [
+          "82BA7080",
+          "82BA7250",
+          "82BA7438",
+          "82BA7648",
+          "82BA7DB8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One focused sample exercises all three record sorts, a successful triple lookup, the original adjacent-pair ambiguity rejection, and triangle/tetrahedral descriptor layouts. Lookup retains the original nonempty valid-range contract; invalid and underflowing search ranges are not accepted as validated. Logical/ABI only"
       }
     ]
   },

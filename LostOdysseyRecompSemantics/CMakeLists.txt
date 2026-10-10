@@ -259,6 +259,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_triangle_tree61.cpp
     src/mesh_triangle_clean61.cpp
     src/mesh_triangle_flags61.cpp
+    src/cloth_topology_support61.cpp
     src/cloth_load61.cpp
     src/cloth_stream61.cpp
     src/cloth_storage61.cpp
