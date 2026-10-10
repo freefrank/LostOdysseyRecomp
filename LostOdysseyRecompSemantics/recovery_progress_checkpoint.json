@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 238,
-    "distinct_entries": 1175,
+    "unit_count": 239,
+    "distinct_entries": 1182,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -3017,6 +3017,20 @@
         "validation": "Recovered shared effect scaling, critical-property/chance decision, bounded magnitude jitter and final status/partner normalization. Uses guest-provided coefficients and source single-precision stages, with no embedded private constants. Focused synthetic checks cover stat scaling, target status multiplier, bypass, critical categories, jitter/zero handling, source/target status overrides, partner short-circuit and rounding. Logical ABI coverage only, not bitwise FP or gameplay acceptance.",
         "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "shared_damage_helpers": "Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+      },
+      {
+        "unit": "battle_phase_support61",
+        "entries": [
+          "82400A18",
+          "82B08A60",
+          "82B2C410",
+          "82389B10",
+          "82A9F160",
+          "82ACE978",
+          "82AF6B48"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {
@@ -3101,8 +3115,8 @@
   },
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
-    "routed_units": 74,
-    "routed_distinct_entries": 660,
+    "routed_units": 75,
+    "routed_distinct_entries": 667,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3110,8 +3124,8 @@
     "library_validated": true,
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
-    "routed_battle_units": 71,
-    "routed_battle_entries": 631,
+    "routed_battle_units": 72,
+    "routed_battle_entries": 638,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3153,6 +3167,7 @@
     "descriptor_priced_physical": "Recovered B12D08 source-action flag shortcut or priced physical damage. The full branch uses shared physical/critical/shield/MP resolution, optional MP siphon and source-width profile cost arithmetic capped by available balance. The shortcut marks the effect and sets the source flag without running damage or spending. Focused checks cover shortcut preservation and full damage/siphon/spending composition. Descriptor callback coverage now 77 of 83 distinct targets; remaining 6 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_property_reports": "Recovered B106B8 property-family conversion, duration masks and selected-target property assignment; AC8608 inserts, maximizes or accumulates property payloads. Recovered B11A20 temporary-immunity/category selection with real target-label binding and result reports. Focused checks cover family/value conversion, duration slots, random primary target, random immunity, empty-category no-mark behavior and category/class report selection. Descriptor callback coverage now 79 of 83 distinct targets; remaining 4 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_revival": "Recovered revival reset dependencies AC92B0, ACD3C0 and B0FF10, composing the existing AB31E0 action reset, plus B0FFF0 revival modes and B12870 paired HP/MP floor restoration. Reset preserves the designated bank-3 property payload, clears action timing, rebuilds stats/default actions and releases script flags. Focused checks cover real reset composition, activation-only and unconditional revival, paired floors, special full-HP report and same-actor action reset. Descriptor callback coverage now 81 of 83 distinct targets. Logical ABI checks only, not gameplay acceptance.",
-    "descriptor_linked_action_timing": "Recovered the final two descriptor callbacks B11878 and B0EF68, plus six action-state/timing helpers ACE208, ACE260, ACD998, ACDAA0, ACDC40 and ACDCF0. Linked properties preserve the source primary-bank peer-ID quirk and resolve live peer state before timing changes; existing ACD680 supplies timing arithmetic. Focused composition checks cover peer linking and half-time state transition, 130/150-percent action changes, duplicate suppression and item slow timing. All 83 distinct descriptor callback targets now have logical implementations. This table coverage is not whole-game completion or gameplay acceptance; unknown external boundaries remain explicit."
+    "descriptor_linked_action_timing": "Recovered the final two descriptor callbacks B11878 and B0EF68, plus six action-state/timing helpers ACE208, ACE260, ACD998, ACDAA0, ACDC40 and ACDCF0. Linked properties preserve the source primary-bank peer-ID quirk and resolve live peer state before timing changes; existing ACD680 supplies timing arithmetic. Focused composition checks cover peer linking and half-time state transition, 130/150-percent action changes, duplicate suppression and item slow timing. All 83 distinct descriptor callback targets now have logical implementations. This table coverage is not whole-game completion or gameplay acceptance; unknown external boundaries remain explicit.",
+    "phase_support": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance."
   }
 }

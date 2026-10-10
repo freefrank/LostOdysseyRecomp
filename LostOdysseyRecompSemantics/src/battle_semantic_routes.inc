@@ -24,6 +24,7 @@
 #include "lo_semantics/battle_formation61.h"
 #include "lo_semantics/battle_group_gauge61.h"
 #include "lo_semantics/battle_manager_access61.h"
+#include "lo_semantics/battle_phase_support61.h"
 #include "lo_semantics/battle_preferred_target61.h"
 #include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/battle_property_mutation61.h"
@@ -345,6 +346,14 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82df7558u:
   case 0x83081540u:
     return battle_manager_access61::Apply(entry, memory, dependencies, state);
+  case 0x82389b10u:
+  case 0x82400a18u:
+  case 0x82a9f160u:
+  case 0x82ace978u:
+  case 0x82af6b48u:
+  case 0x82b08a60u:
+  case 0x82b2c410u:
+    return battle_phase_support61::Apply(entry, memory, dependencies, state);
   case 0x82ac8228u:
     return battle_preferred_target61::Apply(entry, memory, dependencies, state);
   case 0x82ac3498u:

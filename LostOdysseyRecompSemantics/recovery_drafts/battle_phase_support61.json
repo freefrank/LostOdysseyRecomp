@@ -1,0 +1,86 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Lower dependencies for battle phase transitions and restart.",
+  "entries": [
+    {
+      "address": "82400A18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.15.cpp",
+      "source_line": 30816,
+      "instruction_count": 5,
+      "body_sha256": "0e6fe77e3057df3fec327e838a69b15961e200bf0456ecd51d8d51cc1bded8d5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08A60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16103,
+      "instruction_count": 6,
+      "body_sha256": "634c2a5099392f69e8ce466f5c8267a4643cde67d79fb6730fd9a0ab00db53de",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B2C410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 6009,
+      "instruction_count": 23,
+      "body_sha256": "10f284a17b6620396280e88c8c29ca7e67d07c0288b81a2022526e33b4773b68",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82389B10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 18664,
+      "instruction_count": 14,
+      "body_sha256": "4c36cd6a1a4015d5d9aec86b405bd171ccea8f389abf7ebeeedd28cb550a5c0d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F160",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 3803,
+      "instruction_count": 23,
+      "body_sha256": "f5d4d7568b56132afaef78bcbb559473e141f01c44fe816b64d3eb603a1b627a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACE978",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 20189,
+      "instruction_count": 43,
+      "body_sha256": "50cb2d9428e244fcae7539e9fba32e577e4f9c043e20016d8e132f694509e9f0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6B48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6305,
+      "instruction_count": 76,
+      "body_sha256": "809bf9900acbb8f26336a6ffdb7b485a0b3d8e00cbde5b658aefb6c94580445f",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82400A18",
+      "82B08A60",
+      "82B2C410",
+      "82389B10",
+      "82A9F160",
+      "82ACE978",
+      "82AF6B48"
+    ],
+    "header": "include/lo_semantics/battle_phase_support61.h",
+    "source": "src/battle_phase_support61.cpp",
+    "smoke": "tests/battle_phase_support61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance."
+  }
+}

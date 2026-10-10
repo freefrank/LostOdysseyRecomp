@@ -1,3 +1,7 @@
+## Root direct continuation: battle phase support (2026-10-10 UTC)
+
+Recovered seven lower dependencies for battle phase transitions: object release flag, timer reset, next action selection, typed play accessor, guarded script restart, side-specific action countdown and profile record restoration. Focused synthetic checks cover all seven entries with real manager/type lookup, two roster sides, blocked countdown, first matching action and both profile record banks. The encompassing phase machine and battle restart remain unclaimed. Logical ABI coverage only, not gameplay acceptance.
+
 ## Root direct continuation: complete descriptor callback coverage (2026-10-10 UTC)
 
 Recovered the final two descriptor callbacks B11878 and B0EF68, plus six action-state/timing helpers ACE208, ACE260, ACD998, ACDAA0, ACDC40 and ACDCF0. Linked properties preserve the source primary-bank peer-ID quirk and resolve live peer state before timing changes; existing ACD680 supplies timing arithmetic. Focused composition checks cover peer linking and half-time state transition, 130/150-percent action changes, duplicate suppression and item slow timing. All 83 distinct descriptor callback targets now have logical implementations. This table coverage is not whole-game completion or gameplay acceptance; unknown external boundaries remain explicit.
