@@ -40,6 +40,7 @@
 #include "frame_pacer.h"
 #include "deadline_wait.h"
 #include "frame_plan.h"
+#include "pipeline_prepare_progress.h"
 #include <settings/config.h>
 #include "frame_generation_settings.h"
 #include <settings/menu.h>
@@ -534,6 +535,14 @@ namespace gpu::video
             std::unique_ptr<plume::RenderBuffer> upload;
             uint64_t revision = 0;
         } g_titleHint;
+        // The background pipeline preparation bar (DrawPreparationBar).
+        struct PreparationBarResources {
+            std::unique_ptr<plume::RenderTexture> texture;
+            std::unique_ptr<plume::RenderBuffer> upload;
+            uint32_t width = 0, height = 0, filled = 0, total = 0;
+            std::chrono::steady_clock::time_point finished{};
+            bool hidden = false;
+        } g_preparationBar;
         std::unique_ptr<plume::RenderTexture> g_presentedSnapshot;
         uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
         plume::RenderFormat g_snapshotFormat=plume::RenderFormat::UNKNOWN;
@@ -1979,6 +1988,7 @@ namespace gpu::video
         g_captureCopy = {};
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
         g_titleHint = {};
+        g_preparationBar = {};
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0; g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         g_hdrCalibrationCache = {};
         settings::SetHdrCalibrationSceneAvailable(false);
@@ -4112,6 +4122,73 @@ namespace gpu::video
 #endif
     }
 
+    // Startup pipeline preparation running in the background (renderer): a thin
+    // translucent bar along the bottom edge, filled done/total, fading out once
+    // done. Only game frames draw it, so the host menus and prompts hide it. The
+    // previous present has completed, so the upload buffer can be rewritten.
+    static void DrawPreparationBar(plume::RenderTexture* backBuffer)
+    {
+#ifdef LO_GPU_PLUME
+        auto& bar = g_preparationBar;
+        const uint64_t progress = gpu::pipeline_prepare::g_progress.load(std::memory_order_relaxed);
+        const uint32_t total = gpu::pipeline_prepare::Total(progress);
+        const uint32_t done = std::min(gpu::pipeline_prepare::Done(progress), total);
+        if (!total) { bar = {}; return; }
+        if (bar.total != total) { bar.total = total; bar.finished = {}; bar.hidden = false; }
+        if (bar.hidden || !g_presentation) return;
+        float opacity = 1.0f;
+        if (done == total) {
+            constexpr double kHoldSeconds = 0.3, kFadeSeconds = 0.7;
+            const auto now = std::chrono::steady_clock::now();
+            if (bar.finished == std::chrono::steady_clock::time_point{}) bar.finished = now;
+            const double since = std::chrono::duration<double>(now - bar.finished).count();
+            if (since >= kHoldSeconds + kFadeSeconds) {
+                bar.hidden = true;
+                bar.texture.reset();
+                bar.upload.reset();
+                return;
+            }
+            if (since > kHoldSeconds) opacity = float(1.0 - (since - kHoldSeconds) / kFadeSeconds);
+        }
+        const uint32_t outputWidth = g_swapChain->getWidth(), outputHeight = g_swapChain->getHeight();
+        const uint32_t height = std::max(2u, outputHeight / 360); // 3 px at 1080p
+        if (!outputWidth || height >= outputHeight) return;
+        const uint32_t rowPitch = (outputWidth * 4 + 255) & ~255u;
+        if (!bar.texture || bar.width != outputWidth || bar.height != height) {
+            bar.texture = g_device->createTexture(plume::RenderTextureDesc::Texture2D(outputWidth, height, 1,
+                plume::RenderFormat::R8G8B8A8_UNORM));
+            bar.upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(rowPitch) * height));
+            if (!bar.texture || !bar.upload) { bar.texture.reset(); bar.upload.reset(); return; }
+            bar.width = outputWidth;
+            bar.height = height;
+            bar.filled = ~0u;
+        }
+        const uint32_t filled = uint32_t(uint64_t(outputWidth) * done / total);
+        if (filled != bar.filled) {
+            auto* mapped = static_cast<uint8_t*>(bar.upload->map());
+            if (!mapped) return;
+            // R8G8B8A8, straight alpha: light fill over a faint dark track.
+            constexpr uint32_t kFill = 235u | 240u << 8 | 245u << 16 | 150u << 24, kTrack = 0u | 0u << 8 | 0u << 16 | 64u << 24;
+            for (uint32_t y = 0; y < height; ++y) {
+                auto* row = reinterpret_cast<uint32_t*>(mapped + size_t(y) * rowPitch);
+                std::fill(row, row + filled, kFill);
+                std::fill(row + filled, row + outputWidth, kTrack);
+            }
+            bar.upload->unmap();
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,
+                plume::RenderTextureBarrier(bar.texture.get(), plume::RenderTextureLayout::COPY_DEST));
+            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(bar.texture.get()),
+                plume::RenderTextureCopyLocation::PlacedFootprint(bar.upload.get(), plume::RenderFormat::R8G8B8A8_UNORM,
+                    outputWidth, height, 1, rowPitch / 4), 0, 0, 0, nullptr);
+            bar.filled = filled;
+        }
+        g_presentation->DrawOverlay(g_commandList.get(), bar.texture.get(), backBuffer, 0, outputHeight - height,
+            outputWidth, height, outputWidth, outputHeight, opacity);
+#else
+        (void)backBuffer;
+#endif
+    }
+
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
                                        const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult)
@@ -4606,6 +4683,7 @@ namespace gpu::video
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
                     DrawTitleHint(backBuffer);
+                    DrawPreparationBar(backBuffer);
                 }
                 else {
                     g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));

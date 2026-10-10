@@ -347,3 +347,17 @@ Lenovo TB321FU（Adreno 750），Turnip Mesa 26.0.0-devel（libadrenotools），
 - `MESA_SHADER_CACHE_DIR` 指向的目录始终没有生成，这个 Turnip 版本上持久缓存只靠 `VkPipelineCache`。
 - 语料下载（#264）在设备上成功（409184 字节，SHA-256 与发布的一致）；真实战斗里 `scene load: battle id=3` 出现，战斗场景标签在运行时得到确认。
 - 没有崩溃、设备丢失或管线创建失败；截图正常，GPL 链接出的 155 条管线画面与关 GPL 一致。
+
+## 后台启动预建（2026-10-09，分支 feat/background-pipeline-prebuild）
+
+**做法。** 启动预建不再挡住开机：`PrepareKnownPipelines` 读入配方和语料后，把启动集合（规则同上：学到的 + 场景外 / 常用 / 无标签的语料配方）交给 P3/P4 的 worker 池，优先级最低（跳过的绘制 > 加载中的场景 > 兄弟配方 > 启动预建），在场景外画过的（标题、菜单）排在最前。启动任务最多占 `worker 数 - 1` 个线程，给场景和绘制时任务留一个；Metal 上只占绘制时任务的份额（P4 里 worker 建 MSL 模块拖慢过渲染线程自己的模块），`LO_PIPELINE_STARTUP_WORKERS` 可改。
+
+- 着色器模块：启动任务需要的 pack 着色器还没有模块时，任务自己在 worker 上建（同兄弟配方的做法），渲染线程收任务时放进着色器表。Vulkan 的 pipeline library 线程也改为通过同一批着色器任务取模块，不再在启动时同步建全部模块。
+- 绘制碰到还在排队或正在建的启动任务，按 P3/P4 的规则处理（排队的自己建，正在建的同种管线就等，有 pipeline library 时 fast-link），同一管线不会建两次。场景开始加载时，它的配方中还在排队的启动任务（和着色器任务）移到场景队列。
+- 渲染线程收结果改为只看刚完成的任务（worker 完成时放进一个列表），不再每帧、每次未命中遍历全部任务表；启动集合有两千多条，原来的遍历会变成每次未命中的固定开销。
+- 进度：渲染线程每帧发布完成数 / 总数，呈现在游戏画面最下方画一条半透明细条（宽度等于输出宽度，高度为输出高度的 1/360，至少 2 像素），完成后停 0.3 秒再用 0.7 秒淡出；设置菜单、调试菜单等主机菜单走 CPU 画面，不画这条。没有要建的配方时不显示。帧生成没有 UI 分离路径（日志里 `ui=unavailable`），进度条和标题菜单提示一样进入插帧。
+- 日志：开始一行 `renderer: pipeline preparation: background, …`（数量、需要建模块的数量、worker 数），结束一行 `renderer: pipeline preparation: background done, …`（worker 建的、绘制时自己建的、失败的、耗时、距启动的秒数）；`tools/pipeline_misses.py` 两行都会列出。结束时异步写一次驱动缓存。
+- `LO_PIPELINE_PREPARE_SYNC=1` 恢复原来的同步预建（准备画面、同步建 library 模块），`--prepare-shaders-only` 也走同步路径。`skip_shader_prebuild` 和 `LO_NO_PIPELINE_PREPARE` 照旧不预建；Vulkan 的 pipeline library 线程本来就在后台，照旧运行。
+- 仍在启动路径上：没有着色器包时的着色器准备（启动 bundle、编译）和驱动缓存文件的读入，这两步都要在第一条管线之前完成。
+
+**未测：** 本机不跑游戏；尚无任何平台的运行数据。

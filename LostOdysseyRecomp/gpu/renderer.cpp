@@ -31,6 +31,7 @@
 #include "polygon_offset.h"
 #include "pipeline_cache.h"
 #include "driver_pipeline_cache.h"
+#include "pipeline_prepare_progress.h"
 #include "texture_layout.h"
 #include "controller_atlas.h"
 #include "bc_decode.h"
@@ -147,6 +148,8 @@ namespace gpu::renderer
         // consumed by the renderer's scene prefetch once a frame.
         std::mutex g_scenePrefetchMutex;
         std::vector<uint32_t> g_scenePrefetchRequests;
+        // Static initialization: close enough to the process start for the log.
+        const auto g_launchTime = std::chrono::steady_clock::now();
         void RequestScenePrefetch(uint32_t tag)
         {
             std::lock_guard lock(g_scenePrefetchMutex);
@@ -778,20 +781,27 @@ namespace gpu::renderer
             // on the worker before building; such modules are never freed (plume's
             // pipeline libraries key on module handles). A draw that needs a queued
             // pipeline job takes it over, one that needs a running job waits for it.
+            // The startup set is built the same way, after everything else.
             // Declared before the pool so jobs outlive it.
             struct PrefetchBatch {
                 uint32_t tag = 0;
                 size_t planned = 0;
                 std::atomic<size_t> remaining{0}, failed{0};
+                std::atomic<size_t> taken{0}; // claimed by a draw and built there
+                bool startup = false;
                 std::chrono::steady_clock::time_point started;
             };
-            struct PrefetchJob {
+            struct PrefetchJob : std::enable_shared_from_this<PrefetchJob> {
                 enum State : int { Queued, Running, Done, Taken };
                 // Priority order. Draw: a skipped draw needs it. Scene: a scene that is
-                // loading. Sibling: shares a shader with a draw-time miss.
-                enum Kind : uint8_t { Draw, Scene, Sibling };
+                // loading. Sibling: shares a shader with a draw-time miss. Startup: the
+                // startup set, built in the background.
+                enum Kind : uint8_t { Draw, Scene, Sibling, Startup };
+                // The capped worker group a running job counts against.
+                enum Slot : uint8_t { NoSlot, DrawSlot, StartupSlot };
                 std::atomic<int> state{Queued};
                 Kind kind = Scene; // changed under the pool mutex
+                Slot slot = NoSlot; // under the pool mutex
                 PipelineKey key{};
                 RenderGraphicsPipelineDesc desc;
                 std::unique_ptr<RenderPipeline> pipeline;
@@ -804,12 +814,13 @@ namespace gpu::renderer
                 xenos::TranslatedShader info;
                 std::unique_ptr<RenderShader> module;
                 RenderShader* raw = nullptr;
-                // Sibling job whose shader is not loaded: the desc is made on the worker
-                // after the shader job (run there if still queued) has its module.
+                // Sibling or startup job whose shader is not loaded: the desc is made on
+                // the worker after the shader job (run there if still queued) has its module.
                 Shader* vs = nullptr;
                 Shader* ps = nullptr;
                 std::shared_ptr<PrefetchJob> needVs, needPs;
             };
+            static bool DrawTimeJob(PrefetchJob::Kind kind) { return kind == PrefetchJob::Draw || kind == PrefetchJob::Sibling; }
             // Worker-made modules whose hash got another module first; a build may
             // have used them, so they live as long as the shader map.
             std::vector<std::unique_ptr<RenderShader>> orphanShaders;
@@ -817,8 +828,12 @@ namespace gpu::renderer
             std::unordered_map<uint64_t, std::shared_ptr<PrefetchJob>> prefetchShaderJobs[2];
             // Recipes whose shader modules are still being made.
             std::vector<std::pair<PipelineKey, std::shared_ptr<PrefetchBatch>>> prefetchWaiting;
-            uint64_t prefetchHarvested = 0;
             bool scenePrefetchEnabled = false;
+            // Startup preparation: LO_PIPELINE_PREPARE_SYNC=1 (or --prepare-shaders-only)
+            // builds the startup set before Init returns, otherwise the workers build it
+            // while the game runs. startupBatch is cleared once it is done.
+            bool synchronousPreparation = false;
+            std::shared_ptr<PrefetchBatch> startupBatch;
             bool prefetchShadersChanged = false; // a draw took a shader job over
             std::unordered_set<PipelineKey, PipelineKeyHash> failedPrefetch;
             // Draw-time siblings: known recipes not built at the first miss, by shader.
@@ -843,31 +858,34 @@ namespace gpu::renderer
             struct WorkerStats { uint32_t queued = 0, built = 0, hits = 0, skipped = 0, shaders = 0; } workerStats; // this frame
             // Vulkan graphics pipeline libraries: a draw-time miss links per-shader
             // parts instead of compiling the whole pipeline. A background thread builds
-            // the parts for the shaders of known recipes. Declared after the shader
-            // and pipeline maps so it stops first.
+            // the parts for the shaders of known recipes (libraryPrecompile below).
             bool fastLinkPipelines = false;
+            struct PrefetchPool {
+                std::mutex mutex;
+                std::condition_variable wake, finished;
+                // One queue per job kind; siblings newest miss first. Entries that were
+                // taken over, dropped or moved to another queue stay until a worker skips them.
+                std::deque<std::shared_ptr<PrefetchJob>> draw, scene, siblings, startup;
+                size_t runningSmall = 0, smallCap = 1; // draw and sibling jobs
+                size_t runningStartup = 0, startupCap = 1;
+                // Finished jobs for the render thread to harvest.
+                std::vector<std::shared_ptr<PrefetchJob>> finishedJobs;
+                std::vector<std::thread> workers;
+                bool stop = false;
+                ~PrefetchPool()
+                {
+                    { std::lock_guard lock(mutex); stop = true; draw.clear(); scene.clear(); siblings.clear(); startup.clear(); }
+                    wake.notify_all();
+                    for (auto& worker : workers) worker.join();
+                }
+            } prefetchPool;
+            // Declared after the shader and pipeline maps and the pool so it stops
+            // first: it may wait for shader jobs the workers run.
             struct LibraryPrecompile {
                 std::atomic<bool> stop{false};
                 std::thread thread;
                 ~LibraryPrecompile() { stop = true; if (thread.joinable()) thread.join(); }
             } libraryPrecompile;
-            struct PrefetchPool {
-                std::mutex mutex;
-                std::condition_variable wake, finished;
-                // One queue per job kind; siblings newest miss first. Entries that were
-                // taken over or dropped stay until a worker skips them.
-                std::deque<std::shared_ptr<PrefetchJob>> draw, scene, siblings;
-                size_t runningSmall = 0, smallCap = 1; // draw and sibling jobs
-                std::vector<std::thread> workers;
-                bool stop = false;
-                std::atomic<uint64_t> completed{0};
-                ~PrefetchPool()
-                {
-                    { std::lock_guard lock(mutex); stop = true; draw.clear(); scene.clear(); siblings.clear(); }
-                    wake.notify_all();
-                    for (auto& worker : workers) worker.join();
-                }
-            } prefetchPool;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
 
@@ -5125,6 +5143,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             void PrepareKnownPipelines()
             {
+                const char* sync = getenv("LO_PIPELINE_PREPARE_SYNC");
+                synchronousPreparation = gpu::pipeline_prepare::g_synchronous || (sync && std::string_view(sync) != "0");
                 pipelineCacheEnabled = !shaderCacheDir.empty() && !getenv("LO_NO_PIPELINE_CACHE");
                 if (!pipelineCacheEnabled) return;
                 const std::string driverCache = LoadDriverPipelineCache();
@@ -5155,6 +5175,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Learning remains enabled when eager creation is skipped.
                 if (getenv("LO_NO_PIPELINE_PREPARE") || getenv("LO_NO_SHADER_PREPARE") ||
                     settings::GetConfig().skipShaderPrebuild || video::ShaderPreparationSkipped()) return;
+                if (!synchronousPreparation) {
+                    QueueStartupPipelines(driverCache);
+                    return;
+                }
                 struct Job { PipelineKey key; Shader* vs; Shader* ps; std::unique_ptr<RenderPipeline> pipeline; };
                 std::vector<Job> jobs;
                 size_t missingShaders = 0, failed = 0, deferred = 0;
@@ -5211,6 +5235,65 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 SaveDriverPipelineCache(true);
             }
 
+            // Default startup: the startup set goes to the pipeline workers behind every
+            // other job and the game starts at once. Recipes drawn outside any scene
+            // (title, menus) go first. Pack shaders without a module are made by the
+            // jobs that need them (or by a draw that needs one first).
+            void QueueStartupPipelines(const std::string& driverCache)
+            {
+                const auto started = std::chrono::steady_clock::now();
+                auto batch = std::make_shared<PrefetchBatch>();
+                batch->startup = true;
+                batch->started = started;
+                std::vector<std::shared_ptr<PrefetchJob>> jobs, later;
+                size_t missingShaders = 0, deferred = 0, loading = 0;
+                for (const auto& [key, entry] : knownRecipes) {
+                    if (!PrebuildAtStartup(entry)) { ++deferred; continue; }
+                    Shader* vs = nullptr;
+                    Shader* ps = nullptr;
+                    std::shared_ptr<PrefetchJob> job;
+                    switch (FindRecipeShaders(key, vs, ps, nullptr)) {
+                    case RecipeShaderState::Unavailable: break;
+                    case RecipeShaderState::Ready: job = MakePipelineJob(key, vs, ps, batch, PrefetchJob::Startup); break;
+                    case RecipeShaderState::Loading:
+                        job = MakeLoadingJob(key, vs, ps, batch, PrefetchJob::Startup, nullptr);
+                        loading += job != nullptr;
+                        break;
+                    }
+                    if (!job) { ++missingShaders; continue; }
+                    (entry.scenes.Contains(gpu::pipeline_cache::kNoScene) ? jobs : later).push_back(std::move(job));
+                }
+                const size_t outsideScenes = jobs.size();
+                jobs.insert(jobs.end(), later.begin(), later.end());
+                batch->planned = jobs.size();
+                batch->remaining = batch->planned;
+                if (!jobs.empty()) startupBatch = batch;
+                QueuePrefetchJobs(jobs);
+                gpu::pipeline_prepare::Publish(0, uint32_t(jobs.size()));
+                LOG_INFO("renderer: pipeline preparation: background, {} recipes, {} queued ({} drawn outside scenes first, {} need pack shader modules), {} missing shaders, {} left to scene prefetch, {} workers, setup {:.0f} ms, driver cache {}",
+                    knownRecipes.size(), jobs.size(), outsideScenes, loading, missingShaders, deferred, prefetchPool.workers.size(),
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(), driverCache);
+            }
+
+            // Render thread, once a frame after the harvest: publishes the background
+            // preparation's progress for the bar and logs its end.
+            void UpdateStartupPreparation()
+            {
+                if (!startupBatch) return;
+                const size_t planned = startupBatch->planned, remaining = startupBatch->remaining;
+                gpu::pipeline_prepare::Publish(uint32_t(planned - remaining), uint32_t(planned));
+                if (remaining) return;
+                const auto now = std::chrono::steady_clock::now();
+                const size_t failed = startupBatch->failed, taken = startupBatch->taken;
+                LOG_INFO("renderer: pipeline preparation: background done, {} recipes, {} built by the workers, {} at draw time, {} failed, {:.0f} ms, {:.1f} s after launch",
+                    planned, planned - failed - taken, taken, failed,
+                    std::chrono::duration<double, std::milli>(now - startupBatch->started).count(),
+                    std::chrono::duration<double>(now - g_launchTime).count());
+                startupBatch.reset();
+                // The driver cache now holds the startup set.
+                SaveDriverPipelineCache(false);
+            }
+
             // Turns on fast-linked draw-time pipelines and builds the libraries for the
             // shaders of the known recipes on a background thread.
             void StartLibraryPrecompile()
@@ -5219,43 +5302,70 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 LOG_INFO("renderer: graphics pipeline libraries {}", fastLinkPipelines ? "on" :
                     device->getCapabilities().fastLinkPipelines ? "off (LO_NO_PIPELINE_LIBRARY)" : "unsupported");
                 if (!fastLinkPipelines) return;
-                std::vector<RenderGraphicsPipelineDesc> descs;
-                descs.reserve(knownRecipes.size());
-                // Corpus recipes left to scene prefetch get their libraries too. Their
-                // shader modules are made here, before the library thread starts.
+                // Corpus recipes left to scene prefetch get their libraries too. A recipe
+                // whose pack shaders have no module yet gets them from the shader jobs the
+                // startup jobs and draws share, on the library thread unless someone else
+                // got there first. LO_PIPELINE_PREPARE_SYNC=1 makes them all here first.
                 const auto started = std::chrono::steady_clock::now();
-                std::vector<std::pair<bool, uint64_t>> load;
+                if (synchronousPreparation) {
+                    std::vector<std::pair<bool, uint64_t>> load;
+                    for (const auto& [key, entry] : knownRecipes) {
+                        Shader* vs = nullptr;
+                        Shader* ps = nullptr;
+                        FindRecipeShaders(key, vs, ps, &load);
+                    }
+                    std::sort(load.begin(), load.end());
+                    load.erase(std::unique(load.begin(), load.end()), load.end());
+                    const size_t modules = load.size();
+                    LoadPackShaders(std::move(load));
+                    if (modules)
+                        LOG_INFO("renderer: pipeline libraries: {} shader modules for known recipes, {:.0f} ms", modules,
+                            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+                }
+                struct Item { RenderGraphicsPipelineDesc desc; PipelineKey key; Shader* vs; Shader* ps; std::shared_ptr<PrefetchJob> needVs, needPs; };
+                std::vector<Item> items;
+                items.reserve(knownRecipes.size());
+                size_t loading = 0;
                 for (const auto& [key, entry] : knownRecipes) {
                     Shader* vs = nullptr;
                     Shader* ps = nullptr;
-                    FindRecipeShaders(key, vs, ps, &load);
+                    const auto state = FindRecipeShaders(key, vs, ps, nullptr);
+                    if (state == RecipeShaderState::Ready) {
+                        auto desc = DescribePipeline(key, vs, ps, false);
+                        desc.fastLink = true;
+                        items.push_back({desc, key, vs, ps, {}, {}});
+                    } else if (state == RecipeShaderState::Loading && !synchronousPreparation &&
+                               !(key.prim == 8 && rectListExpansion && (!vs || !vs->rectList))) {
+                        Item item{{}, key, vs, ps, {}, {}};
+                        bool created = false;
+                        if (!vs) item.needVs = PackShaderJob(false, key.vs, PrefetchJob::Startup, created);
+                        if (key.ps && !ps) item.needPs = PackShaderJob(true, key.ps, PrefetchJob::Startup, created);
+                        items.push_back(std::move(item));
+                        ++loading;
+                    }
                 }
-                std::sort(load.begin(), load.end());
-                load.erase(std::unique(load.begin(), load.end()), load.end());
-                const size_t modules = load.size();
-                LoadPackShaders(std::move(load));
-                if (modules)
-                    LOG_INFO("renderer: pipeline libraries: {} shader modules for known recipes, {:.0f} ms", modules,
-                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
-                for (const auto& [key, entry] : knownRecipes) {
-                    Shader* vs = nullptr;
-                    Shader* ps = nullptr;
-                    if (FindRecipeShaders(key, vs, ps, nullptr) != RecipeShaderState::Ready) continue;
-                    auto desc = DescribePipeline(key, vs, ps, false);
-                    desc.fastLink = true;
-                    descs.push_back(desc);
-                }
-                if (descs.empty()) return;
-                libraryPrecompile.thread = std::thread([this, descs = std::move(descs)] {
+                if (items.empty()) return;
+                if (loading) LOG_INFO("renderer: pipeline libraries: {} recipes, {} make their shader modules on the library thread", items.size(), loading);
+                libraryPrecompile.thread = std::thread([this, items = std::move(items)] {
                     os::SetCurrentThreadName("Pipeline Libraries");
                     const auto started = std::chrono::steady_clock::now();
+                    std::unique_ptr<xenos::portable_pack::Reader> reader;
+                    bool readerTried = false;
                     size_t done = 0, failed = 0;
-                    for (const auto& desc : descs) {
+                    for (const auto& item : items) {
                         if (libraryPrecompile.stop) break;
-                        if (!device->prepareGraphicsPipelineLibraries(desc)) ++failed;
                         ++done;
+                        if (!item.needVs && !item.needPs) {
+                            if (!device->prepareGraphicsPipelineLibraries(item.desc)) ++failed;
+                            continue;
+                        }
+                        if (!std::exchange(readerTried, true)) reader = OpenPackReader();
+                        if ((item.needVs && !NeedShaderJob(*item.needVs, reader.get())) ||
+                            (item.needPs && !NeedShaderJob(*item.needPs, reader.get()))) { ++failed; continue; }
+                        auto desc = DescribeWithShaderJobs(item.key, item.vs, item.ps, item.needVs.get(), item.needPs.get(), true);
+                        if (!device->prepareGraphicsPipelineLibraries(desc)) ++failed;
                     }
-                    LOG_INFO("renderer: pipeline libraries for {} of {} recipes, {} failed, {:.0f} ms", done, descs.size(), failed,
+                    LOG_INFO("renderer: pipeline libraries for {} of {} recipes, {} failed, {:.0f} ms", done, items.size(), failed,
                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
                 });
             }
@@ -5468,24 +5578,83 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (!batch) return; // a sibling or draw job
                 if (failed) ++batch->failed;
-                if (--batch->remaining == 0)
+                // The startup batch's end is logged by UpdateStartupPreparation.
+                if (--batch->remaining == 0 && !batch->startup)
                     LOG_INFO("renderer: scene prefetch {:08x} done: {} recipes, {} failed or dropped, {:.0f} ms",
                         batch->tag, batch->planned, size_t(batch->failed),
                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - batch->started).count());
             }
 
-            // Scene jobs compile full pipelines; sibling and draw jobs build what a
-            // draw-time miss would (fast-linked with pipeline libraries).
+            // Scene and startup jobs compile full pipelines; sibling and draw jobs build
+            // what a draw-time miss would (fast-linked with pipeline libraries).
             std::shared_ptr<PrefetchJob> MakePipelineJob(const PipelineKey& key, Shader* vs, Shader* ps,
                 const std::shared_ptr<PrefetchBatch>& batch, PrefetchJob::Kind kind = PrefetchJob::Scene)
             {
                 auto job = std::make_shared<PrefetchJob>();
                 job->key = key;
                 job->kind = kind;
-                job->desc = DescribeForCreation(key, vs, ps, false, kind != PrefetchJob::Scene && fastLinkPipelines);
+                job->desc = DescribeForCreation(key, vs, ps, false, DrawTimeJob(kind) && fastLinkPipelines);
                 job->batch = batch;
                 prefetchJobs.emplace(key, job);
                 return job;
+            }
+
+            // The job that makes a pack shader's module, created with kind when there
+            // is none yet (created is then true; the caller queues it or leaves it to
+            // the jobs that need it, which run it themselves).
+            std::shared_ptr<PrefetchJob> PackShaderJob(bool pixel, uint64_t hash, PrefetchJob::Kind kind, bool& created)
+            {
+                auto& slot = prefetchShaderJobs[pixel ? 1 : 0][hash];
+                created = !slot;
+                if (created) {
+                    slot = std::make_shared<PrefetchJob>();
+                    slot->kind = kind;
+                    slot->shader = true;
+                    slot->pixel = pixel;
+                    slot->hash = hash;
+                    slot->pack = portableShaderPack;
+                }
+                return slot;
+            }
+
+            // A pipeline job for a recipe whose pack shaders have no module yet: the
+            // worker makes them first (FindRecipeShaders returned Loading). Null for a
+            // rect-list recipe without its VS variant: that is built at the first draw.
+            std::shared_ptr<PrefetchJob> MakeLoadingJob(const PipelineKey& key, Shader* vs, Shader* ps,
+                const std::shared_ptr<PrefetchBatch>& batch, PrefetchJob::Kind kind,
+                std::vector<std::shared_ptr<PrefetchJob>>* newShaderJobs)
+            {
+                if (key.prim == 8 && rectListExpansion && (!vs || !vs->rectList)) return nullptr;
+                auto job = std::make_shared<PrefetchJob>();
+                job->key = key;
+                job->kind = kind;
+                job->desc.fastLink = DrawTimeJob(kind) && fastLinkPipelines;
+                job->vs = vs;
+                job->ps = ps;
+                job->batch = batch;
+                bool created = false;
+                if (!vs) {
+                    job->needVs = PackShaderJob(false, key.vs, kind, created);
+                    if (created && newShaderJobs) newShaderJobs->push_back(job->needVs);
+                }
+                if (key.ps && !ps) {
+                    job->needPs = PackShaderJob(true, key.ps, kind, created);
+                    if (created && newShaderJobs) newShaderJobs->push_back(job->needPs);
+                }
+                prefetchJobs.emplace(key, job);
+                return job;
+            }
+
+            // The desc of a pipeline job whose shaders may still be pack jobs: their
+            // modules stand in for the shader map entries. Any thread.
+            RenderGraphicsPipelineDesc DescribeWithShaderJobs(const PipelineKey& key, Shader* vs, Shader* ps,
+                const PrefetchJob* needVs, const PrefetchJob* needPs, bool fastLink)
+            {
+                static Shader unloaded;
+                auto desc = DescribeForCreation(key, vs ? vs : &unloaded, key.ps ? (ps ? ps : &unloaded) : nullptr, false, fastLink);
+                if (needVs) desc.vertexShader = needVs->raw;
+                if (needPs) desc.pixelShader = needPs->raw;
+                return desc;
             }
 
             // Siblings go to the front, the first one first; the oldest ones beyond
@@ -5503,6 +5672,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     for (const auto& job : jobs) {
                         if (job->kind == PrefetchJob::Draw) prefetchPool.draw.push_back(job);
                         else if (job->kind == PrefetchJob::Scene) prefetchPool.scene.push_back(job);
+                        else if (job->kind == PrefetchJob::Startup) prefetchPool.startup.push_back(job);
                     }
                     auto& siblings = prefetchPool.siblings;
                     while (siblings.size() > kMaxSiblings) {
@@ -5535,14 +5705,20 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     auto batch = std::make_shared<PrefetchBatch>();
                     batch->tag = tag;
                     batch->started = started;
-                    std::vector<std::shared_ptr<PrefetchJob>> jobs;
+                    std::vector<std::shared_ptr<PrefetchJob>> jobs, promoted;
                     std::vector<std::pair<bool, uint64_t>> load;
                     size_t tagged = 0, ready = 0, queued = 0, unavailable = 0, waiting = 0;
                     for (const auto& [key, entry] : knownRecipes) {
                         if (!entry.scenes.Contains(tag)) continue;
                         ++tagged;
                         if (pipelines.contains(key)) { ++ready; continue; }
-                        if (prefetchJobs.contains(key)) { ++queued; continue; }
+                        if (const auto found = prefetchJobs.find(key); found != prefetchJobs.end()) {
+                            // A startup job still queued moves ahead with this scene.
+                            if (found->second->kind == PrefetchJob::Startup && found->second->state == PrefetchJob::Queued)
+                                promoted.push_back(found->second);
+                            ++queued;
+                            continue;
+                        }
                         Shader* vs = nullptr;
                         Shader* ps = nullptr;
                         switch (FindRecipeShaders(key, vs, ps, &load)) {
@@ -5554,27 +5730,26 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // Shader jobs go first: the waiting recipes need them.
                     std::vector<std::shared_ptr<PrefetchJob>> shaderJobs;
                     for (const auto& [pixel, hash] : load) {
-                        auto& slot = prefetchShaderJobs[pixel ? 1 : 0][hash];
-                        if (slot && slot->kind == PrefetchJob::Sibling && slot->state == PrefetchJob::Queued) {
-                            // A sibling's shader job may have been dropped from its queue.
-                            std::lock_guard lock(prefetchPool.mutex);
-                            slot->kind = PrefetchJob::Scene;
+                        bool created = false;
+                        const auto slot = PackShaderJob(pixel, hash, PrefetchJob::Scene, created);
+                        // A sibling's shader job may have been dropped from its queue; a
+                        // startup one waits at the back or in no queue at all.
+                        if (created || ((slot->kind == PrefetchJob::Sibling || slot->kind == PrefetchJob::Startup) &&
+                                        slot->state == PrefetchJob::Queued))
                             shaderJobs.push_back(slot);
-                        }
-                        if (slot) continue;
-                        slot = std::make_shared<PrefetchJob>();
-                        slot->shader = true;
-                        slot->pixel = pixel;
-                        slot->hash = hash;
-                        slot->pack = portableShaderPack;
-                        shaderJobs.push_back(slot);
+                    }
+                    if (!shaderJobs.empty() || !promoted.empty()) {
+                        std::lock_guard lock(prefetchPool.mutex);
+                        for (const auto& job : shaderJobs) job->kind = PrefetchJob::Scene;
+                        for (const auto& job : promoted) job->kind = PrefetchJob::Scene;
                     }
                     batch->planned = jobs.size() + waiting;
                     batch->remaining = batch->planned;
-                    LOG_INFO("renderer: scene prefetch {:08x}: {} recipes, {} ready, {} already queued, {} unavailable shaders, {} new jobs, {} waiting for {} shaders, setup {:.1f} ms",
-                        tag, tagged, ready, queued, unavailable, jobs.size(), waiting, shaderJobs.size(),
+                    LOG_INFO("renderer: scene prefetch {:08x}: {} recipes, {} ready, {} already queued ({} moved from startup), {} unavailable shaders, {} new jobs, {} waiting for {} shaders, setup {:.1f} ms",
+                        tag, tagged, ready, queued, promoted.size(), unavailable, jobs.size(), waiting, shaderJobs.size(),
                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
                     QueuePrefetchJobs(shaderJobs);
+                    QueuePrefetchJobs(promoted);
                     QueuePrefetchJobs(jobs);
                 }
             }
@@ -5587,10 +5762,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 size_t count = std::max<size_t>(1, std::min<size_t>(xenos::preparation::HostWorkerCap(logical), logical / 2));
                 if (const char* value = getenv("LO_PIPELINE_PREFETCH_WORKERS")) count = std::max<size_t>(1, strtoul(value, nullptr, 10));
                 prefetchPool.smallCap = std::max<size_t>(1, std::min(drawWorkerCap, count));
+                // Startup jobs leave one worker free for scene and draw-time jobs. On Metal
+                // they get the draw-time share only: their shader modules are MSL compiles,
+                // which held up the render thread's own modules when siblings made them (P4).
+                prefetchPool.startupCap = video::IsMetal() ? prefetchPool.smallCap : std::max<size_t>(1, count - 1);
+                if (const char* value = getenv("LO_PIPELINE_STARTUP_WORKERS"))
+                    prefetchPool.startupCap = std::clamp<size_t>(strtoul(value, nullptr, 10), 1, count);
                 for (size_t i = 0; i < count; ++i)
                     prefetchPool.workers.emplace_back([this] { PrefetchWorker(); });
-                LOG_INFO("renderer: pipeline workers: {}, {} for draw-time jobs; siblings {}, skipped draws {}", count,
-                    prefetchPool.smallCap, !pipelineSiblings ? "off" : video::IsMetal() && !getenv("LO_PIPELINE_SIBLINGS") ? "off on Metal" : "on",
+                LOG_INFO("renderer: pipeline workers: {}, {} for draw-time jobs, {} for startup preparation; siblings {}, skipped draws {}", count,
+                    prefetchPool.smallCap, prefetchPool.startupCap,
+                    !pipelineSiblings ? "off" : video::IsMetal() && !getenv("LO_PIPELINE_SIBLINGS") ? "off on Metal" : "on",
                     pipelineAsync ? "on (LO_PIPELINE_ASYNC)" : "off");
             }
 
@@ -5599,21 +5781,29 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             std::shared_ptr<PrefetchJob> NextPrefetchJob()
             {
                 auto& pool = prefetchPool;
-                for (auto* queue : { &pool.draw, &pool.scene, &pool.siblings }) {
+                for (auto* queue : { &pool.draw, &pool.scene, &pool.siblings, &pool.startup }) {
                     while (!queue->empty()) {
                         const auto& front = queue->front();
-                        const bool drawTime = front->kind != PrefetchJob::Scene;
-                        // A job promoted for a skipped draw runs from the draw queue.
-                        if (front->state != PrefetchJob::Queued || (queue != &pool.draw && front->kind == PrefetchJob::Draw)) {
+                        const auto kind = front->kind;
+                        // A job moved to another queue (for a skipped draw, a loading scene)
+                        // runs from there.
+                        const auto* home = kind == PrefetchJob::Draw ? &pool.draw : kind == PrefetchJob::Scene ? &pool.scene :
+                            kind == PrefetchJob::Sibling ? &pool.siblings : &pool.startup;
+                        if (front->state != PrefetchJob::Queued || home != queue) {
                             queue->pop_front();
                             continue;
                         }
-                        if (drawTime && pool.runningSmall >= pool.smallCap) break;
+                        const auto slot = DrawTimeJob(kind) ? PrefetchJob::DrawSlot :
+                            kind == PrefetchJob::Startup ? PrefetchJob::StartupSlot : PrefetchJob::NoSlot;
+                        if (slot == PrefetchJob::DrawSlot && pool.runningSmall >= pool.smallCap) break;
+                        if (slot == PrefetchJob::StartupSlot && pool.runningStartup >= pool.startupCap) break;
                         auto job = std::move(queue->front());
                         queue->pop_front();
                         int expected = PrefetchJob::Queued;
                         if (!job->state.compare_exchange_strong(expected, PrefetchJob::Running)) continue; // taken by a draw
-                        if (drawTime) ++pool.runningSmall;
+                        job->slot = slot;
+                        if (slot == PrefetchJob::DrawSlot) ++pool.runningSmall;
+                        if (slot == PrefetchJob::StartupSlot) ++pool.runningStartup;
                         return job;
                     }
                 }
@@ -5627,12 +5817,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 bool readerTried = false;
                 for (;;) {
                     std::shared_ptr<PrefetchJob> job;
-                    bool drawTime = false;
                     {
                         std::unique_lock lock(prefetchPool.mutex);
                         prefetchPool.wake.wait(lock, [&] { return prefetchPool.stop || (job = NextPrefetchJob()) != nullptr; });
                         if (prefetchPool.stop) return;
-                        drawTime = job->kind != PrefetchJob::Scene;
                     }
                     if (job->shader || job->needVs || job->needPs)
                         if (!std::exchange(readerTried, true)) reader = OpenPackReader();
@@ -5643,18 +5831,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         try { job->pipeline = device->createGraphicsPipeline(job->desc); }
                         catch (const std::exception& e) { LOG_WARNING("renderer: scene prefetch: {}", e.what()); }
                     } else if ((!job->needVs || NeedShaderJob(*job->needVs, pack)) && (!job->needPs || NeedShaderJob(*job->needPs, pack))) {
-                        // Rect-list siblings never reach here with an unloaded VS.
-                        static Shader unloaded;
-                        auto desc = DescribeForCreation(job->key, job->vs ? job->vs : &unloaded,
-                            job->key.ps ? (job->ps ? job->ps : &unloaded) : nullptr, false, job->desc.fastLink);
-                        if (job->needVs) desc.vertexShader = job->needVs->raw;
-                        if (job->needPs) desc.pixelShader = job->needPs->raw;
-                        try { job->pipeline = device->createGraphicsPipeline(desc); }
-                        catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
+                        // MakeLoadingJob made no job for a rect-list recipe without its VS variant.
+                        try {
+                            job->pipeline = device->createGraphicsPipeline(DescribeWithShaderJobs(job->key, job->vs, job->ps,
+                                job->needVs.get(), job->needPs.get(), job->desc.fastLink));
+                        } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
                     }
-                    FinishJob(*job, drawTime);
-                    if (drawTime) prefetchPool.wake.notify_all(); // a capped job may start now
-                    if (!job->shader) FinishPrefetchRecipe(job->batch.get(), !job->pipeline);
+                    // Before FinishJob: the render thread may take the pipeline right after.
+                    const bool failed = !job->shader && !job->pipeline;
+                    if (FinishJob(*job)) prefetchPool.wake.notify_all(); // a capped job may start now
+                    if (!job->shader) FinishPrefetchRecipe(job->batch.get(), failed);
                 }
             }
 
@@ -5673,16 +5859,22 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 }
             }
 
-            void FinishJob(PrefetchJob& job, bool drawTime)
+            // Any thread: marks a job done and hands it to the render thread's harvest.
+            // True when it freed a capped worker slot.
+            bool FinishJob(PrefetchJob& job)
             {
+                bool freed = false;
                 {
                     // Under the mutex so a waiting draw cannot miss the wakeup.
                     std::lock_guard lock(prefetchPool.mutex);
                     job.state = PrefetchJob::Done;
-                    ++prefetchPool.completed;
-                    if (drawTime) --prefetchPool.runningSmall;
+                    prefetchPool.finishedJobs.push_back(job.shared_from_this());
+                    if (job.slot == PrefetchJob::DrawSlot) --prefetchPool.runningSmall;
+                    if (job.slot == PrefetchJob::StartupSlot) --prefetchPool.runningStartup;
+                    freed = std::exchange(job.slot, PrefetchJob::NoSlot) != PrefetchJob::NoSlot;
                 }
                 prefetchPool.finished.notify_all();
+                return freed;
             }
 
             // Any thread: the module of a shader job another job needs, running the job
@@ -5692,7 +5884,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 int expected = PrefetchJob::Queued;
                 if (job.state.compare_exchange_strong(expected, PrefetchJob::Running)) {
                     LoadShaderJob(job, reader);
-                    FinishJob(job, false);
+                    FinishJob(job);
                 } else {
                     std::unique_lock lock(prefetchPool.mutex);
                     prefetchPool.finished.wait(lock, [&] { return job.state == PrefetchJob::Done; });
@@ -5737,33 +5929,42 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // that were waiting for them and moves finished pipelines into the draw cache.
             void HarvestPrefetch()
             {
-                const uint64_t completed = prefetchPool.completed;
-                if (completed == prefetchHarvested && !prefetchShadersChanged) return;
-                prefetchHarvested = completed;
+                std::vector<std::shared_ptr<PrefetchJob>> finished;
+                {
+                    std::lock_guard lock(prefetchPool.mutex);
+                    finished.swap(prefetchPool.finishedJobs);
+                }
+                if (finished.empty() && !prefetchShadersChanged) return;
                 bool shadersArrived = std::exchange(prefetchShadersChanged, false);
-                for (int pixel = 0; pixel < 2; ++pixel)
-                    for (auto it = prefetchShaderJobs[pixel].begin(); it != prefetchShaderJobs[pixel].end(); ) {
-                        auto& job = *it->second;
-                        if (job.state != PrefetchJob::Done) { ++it; continue; }
-                        // A draw may have made the same module meanwhile.
-                        PublishShaderJob(job);
-                        shadersArrived = true;
-                        it = prefetchShaderJobs[pixel].erase(it);
+                // Jobs a draw took over or waited for are already gone from the maps.
+                for (const auto& done : finished) {
+                    auto& job = *done;
+                    if (job.shader) {
+                        auto& jobs = prefetchShaderJobs[job.pixel ? 1 : 0];
+                        if (const auto it = jobs.find(job.hash); it != jobs.end() && it->second == done) {
+                            // A draw may have made the same module meanwhile.
+                            PublishShaderJob(job);
+                            shadersArrived = true;
+                            jobs.erase(it);
+                        }
+                        continue;
                     }
-                for (auto it = prefetchJobs.begin(); it != prefetchJobs.end(); ) {
-                    auto& job = *it->second;
-                    if (job.state != PrefetchJob::Done) { ++it; continue; }
+                    const auto it = prefetchJobs.find(job.key);
+                    if (it == prefetchJobs.end() || it->second != done) continue;
                     for (const auto* need : { &job.needVs, &job.needPs })
                         if (*need) PublishShaderJob(**need);
                     if (!job.pipeline) failedPrefetch.insert(job.key);
                     else if (pipelines.try_emplace(job.key, PipelineSlot{ std::move(job.pipeline), 0,
                                  job.kind == PrefetchJob::Scene ? record_timing::Origin::ScenePrefetch :
-                                 job.kind == PrefetchJob::Sibling ? record_timing::Origin::Sibling : record_timing::Origin::DrawJob }).second &&
-                             job.kind == PrefetchJob::Sibling) {
-                        ++workerStats.built;
-                        if (pipelineMissVerbose) unusedSiblings.insert(job.key);
+                                 job.kind == PrefetchJob::Sibling ? record_timing::Origin::Sibling :
+                                 job.kind == PrefetchJob::Startup ? record_timing::Origin::Prebuilt : record_timing::Origin::DrawJob }).second) {
+                        if (job.kind == PrefetchJob::Sibling) {
+                            ++workerStats.built;
+                            if (pipelineMissVerbose) unusedSiblings.insert(job.key);
+                        }
+                        if (job.batch && job.batch->startup) preparedPipelineKeys.insert(job.key);
                     }
-                    it = prefetchJobs.erase(it);
+                    prefetchJobs.erase(it);
                 }
                 if (!shadersArrived) return;
                 std::vector<std::shared_ptr<PrefetchJob>> jobs;
@@ -5810,6 +6011,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 int expected = PrefetchJob::Queued;
                 if (job->state.compare_exchange_strong(expected, PrefetchJob::Taken)) {
                     prefetchJobs.erase(found);
+                    if (job->batch) ++job->batch->taken;
                     FinishPrefetchRecipe(job->batch.get(), false);
                     take = JobTake::Claimed;
                     return nullptr;
@@ -5859,22 +6061,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const auto vsFamily = siblingIndex.byVs.find(key.vs);
                 const auto psFamily = key.ps ? siblingIndex.byPs.find(key.ps) : siblingIndex.byPs.end();
                 if (vsFamily == siblingIndex.byVs.end() && psFamily == siblingIndex.byPs.end()) return;
+                // New shader jobs are queued with the siblings.
                 std::vector<std::shared_ptr<PrefetchJob>> jobs, shaderJobs;
                 size_t picked = 0;
-                // The shader job for a pack shader, queued with the siblings if new.
-                const auto shaderJob = [&](bool pixel, uint64_t hash) {
-                    auto& slot = prefetchShaderJobs[pixel ? 1 : 0][hash];
-                    if (!slot) {
-                        slot = std::make_shared<PrefetchJob>();
-                        slot->kind = PrefetchJob::Sibling;
-                        slot->shader = true;
-                        slot->pixel = pixel;
-                        slot->hash = hash;
-                        slot->pack = portableShaderPack;
-                        shaderJobs.push_back(slot);
-                    }
-                    return slot;
-                };
                 const auto consider = [&](uint32_t index) {
                     const auto& [sibling, entry] = siblingIndex.recipes[index];
                     if (sibling == key || pipelines.contains(sibling) || prefetchJobs.contains(sibling) ||
@@ -5885,17 +6074,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     case RecipeShaderState::Unavailable: return;
                     case RecipeShaderState::Ready: jobs.push_back(MakePipelineJob(sibling, vs, ps, nullptr, PrefetchJob::Sibling)); break;
                     case RecipeShaderState::Loading: {
-                        // Rect-list variants are built from guest microcode at the first draw.
-                        if (sibling.prim == 8 && rectListExpansion && !vs) return;
-                        auto job = std::make_shared<PrefetchJob>();
-                        job->key = sibling;
-                        job->kind = PrefetchJob::Sibling;
-                        job->desc.fastLink = fastLinkPipelines;
-                        job->vs = vs;
-                        job->ps = ps;
-                        if (!vs) job->needVs = shaderJob(false, sibling.vs);
-                        if (sibling.ps && !ps) job->needPs = shaderJob(true, sibling.ps);
-                        prefetchJobs.emplace(sibling, job);
+                        auto job = MakeLoadingJob(sibling, vs, ps, nullptr, PrefetchJob::Sibling, &shaderJobs);
+                        if (!job) return;
                         jobs.push_back(std::move(job));
                         break;
                     }
@@ -13247,6 +13427,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 #endif
             g_renderer->SavePipelineRecipes(true);
             g_renderer->SaveDriverPipelineCache(true);
+            gpu::pipeline_prepare::Publish(0, 0);
             std::lock_guard lock(g_exitFlushMutex);
             delete g_renderer;
             g_renderer = nullptr;
@@ -13823,6 +14004,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             g_renderer->ReportPipelineMisses();
             g_renderer->UpdateSceneTag();
             g_renderer->HarvestPrefetch();
+            g_renderer->UpdateStartupPreparation();
             g_renderer->ProcessScenePrefetch();
             g_renderer->SavePipelineRecipes();
             if (stats && g_renderer->frame % 600 == 0)
