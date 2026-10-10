@@ -1,0 +1,212 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Action readiness/selection/preparation, resource state/effect commands and property-mask helpers.",
+  "entries": [
+    {
+      "address": "8238D0E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 26771,
+      "instruction_count": 21,
+      "body_sha256": "310c6222c79adfae3b0ea1987d59942e2f66407f8e2d3c7320dc8c65a1bfde6f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C3E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24881,
+      "instruction_count": 74,
+      "body_sha256": "e1f933a87c27f06e6b01094e806e277685180d2fcf736020f315564610943bad",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B00888",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 29814,
+      "instruction_count": 74,
+      "body_sha256": "5ef1bb808f8db438e04ad414a517a7f4ad286097b40c28641274288a6ec81a95",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6E10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6690,
+      "instruction_count": 24,
+      "body_sha256": "8561af13c67c1db2e3b5781f3e040ec639d9cb50fdfdaa7209457522ddd4aa61",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFE628",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 24657,
+      "instruction_count": 33,
+      "body_sha256": "8493c923ec0204a12b1b58ad1106258fe43d298b2ca352bc03917f303fc4aea0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6E70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6749,
+      "instruction_count": 57,
+      "body_sha256": "75f51da5a95d961ebd6ce5a23a7fa4af023709df7133612a66d5dbec8f52336a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7110",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7135,
+      "instruction_count": 33,
+      "body_sha256": "8b53f8835f75695632e56d0fab4e25bbcfb23a4d5c185c13b2b0cb97dbd46952",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9C10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13561,
+      "instruction_count": 40,
+      "body_sha256": "899bc418ceb66609a68d42ab29021086a5f53bac2ee0d5ccca2f6ac673f29580",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9740",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 12835,
+      "instruction_count": 48,
+      "body_sha256": "7521d6bfbd5a53f3abc8a3bb63f009ae748901edc5e07ed615fdc6dbef59fcc4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9568",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 12565,
+      "instruction_count": 55,
+      "body_sha256": "d396aac38843bbeeca1657165d4aaa632424eef18ea6a08b9b1ec5200a2bc6bd",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF99D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13231,
+      "instruction_count": 21,
+      "body_sha256": "35adb5ef0b38e734064b13c528ed1e2e7f938e821a4689f47bd61c5eca3ee081",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C018",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24283,
+      "instruction_count": 37,
+      "body_sha256": "3ed2a156cdaf70e6ba5983ec87ed628272dccbf129ce12ddc9453a0f36ff71d3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF8458",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 10025,
+      "instruction_count": 33,
+      "body_sha256": "7b3e9514a82bb3c5308117a2062502102114be3348fd59be9b83ceb9e9b54fef",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF8510",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 10135,
+      "instruction_count": 31,
+      "body_sha256": "c006fe0a60244d2ca00cff6e6a55bc8ac1930120af5fe9cde3ff41186b10b858",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C0D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24402,
+      "instruction_count": 16,
+      "body_sha256": "3e5de19eedc9565814baf14b46dac2faa57fe6c704541494d4e77c0c9177715d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C1A0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24521,
+      "instruction_count": 26,
+      "body_sha256": "8e6fc48f400bc9cfd3be90fba8d4e3768a0bc3b662b6b4d4ba42cb71420e9882",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C510",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25051,
+      "instruction_count": 24,
+      "body_sha256": "9af452ae54df39e4d2723c495f1161ce4005e14a65b11da559ea307336c56989",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C570",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25109,
+      "instruction_count": 8,
+      "body_sha256": "14593109b73a8074123081f3adbcc0d6ad8b574c84d073829929b98c616d9b03",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF65F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 5483,
+      "instruction_count": 53,
+      "body_sha256": "4deca0fc4c9cf240b1d339fd6975c55f9ea207203ae0009f77de7d9c2042ae19",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238AA80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 21034,
+      "instruction_count": 12,
+      "body_sha256": "e2e0a221210797f8f87f60319051dd273fba930008479a6b7720fa6c1fbe4846",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238AAB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 21070,
+      "instruction_count": 10,
+      "body_sha256": "c9f775fe0986e2e1f62401f92799a7bf32261ee9c5772ac50820c0a409534ac5",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238D0E8",
+      "8238C3E8",
+      "82B00888",
+      "82AF6E10",
+      "82AFE628",
+      "82AF6E70",
+      "82AF7110",
+      "82AF9C10",
+      "82AF9740",
+      "82AF9568",
+      "82AF99D8",
+      "8238C018",
+      "82AF8458",
+      "82AF8510",
+      "8238C0D8",
+      "8238C1A0",
+      "8238C510",
+      "8238C570",
+      "82AF65F8",
+      "8238AA80",
+      "8238AAB0"
+    ],
+    "header": "include/lo_semantics/battle_script_actions61.h",
+    "source": "src/battle_script_actions61.cpp",
+    "smoke": "tests/battle_script_actions61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One compact fixture checks readiness branches, preparation/reset flags, three event action routing targets, default target selection, query result writeback, conditional resource counters, indexed resource reset, actor record extraction and guest-table property masks, plus target effect callbacks and stack preservation. Concrete action execution, resource lookup and effects remain explicit guest services. Signed table indexing and original permissive resource assumptions are retained rather than hardened. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
