@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 183,
-    "distinct_entries": 654,
+    "unit_count": 184,
+    "distinct_entries": 656,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1978,6 +1978,15 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One compact fixture checks a scaled vector roundtrip with synthetic constants, halfword and word flags, resource numeric state, eight-record clear/latest-record extraction, original descending search with slot0 excluded and repeated-match replacement, resource group cleanup, action-completion callback and nonvolatile state. Concrete runtime resource lists and action-completion services remain guest boundaries. History count/index bounds are not newly hardened. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_targets61",
+        "entries": [
+          "8238DE58",
+          "8238D148"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact four-resource fixture checks category pool counts, stable candidate order, self exclusion, numeric threshold/min/max/group filters, duplicate field matches, pending-action filtering, inventory availability, random selection ABI, result writeback and nonvolatile state. Remaining filter arms are source-reviewed; concrete runtime resource lookup, property predicates and random service remain guest boundaries. Guest stack arrays retain source size assumptions and original duplicate/tie behavior, without new validation guards. Logical/ABI only"
       }
     ]
   },
