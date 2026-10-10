@@ -1,0 +1,167 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Actor readiness, phase handshake, resource group updates and scene predicate instructions.",
+  "entries": [
+    {
+      "address": "82AF7E18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9071,
+      "instruction_count": 34,
+      "body_sha256": "a2709e6d54bac94375b8675a506647a4a56dc00deb8bfad5e7ee7d90e1321e2f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7B68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8679,
+      "instruction_count": 45,
+      "body_sha256": "58772127f66ff36e4e66dc89c7260f1c445f5af73476d8f8fb80a57ee3e0ae1f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAC40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16019,
+      "instruction_count": 45,
+      "body_sha256": "a4e87eba703fcaf54a30ef488177464991f06dc31bd7474854932f1f7ebe925c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF76C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7991,
+      "instruction_count": 40,
+      "body_sha256": "ba05fea46e5202e14c23a094fa176c3cf8261c3dc72481d7ccfd057625c32d2d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA258",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14537,
+      "instruction_count": 36,
+      "body_sha256": "868bdcee0228d5aa24215f6148fbb9491214157190938f3f31f9227f74ab9edc",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFF360",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 26620,
+      "instruction_count": 35,
+      "body_sha256": "847e6180200abf82af20d86cc6cc6458dd7216cd0822d46010897ce9aa8ac64e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD770",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 22512,
+      "instruction_count": 33,
+      "body_sha256": "c0a8b57e2a3d0d49446ae0b5d4191a0b57256de4ef51f7da71700fdb17c71787",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7028",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 7000,
+      "instruction_count": 57,
+      "body_sha256": "00cb57bc846f3c9ac2935a408b426c912cf4fe148a43c788186bb0d12bb9e94f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9648",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 12693,
+      "instruction_count": 61,
+      "body_sha256": "bd20c69bb61ddbbf59ad04cfad0fe910e5a63977d4adeaed4657f3ef5f41378b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFACF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16125,
+      "instruction_count": 33,
+      "body_sha256": "8cefa90e38f27c6d16c2eeed060d25e32999bb38ebbf33845c8874d4d7262d61",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAD80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16204,
+      "instruction_count": 36,
+      "body_sha256": "fa68b7f4694c8307e09341df1a28a83291aa79aed101f43ad2ece98f1b67d6db",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAE10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16290,
+      "instruction_count": 33,
+      "body_sha256": "8b7e9defd95adc9691523c83d4f0c2881afa8f42a15e3f265eddc3f0ff0bbdcf",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAE98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16369,
+      "instruction_count": 36,
+      "body_sha256": "62fec00e660f6479d2120419ef2e6aa8d4c7b92a7291a81f87742ee6765dcced",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAF28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16455,
+      "instruction_count": 33,
+      "body_sha256": "fca78edf96518b94a86adf1a0f0dd046f4855c0545da7a6939659707f957e74d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAFB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16534,
+      "instruction_count": 36,
+      "body_sha256": "3d2d4ed7c05935c9c0b826687e16344a370377f378e262a368dc6870edf4d308",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB040",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16620,
+      "instruction_count": 33,
+      "body_sha256": "793b930444fb7eddda9db99061dfcced60db952a03c3d4f72e28d317db1d2345",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AF7E18",
+      "82AF7B68",
+      "82AFAC40",
+      "82AF76C0",
+      "82AFA258",
+      "82AFF360",
+      "82AFD770",
+      "82AF7028",
+      "82AF9648",
+      "82AFACF8",
+      "82AFAD80",
+      "82AFAE10",
+      "82AFAE98",
+      "82AFAF28",
+      "82AFAFB0",
+      "82AFB040"
+    ],
+    "header": "include/lo_semantics/battle_script_status61.h",
+    "source": "src/battle_script_status61.cpp",
+    "smoke": "tests/battle_script_status61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One synthetic fixture covers all fifteen handlers plus the group-clearing helper: signed branch targets, phase start/completion, indexed enable/disable, consumed action result, global mode lookup, group assignment and clearing, target readiness, activation counter, low-byte predicate results and exact-one branching with suppression bypass. Concrete predicate services and game execution remain unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

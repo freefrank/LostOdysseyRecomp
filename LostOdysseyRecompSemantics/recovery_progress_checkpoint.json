@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 188,
-    "distinct_entries": 699,
+    "unit_count": 189,
+    "distinct_entries": 715,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2058,6 +2058,29 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture covers mapped/high/indexed resource flags, buffer and latest-action queries, resource refresh field propagation, same-side eligible selection with random tag111, packed float ABI, add-slot/full-slot behavior and the source mode7-to-mode8 service fallthrough. Other scene-service arms are source-reviewed. The original empty-candidate random call is retained but not fixture validated; concrete services and native gameplay remain unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_status61",
+        "entries": [
+          "82AF7E18",
+          "82AF7B68",
+          "82AFAC40",
+          "82AF76C0",
+          "82AFA258",
+          "82AFF360",
+          "82AFD770",
+          "82AF7028",
+          "82AF9648",
+          "82AFACF8",
+          "82AFAD80",
+          "82AFAE10",
+          "82AFAE98",
+          "82AFAF28",
+          "82AFAFB0",
+          "82AFB040"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One synthetic fixture covers all fifteen handlers plus the group-clearing helper: signed branch targets, phase start/completion, indexed enable/disable, consumed action result, global mode lookup, group assignment and clearing, target readiness, activation counter, low-byte predicate results and exact-one branching with suppression bypass. Concrete predicate services and game execution remain unvalidated. Logical/ABI only"
       }
     ]
   },
