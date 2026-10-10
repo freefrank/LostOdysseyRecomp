@@ -33,6 +33,22 @@
       "instruction_count": 58,
       "body_sha256": "a97e652cbc4545424c2e3e7caa1d8b4e18ab2836e33fb5555510d9021ce7c9a7",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF60D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 4713,
+      "instruction_count": 109,
+      "body_sha256": "116f38a5564f6aaec975e35519d63e7811a11f8e667bf78dc7f1043dcf7dc60e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF63E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 5154,
+      "instruction_count": 25,
+      "body_sha256": "aea7500975dbac3432926474c1df25cca3b875f4c81d235b8e431daef9408c3e",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -40,7 +56,9 @@
       "82AB3B08",
       "82AF5D18",
       "82AF6290",
-      "82AF6448"
+      "82AF6448",
+      "82AF60D8",
+      "82AF63E0"
     ],
     "header": "include/lo_semantics/battle_resource_creation61.h",
     "source": "src/battle_resource_creation61.cpp",
@@ -55,6 +73,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered resource reset and battle resource factory. The factory composes actual action-record initialization, profile restore or creature growth, skills/equipment recalculation, position/angle writes and active-state reset before roster append. Class lookup/load and object allocation remain explicit external services. Focused fixture covers failed class load, party and creature paths, actual record setup, roster append and nonvolatile preservation with public synthetic data. Library builds; no gameplay, full ABI or bitwise FP acceptance.",
-    "roster_population": "Recovered party roster construction AF6290 and enabled encounter-row construction AF6448. Both compose the actual resource factory, profile/creature initialization and record setup. Party slots retain source slot IDs and compact selected group indexes; encounter rows preserve enable/class bytes, tags and per-resource marker, then call the existing layout service boundary AAC1E0. Focused roster fixture passes party and encounter paths and preserved nonvolatile state. Complex encounter layout remains a guest boundary; no gameplay acceptance."
+    "roster_population": "Recovered party roster construction AF6290 and enabled encounter-row construction AF6448. Both compose the actual resource factory, profile/creature initialization and record setup. Party slots retain source slot IDs and compact selected group indexes; encounter rows preserve enable/class bytes, tags and per-resource marker, then call the existing layout service boundary AAC1E0. Focused roster fixture passes party and encounter paths and preserved nonvolatile state. Complex encounter layout remains a guest boundary; no gameplay acceptance.",
+    "group_creation": "Recovered two-group construction AF60D8, shared profile restore ABFDD8 and party rebuild wrapper AF63E0. Rebuild now composes real group creation, party resource population and formation selection. Preserved typed object services, list capacity growth and paired shared-profile copy ranges. Focused fixture checks two objects, array resize, all shared bytes and empty-party rebuild composition. Object allocation remains external; logical ABI coverage only, not gameplay acceptance."
   }
 }

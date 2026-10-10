@@ -1,3 +1,7 @@
+## Root direct continuation: group construction and party rebuild (2026-10-10 UTC)
+
+Recovered two-group construction AF60D8, shared profile restore ABFDD8 and party rebuild wrapper AF63E0. Rebuild now composes real group creation, party resource population and formation selection. Preserved typed object services, list capacity growth and paired shared-profile copy ranges. Focused fixture checks two objects, array resize, all shared bytes and empty-party rebuild composition. Object allocation remains external; logical ABI coverage only, not gameplay acceptance.
+
 ## Root direct continuation: party and encounter roster creation (2026-10-10 UTC)
 
 Recovered party roster construction AF6290 and enabled encounter-row construction AF6448. Both compose the actual resource factory, profile/creature initialization and record setup. Party slots retain source slot IDs and compact selected group indexes; encounter rows preserve enable/class bytes, tags and per-resource marker, then call the existing layout service boundary AAC1E0. Focused roster fixture passes party and encounter paths and preserved nonvolatile state. Complex encounter layout remains a guest boundary; no gameplay acceptance.

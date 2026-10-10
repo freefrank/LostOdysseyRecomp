@@ -15,6 +15,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   switch (e) {
   case 0x82af52f0:
     break;
+  case 0x82abfdd8:
   case 0x82abfc50:
   case 0x82af5400:
     frame = 112;
@@ -52,7 +53,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
     return Address(s.r[3]);
   };
-  if (e == 0x82abfc50) {
+  if (e == 0x82abfdd8) {
+    auto source = Address(s.r[4]), destination = Address(s.r[5]);
+    copy(destination, source + 157436, 8192);
+    copy(destination + 8192, source + 165628, 4096);
+  } else if (e == 0x82abfc50) {
     auto row = Address(s.r[4]), resource = Address(s.r[5]);
     if (s.cached_fp_control & 0x8040) {
       s.cached_fp_control &= ~0x8040u;

@@ -8,7 +8,7 @@
 struct CreationGuest final : manager_release_context61::GuestServices {
   bool found = true, loadSucceeds = true;
   unsigned allocations = 0, loads = 0, created = 0, placements = 0,
-           nextResource = 0x80000;
+           nextResource = 0x80000, nextGroup = 0xc0000;
   bool advance = false;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
@@ -23,6 +23,11 @@ struct CreationGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82300100) {
       s.r[3] = 17;
+      return;
+    }
+    if (e == 0x82401a10 && s.r[3] == 0x73004) {
+      s.r[3] = nextGroup;
+      nextGroup += 0x10000;
       return;
     }
     if (e == 0x82401a10) {
@@ -67,6 +72,14 @@ struct CreationGuest final : manager_release_context61::GuestServices {
       return;
     if (e != 0x123400 || s.r[3] != 0x70000 || s.r[6] != 8)
       throw std::runtime_error("creation allocator ABI");
+    if (s.r[5] == 132) {
+      s.r[3] = 0x64000;
+      return;
+    }
+    if (!s.r[5]) {
+      s.r[3] = 0;
+      return;
+    }
     ++allocations;
     s.r[3] = s.r[5] ? (0x300000 + 0x400000 * (allocations - 1)) : 0;
   }
@@ -212,6 +225,32 @@ int main() {
     check(s.r[1] == initial.r[1] && s.r[25] == initial.r[25] &&
               s.fpr_bits[31] == initial.fpr_bits[31],
           "roster wrapper nonvolatile state");
+    m.WriteU32(0x832c99f8, 0x73004);
+    m.WriteU32(groups + 8, 33);
+    for (unsigned i = 0; i < 12288; ++i)
+      m.WriteU8(profile + 157512 + i, (i * 11 + 5) & 255);
+    s.r[3] = owner;
+    check(battle_resource_creation61::Apply(0x82af60d8, m, {guest, native}, s),
+          "group construction entry");
+    check(m.ReadU32(groups + 4) == 2 && m.ReadU32(groups + 8) == 33 &&
+              m.ReadU32(groupData) == left && m.ReadU32(groupData + 4) == right,
+          "two typed group resources and resized list");
+    for (unsigned i = 0; i < 12288; ++i)
+      check(m.ReadU8(right + 72 + i) == ((i * 11 + 5) & 255),
+            "profile shared state restored into group");
+    for (unsigned i = 0; i < 5; ++i)
+      m.WriteU32(profile + 104 + 4 * i, 0xffffffff);
+    m.WriteU32(0x130000 + 84, 0x68000);
+    guest.nextGroup = left;
+    s.r[3] = owner;
+    check(battle_resource_creation61::Apply(0x82af63e0, m, {guest, native}, s),
+          "party rebuild orchestration entry");
+    check(m.ReadU32(groups + 4) == 2 && m.ReadU32(list + 4) == 0 &&
+              m.ReadU32(right + 12676) == 0 && s.r[3] == 1,
+          "empty party rebuild and formation composition");
+    check(s.r[1] == initial.r[1] && s.r[20] == initial.r[20] &&
+              s.r[31] == initial.r[31],
+          "group creation nonvolatile state");
     std::puts("PASS resource factory failure, party/creature initialization, "
               "actual record setup and roster append");
     return 0;

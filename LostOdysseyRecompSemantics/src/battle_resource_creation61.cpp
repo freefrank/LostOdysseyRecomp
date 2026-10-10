@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_resource_creation61.h"
 #include "lo_semantics/battle_manager_access61.h"
+#include "lo_semantics/battle_formation61.h"
 #include "lo_semantics/battle_action_storage61.h"
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_resource_stats61.h"
@@ -12,6 +13,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_resource_creation61::Apply(e, m, d, s) &&
+      !battle_formation61::Apply(e, m, d, s) &&
       !battle_action_storage61::Apply(e, m, d, s) &&
       !battle_resource_growth61::Apply(e, m, d, s) &&
       !battle_resource_stats61::Apply(e, m, d, s) &&
@@ -21,6 +23,102 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82af60d8 || e == 0x82af63e0) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]);
+    unsigned frame = e == 0x82af60d8 ? 192 : 96,
+             first = e == 0x82af60d8 ? 20 : 31;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    if (e == 0x82af60d8) {
+      auto resize = [&](unsigned data, unsigned bytes) {
+        auto manager = m.ReadU32(0x8330b608);
+        if (!manager) {
+          Call(0x827c5f38, m, d, s);
+          manager = m.ReadU32(0x8330b608);
+        }
+        s.r[3] = manager;
+        s.r[4] = data;
+        s.r[5] = bytes;
+        s.r[6] = 8;
+        s.ctr = m.ReadU32(m.ReadU32(manager) + 8);
+        d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+        return Address(s.r[3]);
+      };
+      auto list = m.ReadU32(owner + 48);
+      m.WriteU32(list + 4, 0);
+      if (m.ReadU32(list + 8)) {
+        auto data = m.ReadU32(list);
+        m.WriteU32(list + 8, 0);
+        if (data)
+          m.WriteU32(list, resize(data, 0));
+      }
+      m.WriteU32(sp + 80, 0);
+      m.WriteU32(sp + 84, 0);
+      auto objectArgument = recovery_abi::ReadU64(m, sp + 80);
+      for (unsigned i = 0; i < 2; ++i) {
+        auto type = m.ReadU32(0x832c99f8);
+        if (!type) {
+          s.r[3] = 0x820205bc;
+          Call(0x82a79de0, m, d, s);
+          m.WriteU32(0x832c99f8, Address(s.r[3]));
+          Call(0x82a795b0, m, d, s);
+          type = m.ReadU32(0x832c99f8);
+        }
+        Call(0x82300100, m, d, s);
+        s.r[4] = s.r[3];
+        s.r[3] = type;
+        s.r[5] = objectArgument;
+        s.r[6] = 0;
+        s.r[7] = 0;
+        s.r[8] = m.ReadU32(0x8330b5f4);
+        s.r[9] = 0;
+        s.r[10] = 0;
+        Call(0x82401a10, m, d, s);
+        auto group = Address(s.r[3]);
+        Call(0x82400a08, m, d, s);
+        list = m.ReadU32(owner + 48);
+        auto previous = m.ReadU32(list + 4), count = previous + 1;
+        m.WriteU32(list + 4, count);
+        if (std::int32_t(count) > std::int32_t(m.ReadU32(list + 8))) {
+          auto data = m.ReadU32(list),
+               capacity = count + unsigned(std::int32_t(count * 3) / 8) + 32;
+          m.WriteU32(list + 8, capacity);
+          if (data || capacity)
+            m.WriteU32(list, resize(data, capacity * 4));
+        }
+        auto slot = m.ReadU32(list) + 4 * previous;
+        if (slot)
+          m.WriteU32(slot, group);
+      }
+      auto group = m.ReadU32(m.ReadU32(m.ReadU32(owner + 48)) + 4);
+      s.r[3] = m.ReadU32(0x83291dc0);
+      s.r[4] = m.ReadU32(owner + 32) + 76;
+      s.r[5] = group + 72;
+      Call(0x82abfdd8, m, d, s);
+    } else {
+      Call(0x82af60d8, m, d, s);
+      auto group = m.ReadU32(m.ReadU32(m.ReadU32(owner + 48)) + 4);
+      m.WriteU32(group + 12676, 0);
+      s.r[3] = owner;
+      Call(0x82af6290, m, d, s);
+      Call(0x82380a18, m, d, s);
+      (void)battle_manager_access61::Apply(0x82389aa0, m, d, s);
+      auto profile = Address(s.r[3]);
+      s.r[3] = owner;
+      s.r[4] = 1;
+      s.r[5] = m.ReadU8(profile + 56);
+      Call(0x82af5ba8, m, d, s);
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82af6290 || e == 0x82af6448) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]);
     m.WriteU32(old - 8, Address(s.lr));

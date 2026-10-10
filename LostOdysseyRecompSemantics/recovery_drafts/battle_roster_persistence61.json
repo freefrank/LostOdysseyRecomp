@@ -49,6 +49,14 @@
       "instruction_count": 49,
       "body_sha256": "1e76131dc08f07f43a6646619cc18b14d415a8299ee08072dc3f3d946b970ad2",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ABFDD8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 22114,
+      "instruction_count": 23,
+      "body_sha256": "8b33e6a3b4334661ebf0b41e431584a2fcb1c1b7de78bf6e5f584fd4a909ebfb",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -58,7 +66,8 @@
       "82AF56A8",
       "82AF57D8",
       "82AF5810",
-      "82ABFC50"
+      "82ABFC50",
+      "82ABFDD8"
     ],
     "header": "include/lo_semantics/battle_roster_persistence61.h",
     "source": "src/battle_roster_persistence61.cpp",
@@ -73,6 +82,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance.",
-    "resource_restore": "Recovered profile-to-resource restore ABFC50 with actual seven-span copy and passive-state reset, plus ABFE38 baseline counters/level limits and ABFE90 active-state/group flag reset. Focused roster fixture now checks save/restore data, the deliberate passive reset, 32 initial limits and all group-dependent mask cases. Library and focused logic checks pass; no gameplay/full ABI acceptance is claimed."
+    "resource_restore": "Recovered profile-to-resource restore ABFC50 with actual seven-span copy and passive-state reset, plus ABFE38 baseline counters/level limits and ABFE90 active-state/group flag reset. Focused roster fixture now checks save/restore data, the deliberate passive reset, 32 initial limits and all group-dependent mask cases. Library and focused logic checks pass; no gameplay/full ABI acceptance is claimed.",
+    "group_creation": "Recovered two-group construction AF60D8, shared profile restore ABFDD8 and party rebuild wrapper AF63E0. Rebuild now composes real group creation, party resource population and formation selection. Preserved typed object services, list capacity growth and paired shared-profile copy ranges. Focused fixture checks two objects, array resize, all shared bytes and empty-party rebuild composition. Object allocation remains external; logical ABI coverage only, not gameplay acceptance."
   }
 }
