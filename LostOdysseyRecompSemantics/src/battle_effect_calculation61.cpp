@@ -25,8 +25,68 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82aa0890) {
+    auto owner = Address(s.r[3]), resource = Address(s.r[4]),
+         category = Address(s.r[5]), kind = Address(s.r[6]),
+         detail = Address(s.r[7]);
+    s.r[3] = 0;
+    for (unsigned i = 0; i < 3; ++i) {
+      auto a = m.ReadU32(resource + 76252 + 4 * i),
+           b = m.ReadU32(resource + 76264 + 4 * i),
+           c = m.ReadU32(resource + 76276 + 4 * i);
+      if ((category == 0xffffffffu || category == a) &&
+          (kind == 0xffffffffu || kind == b) &&
+          (detail == 0xffffffffu || detail == c)) {
+        m.WriteU32(owner + 12, a);
+        m.WriteU32(owner + 16, b);
+        m.WriteU32(owner + 20, c);
+        s.r[3] = 1;
+        break;
+      }
+    }
+    return true;
+  }
+  if (e == 0x82aa0e10) {
+    auto resource = Address(s.r[4]), category = Address(s.r[7]);
+    unsigned mode = 0;
+    for (unsigned i = 0; i < 3; ++i)
+      if (m.ReadU32(resource + 76252 + 4 * i) == category) {
+        mode = m.ReadU32(m.ReadU32(0x832ca0cc) + 100);
+        break;
+      }
+    if (mode >= 3)
+      return true;
+    if (mode == 2) {
+      s.fpr_bits[1] = s.fpr_bits[2];
+      return true;
+    }
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto first = std::bit_cast<double>(s.fpr_bits[1]);
+    if (mode == 1) {
+      auto delta = double(float(std::bit_cast<double>(s.fpr_bits[2]) - first));
+      s.fpr_bits[13] = std::bit_cast<std::uint64_t>(delta);
+      auto factor = double(std::bit_cast<float>(m.ReadU32(0x82000da4)));
+      s.fpr_bits[0] = std::bit_cast<std::uint64_t>(factor);
+      s.fpr_bits[1] =
+          std::bit_cast<std::uint64_t>(double(float(delta * factor + first)));
+    } else {
+      auto zero = double(std::bit_cast<float>(m.ReadU32(0x82000e50)));
+      s.fpr_bits[0] = std::bit_cast<std::uint64_t>(zero);
+      if (std::bit_cast<double>(s.fpr_bits[3]) != zero)
+        s.fpr_bits[1] = s.fpr_bits[3];
+    }
+    return true;
+  }
   unsigned frame = 112, first = 31, literal = 0, saveFloat = 0;
   switch (e) {
+  case 0x82b20270:
+    frame = 144;
+    first = 27;
+    literal = 84;
+    break;
   case 0x82b20ef0:
     frame = 128;
     first = 29;
@@ -125,7 +185,46 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     m.WriteU32(sp + offset, unsigned(n));
     return n;
   };
-  if (e == 0x82b20ef0) {
+  if (e == 0x82b20270) {
+    auto source = m.ReadU32(owner + 4), base = m.ReadU32(source + 4940);
+    m.WriteU32(sp + 80, 0);
+    if (m.ReadU8(owner + 45) != 1) {
+      if (!m.ReadU8(owner + 108)) {
+        constexpr unsigned traits[] = {13, 3, 12, 2, 11, 1};
+        for (unsigned i = 0; i < 6; ++i) {
+          s.r[3] = m.ReadU32(0x832cb784);
+          s.r[4] = m.ReadU32(owner + 4);
+          s.r[5] = 5;
+          s.r[6] = 0xffffffffu;
+          s.r[7] = traits[i];
+          Call(0x82aa0890, m, d, s);
+          if ((Address(s.r[3]) & 255) != 1)
+            continue;
+          s.r[3] = m.ReadU32(0x832cb784);
+          s.r[4] = m.ReadU32(owner + 4);
+          auto zero = readFloat(0x82000e50, 3);
+          readFloat(i < 2 ? 0x82000dc0 : i < 4 ? 0x82000dd0 : 0x82000e20, 2);
+          f(1, double(zero));
+          s.r[7] = 5;
+          Call(0x82aa0e10, m, d, s);
+          integer(std::bit_cast<double>(s.fpr_bits[1]), 80);
+          break;
+        }
+      }
+      auto threshold = std::int32_t(base + m.ReadU32(sp + 80));
+      if (property(m.ReadU32(owner + 8), 10))
+        threshold = std::int32_t(unsigned(threshold) * 150u) / 100;
+      if (threshold != 0) {
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = unsigned(threshold);
+        s.r[5] = 28;
+        s.r[6] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+        Call(0x82aa0838, m, d, s);
+        if (Address(s.r[3]) & 255)
+          m.WriteU8(owner + 36, 1);
+      }
+    }
+  } else if (e == 0x82b20ef0) {
     auto amount = readFloat(owner + 20, 31);
     auto source = m.ReadU32(owner + 4), target = m.ReadU32(owner + 8);
     bool apply = !(m.ReadU32(target + 124) & 0x40000000u) &&

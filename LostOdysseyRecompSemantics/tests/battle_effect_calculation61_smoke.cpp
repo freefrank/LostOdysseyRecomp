@@ -152,6 +152,58 @@ int main() {
     m.WriteU8(0x73000 + 64, 1);
     run(0x82b21148);
     check(!m.ReadU32(0x73000 + 24));
+    m.WriteU32(0x80000 + 76252, 2);
+    m.WriteU32(0x80000 + 76264, 7);
+    m.WriteU32(0x80000 + 76276, 13);
+    s.r[3] = 0x76000;
+    s.r[4] = 0x80000;
+    s.r[5] = 2;
+    s.r[6] = 0xffffffff;
+    s.r[7] = 13;
+    check(battle_effect_calculation61::Apply(0x82aa0890, m, {g, native}, s) &&
+          s.r[3] == 1 && m.ReadU32(0x76000 + 16) == 7);
+    s.r[3] = 0x76000;
+    s.r[5] = 8;
+    check(battle_effect_calculation61::Apply(0x82aa0890, m, {g, native}, s) &&
+          s.r[3] == 0 && m.ReadU32(0x76000 + 12) == 2);
+    m.WriteU32(0x832ca0cc, 0x77000);
+    m.WriteU32(0x82000da4, 0x3f000000);
+    for (unsigned mode = 0; mode < 5; ++mode) {
+      m.WriteU32(0x77000 + 100, mode);
+      s.r[4] = 0x80000;
+      s.r[7] = 2;
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(10.);
+      s.fpr_bits[2] = std::bit_cast<std::uint64_t>(20.);
+      s.fpr_bits[3] = std::bit_cast<std::uint64_t>(0.);
+      check(battle_effect_calculation61::Apply(0x82aa0e10, m, {g, native}, s));
+      check(std::bit_cast<double>(s.fpr_bits[1]) == (mode == 1   ? 15
+                                                     : mode == 2 ? 20
+                                                                 : 10));
+    }
+    s.r[7] = 99;
+    s.fpr_bits[3] = std::bit_cast<std::uint64_t>(7.);
+    check(battle_effect_calculation61::Apply(0x82aa0e10, m, {g, native}, s) &&
+          std::bit_cast<double>(s.fpr_bits[1]) == 7);
+    m.WriteU32(0x832cb784, 0x76000);
+    m.WriteU32(0x80000 + 76252, 5);
+    m.WriteU32(0x80000 + 76276, 13);
+    m.WriteU32(0x77000 + 100, 2);
+    m.WriteU32(0x82000dc0, 0x41a00000);
+    m.WriteU32(0x80000 + 4940, 10);
+    m.WriteU8(0x73000 + 108, 0);
+    m.WriteU8(0x73000 + 45, 0);
+    m.WriteU8(0x73000 + 36, 0);
+    run(0x82b20270);
+    check(m.ReadU8(0x73000 + 36) == 1);
+    m.WriteU8(0x73000 + 45, 1);
+    m.WriteU8(0x73000 + 36, 9);
+    run(0x82b20270);
+    check(m.ReadU8(0x73000 + 36) == 9);
+    m.WriteU8(0x73000 + 45, 0);
+    m.WriteU8(0x73000 + 108, 1);
+    m.WriteU32(0x80000 + 4940, 0);
+    run(0x82b20270);
+    check(m.ReadU8(0x73000 + 36) == 9);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;
