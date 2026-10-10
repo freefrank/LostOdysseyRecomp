@@ -5,7 +5,7 @@
 #include "battle_profile_fixture.h"
 #include <iostream>
 struct TasksGuest final : manager_release_context61::GuestServices {
-  unsigned removed = 0, freed = 0;
+  unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18)
@@ -27,18 +27,26 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = 21;
       return;
     }
-    if (e == 0x82b35568) {
-      if (s.r[3] != 0xa0000)
-        throw std::runtime_error("row destructor");
-      ++removed;
-      return;
-    }
     throw std::runtime_error("tasks direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
     if (profile_fixture::Indirect(e, s))
       return;
+    if (e == 0x12340c) {
+      ++rawFreed;
+      return;
+    }
+    if (e == 0x123474) {
+      s.r[3] = 2;
+      return;
+    }
+    if (e == 0x123484) {
+      if (s.r[4] != 2)
+        throw std::runtime_error("row virtual removal");
+      ++virtualRemoved;
+      return;
+    }
     if (e == 0x123400) {
       if (s.r[3] != 0xa6000 || s.r[4] != 1)
         throw std::runtime_error("tracked destructor");
@@ -143,6 +151,7 @@ int main() {
     m.WriteU32(0x832cb68c + 8, 1);
     m.WriteU32(0x832cb68c + 12, 1);
     m.WriteU32(0xa0004, 8);
+    m.WriteU32(0xa0000 + 12, 0xffffffff);
     m.WriteU32(0x832cc0fc + 8, 0xa5000);
     m.WriteU32(0x832cc0fc + 12, 1);
     m.WriteU32(0xa5000, 0xa6000);
@@ -173,12 +182,12 @@ int main() {
     m.WriteU32(0xa8000, 12);
     m.WriteU32(0x832cb6f0, 9);
     run(0x82b035e0);
-    check(g.removed == 4 && g.freed == 7 && m.ReadU32(0xb0000 + 36) == 99 &&
+    check(g.removed == 3 && g.freed == 7 && m.ReadU32(0xb0000 + 36) == 99 &&
           !m.ReadU32(0x832cc05c + 128) && !m.ReadU32(0x832cc05c + 140) &&
           !m.ReadU32(0x832cc05c + 148));
     m.WriteU8(0x70000 + 133, 0);
     run(0x82b04c50);
-    check(g.removed == 4);
+    check(g.removed == 3);
     m.WriteU32(0x88004, 2);
     m.WriteU32(0x88008, 2);
     check(run(0x82b1a560, 0x88000, 1) == 2 && m.ReadU32(0x88004) == 3 &&
@@ -188,7 +197,7 @@ int main() {
     m.WriteU32(0x832cb68c + 8, 1);
     m.WriteU32(0x832cb68c + 12, 1);
     run(0x82b08410, 0x832cb68c, 0xffffffff);
-    check(g.removed == 5 && g.freed == 8 && !m.ReadU32(0x832cb68c + 8));
+    check(g.removed == 3 && g.freed == 8 && !m.ReadU32(0x832cb68c + 8));
     m.WriteU32(0x832cc05c + 32, 13);
     m.WriteU32(0x832cc05c + 48, 0xb1000);
     m.WriteU32(0x832cc05c + 52, 1);
@@ -220,6 +229,24 @@ int main() {
     run(0x82aaf850, 0xc0000);
     check(g.freed == before + 3 && !m.ReadU32(0xc0000 + 12) &&
           !m.ReadU32(0xc0000 + 24) && !m.ReadU32(0xc2000));
+    m.WriteU32(0x8f00c, 0x12340c);
+    m.WriteU32(0x73000 + 116, 0x123474);
+    m.WriteU32(0x73000 + 132, 0x123484);
+    m.WriteU8(0xd0000, 3);
+    m.WriteU32(0xd0000 + 12, 17);
+    m.WriteU32(0xd0000 + 24, 0xd5000);
+    m.WriteU32(0xd0000 + 18032, 0xe0000);
+    m.WriteU32(0xd0000 + 18036, 1);
+    m.WriteU32(0xd0000 + 18040, 1);
+    m.WriteU32(0xe0000, 0x12345678);
+    m.WriteU32(0xe0000 + 18016, 0x87654321);
+    before = g.freed;
+    run(0x82b35568, 0xd0000);
+    check(g.freed == before + 1 && g.rawFreed == 1 && g.virtualRemoved == 1 &&
+          !m.ReadU8(0xd0000) && m.ReadU32(0xd0000 + 12) == 0xffffffff &&
+          !m.ReadU32(0xd0000 + 24));
+    check(!m.ReadU32(0xe0000) && !m.ReadU32(0xe0000 + 18016) &&
+          !m.ReadU32(0xd0000 + 18032));
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

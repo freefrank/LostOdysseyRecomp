@@ -105,6 +105,54 @@
       "instruction_count": 53,
       "body_sha256": "5c3987778c49d1292593b0edffd910fa898356bf6879cb5d9ee766bdbd30a94f",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B35568",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 27968,
+      "instruction_count": 17,
+      "body_sha256": "53f8a82dd9cd3b2172102e66b97c1bfedfed6805463248509b6057a2793f24ee",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B352E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 27592,
+      "instruction_count": 38,
+      "body_sha256": "2cdd6bbe81e8b0f1b757c7ab08774146650eea2b196f07f5516352daec35e355",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B35228",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 27478,
+      "instruction_count": 48,
+      "body_sha256": "6e9ae2ef2f611b64db9fabe27858351239dee9f7a6ddda5e636b445781a638c7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B354C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 27866,
+      "instruction_count": 29,
+      "body_sha256": "0e1b1790f185986a43abcec2ad9b0b4391914de1090cb2c7112ac9ccf4bb6c8c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B351B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 27408,
+      "instruction_count": 28,
+      "body_sha256": "72e7b5d4b6dee760ff2400cf377cb9dda7a7d140ddc9ad45bcb2e6859ce2b1f4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B01ED0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 33213,
+      "instruction_count": 22,
+      "body_sha256": "715ddc50a7c85faee10cd73eac048fbf72ffc1b4af1702696e7d61f1fead0710",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -121,7 +169,13 @@
       "82388348",
       "823883F0",
       "82B05B38",
-      "82AAF850"
+      "82AAF850",
+      "82B35568",
+      "82B352E8",
+      "82B35228",
+      "82B354C0",
+      "82B351B8",
+      "82B01ED0"
     ],
     "header": "include/lo_semantics/battle_scene_tasks61.h",
     "source": "src/battle_scene_tasks61.cpp",
@@ -138,6 +192,7 @@
     "case_scope": "Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs.",
     "task_cancellation": "Recovered scene-task cancellation lookup, bulk row cleanup, paired membership lookup/removal and conditional task removal. Preset clear now executes these paths and real array compaction rather than mocking cancellation. Library and scene-task/runtime checks pass, including empty membership and clear-all release. Object destructors and final tracked-pointer removal remain lower service boundaries; no runtime acceptance is claimed.",
     "task_unlink": "Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed.",
-    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance."
+    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
+    "scene_row_cleanup": "Recovered large scene-row destruction, nested row-array reset/removal and virtual scene-handle release. Cancellation now composes real row cleanup instead of a destructor mock, reusing recovered memory fill and storage helpers. Focused scene-task checks pass actual buffer clearing, nested release, identifier reset and virtual removal arguments. Allocator and object-specific virtual methods remain explicit services; no native gameplay or full ABI acceptance is claimed."
   }
 }

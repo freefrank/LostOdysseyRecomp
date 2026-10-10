@@ -2,10 +2,119 @@
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/memory_fill.h"
 #include <utility>
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b35568 || e == 0x82b352e8 || e == 0x82b35228 ||
+      e == 0x82b354c0 || e == 0x82b351b8 || e == 0x82b01ed0) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]), arg4 = Address(s.r[4]),
+         arg5 = Address(s.r[5]);
+    unsigned frame = e == 0x82b01ed0                        ? 96
+                     : (e == 0x82b35568 || e == 0x82b352e8) ? 112
+                                                            : 128;
+    unsigned first = e == 0x82b01ed0   ? 31
+                     : e == 0x82b35568 ? 30
+                     : e == 0x82b352e8 ? 29
+                     : e == 0x82b354c0 ? 28
+                                       : 27;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s) &&
+          !string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    auto virt = [&](unsigned object, unsigned off) {
+      auto method = m.ReadU32(m.ReadU32(object) + off);
+      s.r[3] = object;
+      s.ctr = method;
+      d.guest.CallIndirect(method & ~3u, m, s);
+    };
+    auto free = [&](unsigned data) {
+      s.r[3] = m.ReadU32(0x8330b608);
+      if (!s.r[3]) {
+        call(0x827c5f38);
+        s.r[3] = m.ReadU32(0x8330b608);
+      }
+      s.r[4] = data;
+      virt(Address(s.r[3]), 12);
+    };
+    if (e == 0x82b01ed0) {
+      virt(owner, 116);
+      auto index = Address(s.r[3]);
+      s.r[4] = s.r[3];
+      if (std::int32_t(index) >= 0)
+        virt(owner, 132);
+    } else if (e == 0x82b35568) {
+      m.WriteU32(sp + 132, owner);
+      call(0x82b352e8);
+      s.r[3] = owner + 18032;
+      call(0x82b354c0);
+    } else if (e == 0x82b352e8) {
+      s.r[3] = owner + 18032;
+      s.r[4] = 0;
+      call(0x82b35228);
+      auto id = m.ReadU32(owner + 12);
+      if (std::int32_t(id) >= 0) {
+        s.r[3] = 0x832cc05c;
+        s.r[4] = id;
+        call(0x82b01ed0);
+      }
+      m.WriteU32(owner + 12, 0xffffffff);
+      auto data = m.ReadU32(owner + 24);
+      if (data) {
+        free(data);
+        m.WriteU32(owner + 24, 0);
+      }
+      m.WriteU8(owner, 0);
+    } else if (e == 0x82b354c0) {
+      m.WriteU32(sp + 148, owner);
+      s.r[4] = 0;
+      s.r[5] = m.ReadU32(owner + 4);
+      call(0x82b351b8);
+      auto data = m.ReadU32(owner);
+      if (data)
+        free(data);
+      for (auto off : {0u, 4u, 8u})
+        m.WriteU32(owner + off, 0);
+    } else if (e == 0x82b351b8) {
+      auto end = arg4 + arg5;
+      if (std::int32_t(arg4) < std::int32_t(end))
+        for (unsigned i = 0; i < arg5; ++i)
+          s.r[3] = FillGuestMemory(m, m.ReadU32(owner) + 18020 * (arg4 + i), 0,
+                                   18020);
+      s.r[3] = owner;
+      s.r[4] = arg4;
+      s.r[5] = arg5;
+      s.r[6] = 18020;
+      s.r[7] = 8;
+      call(0x82298af8);
+    } else {
+      for (unsigned i = 0; std::int32_t(i) < std::int32_t(m.ReadU32(owner + 4));
+           ++i)
+        s.r[3] = FillGuestMemory(m, m.ReadU32(owner) + 18020 * i, 0, 18020);
+      auto capacity = m.ReadU32(owner + 8);
+      m.WriteU32(owner + 4, 0);
+      if (capacity != arg4) {
+        m.WriteU32(owner + 8, arg4);
+        s.r[3] = owner;
+        s.r[4] = 18020;
+        s.r[5] = 8;
+        call(0x8229f678);
+      }
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82aaf850) {
     auto old = Address(s.r[1]), object = Address(s.r[3]);
     m.WriteU32(old - 8, Address(s.lr));
