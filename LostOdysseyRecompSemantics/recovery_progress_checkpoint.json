@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 215,
-    "distinct_entries": 837,
+    "distinct_entries": 839,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2370,11 +2370,14 @@
           "82AC90E8",
           "82AC90F8",
           "82AC8AF8",
-          "82AC89F0"
+          "82AC89F0",
+          "82AC8978",
+          "82AC87D8"
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI only",
-        "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated."
+        "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.",
+        "payload_operations": "Recovered typed property payload comparison, maximum update, additive update and insertion. Source semantics retain the first original-mask bit for payload addressing, signed comparisons, last processed eligibility result and low-31-bit scan. The read-only adapter clears both mutation flags. Paired payload evaluators now use actual bank state; focused property and evaluator fixtures pass. Logical recovery only, not native gameplay acceptance."
       },
       {
         "unit": "battle_preferred_target61",

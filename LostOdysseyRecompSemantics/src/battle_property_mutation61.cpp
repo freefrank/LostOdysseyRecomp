@@ -72,6 +72,60 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.lr = m.ReadU32(old - 8);
     return true;
   }
+  if (e == 0x82ac8978) {
+    s.r[8] = 0;
+    s.r[7] = 0;
+    return battle_property_mutation61::Apply(0x82ac87d8, m, d, s);
+  }
+  if (e == 0x82ac87d8) {
+    auto old = Address(s.r[1]), resource = Address(s.r[3]),
+         bank = Address(s.r[4]), mask = Address(s.r[5]),
+         value = Address(s.r[6]);
+    auto mode = Address(s.r[7]) & 255, add = Address(s.r[8]) & 255;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 24; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 160;
+    m.WriteU32(Address(s.r[1]), old);
+    auto flagAddress = resource + 272 * bank + 232,
+         flags = m.ReadU32(flagAddress);
+    unsigned result = 0, index = 0;
+    for (; index < 31; ++index)
+      if (mask & (1u << index))
+        break;
+    auto payload = resource + 4 * (68 * bank + index + 59),
+         other = resource + 4 * (68 * bank + index + 91);
+    for (unsigned bit = 0; bit < 31; ++bit) {
+      auto flag = 1u << bit;
+      if (!(mask & flag))
+        continue;
+      bool typed = m.ReadU32(0x83213538 + 4 * (32 * bank + bit)) == 1;
+      if (typed && (flags & flag)) {
+        result = 1;
+        auto current = m.ReadU32(payload);
+        if (mode == 1) {
+          if (add == 1)
+            m.WriteU32(payload, current + value);
+          else if (std::int32_t(current) < std::int32_t(value))
+            m.WriteU32(payload, value);
+        } else if (std::int32_t(current) > std::int32_t(value))
+          result = 0;
+      } else {
+        result = 1;
+        if (mode == 1) {
+          m.WriteU32(flagAddress, m.ReadU32(flagAddress) | flag);
+          m.WriteU32(payload, value);
+          m.WriteU32(other, 0);
+        }
+      }
+    }
+    s.r[3] = result;
+    s.r[1] += 160;
+    for (unsigned i = 24; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac9000) {
     s.r[5] = 1;
     return battle_property_mutation61::Apply(0x82ac8ee8, m, d, s);

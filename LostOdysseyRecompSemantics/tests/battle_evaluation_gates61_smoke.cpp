@@ -76,7 +76,7 @@ int main() {
     m.WriteU32(0x8321343c + 8 * 18, 4);
     m.WriteU32(0x80000 + 3 * 272 + 232, 4);
     check(!run(0x82b0b0f0));
-    for (auto e : {0x82b0c430u, 0x82b0e9d0u, 0x82b0ed68u}) {
+    for (auto e : {0x82b0e9d0u}) {
       g.first = 0;
       g.second = 0;
       g.calls = 0;
@@ -100,6 +100,19 @@ int main() {
     check(!run(0x82b0eb68));
     m.WriteU32(0x90000 + 272 * 10 + 232, 4);
     check(run(0x82b0eb68));
+    // Typed payload threshold gate uses real bank data.
+    for (unsigned bank : {10u, 11u})
+      for (unsigned bit = 0; bit < 31; ++bit)
+        m.WriteU32(0x83213538 + 4 * (32 * bank + bit), 1);
+    m.WriteU32(0x90000 + 272 * 10 + 232, 20);
+    m.WriteU32(0x90000 + 272 * 11 + 232, 21);
+    m.WriteU32(0x90000 + 4 * (680 + 2 + 59), 10);
+    m.WriteU32(0x90000 + 4 * (748 + 0 + 59), 10);
+    m.WriteU32(0x73000 + 108, 9);
+    m.WriteU32(0x73000 + 112, 9);
+    check(!run(0x82b0c430));
+    m.WriteU32(0x73000 + 112, 10);
+    check(run(0x82b0c430) && run(0x82b0ed68));
     g.virtualResult = 1;
     g.calls = 0;
     check(!run(0x82b0ed68) && !g.calls);

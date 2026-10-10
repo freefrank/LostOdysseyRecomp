@@ -1,3 +1,7 @@
+## Root direct continuation: property payload operations (2026-10-10 UTC)
+
+Recovered typed property payload comparison, maximum update, additive update and insertion. Source semantics retain the first original-mask bit for payload addressing, signed comparisons, last processed eligibility result and low-31-bit scan. The read-only adapter clears both mutation flags. Paired payload evaluators now use actual bank state; focused property and evaluator fixtures pass. Logical recovery only, not native gameplay acceptance.
+
 ## Root direct continuation: property bank operations (2026-10-10 UTC)
 
 Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.

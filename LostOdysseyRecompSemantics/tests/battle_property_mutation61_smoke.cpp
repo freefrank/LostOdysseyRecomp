@@ -85,6 +85,34 @@ int main() {
     check(m.ReadU32(resource + 4 * (136 + 3 + 59)) ==
           17); // first bit of the original mask
     check(bankRun(0x82ac89f0, 0x80000000, 1) == 0);
+    auto payloadRun = [&](unsigned e, unsigned mask, unsigned value,
+                          unsigned mode, unsigned add) {
+      s.r[3] = resource;
+      s.r[4] = 2;
+      s.r[5] = mask;
+      s.r[6] = value;
+      s.r[7] = mode;
+      s.r[8] = add;
+      check(battle_property_mutation61::Apply(e, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[24] == initial.r[24]);
+      return unsigned(s.r[3]);
+    };
+    auto payload = resource + 4 * (136 + 2 + 59),
+         other = resource + 4 * (136 + 2 + 91);
+    m.WriteU32(payload, 10);
+    m.WriteU32(other, 55);
+    check(!payloadRun(0x82ac8978, 4, 9, 1, 1) && m.ReadU32(payload) == 10);
+    check(payloadRun(0x82ac8978, 4, 10, 0, 0));
+    check(payloadRun(0x82ac87d8, 4, 12, 1, 0) && m.ReadU32(payload) == 12 &&
+          m.ReadU32(other) == 55);
+    check(payloadRun(0x82ac87d8, 4, 3, 1, 1) && m.ReadU32(payload) == 15);
+    check(payloadRun(0x82ac87d8, 4, 5, 1, 0) && m.ReadU32(payload) == 15);
+    m.WriteU32(bankFlags, 0);
+    check(payloadRun(0x82ac87d8, 4, 7, 1, 0) && m.ReadU32(payload) == 7 &&
+          !m.ReadU32(other));
+    m.WriteU32(payload, 0xffffffff);
+    check(payloadRun(0x82ac8978, 4, 0, 0, 0));
+    check(!payloadRun(0x82ac87d8, 0x80000000, 1, 1, 0));
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

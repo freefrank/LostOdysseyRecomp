@@ -57,6 +57,22 @@
       "instruction_count": 61,
       "body_sha256": "c62cf67086135b4295b5d24ac6ad573adde84a15f522dbb55447f933a8c26385",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8978",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6266,
+      "instruction_count": 3,
+      "body_sha256": "fed3e51f1cde062c25513c8472c48ea7680b1eafa3eee35d1201b6c0a8309d89",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC87D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6032,
+      "instruction_count": 100,
+      "body_sha256": "598a88459a2c55ee783e3320cf71618a52698f137f79f928d7889205e99fc2fb",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -67,7 +83,9 @@
       "82AC90E8",
       "82AC90F8",
       "82AC8AF8",
-      "82AC89F0"
+      "82AC89F0",
+      "82AC8978",
+      "82AC87D8"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -82,6 +100,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated."
+    "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.",
+    "payload_operations": "Recovered typed property payload comparison, maximum update, additive update and insertion. Source semantics retain the first original-mask bit for payload addressing, signed comparisons, last processed eligibility result and low-31-bit scan. The read-only adapter clears both mutation flags. Paired payload evaluators now use actual bank state; focused property and evaluator fixtures pass. Logical recovery only, not native gameplay acceptance."
   }
 }
