@@ -81,6 +81,30 @@
       "instruction_count": 17,
       "body_sha256": "aa72bca422d09d7ee78ed0154a273cb1256b71ac0c86eee3fba1cb9198e058d1",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "823562A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.7.cpp",
+      "source_line": 56264,
+      "instruction_count": 10,
+      "body_sha256": "74f04ea6be5ff5df2a3e7c4f1bb8f4a49cca070c793acf501ab66a2d8ad0bb93",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82320328",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.5.cpp",
+      "source_line": 32685,
+      "instruction_count": 63,
+      "body_sha256": "c2b01516b1c5f2302aa28b7547bdb333e1c597c19363427f395ceed0757b4142",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82474348",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.23.cpp",
+      "source_line": 7336,
+      "instruction_count": 21,
+      "body_sha256": "8f31095e3a5614094c64033d6ec3f5c8369f459e1128f5b41dcefeb129cc6714",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +118,10 @@
       "8230BAC0",
       "82298AF8",
       "8229F678",
-      "822D03D8"
+      "822D03D8",
+      "823562A8",
+      "82320328",
+      "82474348"
     ],
     "header": "include/lo_semantics/string_storage_context61.h",
     "source": "src/string_storage_context61.cpp",
@@ -114,6 +141,7 @@
     "report_strings": "Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.",
     "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.",
     "array_storage_adapters": "Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.",
-    "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed."
+    "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
+    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance."
   }
 }

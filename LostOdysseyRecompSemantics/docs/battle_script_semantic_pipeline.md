@@ -453,3 +453,7 @@ Recovered scene-task cancellation lookup, bulk row cleanup, paired membership lo
 ## Task unlink
 
 Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed.
+
+## Event payload cleanup
+
+Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.

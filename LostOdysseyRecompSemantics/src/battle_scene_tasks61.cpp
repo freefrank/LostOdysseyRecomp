@@ -6,6 +6,50 @@
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82aaf850) {
+    auto old = Address(s.r[1]), object = Address(s.r[3]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 26; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 144;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    m.WriteU32(sp + 164, object);
+    auto call = [&](unsigned a) {
+      if (!string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    s.r[3] = object + 12;
+    s.r[4] = 0;
+    call(0x823562a8);
+    auto header = object + 24;
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(m.ReadU32(header + 4));
+         ++i) {
+      s.r[3] = m.ReadU32(header) + 12 * i;
+      call(0x82298938);
+    }
+    auto capacity = m.ReadU32(header + 8);
+    m.WriteU32(header + 4, 0);
+    if (capacity) {
+      auto data = m.ReadU32(header);
+      m.WriteU32(header + 8, 0);
+      if (data) {
+        s.r[3] = header;
+        s.r[4] = 12;
+        s.r[5] = 8;
+        call(0x8229f678);
+      }
+    }
+    s.r[3] = header;
+    call(0x82474348);
+    s.r[3] = object + 12;
+    call(0x82298938);
+    s.r[1] += 144;
+    for (unsigned i = 26; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82388348 || e == 0x823883f0 || e == 0x82b05b38) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]), arg4 = Address(s.r[4]),
          arg5 = Address(s.r[5]);

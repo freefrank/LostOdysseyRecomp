@@ -118,6 +118,17 @@ int main() {
     if (!string_storage_context61::Apply(0x8229f678, m, {g, native}, s) ||
         m.ReadU32(0xc0000) != 0xa0000 || s.r[1] != initial.r[1])
       throw std::runtime_error("array resize adapter");
+    // Releasing an outer array also clears its inline string headers.
+    m.WriteU32(0xc0000, 0xc1000);
+    m.WriteU32(0xc0004, 1);
+    m.WriteU32(0xc0008, 1);
+    m.WriteU32(0xc1000, 0xc2000);
+    m.WriteU32(0xc1004, 2);
+    m.WriteU32(0xc1008, 2);
+    s.r[3] = 0xc0000;
+    if (!string_storage_context61::Apply(0x82474348, m, {g, native}, s) ||
+        m.ReadU32(0xc0000) || m.ReadU32(0xc1000) || s.r[1] != initial.r[1])
+      throw std::runtime_error("nested string array cleanup");
     std::cout << "string_storage_context61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

@@ -97,6 +97,14 @@
       "instruction_count": 26,
       "body_sha256": "41b668d9a3c3050fccfd3b61e36055f1f61c8c06dcf7c319a2191a2b07adadf9",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AAF850",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 5297,
+      "instruction_count": 53,
+      "body_sha256": "5c3987778c49d1292593b0edffd910fa898356bf6879cb5d9ee766bdbd30a94f",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -112,7 +120,8 @@
       "82B35DD8",
       "82388348",
       "823883F0",
-      "82B05B38"
+      "82B05B38",
+      "82AAF850"
     ],
     "header": "include/lo_semantics/battle_scene_tasks61.h",
     "source": "src/battle_scene_tasks61.cpp",
@@ -128,6 +137,7 @@
     "focused_smoke_paths": 1,
     "case_scope": "Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs.",
     "task_cancellation": "Recovered scene-task cancellation lookup, bulk row cleanup, paired membership lookup/removal and conditional task removal. Preset clear now executes these paths and real array compaction rather than mocking cancellation. Library and scene-task/runtime checks pass, including empty membership and clear-all release. Object destructors and final tracked-pointer removal remain lower service boundaries; no runtime acceptance is claimed.",
-    "task_unlink": "Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed."
+    "task_unlink": "Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed.",
+    "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance."
   }
 }

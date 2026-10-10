@@ -5,7 +5,7 @@
 #include "battle_profile_fixture.h"
 #include <iostream>
 struct TasksGuest final : manager_release_context61::GuestServices {
-  unsigned removed = 0, freed = 0, queueDestroyed = 0;
+  unsigned removed = 0, freed = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18)
@@ -31,10 +31,6 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       if (s.r[3] != 0xa0000)
         throw std::runtime_error("row destructor");
       ++removed;
-      return;
-    }
-    if (e == 0x82aaf850) {
-      ++queueDestroyed;
       return;
     }
     throw std::runtime_error("tasks direct");
@@ -177,9 +173,9 @@ int main() {
     m.WriteU32(0xa8000, 12);
     m.WriteU32(0x832cb6f0, 9);
     run(0x82b035e0);
-    check(g.removed == 4 && g.freed == 7 && g.queueDestroyed == 3 &&
-          m.ReadU32(0xb0000 + 36) == 99 && !m.ReadU32(0x832cc05c + 128) &&
-          !m.ReadU32(0x832cc05c + 140) && !m.ReadU32(0x832cc05c + 148));
+    check(g.removed == 4 && g.freed == 7 && m.ReadU32(0xb0000 + 36) == 99 &&
+          !m.ReadU32(0x832cc05c + 128) && !m.ReadU32(0x832cc05c + 140) &&
+          !m.ReadU32(0x832cc05c + 148));
     m.WriteU8(0x70000 + 133, 0);
     run(0x82b04c50);
     check(g.removed == 4);
@@ -210,6 +206,20 @@ int main() {
     s.r[5] = 77;
     check(battle_scene_tasks61::Apply(0x823883f0, m, {g, native}, s) &&
           !m.ReadU32(0x832cc05c + 52));
+    // Real event payload cleanup releases the name and each nested string.
+    m.WriteU32(0xc0000 + 12, 0xc1000);
+    m.WriteU32(0xc0000 + 16, 2);
+    m.WriteU32(0xc0000 + 20, 2);
+    m.WriteU32(0xc0000 + 24, 0xc2000);
+    m.WriteU32(0xc0000 + 28, 1);
+    m.WriteU32(0xc0000 + 32, 1);
+    m.WriteU32(0xc2000, 0xc3000);
+    m.WriteU32(0xc2004, 2);
+    m.WriteU32(0xc2008, 2);
+    auto before = g.freed;
+    run(0x82aaf850, 0xc0000);
+    check(g.freed == before + 3 && !m.ReadU32(0xc0000 + 12) &&
+          !m.ReadU32(0xc0000 + 24) && !m.ReadU32(0xc2000));
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
