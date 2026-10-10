@@ -111,6 +111,17 @@ class Presentation
         plume::RenderCommandList *commands, plume::RenderTexture *hudless,
         plume::RenderTexture *uiColorAndAlpha, plume::RenderTexture *target,
         uint32_t width, uint32_t height, bool toSwapchain = true);
+    // Blend a straight-alpha RGBA8 image (SDR display signal) over the final
+    // image in target at x, y without scaling, times opacity, converted like
+    // the final pass's SDR output. Records after a Draw to the same swap chain
+    // image; target stays COLOR_WRITE and overlay ends SHADER_READ. Keep the
+    // overlay alive until the recorded work completes.
+    void DrawOverlay(plume::RenderCommandList *commands, plume::RenderTexture *overlay, plume::RenderTexture *target,
+                     uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                     uint32_t targetWidth, uint32_t targetHeight, float opacity);
+    // Builds DrawOverlay's shaders and pipeline now, so the first overlay does
+    // not compile on a visible frame. A failure is logged once until Init.
+    bool PrewarmOverlay();
     // Present the scene + subsequently composited UI without applying AA again.
     // Same ownership/layout contract as Draw (source ends COPY_SOURCE).
     void DrawComposited(plume::RenderCommandList *commands, plume::RenderTexture *source,

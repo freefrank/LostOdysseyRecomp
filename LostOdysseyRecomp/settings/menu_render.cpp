@@ -38,7 +38,17 @@ namespace
         Canvas(uint32_t *pixels, uint32_t w, uint32_t h)
             : dib(pixels), width(w), height(h), scale(std::min(w / 1280.0, h / 720.0)),
               offsetX((w - 1280 * scale) * 0.5), offsetY((h - 720 * scale) * 0.5) {}
+        // A part of a larger output: its scale, shifted so layout coordinates apply.
+        Canvas(uint32_t *pixels, uint32_t w, uint32_t h, const Canvas &output, int left, int top)
+            : dib(pixels), width(w), height(h), scale(output.scale),
+              offsetX(output.offsetX - left), offsetY(output.offsetY - top) {}
     };
+
+    // The title menu's Settings legend: key, then label, in this layout box
+    // with a margin for the outline.
+    constexpr int kHintX = 1036, kHintY = 646, kHintKey = 22, kHintWidth = 180, kHintHeight = 28;
+    constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
+                  kHintBottom = kHintY + kHintHeight + 4;
 
     void Line(const Canvas &c, int x1, int y1, int x2, int y2, uint32_t color, int thickness = 1)
     {
@@ -167,6 +177,17 @@ void settings::DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint
     Arrow(Canvas(pixels.data(), width, height), x, y);
 }
 
+settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
+{
+    // Rounded like RasterizeMenu's own rectangles.
+    const Canvas c(nullptr, width, height);
+    const auto edge = [](double value, uint32_t limit) {
+        return size_t(std::clamp(int(std::lround(value)), 0, int(limit)));
+    };
+    return {edge(c.offsetX + kHintLeft * c.scale, width), edge(c.offsetY + kHintTop * c.scale, height),
+            edge(c.offsetX + kHintRight * c.scale, width), edge(c.offsetY + kHintBottom * c.scale, height)};
+}
+
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
 {
     const Canvas c(nullptr, width, height);
@@ -249,10 +270,21 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     // Cross-platform software rasterizer: logical design canvas is 1280x720.
     // If output dimensions differ, scale and center onto the output buffer.
+    // The title hint rasterizes only its own rectangle of the output.
+    const Canvas output(nullptr, width, height);
+    const MenuRect hint = current.titleHint ? TitleHintBounds(width, height) : MenuRect{};
+    if (current.titleHint)
+    {
+        width = uint32_t(hint.x1 - hint.x0);
+        height = uint32_t(hint.y1 - hint.y0);
+        if (!width || !height)
+            return false;
+    }
     pixels.assign(size_t(width) * height, 0xFF000000u);
     uint32_t *dib = pixels.data();
 
-    const Canvas canvas(dib, width, height);
+    const Canvas canvas = current.titleHint ? Canvas(dib, width, height, output, int(hint.x0), int(hint.y0))
+                                            : Canvas(dib, width, height);
     const double scale = canvas.scale;
     const double offsetX = canvas.offsetX;
     const double offsetY = canvas.offsetY;
@@ -578,6 +610,36 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
+    if (current.titleHint)
+    {
+        // The key on its own, so a PlayStation face does not move the label off
+        // the menu font. Drawn over black and over white: the difference is
+        // the coverage, so the legend keeps the font's outline in straight alpha.
+        const uint32_t face = MakeColor(255, 196, 197, 194);
+        const auto legend = [&] {
+            text(kHintX, kHintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
+            text(kHintX + kHintKey, kHintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
+                 false, 0, outline, 12);
+        };
+        legend();
+        const std::vector<uint32_t> overBlack = pixels;
+        std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
+        legend();
+        for (size_t i = 0; i < pixels.size(); ++i)
+        {
+            auto &p = pixels[i];
+            const uint32_t b = overBlack[i];
+            int spread = 0;
+            for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
+            const int alpha = std::clamp(255 - spread / 3, 0, 255);
+            const auto channel = [&](int c) {
+                return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
+            };
+            p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha));
+        }
+        return true;
+    }
+
     if (current.neuralRendering.open)
     {
         // Presentation paints the DLSS / DLSS + NR comparison in the transparent
@@ -745,7 +807,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         for (int i = 0; i < 4; ++i)
         {
             cell(buttons[i].x, 610, buttons[i].w, 40, page.focus == i + 2);
-            text(buttons[i].x + 8, 610, buttons[i].w - 16, 40, buttons[i].label, 19, ink, false, 1, outline, 14);
+            text(buttons[i].x + 8, 610, buttons[i].w - 16, 40, buttons[i].label, 19,
+                 i == 1 && !page.originalPattern ? muted : ink, false, 1, outline, 14);
         }
         text(160, 666, 960, 32,
              Translate(current.language, L"D-pad: select / adjust · A: choose · B: back · LB / RB: scene / pattern",

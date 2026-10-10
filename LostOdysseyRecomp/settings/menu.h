@@ -39,6 +39,8 @@ struct BrightnessCalibration
     int brightness = 0;
     uint32_t gamma = 100;
     int focus = 0;
+    // The retail calibration screen ("Original pattern") can open.
+    bool originalPattern = true;
     bool operator==(const BrightnessCalibration &) const = default;
 };
 // DLSS 5 neural rendering page, opened from its Graphics row. Presentation
@@ -173,4 +175,14 @@ bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);
 bool DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width = 1280, uint32_t height = 720);
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
+// Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
+// before a game is loaded. The title tick reports whether its menu is idle and
+// takes a fresh press made there, if any.
+inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
+bool ConsumeTitleShortcut(bool titleMenuIdle);
+// The retail Settings task was just opened from the title menu. Until that task
+// is idle again, the per-save options are hidden (Gameplay's retail rows,
+// Restore game defaults and Quit to Main Menu; Audio's Voice, Music and Sound
+// effects) and the brightness page cannot open the retail calibration screen.
+void MarkTitleEntry();
 } // namespace settings

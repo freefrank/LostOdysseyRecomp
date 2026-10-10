@@ -33,6 +33,12 @@ struct Presentation::Impl
     std::unique_ptr<RenderPipelineLayout> uiLayout;
     std::unique_ptr<RenderShader> uiVs, uiPs;
     std::unique_ptr<RenderPipeline> uiPipeline, uiPresentPipeline;
+    std::unique_ptr<RenderPipelineLayout> overlayLayout;
+    std::unique_ptr<RenderShader> overlayVs, overlayPs;
+    std::unique_ptr<RenderPipeline> overlayPipeline;
+    std::unique_ptr<RenderDescriptorSet> overlayDescriptors;
+    // A failed compile or pipeline creation is not retried until Init.
+    bool overlayFailed = false;
     std::unique_ptr<RenderSampler> sampler;
     struct Pass
     {
@@ -70,6 +76,7 @@ struct Presentation::Impl
     // Null keeps the current curve.
     RenderBuffer *UpdateGammaRamp(const PresentationOptions *curve);
     bool EnsureUiPipelines();
+    bool EnsureOverlayPipeline();
 };
 RenderBuffer *Presentation::Impl::UpdateGammaRamp(const PresentationOptions *curve)
 {
@@ -153,6 +160,8 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat)
     p.uiVs.reset();
     p.uiPs.reset();
     p.uiLayout.reset();
+    p.overlayPipeline.reset();
+    p.overlayFailed = false;
     const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
     const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
     const char *source = R"(
@@ -538,6 +547,128 @@ float4 pixelUi(float4 position : SV_Position) : SV_Target {
     uiPresentPipeline = std::move(swapchainPipeline);
     return true;
 }
+bool Presentation::Impl::EnsureOverlayPipeline()
+{
+    if (overlayPipeline) return true;
+    if (overlayFailed) return false;
+    overlayFailed = true;
+    const char *overlaySource = R"(
+#ifdef __spirv__
+[[vk::binding(0,0)]]
+#endif
+Texture2D<float4> overlayImage : register(t0);
+#ifdef __spirv__
+struct OverlayParameters { float2 origin; uint outputFlags; float outputScale; float opacity; };
+[[vk::push_constant]] ConstantBuffer<OverlayParameters> overlayParameters;
+#define origin overlayParameters.origin
+#define outputFlags overlayParameters.outputFlags
+#define outputScale overlayParameters.outputScale
+#define opacity overlayParameters.opacity
+#else
+cbuffer OverlayParameters : register(b0) { float2 origin; uint outputFlags; float outputScale; float opacity; };
+#endif
+float4 vertexOverlay(uint id : SV_VertexID) : SV_Position {
+    float2 uv = float2((id << 1) & 2, id & 2);
+    return float4(uv * float2(2,-2) + float2(-1,1),0,1);
+}
+// The final pass's SDR output conversion: linear swap chains get the sRGB
+// decode and paper white, PQ also Rec. 2020 primaries and the PQ curve.
+float4 pixelOverlay(float4 position : SV_Position) : SV_Target {
+    float4 image = overlayImage.Load(int3(int2(position.xy - origin), 0));
+    float3 color = image.rgb;
+    if ((outputFlags & 1) != 0) {
+        color=lerp(pow((color+0.055)/1.055,2.4),color/12.92,step(color,0.04045))*outputScale;
+        if ((outputFlags & 8) != 0) {
+            color = mul(float3x3(0.627404,0.329283,0.043313,
+                                0.069097,0.919540,0.011362,
+                                0.016391,0.088013,0.895595), color);
+            float3 p=pow(saturate(color/10000.0),2610.0/16384.0);
+            color=pow((3424.0/4096.0+(2413.0/128.0)*p)/(1+(2392.0/128.0)*p),2523.0/32.0);
+        }
+    }
+    return float4(color, saturate(image.a * opacity));
+})";
+    const auto binaryFormat = vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
+    const auto renderFormat = vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
+    auto vsResult = xenos::CompileCachedHlsl(overlaySource, "vertexOverlay", "vs_6_0", binaryFormat);
+    auto psResult = xenos::CompileCachedHlsl(overlaySource, "pixelOverlay", "ps_6_0", binaryFormat);
+    if (!vsResult.ok || !psResult.ok) {
+        LOG_WARNING("presentation overlay shaders: {} {}", vsResult.errors, psResult.errors);
+        return false;
+    }
+    auto vertexShader = device->createShader(vsResult.bytecode.data(), vsResult.bytecode.size(),
+                                              "vertexOverlay", renderFormat);
+    auto pixelShader = device->createShader(psResult.bytecode.data(), psResult.bytecode.size(),
+                                             "pixelOverlay", renderFormat);
+    if (!vertexShader || !pixelShader) {
+        LOG_WARNING("presentation overlay: shader creation failed");
+        return false;
+    }
+    RenderDescriptorSetBuilder set;
+    set.begin(); set.addTexture(0); set.end();
+    RenderPipelineLayoutBuilder builder;
+    builder.begin(false, false); builder.addPushConstant(0, 0, 20, RenderShaderStageFlag::PIXEL);
+    builder.addDescriptorSet(set); builder.end();
+    auto pipelineLayout = builder.create(device);
+    auto descriptors = set.create(device);
+    if (!pipelineLayout || !descriptors) {
+        LOG_WARNING("presentation overlay: layout creation failed");
+        return false;
+    }
+    RenderGraphicsPipelineDesc desc;
+    desc.pipelineLayout = pipelineLayout.get();
+    desc.vertexShader = vertexShader.get();
+    desc.pixelShader = pixelShader.get();
+    desc.renderTargetCount = 1;
+    desc.renderTargetFormat[0] = swapchainFormat;
+    desc.renderTargetBlend[0] = RenderBlendDesc::AlphaBlend();
+    desc.cullMode = RenderCullMode::NONE;
+    auto pipeline = device->createGraphicsPipeline(desc);
+    if (!pipeline) {
+        LOG_WARNING("presentation overlay: pipeline creation failed");
+        return false;
+    }
+    overlayVs = std::move(vertexShader);
+    overlayPs = std::move(pixelShader);
+    overlayLayout = std::move(pipelineLayout);
+    overlayDescriptors = std::move(descriptors);
+    overlayPipeline = std::move(pipeline);
+    overlayFailed = false;
+    return true;
+}
+bool Presentation::PrewarmOverlay()
+{
+    return impl->initialized && impl->EnsureOverlayPipeline();
+}
+void Presentation::DrawOverlay(RenderCommandList *commands, RenderTexture *overlay, RenderTexture *target,
+                               uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                               uint32_t targetWidth, uint32_t targetHeight, float opacity)
+{
+    auto &p = *impl;
+    if (!commands || !overlay || !target || overlay == target || !width || !height || !(opacity > 0.0f) ||
+        x >= targetWidth || y >= targetHeight || !p.initialized || !p.EnsureOverlayPipeline())
+        return;
+    width = std::min(width, targetWidth - x);
+    height = std::min(height, targetHeight - y);
+    // Each present records after the previous one completed, so one
+    // descriptor set serves every frame's overlay.
+    p.overlayDescriptors->setTexture(0, overlay, RenderTextureLayout::SHADER_READ);
+    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(overlay, RenderTextureLayout::SHADER_READ));
+    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE));
+    commands->setFramebuffer(p.FramebufferFor(target, targetWidth, targetHeight));
+    const RenderViewport viewport{float(x), float(y), float(width), float(height)};
+    const RenderRect scissor{int32_t(x), int32_t(y), int32_t(x + width), int32_t(y + height)};
+    commands->setViewports(&viewport, 1);
+    commands->setScissors(&scissor, 1);
+    commands->setGraphicsPipelineLayout(p.overlayLayout.get());
+    commands->setPipeline(p.overlayPipeline.get());
+    struct { float x, y; uint32_t outputFlags; float outputScale, opacity; } constants{
+        float(x), float(y), (p.output.linear ? 1u : 0u) | (p.output.linear && p.output.pq ? 8u : 0u),
+        p.output.scale, std::min(opacity, 1.0f)};
+    commands->setGraphicsPushConstants(0, &constants);
+    commands->setGraphicsDescriptorSet(p.overlayDescriptors.get(), 0);
+    commands->drawInstanced(3, 1, 0, 0);
+}
 bool Presentation::ProcessSceneColor(RenderCommandList *commands, RenderTexture *source, RenderTexture *target,
                                      uint32_t width, uint32_t height, Antialiasing antialiasing, bool hdr)
 {
@@ -816,6 +947,14 @@ std::shared_ptr<Presentation::UiCompositionLease> Presentation::DrawSeparatedUi(
     plume::RenderTexture *, uint32_t, uint32_t, bool)
 {
     return {};
+}
+void Presentation::DrawOverlay(plume::RenderCommandList *, plume::RenderTexture *, plume::RenderTexture *,
+                               uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, float)
+{
+}
+bool Presentation::PrewarmOverlay()
+{
+    return false;
 }
 plume::RenderTexture* Presentation::ComposeHdrGain(plume::RenderCommandList *, plume::RenderTexture *, plume::RenderTexture *,
                                                    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)

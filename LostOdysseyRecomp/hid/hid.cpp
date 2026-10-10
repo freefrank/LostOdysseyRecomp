@@ -24,9 +24,13 @@ namespace
     std::vector<SDL_JoystickID> g_physicalControllerIds;
     std::atomic<uint32_t> g_physicalControllerCount{0};
     hid::prompts::ActiveController g_promptController;
-    std::atomic<bool> g_playStationPrompts{false};
+    std::atomic<bool> g_playStationPrompts{false}, g_keyboardPrompts{false};
     std::atomic<uint32_t> g_promptStyle{0};
-    void PublishPromptStyle() { g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed); }
+    void PublishPromptStyle()
+    {
+        g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed);
+        g_keyboardPrompts.store(g_promptController.KeyboardActive(), std::memory_order_relaxed);
+    }
 
     void ObserveController(SDL_Gamepad* controller)
     {
@@ -181,6 +185,10 @@ bool hid::UsesPlayStationPrompts()
 {
     const uint32_t style = g_promptStyle.load(std::memory_order_relaxed);
     return style == 0 ? g_playStationPrompts.load(std::memory_order_relaxed) : style == 2;
+}
+bool hid::UsesKeyboardPrompts()
+{
+    return g_promptStyle.load(std::memory_order_relaxed) == 0 && g_keyboardPrompts.load(std::memory_order_relaxed);
 }
 void hid::SetPromptStyle(uint32_t style) { g_promptStyle.store(style <= 2 ? style : 0, std::memory_order_relaxed); }
 bool hid::HasConnectedController() { return g_physicalControllerCount.load(std::memory_order_relaxed) != 0; }

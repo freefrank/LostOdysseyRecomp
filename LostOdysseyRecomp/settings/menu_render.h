@@ -60,6 +60,10 @@ struct MenuSnapshot
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.
     bool backdropOnly = false;
+    // Only help, a key then its label, at the title menu's lower right as
+    // straight alpha: the Settings legend (title_entry.cpp). The raster is
+    // just TitleHintBounds of the output.
+    bool titleHint = false;
 };
 // The list cursor arrow, top-left corner in the 1280x720 layout.
 struct MenuArrow
@@ -78,6 +82,9 @@ struct MenuRect
 };
 // The list arrow at a layout position, and the output pixels it can cover.
 void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
+// The output pixels of the title menu's Settings legend: with titleHint,
+// RasterizeMenu returns only this rectangle, row by row.
+MenuRect TitleHintBounds(uint32_t width, uint32_t height);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);
 // The speaker test marker where a matrix decoder puts the test sound at
 // `position` along its circle (apu::SpeakerPan) with the surrounds encoded for

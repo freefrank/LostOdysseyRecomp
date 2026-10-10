@@ -44,6 +44,7 @@
 #include "frame_generation_settings.h"
 #include <settings/menu.h>
 #include <settings/restart.h>
+#include <settings/title_entry.h>
 #include <kernel/memory.h>
 #include <os/main_thread.h>
 #include <os/platform.h>
@@ -527,6 +528,12 @@ namespace gpu::video
         uint64_t g_fgPresentSerial = 0;
 #endif
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
+        // The title menu's Settings legend (settings/title_entry.cpp).
+        struct TitleHintResources {
+            std::unique_ptr<plume::RenderTexture> texture;
+            std::unique_ptr<plume::RenderBuffer> upload;
+            uint64_t revision = 0;
+        } g_titleHint;
         std::unique_ptr<plume::RenderTexture> g_presentedSnapshot;
         uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
         plume::RenderFormat g_snapshotFormat=plume::RenderFormat::UNKNOWN;
@@ -1971,6 +1978,7 @@ namespace gpu::video
         if (g_captureCopy.buffer) g_captureCopy.buffer.reset();
         g_captureCopy = {};
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
+        g_titleHint = {};
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0; g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         g_hdrCalibrationCache = {};
         settings::SetHdrCalibrationSceneAvailable(false);
@@ -2567,6 +2575,7 @@ namespace gpu::video
             if (!g_uploadBuffer) return "presentation upload allocation failed";
             g_presentation = std::make_unique<Presentation>();
             if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat())) return "presentation shader/pipeline initialization failed";
+            g_presentation->PrewarmOverlay();
             g_presentationFormat = g_swapChain->getFormat();
             startupWatch.Step("renderer initialization");
             if (!getenv("LO_NO_RENDERER") && !renderer::Init()) return "renderer initialization failed";
@@ -3932,6 +3941,7 @@ namespace gpu::video
                 }
                 g_presentation = std::move(replacement);
                 g_presentationFormat = g_swapChain->getFormat();
+                g_presentation->PrewarmOverlay();
             }
             UpdateHdrOutput(true);
             LogOutputPixels("resized");
@@ -4064,6 +4074,42 @@ namespace gpu::video
         static uint32_t logs = 0;
         if (logs++ < 8)
             LOG_INFO("calibration: frozen game scene {}x{} extended={}", cache.width, cache.height, cache.extended);
+    }
+
+    // The title menu's Settings legend over the presented frame, on the GPU
+    // path. It is rasterized and uploaded during its delay, before it fades in.
+    // The previous present has completed, so its texture and upload buffer can
+    // be replaced.
+    static void DrawTitleHint(plume::RenderTexture* backBuffer)
+    {
+#ifdef LO_GPU_PLUME
+        if (!settings::title_entry::HintShown() || !g_presentation) return;
+        const uint32_t outputWidth = g_swapChain->getWidth(), outputHeight = g_swapChain->getHeight();
+        const auto* hint = settings::title_entry::DrawHint(outputWidth, outputHeight);
+        if (!hint) return;
+        if (!g_titleHint.texture || g_titleHint.revision != hint->revision) {
+            const uint32_t rowPitch = (hint->width * 4 + 255) & ~255u;
+            g_titleHint.texture = g_device->createTexture(plume::RenderTextureDesc::Texture2D(hint->width, hint->height, 1,
+                plume::RenderFormat::R8G8B8A8_UNORM));
+            g_titleHint.upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(rowPitch) * hint->height));
+            auto* mapped = g_titleHint.upload ? static_cast<uint8_t*>(g_titleHint.upload->map()) : nullptr;
+            if (!g_titleHint.texture || !mapped) { g_titleHint = {}; return; }
+            for (uint32_t y = 0; y < hint->height; ++y)
+                memcpy(mapped + size_t(y) * rowPitch, &hint->pixels[size_t(y) * hint->width], size_t(hint->width) * 4);
+            g_titleHint.upload->unmap();
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,
+                plume::RenderTextureBarrier(g_titleHint.texture.get(), plume::RenderTextureLayout::COPY_DEST));
+            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(g_titleHint.texture.get()),
+                plume::RenderTextureCopyLocation::PlacedFootprint(g_titleHint.upload.get(), plume::RenderFormat::R8G8B8A8_UNORM,
+                    hint->width, hint->height, 1, rowPitch / 4), 0, 0, 0, nullptr);
+            g_titleHint.revision = hint->revision;
+        }
+        if (const float opacity = settings::title_entry::HintOpacity(); opacity > 0.0f)
+            g_presentation->DrawOverlay(g_commandList.get(), g_titleHint.texture.get(), backBuffer, hint->x, hint->y,
+                hint->width, hint->height, outputWidth, outputHeight, opacity);
+#else
+        (void)backBuffer;
+#endif
     }
 
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
@@ -4559,6 +4605,7 @@ namespace gpu::video
                     // With scene AA already applied this is DrawComposited's pass.
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
+                    DrawTitleHint(backBuffer);
                 }
                 else {
                     g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));
