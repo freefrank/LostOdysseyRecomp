@@ -29,6 +29,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows no longer opens the setup page at the first launch: the game starts with default settings, which Settings changes (`--setup` still opens the page). Opening Settings no longer asks about log collection; the first launch still asks once.
 - Settings opens from the title menu with Y (S on the keyboard), shown at the bottom right, so settings can be changed before loading a save. Options stored in the save are hidden there.
 - Fixed hitches the first time you enter an area, such as the world map.
+- Startup no longer waits for pipeline preparation; it continues in the background with a progress bar at the bottom of the screen.
 
 ### 简体中文
 
@@ -53,6 +54,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows 第一次启动不再打开设置页面：游戏以默认设置启动，在设置里修改（`--setup` 仍可打开该页面）。打开设置时不再询问日志收集；第一次启动仍会询问一次。
 - 标题菜单按 Y（键盘 S）可打开设置，提示显示在右下角，不用先读档。存在存档里的选项在这里隐藏。
 - 修复首次进入某个区域（例如世界地图）时的卡顿。
+- 启动时不再等待管线准备，改为在后台进行，屏幕底部显示进度条。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 

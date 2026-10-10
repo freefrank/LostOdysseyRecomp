@@ -11,6 +11,7 @@
 #include <gpu/command_processor.h>
 #include <gpu/renderer.h>
 #include <gpu/video.h>
+#include <gpu/pipeline_prepare_progress.h>
 #include <apu/audio.h>
 #include <apu/xma.h>
 #include <hid/hid.h>
@@ -560,6 +561,8 @@ int main(int argc, char* argv[])
     // starting guest threads or opening game saves/profiles. This also provides
     // a bounded cache warmup command for portable installations.
     if (prepareShadersOnly) {
+        // Pipelines too: background preparation would be dropped at the exit below.
+        gpu::pipeline_prepare::g_synchronous = true;
         const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
