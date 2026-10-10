@@ -21,19 +21,8 @@ struct EffectGuest final : manager_release_context61::GuestServices {
       ++side;
       return;
     }
-    if (e == 0x82b22948) {
-      check(step++ == 0 && s.r[3] == 0x70000 &&
-            m.ReadU32(0x73000 + 64) == mode);
-      check(m.ReadU32(0x70004) == 0x80000 && m.ReadU32(0x70008) == 0x90000 &&
-            m.ReadU32(0x70000 + 28) == 36 && m.ReadU32(0x70000 + 32) == 40 &&
-            m.ReadU8(0x70000 + 45) == 1 && m.ReadU32(0x70000 + 56) == 1);
-      check(m.ReadU32(0x74000 + 4) == 0x80000 &&
-            m.ReadU32(0x74000 + 20) == 40 && m.ReadU8(0x70000 + 109) == 1 &&
-            m.ReadU32(0x70000 + 96) == 0x42c80000);
-      return;
-    }
     if (e == 0x82ac71e8 || e == 0x82ac80b8) {
-      check(step == 1 && s.r[3] == 0x72000 && s.r[4] == 0x90000 &&
+      check(step == 0 && s.r[3] == 0x72000 && s.r[4] == 0x90000 &&
             s.r[5] == 120);
       side = e == 0x82ac71e8 ? 1 : 2;
       return;
@@ -52,6 +41,7 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x832ae000, 0x1000});
+    regions.push_back({0x8204f000, 0x1000});
     regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x831f3000, 0x21000});
@@ -97,7 +87,10 @@ int main() {
         check(
             battle_evaluation_effects61::Apply(entries[i], m, {g, native}, s));
         check(s.r[1] == initial.r[1] && s.r[28] == initial.r[28] &&
-              s.r[31] == initial.r[31] && g.step == 1);
+              s.r[31] == initial.r[31] && g.step == 0);
+        check(m.ReadU32(0x70004) == 0x80000 && m.ReadU32(0x70008) == 0x90000 &&
+              m.ReadU32(0x70000 + 28) == 36 && m.ReadU32(0x70000 + 32) == 40 &&
+              m.ReadU8(0x70000 + 45) == 1);
         if (i >= 8)
           check(g.side == choice + 1);
         if (i == 7)

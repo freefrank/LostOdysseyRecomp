@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 219,
-    "distinct_entries": 904,
+    "unit_count": 220,
+    "distinct_entries": 906,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2527,6 +2527,15 @@
         "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
         "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.",
         "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated."
+      },
+      {
+        "unit": "battle_effect_execution61",
+        "entries": [
+          "82B22870",
+          "82B22948"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Focused fixture exercises the real calculation pipeline for ordinary hit, miss, guard response, cancellation, absorption and partial MP diversion, plus linked-list exclusion traversal and frame/FPR preservation. Effect descriptors now call recovered execution instead of mocking it. Result normalization, final resource application and notification remain explicit guest boundaries; special scene/refund paths are logical implementations without gameplay validation. Logical/ABI only"
       }
     ]
   },

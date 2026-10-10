@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_effect_execution61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_action_results61.h"
 #include "lo_semantics/battle_random_range61.h"
@@ -258,7 +259,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (late)
     m.WriteU32(owner + 64, mode);
   s.r[3] = m.ReadU32(0x832ca0cc);
-  d.guest.CallDirect(0x82b22948, m, s);
+  (void)battle_effect_execution61::Apply(0x82b22948, m, d, s);
   if (e == 0x82b0cd88) {
     s.r[3] = owner;
     (void)battle_evaluation_chance61::Apply(0x82b08ea8, m, d, s);

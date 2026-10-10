@@ -1,3 +1,7 @@
+## Root direct continuation: main battle effect execution (2026-10-10 UTC)
+
+Recovered and composed the main effect execution sequence and linked-target preparation. Real stat, hit, response, critical, element, bonus, aggregation, property and result-record stages execute together. Targeted hit/miss/guard/absorption/MP-diversion checks and existing descriptor/eligibility fixtures pass. Final resource application, result normalization and notification are still external dependencies; no native gameplay or full floating-point acceptance is claimed.
+
 ## Root direct continuation: status consumption and return amount (2026-10-10 UTC)
 
 Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated.

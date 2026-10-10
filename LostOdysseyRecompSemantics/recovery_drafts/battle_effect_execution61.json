@@ -1,0 +1,41 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Linked-target record preparation and main effect execution orchestration.",
+  "entries": [
+    {
+      "address": "82B22870",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 15682,
+      "instruction_count": 52,
+      "body_sha256": "d557d7d0a6a9205b45a9f3260005c700ba4ff3d72fddbf2edece0a4937d359f7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B22948",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 15805,
+      "instruction_count": 368,
+      "body_sha256": "cb35e035f1ed0d92d2e2d487d53c51eb34bdf3e51b0bd2790b82b5e6acd9766c",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B22870",
+      "82B22948"
+    ],
+    "header": "include/lo_semantics/battle_effect_execution61.h",
+    "source": "src/battle_effect_execution61.cpp",
+    "smoke": "tests/battle_effect_execution61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Focused fixture exercises the real calculation pipeline for ordinary hit, miss, guard response, cancellation, absorption and partial MP diversion, plus linked-list exclusion traversal and frame/FPR preservation. Effect descriptors now call recovered execution instead of mocking it. Result normalization, final resource application and notification remain explicit guest boundaries; special scene/refund paths are logical implementations without gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
