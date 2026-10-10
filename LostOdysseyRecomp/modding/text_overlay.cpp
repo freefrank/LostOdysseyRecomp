@@ -205,6 +205,15 @@ Folder Build(const fs::path &folder)
                    counts.files, Utf8(folder), counts.failed, counts.unknownKeys);
     return result;
 }
+
+// Caller holds gMutex.
+void List()
+{
+    if (gListed) return;
+    gListed = true;
+    for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset.path));
+    if (!gTexts.empty()) LOG_NOTICE("[mods] text: {} translation files", gTexts.size());
+}
 } // namespace
 
 std::vector<Range> RangesFor(const fs::path &file)
@@ -213,17 +222,22 @@ std::vector<Range> RangesFor(const fs::path &file)
     const bool archive = name.size() > 4 && (name.compare(name.size() - 4, 4, ".fpd") == 0 || name.compare(name.size() - 4, 4, ".fpi") == 0);
     if (!archive) return {};
     std::lock_guard lock(gMutex);
-    if (!gListed)
-    {
-        gListed = true;
-        for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset.path));
-        if (!gTexts.empty()) LOG_NOTICE("[mods] text: {} translation files", gTexts.size());
-    }
+    List();
     if (gTexts.empty()) return {};
     const auto folder = file.parent_path().lexically_normal();
     auto it = gFolders.find(folder);
     if (it == gFolders.end()) it = gFolders.emplace(folder, Build(folder)).first;
     const auto ranges = it->second.ranges.find(name);
     return ranges == it->second.ranges.end() ? std::vector<Range>{} : ranges->second;
+}
+
+bool Translates(const std::string &memberPath, const std::string &key)
+{
+    std::lock_guard lock(gMutex);
+    List();
+    const auto text = gTexts.find(memberPath);
+    if (text == gTexts.end()) return false;
+    const auto *translation = Translation(text->second);
+    return translation && translation->count(key);
 }
 }

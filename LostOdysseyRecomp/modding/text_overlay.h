@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <vector>
 
 // Language packs: the game's text files with translations applied, served in
@@ -25,4 +26,8 @@ struct Range
 // or index (.fpi) whose folder has translated text; the first call for a
 // folder does the rebuilding.
 std::vector<Range> RangesFor(const std::filesystem::path &file);
+
+// Whether a language pack has a translation for this key of this member
+// (for host text that replaces game text, such as the Quit to Desktop row).
+bool Translates(const std::string &memberPath, const std::string &key);
 }

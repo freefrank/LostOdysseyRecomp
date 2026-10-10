@@ -4,6 +4,7 @@
 #include "text_format.h"
 #include "xenos_texture.h"
 #include <gpu/shader/cpx_decode.h>
+#include <settings/quit_text_hook.h>
 #include <gpu/texture_layout.h>
 #include <lzokay.hpp>
 #include <xxhash.h>
@@ -623,6 +624,18 @@ void ExportText(const Job &job, const fs::path &textRoot, Stats &stats)
     catch (const std::exception &error) { stats.Skipped("text_unreadable", job.path + ": " + error.what()); return; }
     // Still exported (the text is right), but listed: importing it is not safe.
     if (!roundTrip && stats.examples["text_round_trip_failed"]++ < 5) stats.notes.push_back("text_round_trip_failed: " + job.path);
+    // The game shows the port's Quit to Desktop texts for these IDs
+    // (settings/quit_text_hook.h); export those, so a translation fits the row.
+    if (job.textFormat == text::Format::MenuDat)
+    {
+        constexpr const char *codes[] = {"", "int", "jpn", "deu", "fra", "spa", "ita", "kor", "chi", "sch"};
+        const auto code = text::Language(job.path);
+        const auto language = uint32_t(std::find(std::begin(codes), std::end(codes), code) - std::begin(codes));
+        for (auto &entry : entries)
+            for (const auto id : settings::quit_text::TextIds)
+                if (language > 0 && language < std::size(codes) && entry.key == "id." + std::to_string(id))
+                    entry.text = text::EncodeUnits(settings::quit_text::Text(id, language));
+    }
     std::string json = "{";
     for (size_t i = 0; i < entries.size(); ++i)
     {

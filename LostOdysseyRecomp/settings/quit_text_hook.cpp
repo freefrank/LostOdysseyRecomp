@@ -3,12 +3,31 @@
 #include "config.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
+#include <modding/text_overlay.h>
 
 extern "C" PPC_FUNC(__imp__sub_8230BA20);
 
+// A language pack that translates one of these IDs in the game's menu text
+// keeps its own text; the rebuilt menu file already holds it.
+static bool PackTranslates(uint32_t id)
+{
+    static constexpr const char* codes[] = {"", "int", "jpn", "deu", "fra", "spa", "ita", "kor", "chi", "sch"};
+    const auto language = settings::GameLanguage();
+    if (language == 0 || language >= std::size(codes))
+        return false;
+    const std::string code = codes[language];
+    return modding::text_overlay::Translates("bin/xenon/loc/" + code + "/menu/menu_" + code + ".dat", "id." + std::to_string(id));
+}
+
 PPC_FUNC(sub_8230BA20)
 {
-    if (settings::quit_text::TextIndex(ctx.r4.u32) == std::size(settings::quit_text::TextIds))
+    const auto index = settings::quit_text::TextIndex(ctx.r4.u32);
+    static const auto packed = [] {
+        std::array<bool, std::size(settings::quit_text::TextIds)> result{};
+        for (size_t i = 0; i < result.size(); ++i) result[i] = PackTranslates(settings::quit_text::TextIds[i]);
+        return result;
+    }();
+    if (index == std::size(settings::quit_text::TextIds) || packed[index])
     {
         __imp__sub_8230BA20(ctx, base);
         return;
