@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 185,
-    "distinct_entries": 669,
+    "unit_count": 186,
+    "distinct_entries": 682,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2007,6 +2007,26 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture checks four category/readiness count modes, deduplicated reverse action lookup and random tag87, the source rule rejecting a detail-only filter without a type, property/effect callbacks, first target and actor/resource fields, three inventory indexing cases, cursor and nonvolatile state. Concrete runtime resource lists, readiness services and inventory provider remain guest boundaries. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_runtime61",
+        "entries": [
+          "82AFA1A8",
+          "82AFA200",
+          "82AFF2A8",
+          "82AFB5E0",
+          "82AFB650",
+          "82AFB6B0",
+          "82AFB718",
+          "82AFF3F0",
+          "82AF6F58",
+          "82AFCC48",
+          "82AFCCF8",
+          "82A9BDB0",
+          "82AF80B0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact fixture checks actor/manager fields, resource-to-script-actor lookup and flagged count, direct/virtual command ABI, group-to-ID resolution, existing/missing target selection, mode switches, scene object bit predicate, signed branch and invalid-mode cursor preservation. Scene commands, concrete lookups and virtual services remain guest boundaries. Logical/ABI only"
       }
     ]
   },
