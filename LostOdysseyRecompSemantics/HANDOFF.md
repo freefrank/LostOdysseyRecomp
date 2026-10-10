@@ -1,3 +1,11 @@
+## Root direct continuation: battle probability wrapper (2026-10-10 UTC)
+
+Added the probability wrapper 82AA0838, preserving threshold >= a 0..99 draw. Preferred target selection composes it and the focused fixture verifies equality behavior and side-specific cursor tags.
+
+## Root direct continuation: preferred battle targets (2026-10-10 UTC)
+
+Recovered preferred target selection and composed it into preparation. The flow builds live resource pools, selects a side using the shared probability wrapper and draws through the recovered random cursor logic. Focused fixtures check the source branch behavior, including its empty-pool contract without added guards. Native gameplay remains unvalidated.
+
 ## Root direct continuation: target property composition (2026-10-10 UTC)
 
 Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated.

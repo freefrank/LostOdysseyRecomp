@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 212,
-    "distinct_entries": 812,
+    "unit_count": 213,
+    "distinct_entries": 814,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2183,7 +2183,8 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture covers all18 modes, mode1 property override and fallback, pool random tags78 through83, selected-list copying, side-dependent target modes, mode15 resource filtering, mode16 mask-to-random fallthrough, empty-pool failure and out-of-range mode. Three affected opcode/execution fixtures pass through the recovered chain. Mode3 retains its original unchecked empty-pool random call and mode17 retains retry-until-not-self; these pathological paths are not runtime validated. Native gameplay is unvalidated. Logical/ABI only",
-        "target_property_composition": "Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated."
+        "target_property_composition": "Target filtering and preparation now compose resource property lookup, mask indexing and the narrower target-unavailability predicate. Fixtures use actual property masks and payload indexes instead of mocked predicates; readiness, adjustment, preparation, target and marshaling checks pass. Random selection and preferred-target selection remain pending composition steps; native gameplay is unvalidated.",
+        "preferred_target_composition": "Preparation now composes battle_preferred_target61 instead of a preferred-target stub. The source property override and preferred pool path both pass with real logical selection."
       },
       {
         "unit": "battle_script_pickers61",
@@ -2293,11 +2294,13 @@
       {
         "unit": "battle_random_range61",
         "entries": [
-          "82AA0740"
+          "82AA0740",
+          "82AA0838"
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact fixture checks actor-group resolution, direct group mapping and clamping, inclusive signed range selection, independent per-tag cursors, the 32768-entry wrap and invalid/equal endpoints. Synthetic random values are used. Resource lookup remains a service boundary and existing callers are not yet composed; no statistical or native runtime validation is claimed. Logical/ABI only",
-        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated."
+        "effect_chain_composition": "Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated.",
+        "probability_wrapper_update": "Added the probability wrapper 82AA0838, preserving threshold >= a 0..99 draw. Preferred target selection composes it and the focused fixture verifies equality behavior and side-specific cursor tags."
       },
       {
         "unit": "battle_action_readiness61",
@@ -2359,6 +2362,14 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_preferred_target61",
+        "entries": [
+          "82AC8228"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks eligibility, side-biased and all-pool selection, synthetic random cursor tags, NaN/inactive exclusion, source empty-pool behavior and saved FPR/GPR state. Preparation composes preferred selection; preparation, execution, action and marshaling fixtures pass. Manager/list/resource lookup remains a service boundary; no native target behavior is claimed. Logical/ABI only"
       }
     ]
   },

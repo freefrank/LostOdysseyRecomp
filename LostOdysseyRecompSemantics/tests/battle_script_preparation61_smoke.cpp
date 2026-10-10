@@ -16,11 +16,7 @@ struct PreparationGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x8238e308) {
-      s.r[3] = 0x80000 + 0x10000 * (unsigned(s.r[4]) - 24);
-      return;
-    }
-    if (e == 0x82ac8228) {
-      s.r[3] = 25;
+      s.r[3] = s.r[4] ? 0x80000 + 0x10000 * (unsigned(s.r[4]) - 24) : 0x80000;
       return;
     }
     if (e == 0x82aa0740) {
@@ -45,6 +41,7 @@ int main() {
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832ae000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -88,6 +85,7 @@ int main() {
     };
     run(0);
     check(s.r[3] == 0 && m.ReadU32(actor + 84) == 1 && m.ReadU8(targets) == 24);
+    m.WriteU32(0x90000 + 124, m.ReadU32(0x90000 + 124) | 0x10000000);
     run(1);
     check(m.ReadU8(targets) == 25);
     m.WriteU32(0x83213438 + 16, 0);
