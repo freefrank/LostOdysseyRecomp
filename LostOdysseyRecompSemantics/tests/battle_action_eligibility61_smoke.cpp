@@ -4,35 +4,28 @@
 #include "lo_semantics/battle_action_eligibility61.h"
 #include <iostream>
 struct EligibilityGuest final : manager_release_context61::GuestServices {
-  unsigned allowed = 1, resultByte = 1, otherByte = 0, configured = 0,
-           evaluated = 0;
+  unsigned resultByte = 1, otherByte = 0, configured = 0, evaluated = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
     }
-    if (e == 0x82b14168) {
-      if (s.r[3] != 0x73000 || s.r[4] != 0x80000 || s.r[5] != 0x90000 ||
-          s.r[6] != 3 || s.r[7] != 9)
-        throw std::runtime_error("eligibility configuration");
+    if (e == 0x82b121b0) {
+      if (s.r[3] != 0x73000 || s.r[4] != m.ReadU32(0x73000 + 20))
+        throw std::runtime_error("initializer arguments");
       ++configured;
-      s.r[3] = allowed;
-      return;
-    }
-    if (e == 0x82b120e0) {
-      if (s.r[3] != 0x73000)
-        throw std::runtime_error("eligibility receiver");
-      ++evaluated;
-      m.WriteU8(0x73000 + 208, resultByte);
-      m.WriteU8(0x73000 + 76, otherByte);
       return;
     }
     throw std::runtime_error("eligibility direct");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
-    throw std::runtime_error("eligibility indirect");
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (e != 0x123456 || s.ctr != e || s.r[3] != 0x73000)
+      throw std::runtime_error("eligibility indirect");
+    ++evaluated;
+    m.WriteU8(0x73000 + 208, resultByte);
+    m.WriteU8(0x73000 + 76, otherByte);
   }
 };
 int main() {
@@ -40,6 +33,7 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     test::GuestWindow w(regions);
@@ -51,6 +45,13 @@ int main() {
       if (!b)
         throw std::runtime_error("eligibility state");
     };
+    m.WriteU32(0x83264984, 0x100000);
+    m.WriteU32(0x832649c0, 0x110000);
+    m.WriteU32(0x83264978, 0x120000);
+    m.WriteU32(0x832ca0d0, 0x74000);
+    m.WriteU32(0x74000 + 132, 0x130000);
+    m.WriteU32(0x73000 + 4 * 124, 0x123456);
+    m.WriteU32(0x90000 + 132, 1);
     m.WriteU32(0x832ca0d8, 0x73000);
     m.WriteU32(0x832c9c54 + 44, 0x63000);
     m.WriteU32(0x63004, 0x62000);
@@ -84,14 +85,53 @@ int main() {
     m.WriteU32(0x80000 + 68, 7);
     check(run(1) == 1 && !run(3));
     m.WriteU16(0x70000 + 148, 0);
-    g.allowed = 0;
+    m.WriteU32(0x90000 + 132, 0);
     auto evaluated = g.evaluated;
     check(!run(2) && g.evaluated == evaluated);
-    g.allowed = 1;
+    m.WriteU32(0x90000 + 132, 1);
     g.resultByte = 0;
     check(!run(2));
     g.otherByte = 1;
     check(run(2) == 1);
+    // Exercise the actual category setup and leaf evaluator dispatch
+    // separately.
+    auto setup = [&](unsigned kind, unsigned detail) {
+      s.r[3] = 0x73000;
+      s.r[4] = 0x80000;
+      s.r[5] = 0x90000;
+      s.r[6] = kind;
+      s.r[7] = detail;
+      check(battle_action_eligibility61::Apply(0x82b14168, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[24] == initial.r[24]);
+      return unsigned(s.r[3]);
+    };
+    m.WriteU32(0x120000 + 196 * 2 + 48, 5);
+    for (auto kind : {2u, 3u, 6u, 7u, 8u, 9u, 10u, 11u, 0u}) {
+      check(setup(kind, 2) == 1);
+      check(m.ReadU32(0x73004) == 0x80000 && m.ReadU32(0x73010) == 0x90000);
+      if (kind == 2 || (kind >= 6 && kind <= 9))
+        check(m.ReadU32(0x73000 + 44) == 0x100000 + 192);
+      if (kind == 3)
+        check(m.ReadU32(0x73000 + 48) == 0x110000 + 208);
+      if (kind == 10)
+        check(m.ReadU32(0x73000 + 52) == 0x130000 + 136);
+      if (kind == 11)
+        check(m.ReadU32(0x73000 + 44) == 0x100000 + 480);
+      auto prior = g.evaluated;
+      s.r[3] = 0x73000;
+      check(battle_action_eligibility61::Apply(0x82b120e0, m, {g, native}, s));
+      check(g.evaluated == prior + unsigned(kind != 0));
+      if (kind == 0)
+        check(m.ReadU8(0x73000 + 208) == 0);
+    }
+    m.WriteU32(0x90000 + 232, 4);
+    check(!setup(2, 2));
+    for (auto descriptor : {7u, 18u}) {
+      m.WriteU32(0x100000 + 192 + 32, descriptor);
+      check(setup(2, 2) == 1);
+    }
+    m.WriteU32(0x90000 + 132, 0);
+    check(!setup(2, 2));
     check(!battle_action_eligibility61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_eligibility61 smoke passed\n";
     return 0;

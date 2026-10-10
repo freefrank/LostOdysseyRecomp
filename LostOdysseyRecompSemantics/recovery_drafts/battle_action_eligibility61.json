@@ -25,13 +25,31 @@
       "instruction_count": 29,
       "body_sha256": "d7c911a14aa675f911889a3d67544520f1f7f092e3360219e838a009338b72e4",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B14168",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 18868,
+      "instruction_count": 136,
+      "body_sha256": "0bdf4f3fa7fea25a4c363630df948bc2a7a6f9d4a391929f27f9f71e95513111",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B120E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 13907,
+      "instruction_count": 52,
+      "body_sha256": "49d1fb2f4593434d7dd973a55e232697e27ec3d4cb63ab388e74fab6314085f8",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "8238ABE0",
       "82AD0C10",
-      "82B143B0"
+      "82B143B0",
+      "82B14168",
+      "82B120E0"
     ],
     "header": "include/lo_semantics/battle_action_eligibility61.h",
     "source": "src/battle_action_eligibility61.cpp",
@@ -45,6 +63,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "A focused fixture checks all 32 action-kind routes plus out-of-range, raw property-zero mask, manager/actor restrictions, source-group exception and configured result-byte combinations. Runtime actor lookup and property helpers are composed. Evaluator setup and dispatch remain mutable guest boundaries, and picker/action caller composition is pending; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "A focused fixture checks all 32 action-kind routes plus out-of-range, raw property-zero mask, manager/actor restrictions, source-group exception and configured result-byte combinations. Runtime actor lookup and property helpers are composed. Evaluator setup and dispatch remain mutable guest boundaries, and picker/action caller composition is pending; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "configuration_dispatch_composition": "Recovered and composed evaluator configuration and descriptor-based tail dispatch. Category setup resolves skill, item, special and inventory descriptors, permits property-zero targets only for descriptors 7/18, and rejects inactive targets. The leaf dispatcher preserves stack depth and invokes the descriptor callback through CTR. Targeted fixture passes actual setup and all dispatch categories; parameter initializer 82B121B0 and descriptor callbacks remain guest boundaries. Logical/ABI recovery only; native gameplay remains unvalidated."
   }
 }

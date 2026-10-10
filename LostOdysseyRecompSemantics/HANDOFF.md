@@ -1,3 +1,7 @@
+## Root direct continuation: eligibility configuration and dispatch (2026-10-10 UTC)
+
+Recovered and composed evaluator configuration and descriptor-based tail dispatch. Category setup resolves skill, item, special and inventory descriptors, permits property-zero targets only for descriptors 7/18, and rejects inactive targets. The leaf dispatcher preserves stack depth and invokes the descriptor callback through CTR. Targeted fixture passes actual setup and all dispatch categories; parameter initializer 82B121B0 and descriptor callbacks remain guest boundaries. Logical/ABI recovery only; native gameplay remains unvalidated.
+
 ## Root direct continuation: battle action eligibility (2026-10-10 UTC)
 
 Recovered the action-kind eligibility dispatcher, raw property-zero query and result wrapper. The fixture checks the source gate distinctions and actor/manager restrictions while retaining setup and evaluation as explicit service boundaries. Picker/action integration is next; no native gameplay claim is made.

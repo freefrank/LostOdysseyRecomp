@@ -13,10 +13,34 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82b120e0) {
+    auto receiver = Address(s.r[3]), kind = m.ReadU32(receiver + 20);
+    unsigned record = 0, offset = 32;
+    if (kind == 2 || (kind >= 6 && kind <= 9) || kind == 11)
+      record = m.ReadU32(receiver + 44);
+    else if (kind == 3) {
+      record = m.ReadU32(receiver + 48);
+      offset = 40;
+    } else if (kind == 10) {
+      record = m.ReadU32(receiver + 52);
+      offset = 16;
+    } else {
+      m.WriteU8(receiver + 208, 0);
+      return true;
+    }
+    auto callback =
+        m.ReadU32(receiver + 4 * (m.ReadU32(record + offset) + 124));
+    s.ctr = callback;
+    d.guest.CallIndirect(callback, m, s);
+    return true;
+  }
   unsigned first = 31, frame = 96;
   if (e == 0x82ad0c10) {
     first = 27;
     frame = 144;
+  } else if (e == 0x82b14168) {
+    first = 24;
+    frame = 160;
   } else if (e != 0x8238abe0 && e != 0x82b143b0)
     return false;
   auto old = Address(s.r[1]), owner = Address(s.r[3]), source = Address(s.r[4]),
@@ -28,7 +52,65 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
-  if (e == 0x8238abe0) {
+  if (e == 0x82b14168) {
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    for (auto offset : {4u, 12u})
+      m.WriteU32(owner + offset, source);
+    for (auto offset : {8u, 16u})
+      m.WriteU32(owner + offset, target);
+    m.WriteU32(owner + 20, kind);
+    m.WriteU32(owner + 24, detail);
+    for (auto offset : {203u, 76u, 60u})
+      m.WriteU8(owner + offset, 1);
+    m.WriteU32(owner + 196, 0);
+    m.WriteU32(owner + 184, 0);
+    auto skills = m.ReadU32(0x83264984), items = m.ReadU32(0x832649c0),
+         special = m.ReadU32(m.ReadU32(0x832ca0d0) + 132),
+         inventory = m.ReadU32(0x83264978);
+    m.WriteU32(owner + 44, skills);
+    m.WriteU32(owner + 48, items);
+    m.WriteU32(owner + 52, special);
+    m.WriteU32(owner + 56, inventory);
+    unsigned descriptor = 0;
+    if (kind == 2 || (kind >= 6 && kind <= 9)) {
+      m.WriteU8(owner + 76, 0);
+      skills += 96 * detail;
+      m.WriteU32(owner + 44, skills);
+      descriptor = m.ReadU32(skills + 32);
+    } else if (kind == 3) {
+      m.WriteU8(owner + 76, 0);
+      items += 104 * detail;
+      m.WriteU32(owner + 48, items);
+      descriptor = m.ReadU32(items + 40);
+    } else if (kind == 10) {
+      m.WriteU8(owner + 76, m.ReadU32(special + 64) != 0);
+      special += 68 * detail;
+      m.WriteU32(owner + 52, special);
+      descriptor = m.ReadU32(special + 16);
+    } else if (kind == 11) {
+      m.WriteU8(owner + 76, 0);
+      inventory += 196 * detail;
+      m.WriteU32(owner + 56, inventory);
+      skills += 96 * m.ReadU32(inventory + 48);
+      m.WriteU32(owner + 44, skills);
+      descriptor = m.ReadU32(skills + 32);
+    }
+    s.r[3] = target;
+    Call(0x8238abe0, m, d, s);
+    bool valid = (!Address(s.r[3]) || descriptor == 7 || descriptor == 18) &&
+                 m.ReadU32(target + 132) != 0;
+    if (valid) {
+      s.r[3] = owner;
+      s.r[4] = m.ReadU32(owner + 20);
+      Call(0x82b121b0, m, d, s);
+      m.WriteU8(owner + 70, 0);
+      m.WriteU8(owner + 69, 0);
+      m.WriteU8(owner + 208, 1);
+      m.WriteU8(owner + 200, 0);
+    }
+    s.r[3] = valid;
+    m.WriteU32(sp + 80, 0x8204a1d8);
+  } else if (e == 0x8238abe0) {
     s.r[3] = 0;
     Call(0x8238aa80, m, d, s);
     auto bank = Address(s.r[3]);
