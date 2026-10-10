@@ -29,16 +29,23 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       prepared = unsigned(s.r[4]) + 1;
       return;
     }
-    if (e == 0x82aff4e8 || e == 0x82aff8e0 || e == 0x82aff9e8) {
-      picker = e;
-      fail(s.r[3] == 0x60000 &&
-           s.r[4] == (e == 0x82aff4e8   ? 1
-                      : e == 0x82aff8e0 ? 2
-                                        : 3) &&
-           s.r[5] == unsigned(s.r[1]) + 80 && s.r[6] == unsigned(s.r[1]) + 84);
-      m.WriteU32(unsigned(s.r[5]), 7);
-      m.WriteU32(unsigned(s.r[6]), 19);
+    if (e == 0x82ac9aa8) {
       s.r[3] = ok;
+      return;
+    }
+    if (e == 0x82ad0c10) {
+      s.r[3] = ok;
+      return;
+    }
+    if (e == 0x82aa0740) {
+      picker = s.r[6] == 100   ? 0x82aff8e0
+               : s.r[6] == 101 ? 0x82aff9e8
+                               : 0x82aff4e8;
+      s.r[3] = 0;
+      return;
+    }
+    if (e == 0x82b08b80) {
+      s.r[3] = 7;
       return;
     }
     if (e == 0x8238e308) {
@@ -93,7 +100,12 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
 int main() {
   try {
     using namespace cook_main_smoke;
-    test::GuestWindow w(cook_main_smoke::Regions);
+    std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
+                                      cook_main_smoke::Regions.end());
+    regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
+    test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
     MarshalGuest guest;
@@ -109,6 +121,17 @@ int main() {
     m.WriteU32(actor + 84, 1);
     m.WriteU8(0x66000, 24);
     m.WriteU32(0x82007784, 0x3f800000);
+    m.WriteU32(0x80000 + 232, 3);
+    m.WriteU32(0x80000 + 15212, 19);
+    m.WriteU32(0x83264984, 0x90000);
+    m.WriteU32(0x90000 + 96 * 19 + 8, 8);
+    for (unsigned i = 0; i < 25; ++i)
+      m.WriteU32(0x832139e8 + 4 * i, 19);
+    for (unsigned i = 0; i < 6; ++i)
+      m.WriteU32(0x83213a4c + 4 * i, 19);
+    for (unsigned i = 0; i < 53; ++i)
+      m.WriteU32(0x83213a68 + 4 * i, 19);
+
     auto le = [&](unsigned p, unsigned v) {
       m.WriteU8(p, v);
       m.WriteU8(p + 1, v >> 8);

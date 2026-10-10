@@ -1,3 +1,7 @@
+## Root direct continuation: battle script prioritized action pickers (2026-10-10 UTC)
+
+Three action pickers and the 512-record learned-action eligibility scan now feed the recovered target-preparation and execution chain. Candidate priorities, exact-one skill gating, random tags and private table reads follow the source. The category flag selects preparation mode2 or17. A focused picker fixture and the updated marshaling chain fixture pass; concrete skill checks, kind lookup and native gameplay remain unvalidated.
+
 ## Root direct continuation: battle script target preparation chain (2026-10-10 UTC)
 
 The eighteen-mode target preparation helper now composes the recovered pool builder and is connected through action execution and the calling opcodes. It preserves property-based overrides, random tags, selected-list and group selection, the source mode16 fallthrough and empty-pool behavior. A focused fixture and three affected chain fixtures pass. Concrete resource services, pathological random paths and native gameplay remain unvalidated.
