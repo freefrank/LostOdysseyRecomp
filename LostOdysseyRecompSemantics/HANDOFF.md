@@ -1,3 +1,7 @@
+## Root direct continuation: DLC overlay registration (2026-10-10 UTC)
+
+DLC index registration now composes the resident loader, reuses vacant pointer slots or appends segmented storage, and rebuilds the stable descending priority order from owner+340. A synthetic three-owner case, hole reuse and segment growth pass. Path formatting and runtime file/lock/allocation services remain guest boundaries. The original nonzero loader-result insertion gate is preserved, even though its final return requires result 1; failure-path insertion has not been fixture-tested.
+
 ## Root direct continuation: archive startup (2026-10-10 UTC)
 
 Base archive startup now constructs the root and filename, normalizes directory separators while preserving multibyte trail bytes, loads the resident index through the recovered loader, and updates the source readiness flags. A synthetic startup chain passes with the expected path, index and service calls. The startup wrapper preserves its original unconditional success return, while the outer initialization returns the registry singleton result.

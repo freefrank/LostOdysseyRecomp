@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 164,
-    "distinct_entries": 516,
+    "unit_count": 165,
+    "distinct_entries": 520,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1707,6 +1707,17 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture composes root/path splitting and resident index loading, checks startup flags and guest initialization arguments, and preserves multibyte trail slash bytes. Thread/runtime initialization and registry singleton calls remain explicit guest services. Logical/ABI only"
+      },
+      {
+        "unit": "archive_overlay61",
+        "entries": [
+          "8285D418",
+          "8285D920",
+          "828537D0",
+          "82854D98"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused synthetic fixture checks DLC index loading and insertion, vacant-slot reuse, stable descending unsigned priority ordering and segmented append growth. Guest path formatting, allocator and file/lock services remain boundaries. The source nonzero loader-result insertion gate, including negative failure results, is preserved but not exercised by the fixture. Logical/ABI only"
       }
     ]
   },

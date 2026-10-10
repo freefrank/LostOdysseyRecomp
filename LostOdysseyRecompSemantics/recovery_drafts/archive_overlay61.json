@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "DLC index insertion, segmented pointer storage and overlay priority order.",
+  "entries": [
+    {
+      "address": "8285D418",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.94.cpp",
+      "source_line": 11349,
+      "instruction_count": 30,
+      "body_sha256": "922edc4265a368adc2b4610b1ac0730957f26c449cc3ed10a3df0d4076390c5e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8285D920",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.94.cpp",
+      "source_line": 12120,
+      "instruction_count": 46,
+      "body_sha256": "21a5710f606f2d29d7e686302ffb942fa44bbda8e6e35179ff6132c6fdca8d61",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "828537D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 15602,
+      "instruction_count": 69,
+      "body_sha256": "fb53af9baa9795b433e7509ffe3092fb471d366e9a7765f5aad8e5f9bbdae8b8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82854D98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.93.cpp",
+      "source_line": 18802,
+      "instruction_count": 81,
+      "body_sha256": "7ea550deb0b49fd0794194639c30b0e0a76ddf7506d9c715519d43fe97397bc0",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8285D418",
+      "8285D920",
+      "828537D0",
+      "82854D98"
+    ],
+    "header": "include/lo_semantics/archive_overlay61.h",
+    "source": "src/archive_overlay61.cpp",
+    "smoke": "tests/archive_overlay61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture checks DLC index loading and insertion, vacant-slot reuse, stable descending unsigned priority ordering and segmented append growth. Guest path formatting, allocator and file/lock services remain boundaries. The source nonzero loader-result insertion gate, including negative failure results, is preserved but not exercised by the fixture. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
