@@ -404,3 +404,8 @@ BA8208 canonicalizes each triangle by sorted vertex IDs, sorts the resulting key
 ### Cloth strided import
 
 BA8AE8/BA9530 now append strided triangle/tetrahedral inputs into owned cooking vectors, including optional per-vertex float/word channels, halfword/word indices and triangle winding selection. Four small combinations validate the data flow and ownership cleanup. These importers preserve the original growth path and early empty-input rejection; no additional validation layer or complete-cooker claim was added.
+
+
+### Cloth triangle edge constraints
+
+BAB468 now groups canonical edges from nonduplicate triangle faces and emits 68-byte cloth constraints, with endpoint/opposite vertices, edge lengths, opposite-vertex separation and the original polynomial angle approximation. A quad plus a duplicate face yields five edges and one shared diagonal with full cleanup. Only a private local 20-byte coefficient bundle is used; no original constants are published. The cloth scheduling/packing stages and full cooker remain pending.

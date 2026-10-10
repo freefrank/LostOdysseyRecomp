@@ -1,3 +1,11 @@
+## Local findings incorporated (2026-10-10 UTC)
+
+Continuation is based on maintainer commit 72a5abdb6310e9ba43e232a19b6ab73706e79e23. Consult [guest function findings](../docs/notes/guest-function-findings.md) and its linked Ghidra annotations before selecting or naming further recovery targets. The ledger has 538 address rows (349 functions, 86 instruction sites, 56 globals, 33 data, 14 vtables); these are evidence/search labels, not implementation or runtime credit. Its archive/CPX, language/text-bank and battle-script chains provide concrete next targets after the current cloth chain. Source paths refer to main at 7d3c66a6 or explicitly named maintainer-local research, so unavailable local sources must not be presented as independently verified. Existing post-resume implementation overlap is 822A2FE0; retain its documented call-site evidence without promoting its uncertain purpose. No cloth cooking entries are supplied by this ledger.
+
+## Root direct continuation: cloth triangle edge constraints (2026-10-10 UTC)
+
+BAB468 now groups canonical edges from nonduplicate triangle faces and emits 68-byte cloth constraints, with endpoint/opposite vertices, edge lengths, opposite-vertex separation and the original polynomial angle approximation. A quad plus a duplicate face yields five edges and one shared diagonal with full cleanup. Only a private local 20-byte coefficient bundle is used; no original constants are published. The cloth scheduling/packing stages and full cooker remain pending.
+
 ## Root direct continuation: cloth strided import (2026-10-10 UTC)
 
 BA8AE8/BA9530 now append strided triangle/tetrahedral inputs into owned cooking vectors, including optional per-vertex float/word channels, halfword/word indices and triangle winding selection. Four small combinations validate the data flow and ownership cleanup. These importers preserve the original growth path and early empty-input rejection; no additional validation layer or complete-cooker claim was added.
