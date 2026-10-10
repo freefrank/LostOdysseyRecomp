@@ -5,7 +5,7 @@
 # mesa-switch NVK, CMake, Ninja, host Clang). On Windows use
 # tools/switch/build-switch.ps1, which starts the container for you.
 #
-#   docker run --rm -v "$PWD:/work" -w /work ghcr.io/autorunhq/switch-dev:2026.09.28 \
+#   docker run --rm -v "$PWD:/work" -w /work ghcr.io/autorunhq/switch-dev:2026.10.05 \
 #       bash tools/switch/build-switch.sh
 #
 # Inputs kept out of Git (see docs/SWITCH.md):

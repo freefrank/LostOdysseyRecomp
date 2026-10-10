@@ -63,6 +63,10 @@
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
 
+### Nintendo Switch（实验性）
+
+自制程序版本，需要运行 Atmosphère 的主机，画面与 Xbox 360 版相同（720p，不带 PC 版新增的图像选项）。目前还很早期，运行较慢。构建方法、SD 卡目录和所需的着色器文件见 [Switch 说明](docs/SWITCH.md)（英文）。
+
 ### HDR
 
 在图像设置中开启 **HDR** 并保存。**HDR 最高亮度**会打开校准页，按 **LB / RB** 在游戏画面和测试图案之间切换。支持 Windows、Linux 和 macOS。

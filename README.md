@@ -65,7 +65,7 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 
 ### Nintendo Switch (experimental)
 
-A homebrew Switch build is in bring-up: it compiles for the console but has not been run on one yet. Building it, the SD card layout and the shader files it needs are in the [Switch guide](docs/SWITCH.md).
+A homebrew build for consoles running Atmosphère, with the Xbox 360 image (720p, no PC graphics extras). It is early and slow. Building it, the SD card layout and the shader files it needs are in the [Switch guide](docs/SWITCH.md).
 
 ### HDR
 
