@@ -1,3 +1,7 @@
+## Root direct continuation: formation placement (2026-10-10 UTC)
+
+Recovered formation placement: side/class roster counting, matching formation row, ordinal slot lookup, player-profile rotation/translation using existing guest trig, and resource position/angle writes. Script global mode 12 composes the actual formation entry. Focused checks cover mixed sides and slot classes, missing sentinels, translated/rotated coordinates and preserved nonvolatile state. No host trig substitution, raw constants, gameplay acceptance or full ABI/FP acceptance.
+
 ## Root direct continuation: record group rebuilding (2026-10-10 UTC)
 
 Recovered AFD2F0 linked-resource record rebuilding: owner IDs, cleared companion slots, ordered group membership and unordered peer groups across every record. Added AAB870 paired mode-bit update. Global script modes now compose both actual implementations. Focused group-record and global-mode checks pass, preserving the source single-pass order rather than sorting members. Library builds; logical ABI coverage only, not gameplay acceptance.

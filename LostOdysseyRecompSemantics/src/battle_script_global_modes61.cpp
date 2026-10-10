@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_script_global_modes61.h"
 #include "lo_semantics/battle_group_gauge61.h"
+#include "lo_semantics/battle_formation61.h"
 #include "lo_semantics/battle_action_records61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -37,12 +38,16 @@ struct Runtime {
     m.WriteU32(a + 52, W(a + 52) + n);
   }
   void Call(unsigned e) {
-    if(e==0x82afd2f0){(void)battle_action_records61::Apply(e,m,d,s);return;}
+    if (e == 0x82afd2f0) {
+      (void)battle_action_records61::Apply(e, m, d, s);
+      return;
+    }
     if (e == 0x82aab870) {
       (void)battle_script_global_modes61::Apply(e, m, d, s);
       return;
     }
-    if (!battle_group_gauge61::Apply(e, m, d, s))
+    if (!battle_group_gauge61::Apply(e, m, d, s) &&
+        !battle_formation61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
   unsigned Manager(unsigned method) {

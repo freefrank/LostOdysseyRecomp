@@ -18,6 +18,7 @@
 #include "lo_semantics/battle_evaluation_effects61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
 #include "lo_semantics/battle_evaluation_theft61.h"
+#include "lo_semantics/battle_formation61.h"
 #include "lo_semantics/battle_group_gauge61.h"
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_preferred_target61.h"
@@ -224,6 +225,13 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82af52b0u:
   case 0x82b13380u:
     return battle_evaluation_theft61::Apply(entry, memory, dependencies, state);
+  case 0x82acf5d8u:
+  case 0x82af5320u:
+  case 0x82af5498u:
+  case 0x82af5a88u:
+  case 0x82af5b20u:
+  case 0x82af5ba8u:
+    return battle_formation61::Apply(entry, memory, dependencies, state);
   case 0x82ac6e60u:
   case 0x82ac6f08u:
   case 0x82ac7550u:
