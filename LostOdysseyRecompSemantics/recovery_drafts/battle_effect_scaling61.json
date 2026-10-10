@@ -41,6 +41,62 @@
       "instruction_count": 46,
       "body_sha256": "183c186b08751ee29373d2e9634c422d68b2a63bb1aa0437cbff542830885ca0",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B08BC0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 16327,
+      "instruction_count": 106,
+      "body_sha256": "3b5738a05c6a545e90aeef7a0b621ebc36fb6aae2ca719eaba44907953d75b72",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B09A48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18563,
+      "instruction_count": 46,
+      "body_sha256": "a57a2c0c7099d384ce9648c0215bc84051b27818751f0c3e1bdffae60afe0d26",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B09CA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18925,
+      "instruction_count": 61,
+      "body_sha256": "0bde9541a739f57d1b4a536e5434a96d563daa138d38850d558223becec872ea",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B098B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18331,
+      "instruction_count": 26,
+      "body_sha256": "c48ba60dcacb69cfdcabac41cfe9e7ad558f50bf5b89d0e50a10c5a0cdac4f36",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B09C30",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18857,
+      "instruction_count": 28,
+      "body_sha256": "dab8667dd462f6300a42a7b0bd66a815ad084c43ba3270c105c0477b15520b69",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0A260",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 19822,
+      "instruction_count": 72,
+      "body_sha256": "636ed2ce6438c9cab1743dc08f25d46a2a85d81e98c4357627835ad0a0703448",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ABFF20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 22298,
+      "instruction_count": 7,
+      "body_sha256": "52642dc4cf4ffd39dfdafb2ccd0ee143b70e250a1a2039bc35aefdd3e8b4cf79",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -49,7 +105,14 @@
       "82B097A0",
       "82B0A188",
       "82B0A3B0",
-      "82B0A0D0"
+      "82B0A0D0",
+      "82B08BC0",
+      "82B09A48",
+      "82B09CA0",
+      "82B098B0",
+      "82B09C30",
+      "82B0A260",
+      "82ABFF20"
     ],
     "header": "include/lo_semantics/battle_effect_scaling61.h",
     "source": "src/battle_effect_scaling61.cpp",
@@ -64,6 +127,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Recovered shared effect scaling, critical-property/chance decision, bounded magnitude jitter and final status/partner normalization. Uses guest-provided coefficients and source single-precision stages, with no embedded private constants. Focused synthetic checks cover stat scaling, target status multiplier, bypass, critical categories, jitter/zero handling, source/target status overrides, partner short-circuit and rounding. Logical ABI coverage only, not bitwise FP or gameplay acceptance.",
-    "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "descriptor_gauge_damage": "Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, status normalization, shield absorption, blocked-damage mode and HP/result writeback. The attenuation helper preserves class bypass, disabled gauges and source comparison behavior; enabled attenuation marks the result record. Focused synthetic checks exercise both helpers together, actual shield depletion, HP changes and result slots. Descriptor callback coverage now 57 of 83 distinct targets; remaining 26 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "shared_damage_helpers": "Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance."
   }
 }

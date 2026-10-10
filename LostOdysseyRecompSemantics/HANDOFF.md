@@ -1,3 +1,7 @@
+## Root direct continuation: shared damage helpers (2026-10-10 UTC)
+
+Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
 ## Root direct continuation: descriptor HP MP drain (2026-10-10 UTC)
 
 Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
