@@ -4,29 +4,24 @@
 #include "lo_semantics/battle_completion61.h"
 #include <iostream>
 struct CompletionGuest final : manager_release_context61::GuestServices {
-  unsigned erased = 0, ready = 1;
+  unsigned freed = 0, ready = 1;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389aa0) {
       s.r[3] = 0x70000;
       return;
     }
-    if (e == 0x82298af8) {
-      auto h = unsigned(s.r[3]), index = unsigned(s.r[4]),
-           count = m.ReadU32(h + 4), data = m.ReadU32(h);
-      if (s.r[5] != 1 || s.r[6] != 8 || s.r[7] != 8)
-        throw std::runtime_error("erase arguments");
-      for (unsigned i = index; i + 1 < count; ++i)
-        for (unsigned j = 0; j < 8; ++j)
-          m.WriteU8(data + 8 * i + j, m.ReadU8(data + 8 * (i + 1) + j));
-      m.WriteU32(h + 4, count - 1);
-      ++erased;
-      return;
-    }
     throw std::runtime_error("completion direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123408) {
+      if (s.r[4] != 0x82000 || s.r[5] != 0 || s.r[6] != 8)
+        throw std::runtime_error("array release arguments");
+      ++freed;
+      s.r[3] = 0;
+      return;
+    }
     if (e != 0x123428)
       throw std::runtime_error("completion indirect");
     s.r[3] = ready;
@@ -38,9 +33,13 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x8330b000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    m.WriteU32(0x8330b608, 0x85000);
+    m.WriteU32(0x85000, 0x85100);
+    m.WriteU32(0x85108, 0x123408);
     CompletionGuest g;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
     auto check = [](bool b) {
@@ -79,10 +78,12 @@ int main() {
     m.WriteU8(0x80000, 4);
     m.WriteU32(0x832cc05c + 124, 0x81000);
     m.WriteU32(0x832cc05c + 128, 2);
+    m.WriteU32(0x832cc05c + 132, 2);
     m.WriteU32(0x81004, 0xffffffff);
     m.WriteU32(0x8100c, 9);
     m.WriteU32(0x832cc05c + 136, 0x82000);
     m.WriteU32(0x832cc05c + 140, 1);
+    m.WriteU32(0x832cc05c + 144, 1);
     m.WriteU32(0x82000, 123);
     m.WriteU32(0x82004, 10);
     m.WriteU32(0x832cc0fc + 8, 0x83000);
@@ -90,7 +91,7 @@ int main() {
     m.WriteU32(0x83000, 0x84000);
     m.WriteU32(0x84008, 10);
     m.WriteU8(0x84006, 3);
-    check(run(0x82b03428) == 1 && g.erased == 1 &&
+    check(run(0x82b03428) == 1 && m.ReadU32(0x81004) == 9 &&
           m.ReadU32(0x832cc05c + 128) == 1);
     check(run(0x82b02f08, 0x832cc05c, 123) == 0 &&
           run(0x82b02f08, 0x832cc05c, 99) == 0xffffffff);
@@ -100,7 +101,7 @@ int main() {
     check(run(0x82b03428) == 0 && run(0x82aad200, 0, 99) == 0);
     m.WriteU32(0x82004, 0xffffffff);
     check(run(0x82aad200, 0, 123) == 0 && run(0x82b03428) == 1 &&
-          g.erased == 2);
+          g.freed == 1 && !m.ReadU32(0x832cc05c + 136));
     check(run(0x82b07e80, 0x832cb68c, 99) == 0 &&
           run(0x82b1a100, 0x832cc0fc, 99) == 0);
     std::cout << "battle completion logic smoke passed\n";

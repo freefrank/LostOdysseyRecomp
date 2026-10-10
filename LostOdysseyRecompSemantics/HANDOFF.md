@@ -1,3 +1,7 @@
+## Root direct continuation: array storage adapters (2026-10-10 UTC)
+
+Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance.
+
 ## Root direct continuation: battle completion (2026-10-10 UTC)
 
 Recovered battle completion predicates, tracked-ID lookup and subordinate state checks. Script conditional branches now compose actual completion logic. Focused fixtures cover rank bounds, optional task gates, pending/completed states, missing IDs and stale row removal routing; library and completion/runtime fixtures pass. Array erasure and platform profile lookup remain guest boundaries. Logical recovery only, not gameplay or full ABI acceptance.

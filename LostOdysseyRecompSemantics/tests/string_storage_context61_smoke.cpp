@@ -110,6 +110,14 @@ int main() {
     run(0x8229f5e0);
     g.Need(!m.ReadU32(0x80000) && !m.ReadU32(0x80004) && !m.ReadU32(0x80008));
     g.Need(!string_storage_context61::Apply(0, m, {g, native}, s));
+    m.WriteU32(0xc0000, 0);
+    m.WriteU32(0xc0008, 4);
+    s.r[3] = 0xc0000;
+    s.r[4] = 8;
+    s.r[5] = 8;
+    if (!string_storage_context61::Apply(0x8229f678, m, {g, native}, s) ||
+        m.ReadU32(0xc0000) != 0xa0000 || s.r[1] != initial.r[1])
+      throw std::runtime_error("array resize adapter");
     std::cout << "string_storage_context61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

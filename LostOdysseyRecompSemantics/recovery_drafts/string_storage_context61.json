@@ -57,6 +57,22 @@
       "instruction_count": 8,
       "body_sha256": "31f92ac0a0012ce7e997dc1d9ead41ea3f9d5d2da46812208ea7311285657ddf",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82298AF8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 20546,
+      "instruction_count": 43,
+      "body_sha256": "c687bd7e5033f3f1e41f689054814cbe7342caf70a381173c598d9c2521364d9",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8229F678",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.0.cpp",
+      "source_line": 36727,
+      "instruction_count": 29,
+      "body_sha256": "6227cab1d3ba6e6bc1c07dbc66a9e66fa2ec4b7afc5b4dc5b80bc4e69ac22c04",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -67,7 +83,9 @@
       "82486C88",
       "8229F5E0",
       "82296830",
-      "8230BAC0"
+      "8230BAC0",
+      "82298AF8",
+      "8229F678"
     ],
     "header": "include/lo_semantics/string_storage_context61.h",
     "source": "src/string_storage_context61.cpp",
@@ -85,6 +103,7 @@
     "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.",
     "allocation_adapter_update": "Added the full-register 82486C88 allocation adapter by reusing AllocateManagerBuffer. Long-string conversion now reaches the manager virtual allocator through recovered code; both string conversion and storage fixtures pass.",
     "report_strings": "Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.",
-    "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed."
+    "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.",
+    "array_storage_adapters": "Added register-context adapters for previously recovered array resize and range removal, reusing allocation_array and memory_move semantics rather than duplicating those algorithms. Battle completion now performs actual stale-entry compaction and empty-array release. Library and focused storage/completion checks pass; allocator methods remain service boundaries. Logical coverage only, not full guest ABI or runtime acceptance."
   }
 }

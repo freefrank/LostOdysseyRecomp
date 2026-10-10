@@ -85,6 +85,14 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 96, first = 31;
   switch (e) {
+  case 0x82298af8:
+    frame = 128;
+    first = 28;
+    break;
+  case 0x8229f678:
+    frame = 128;
+    first = 27;
+    break;
   case 0x82298938:
   case 0x82298a98:
     break;
@@ -110,7 +118,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(sp, old);
   s.r[31] = header;
   Bridge b(m, d, s);
-  if (e == 0x8229f5e0)
+  if (e == 0x82298af8)
+    RemoveArrayRange(m, b, header, source, Address(s.r[5]), Address(s.r[6]),
+                     Address(s.r[7]), sp);
+  else if (e == 0x8229f678)
+    ResizeArray(m, b, header, source, Address(s.r[5]));
+  else if (e == 0x8229f5e0)
     s.r[3] =
         registered_metadata_string::AssignString(m, b, header, source, old);
   else if (e == 0x82486c88)

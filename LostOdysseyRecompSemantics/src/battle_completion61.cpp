@@ -1,5 +1,6 @@
 #include "lo_semantics/battle_completion61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/string_storage_context61.h"
 namespace lo::semantic::gpu::battle_completion61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
@@ -50,7 +51,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   s.r[1] -= frame;
   m.WriteU32(Address(s.r[1]), old);
   auto call = [&](unsigned a) {
-    if (!battle_completion61::Apply(a, m, d, s))
+    if (!battle_completion61::Apply(a, m, d, s) &&
+        !string_storage_context61::Apply(a, m, d, s))
       d.guest.CallDirect(a, m, s);
   };
   if (e == 0x82aad200) {
