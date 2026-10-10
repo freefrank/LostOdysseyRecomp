@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_script_parameters61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
@@ -90,7 +91,7 @@ void Flags(GuestMemory &m, Dependencies d, Registers &s, unsigned owner,
            unsigned resource) {
   s.r[3] = 0x832cb550;
   s.r[4] = m.ReadU32(resource + 64);
-  d.guest.CallDirect(0x82380d40, m, s);
+  (void)battle_manager_access61::Apply(0x82380d40, m, d, s);
   auto object = Address(s.r[3]);
   if (!object)
     return;

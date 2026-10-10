@@ -6,6 +6,8 @@
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/battle_resource_stats61.h"
+#include "lo_semantics/battle_script_angles61.h"
+#include "lo_semantics/battle_manager_access61.h"
 #include <bit>
 #include <limits>
 namespace lo::semantic::gpu::battle_effect_calculation61 {
@@ -29,6 +31,73 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82a9b458) {
+    auto old = Address(s.r[1]), target = Address(s.r[4]),
+         source = Address(s.r[5]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 29; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 160;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto find = [&](unsigned id) {
+      s.r[3] = 0x832cb550;
+      s.r[4] = id;
+      (void)battle_manager_access61::Apply(0x82380d40, m, d, s);
+      return Address(s.r[3]);
+    };
+    auto targetObject = find(target), sourceObject = find(source);
+    unsigned result = 0;
+    if (targetObject && sourceObject) {
+      if (s.cached_fp_control & 0x8040) {
+        s.cached_fp_control &= ~0x8040u;
+        d.fp.SetHostFpControl(s.cached_fp_control);
+      }
+      auto f = [&](unsigned p) { return std::bit_cast<float>(m.ReadU32(p)); };
+      m.WriteU32(sp + 96, std::bit_cast<unsigned>(float(
+                              f(sourceObject + 248) - f(targetObject + 248))));
+      m.WriteU32(sp + 100, std::bit_cast<unsigned>(float(
+                               f(sourceObject + 252) - f(targetObject + 252))));
+      m.WriteU32(sp + 104, m.ReadU32(0x82000e50));
+      s.r[3] = sp + 112;
+      s.r[4] = sp + 96;
+      (void)battle_script_angles61::Apply(0x82323488, m, d, s);
+      auto delta = m.ReadU32(sp + 116) - m.ReadU32(targetObject + 264);
+      m.WriteU32(sp + 80, m.ReadU32(targetObject + 260));
+      m.WriteU32(sp + 88, m.ReadU32(targetObject + 268));
+      if (std::int32_t(delta) < 0)
+        delta += 65536;
+      recovery_abi::WriteU64(m, sp + 80,
+                             std::uint64_t(std::int64_t(std::int32_t(delta))));
+      float angle = float(std::int32_t(delta)), scale = f(0x82000b50);
+      auto config = m.ReadU32(0x832ca0d0);
+      float front = float(f(config + 252) * scale), middle = f(0x82001270);
+      if (!(angle < front)) {
+        float left =
+            float(-(double(f(config + 260)) * double(scale) - double(middle)));
+        if (angle < left)
+          result = 1;
+        else {
+          float back =
+              float(double(f(config + 264)) * double(scale) + double(middle));
+          if (angle < back)
+            result = 2;
+          else {
+            float right = float(-(double(f(config + 256)) * double(scale) -
+                                  double(f(0x82000be8))));
+            if (angle < right)
+              result = 3;
+          }
+        }
+      }
+    }
+    s.r[3] = result;
+    s.r[1] += 160;
+    for (unsigned i = 29; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b09d98) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]);
     unsigned frame = 128;

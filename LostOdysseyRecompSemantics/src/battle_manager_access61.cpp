@@ -148,8 +148,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         break;
       }
     }
-  } else if (e == 0x82380d30) {
-    auto list = 0x832cb550u, id = Address(s.r[4]), count = m.ReadU32(list + 8),
+  } else if (e == 0x82380d30 || e == 0x82380d40) {
+    auto list = e == 0x82380d30 ? 0x832cb550u : Address(s.r[3]),
+         id = Address(s.r[4]), count = m.ReadU32(list + 8),
          data = m.ReadU32(list + 4);
     s.r[3] = 0;
     for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i) {

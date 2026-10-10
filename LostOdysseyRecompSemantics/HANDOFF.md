@@ -1,3 +1,7 @@
+## Root direct continuation: facing sectors (2026-10-10 UTC)
+
+Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance.
+
 ## Root direct continuation: resource growth (2026-10-10 UTC)
 
 Recovered character template-stat loading, level-dependent stat curves and rounding/clamping, and layered creature initialization with archetype selection, equipment/traits and initial skills. The script level-change command now composes real growth, equipment stat refresh and HP/MP recomputation. Focused synthetic growth and command integration checks pass; library builds. Private coefficient tables remain external guest data. This is logical coverage, not gameplay or bitwise floating-point/full volatile ABI acceptance.

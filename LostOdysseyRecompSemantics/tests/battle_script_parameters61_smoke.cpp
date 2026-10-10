@@ -6,12 +6,6 @@ struct ParametersGuest final : manager_release_context61::GuestServices {
   unsigned events = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82380d40) {
-      if (s.r[3] != 0x832cb550 || s.r[4] != 42)
-        throw std::runtime_error("actor lookup");
-      s.r[3] = 0x6e000;
-      return;
-    }
     if (e == 0x82b1aca8) {
       if (s.r[3] != 0x832cc0fc || s.r[4] != 0x61000000 || s.r[5] != 77 ||
           s.r[6])
@@ -29,7 +23,10 @@ struct ParametersGuest final : manager_release_context61::GuestServices {
 int main() {
   try {
     using namespace cook_main_smoke;
-    test::GuestWindow w(cook_main_smoke::Regions);
+    std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
+                                      cook_main_smoke::Regions.end());
+    regions.push_back({0x832cb000, 0x1000});
+    test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
     ParametersGuest guest;
@@ -86,6 +83,10 @@ int main() {
     if (guest.events != 1 || m.ReadU32(script + 16748) != 1 ||
         (m.ReadU32(script + 28) & 0xc0000) != 0x80000)
       throw std::runtime_error("periodic threshold and end marker");
+    m.WriteU32(0x832cb550 + 4, 0x6d000);
+    m.WriteU32(0x832cb550 + 8, 1);
+    m.WriteU32(0x6d000, 0x6e000);
+    m.WriteU32(0x6e000 + 552, 42);
     m.WriteU32(0x6e000 + 516, 0x6f000);
     m.WriteU32(0x6f000 + 444, 0x80000000);
     m.WriteU32(script + 196, 2);

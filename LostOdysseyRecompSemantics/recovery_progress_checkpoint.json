@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 230,
-    "distinct_entries": 1034,
+    "distinct_entries": 1038,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1803,10 +1803,13 @@
         "entries": [
           "82A9C6D8",
           "82A9C790",
-          "82A9C848"
+          "82A9C848",
+          "82323488",
+          "822B94C8"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI only"
+        "validation": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI only",
+        "facing_sector": "Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance."
       },
       {
         "unit": "battle_script_events61",
@@ -2560,7 +2563,8 @@
           "82B21480",
           "82AA0DB0",
           "82AA0E98",
-          "82B09D98"
+          "82B09D98",
+          "82A9B458"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI only",
@@ -2572,7 +2576,8 @@
         "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.",
         "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated.",
         "trait_probability": "Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration.",
-        "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance."
+        "special_damage": "Recovered nine-way special damage mode selection, skill-point/empty-slot scaling, side-count advantage, manager multiplier and composition of the existing property-based fixed attack. Added actual allied/enemy active roster counters with virtual status predicates and battle end gates. Main execution now composes special damage selection; focused calculation and execution checks cover all nine modes and actual HP change. Library builds; logical coverage only, not gameplay or bitwise floating-point acceptance.",
+        "facing_sector": "Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance."
       },
       {
         "unit": "battle_effect_execution61",
@@ -2672,13 +2677,15 @@
           "8229DFD8",
           "82389AA0",
           "82AB01D0",
-          "82389B48"
+          "82389B48",
+          "82380D40"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.",
         "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.",
         "root_initialization": "Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance.",
-        "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance."
+        "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
+        "facing_sector": "Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance."
       },
       {
         "unit": "battle_completion61",

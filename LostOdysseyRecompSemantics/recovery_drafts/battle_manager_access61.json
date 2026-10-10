@@ -97,6 +97,14 @@
       "instruction_count": 11,
       "body_sha256": "60e22ce242494f1174daf51b79f2b1a987bf4fe3e4da96a06b15ae5ccb7f4d8b",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82380D40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.9.cpp",
+      "source_line": 44837,
+      "instruction_count": 19,
+      "body_sha256": "ed1b5f7a1a906c7071e97426292c9d1c4f191f0ef1b4ac74acb25fd6c7cee219",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -112,7 +120,8 @@
       "8229DFD8",
       "82389AA0",
       "82AB01D0",
-      "82389B48"
+      "82389B48",
+      "82380D40"
     ],
     "header": "include/lo_semantics/battle_manager_access61.h",
     "source": "src/battle_manager_access61.cpp",
@@ -129,6 +138,7 @@
     "case_scope": "Recovered common battle manager accessors, resource-ID roster search and scene-object search, including lazy-root forwarding and fixed global manager selection. Main execution composes actual roster/list lookup; focused manager and execution fixtures pass. Lazy singleton construction remains a guest boundary; no gameplay or full ABI acceptance is claimed.",
     "profile_lookup": "Recovered platform object type-chain validation and player profile table lookup, including lazy type registration and missing/type-mismatched objects. Battle completion and script predicates now use the actual profile lookup instead of a mocked profile getter. Library and manager/completion/runtime checks pass; platform object delivery and type registration remain external services. Logical recovery only, not gameplay or full ABI acceptance.",
     "root_initialization": "Recovered lazy battle-root initialization orchestration: temporary name conversion/cleanup, type lookup, manager initialization, object construction and cached-root publication. Root getter now calls this implementation. Focused checks cover cached success, missing type, failed construction and retry. String storage uses existing semantics; registry and object constructors remain external services. Logical recovery only, not native initialization or gameplay acceptance.",
-    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance."
+    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
+    "facing_sector": "Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance."
   }
 }

@@ -2,6 +2,7 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_effect_calculation61.h"
+#include "lo_semantics/battle_script_angles61.h"
 #include <iostream>
 struct CalculationGuest final : manager_release_context61::GuestServices {
   unsigned defense = 5, attack = 20;
@@ -42,6 +43,7 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
     regions.push_back({0x8204f000, 0x1000});
+    regions.push_back({0x82189000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -458,6 +460,67 @@ int main() {
     check(special(5, 1) == 156 && special(8, 1) == 156 &&
           m.ReadU32(0x77000 + 56) == 17);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
+    // Real scene lookup and guest-table atan2 feed the facing-sector query.
+    auto constant = [&](unsigned p, float value) {
+      m.WriteU32(p, std::bit_cast<unsigned>(value));
+    };
+    auto wide = [&](unsigned p, double value) {
+      recovery_abi::WriteU64(m, p, std::bit_cast<std::uint64_t>(value));
+    };
+    auto path = std::getenv("LO_MESH_MATH_CONSTANTS");
+    if (!path)
+      throw std::runtime_error("missing private atan fixture");
+    std::ifstream input(path, std::ios::binary);
+    std::vector<unsigned char> bytes(184);
+    input.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
+    if (input.gcount() != 184)
+      throw std::runtime_error("private atan fixture size");
+    for (unsigned i = 0; i < 184; ++i)
+      m.WriteU8(0x83214e88 + i, bytes[i]);
+    wide(0x820029c0, 4503599627370496.);
+    wide(0x82000f28, 1);
+    constant(0x82000e38, 1);
+    wide(0x82000fc8, 65536. / 6.283185307179586);
+    constant(0x82189798, .5f);
+    constant(0x82000b50, 65536.f / 360.f);
+    constant(0x82001270, 32768);
+    constant(0x82000be8, 65536);
+    m.WriteU32(0x832ca0d0, 0x150000);
+    for (auto off : {252u, 256u, 260u, 264u})
+      constant(0x150000 + off, 45);
+    m.WriteU32(0x832cb554, 0x151000);
+    m.WriteU32(0x832cb558, 2);
+    m.WriteU32(0x151000, 0x152000);
+    m.WriteU32(0x151004, 0x153000);
+    m.WriteU32(0x152000 + 552, 7);
+    m.WriteU32(0x153000 + 552, 8);
+    constant(0x152000 + 248, 0);
+    constant(0x152000 + 252, 0);
+    m.WriteU32(0x152000 + 264, 0);
+    struct Direction {
+      float x, y;
+      unsigned sector;
+    };
+    for (auto direction :
+         {Direction{1, 0, 0}, {0, 1, 1}, {-1, 0, 2}, {0, -1, 3}}) {
+      constant(0x153000 + 248, direction.x);
+      constant(0x153000 + 252, direction.y);
+      s.r[3] = 0;
+      s.r[4] = 7;
+      s.r[5] = 8;
+      check(battle_effect_calculation61::Apply(0x82a9b458, m, {g, native}, s));
+      check(s.r[3] == direction.sector && s.r[1] == initial.r[1] &&
+            s.fpr_bits[31] == initial.fpr_bits[31]);
+    }
+    s.r[4] = 99;
+    s.r[5] = 8;
+    check(battle_effect_calculation61::Apply(0x82a9b458, m, {g, native}, s) &&
+          !s.r[3]);
+    for (auto value : {-2.75, -2., 0., 2.75}) {
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(value);
+      check(battle_script_angles61::Apply(0x822b94c8, m, {g, native}, s));
+      check(std::bit_cast<double>(s.fpr_bits[1]) == std::floor(value));
+    }
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

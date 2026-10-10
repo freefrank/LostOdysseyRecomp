@@ -25,13 +25,31 @@
       "instruction_count": 55,
       "body_sha256": "95c43b52dd2282675a7099cb8b31a6faa268b4de6690af61602afb63c22dc797",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82323488",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.5.cpp",
+      "source_line": 40609,
+      "instruction_count": 58,
+      "body_sha256": "fe782461d7e37624f1c4628264d2aa0310ca2adf574592f4329285ac62e900de",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "822B94C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.1.cpp",
+      "source_line": 57466,
+      "instruction_count": 15,
+      "body_sha256": "f459161bcff75e86bec98c8d6ed1dfc7863bc041793a3f52f69b55a8b5f8cdef",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82A9C6D8",
       "82A9C790",
-      "82A9C848"
+      "82A9C848",
+      "82323488",
+      "822B94C8"
     ],
     "header": "include/lo_semantics/battle_script_angles61.h",
     "source": "src/battle_script_angles61.cpp",
@@ -45,6 +63,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "facing_sector": "Recovered facing-sector classification A9B458 using actual scene lookup D40, vector-to-guest-angle conversion 323488 and guest floor semantics 2B94C8. Reuses the existing guest-table atan2 implementation; no host atan2 substitution. Hit evaluation and queued actor-flag application compose the recovered paths. Library builds and focused calculation, parameters and manager fixtures pass, including four facing sectors and absent-object handling. Private atan tables stay local. This remains logical coverage, not runtime gameplay or full floating-point/volatile ABI acceptance."
   }
 }
