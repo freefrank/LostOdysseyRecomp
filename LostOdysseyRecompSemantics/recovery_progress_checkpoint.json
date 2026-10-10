@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 171,
-    "distinct_entries": 557,
+    "unit_count": 172,
+    "distinct_entries": 560,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1797,6 +1797,16 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture runs a registered call/multiply/return/end program, checks signed division, operand swap and the original 32-deep call-stack stop. Existing core registration/arithmetic paths are included in the fixture. Division keeps the source zero-result branch; invalid signed-overflow inputs and runtime fault equivalence are not covered. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_angles61",
+        "entries": [
+          "82A9C6D8",
+          "82A9C790",
+          "82A9C848"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI only"
       }
     ]
   },

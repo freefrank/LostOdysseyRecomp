@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle fixed-turn sine, cosine and direction-angle opcode handlers.",
+  "entries": [
+    {
+      "address": "82A9C6D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11735,
+      "instruction_count": 45,
+      "body_sha256": "d1c378b291a6cde0942fbf88779106fab2af07f1ba2b1e887d9ce8d8ec54667d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C790",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11839,
+      "instruction_count": 45,
+      "body_sha256": "c71db10edfed2388367795e01b0339204d3e37c2accbabc5a4459eeee830e8a2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C848",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11943,
+      "instruction_count": 55,
+      "body_sha256": "95c43b52dd2282675a7099cb8b31a6faa268b4de6690af61602afb63c22dc797",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82A9C6D8",
+      "82A9C790",
+      "82A9C848"
+    ],
+    "header": "include/lo_semantics/battle_script_angles61.h",
+    "source": "src/battle_script_angles61.cpp",
+    "smoke": "tests/battle_script_angles61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

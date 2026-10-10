@@ -5,6 +5,43 @@
 #include <cmath>
 #include <limits>
 namespace lo::semantic::gpu::mesh_hull_incremental61 {
+double EvaluateGuestTrig(GuestMemory &m, double x, bool cosine) {
+    auto Double = [&](unsigned p) {
+        return std::bit_cast<double>(recovery_abi::ReadU64(m, p));
+    };
+    auto Float = [&](unsigned p) { return std::bit_cast<float>(m.ReadU32(p)); };
+    constexpr std::uint32_t table = 0x83214d80u;
+    double magnitude = std::abs(x);
+    if (!cosine && magnitude == 0)
+        return x;
+    double shifted = cosine ? Double(table) + magnitude : magnitude;
+    double scaled = Double(table + 8) * shifted,
+           rounded = std::nearbyint(scaled);
+    std::int64_t quadrant;
+    if (scaled > double(std::numeric_limits<std::int64_t>::max()))
+        quadrant = std::numeric_limits<std::int64_t>::max();
+    else if (!std::isfinite(rounded) || rounded >= 0x1p63 || rounded < -0x1p63)
+        quadrant = std::numeric_limits<std::int64_t>::min();
+    else
+        quadrant = static_cast<std::int64_t>(rounded);
+    double turns = double(quadrant) - (cosine ? double(Float(table + 36)) : 0.);
+    double reduced = -(Double(table + 40) * turns - magnitude);
+    reduced = -(Double(table + 48) * turns - reduced);
+    double squared = reduced * reduced, poly = Double(table + 112);
+    for (int offset = 104; offset >= 56; offset -= 8)
+        poly = poly * squared + Double(table + unsigned(offset));
+    double value = (poly * squared + Double(0x82000f28u)) * reduced;
+    if (quadrant & 1)
+        value = -value;
+    if (cosine && magnitude == double(Float(table + 24)))
+        return Float(table + 28);
+    if (shifted - Double(table + 16) >= 0)
+        return Double(0x83215508u);
+    if (!cosine)
+        value *= x >= 0 ? Float(table + 28) : Float(table + 32);
+    return value;
+}
+
 namespace {
 using recovery_abi::Address;
 using Vec = std::array<float, 3>;
@@ -108,37 +145,7 @@ struct Hull {
         return dot > upper || dot < lower;
     }
     double Double(std::uint32_t p) { return std::bit_cast<double>(recovery_abi::ReadU64(m, p)); }
-    double Trig(double x, bool cosine) {
-        constexpr std::uint32_t table = 0x83214d80u;
-        double magnitude = std::abs(x);
-        if (!cosine && magnitude == 0)
-            return x;
-        double shifted = cosine ? Double(table) + magnitude : magnitude;
-        double scaled = Double(table + 8) * shifted, rounded = std::nearbyint(scaled);
-        std::int64_t quadrant;
-        if (scaled > double(std::numeric_limits<std::int64_t>::max()))
-            quadrant = std::numeric_limits<std::int64_t>::max();
-        else if (!std::isfinite(rounded) || rounded >= 0x1p63 || rounded < -0x1p63)
-            quadrant = std::numeric_limits<std::int64_t>::min();
-        else
-            quadrant = static_cast<std::int64_t>(rounded);
-        double turns = double(quadrant) - (cosine ? double(Float(table + 36)) : 0.);
-        double reduced = -(Double(table + 40) * turns - magnitude);
-        reduced = -(Double(table + 48) * turns - reduced);
-        double squared = reduced * reduced, poly = Double(table + 112);
-        for (int offset = 104; offset >= 56; offset -= 8)
-            poly = poly * squared + Double(table + unsigned(offset));
-        double value = (poly * squared + Double(0x82000f28u)) * reduced;
-        if (quadrant & 1)
-            value = -value;
-        if (cosine && magnitude == double(Float(table + 24)))
-            return Float(table + 28);
-        if (shifted - Double(table + 16) >= 0)
-            return Double(0x83215508u);
-        if (!cosine)
-            value *= x >= 0 ? Float(table + 28) : Float(table + 32);
-        return value;
-    }
+    double Trig(double x, bool cosine) { return EvaluateGuestTrig(m,x,cosine); }
     std::uint32_t StableSupport(std::uint32_t vertices, unsigned count, std::uint32_t direction,
                                 std::uint32_t mask) {
         const auto axis = Point(direction);
