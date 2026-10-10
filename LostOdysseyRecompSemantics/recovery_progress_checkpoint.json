@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 232,
-    "distinct_entries": 1063,
+    "unit_count": 233,
+    "distinct_entries": 1068,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2821,6 +2821,18 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered formation placement: side/class roster counting, matching formation row, ordinal slot lookup, player-profile rotation/translation using existing guest trig, and resource position/angle writes. Script global mode 12 composes the actual formation entry. Focused checks cover mixed sides and slot classes, missing sentinels, translated/rotated coordinates and preserved nonvolatile state. No host trig substitution, raw constants, gameplay acceptance or full ABI/FP acceptance."
+      },
+      {
+        "unit": "battle_roster_persistence61",
+        "entries": [
+          "82AF52F0",
+          "82AF5400",
+          "82AF56A8",
+          "82AF57D8",
+          "82AF5810"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {
@@ -2905,8 +2917,8 @@
   },
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
-    "routed_units": 68,
-    "routed_distinct_entries": 548,
+    "routed_units": 69,
+    "routed_distinct_entries": 553,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -2914,11 +2926,12 @@
     "library_validated": true,
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
-    "routed_battle_units": 65,
-    "routed_battle_entries": 519,
+    "routed_battle_units": 66,
+    "routed_battle_entries": 524,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
-    "formation_placement": "Recovered formation placement: side/class roster counting, matching formation row, ordinal slot lookup, player-profile rotation/translation using existing guest trig, and resource position/angle writes. Script global mode 12 composes the actual formation entry. Focused checks cover mixed sides and slot classes, missing sentinels, translated/rotated coordinates and preserved nonvolatile state. No host trig substitution, raw constants, gameplay acceptance or full ABI/FP acceptance."
+    "formation_placement": "Recovered formation placement: side/class roster counting, matching formation row, ordinal slot lookup, player-profile rotation/translation using existing guest trig, and resource position/angle writes. Script global mode 12 composes the actual formation entry. Focused checks cover mixed sides and slot classes, missing sentinels, translated/rotated coordinates and preserved nonvolatile state. No host trig substitution, raw constants, gameplay acceptance or full ABI/FP acceptance.",
+    "roster_persistence": "Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance."
   }
 }

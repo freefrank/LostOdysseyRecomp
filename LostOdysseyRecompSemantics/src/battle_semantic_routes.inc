@@ -28,6 +28,7 @@
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_result_application61.h"
+#include "lo_semantics/battle_roster_persistence61.h"
 #include "lo_semantics/battle_scene_requests61.h"
 #include "lo_semantics/battle_scene_tasks61.h"
 #include "lo_semantics/battle_script61.h"
@@ -316,6 +317,12 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82b2b9e0u:
   case 0x82b2bd50u:
     return battle_result_application61::Apply(entry, memory, dependencies, state);
+  case 0x82af52f0u:
+  case 0x82af5400u:
+  case 0x82af56a8u:
+  case 0x82af57d8u:
+  case 0x82af5810u:
+    return battle_roster_persistence61::Apply(entry, memory, dependencies, state);
   case 0x82377168u:
   case 0x82b19e88u:
   case 0x82b1aa50u:

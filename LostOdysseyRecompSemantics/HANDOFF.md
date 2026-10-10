@@ -1,3 +1,7 @@
+## Root direct continuation: roster persistence (2026-10-10 UTC)
+
+Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance.
+
 ## Root direct continuation: formation placement (2026-10-10 UTC)
 
 Recovered formation placement: side/class roster counting, matching formation row, ordinal slot lookup, player-profile rotation/translation using existing guest trig, and resource position/angle writes. Script global mode 12 composes the actual formation entry. Focused checks cover mixed sides and slot classes, missing sentinels, translated/rotated coordinates and preserved nonvolatile state. No host trig substitution, raw constants, gameplay acceptance or full ABI/FP acceptance.
