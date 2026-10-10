@@ -8,6 +8,16 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
   unsigned predicate = 0, configured = 0, finalized = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82a9b698) {
+      auto header = unsigned(s.r[3]);
+      if (!m.ReadU32(header))
+        m.WriteU32(header, 0x100000);
+      m.WriteU32(header + 4, 0);
+      return;
+    }
+    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
+        e == 0x82b1f798)
+      return;
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
       return;
@@ -30,8 +40,8 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
       return;
     }
-    if (e == 0x82ab0d50) {
-      if (s.r[3] != 0x80000)
+    if (e == 0x82acde40) {
+      if (s.r[4] != 0x80000)
         throw std::runtime_error("execution configuration resource");
       ++configured;
       return;
@@ -98,7 +108,7 @@ int main() {
           m.ReadU32(record + 14884) == 25 &&
           m.ReadU32(record + 14884 + 464) == 26 &&
           m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 100) == 10 &&
-          m.ReadU32(actor + 96) == 1 && guest.finalized == 1);
+          m.ReadU32(actor + 96) == 1 && m.ReadU32(resource + 60) == 1);
     m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 300, 7);
     m.WriteU32(actor + 304, 8);
@@ -122,14 +132,14 @@ int main() {
     guest.predicate = 0;
     m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 64, 0x01000000);
-    auto finalized = guest.finalized;
+    m.WriteU32(resource + 60, 0);
     run(0x82afdcf0, 7, 8);
     check(m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 96) == 1 &&
-          guest.finalized == finalized && (m.ReadU32(actor + 64) & 96) == 96);
+          m.ReadU32(resource + 60) == 0 && (m.ReadU32(actor + 64) & 96) == 96);
     m.WriteU32(actor + 96, 0);
     run(0x82afdb90, 7, 8);
     check(m.ReadU32(record + 16) == 2 && !m.ReadU32(actor + 96) &&
-          guest.finalized == finalized + 1);
+          m.ReadU32(resource + 60) == 1);
     // Ordered membership remains single-pass: order 2 preceding order 1 is not
     // revisited.
     InitializeActionRecordFixture(m, resource, true);

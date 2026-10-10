@@ -9,6 +9,16 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
            ready = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82a9b698) {
+      auto header = unsigned(s.r[3]);
+      if (!m.ReadU32(header))
+        m.WriteU32(header, 0x100000);
+      m.WriteU32(header + 4, 0);
+      return;
+    }
+    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
+        e == 0x82b1f798)
+      return;
     if (e == 0x82ab31e0 || e == 0x82ab2d88) {
       InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
       return;
@@ -45,9 +55,10 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acee70)
       return;
-    if (e == 0x82ab0d50) {
-      if (s.r[3] != 0x80000 || s.r[4] != 0 || s.r[5] != 9)
-        throw std::runtime_error("action configuration arguments");
+    if (e == 0x82acde40) {
+      if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 0 ||
+          m.ReadU32(0x62000 + 92) != 9)
+        throw std::runtime_error("action configured arguments");
       ++invoked;
       return;
     }

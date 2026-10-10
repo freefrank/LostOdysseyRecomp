@@ -13,6 +13,16 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       if (!good)
         throw std::runtime_error("marshaling service ABI " + std::to_string(e));
     };
+    if (e == 0x82a9b698) {
+      auto header = unsigned(s.r[3]);
+      if (!m.ReadU32(header))
+        m.WriteU32(header, 0x100000);
+      m.WriteU32(header + 4, 0);
+      return;
+    }
+    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
+        e == 0x82b1f798)
+      return;
     if (e == 0x82ab31e0 || e == 0x82ab2d88) {
       InitializeActionRecordFixture(m, unsigned(s.r[3]), e == 0x82ab31e0);
       return;
@@ -64,7 +74,7 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
-    if (e == 0x82ab0d50)
+    if (e == 0x82acde40)
       return;
     if (e == 0x82b1f1d0) {
       kind = m.ReadU32(0x62000 + 88);
@@ -111,6 +121,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83245000, 0x1000});
     regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
@@ -159,6 +170,8 @@ int main() {
       s.r[3] = owner;
       m.WriteU32(actor + 52, 0);
       check(battle_script_marshaling61::Apply(e, m, {guest, native}, s));
+      guest.kind = m.ReadU32(actor + 88);
+      guest.detail = m.ReadU32(actor + 92);
       check(s.r[1] == initial.r[1] && s.r[26] == initial.r[26] &&
             s.r[31] == initial.r[31]);
     };

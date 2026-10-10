@@ -8,6 +8,16 @@ struct ItemGuest final : manager_release_context61::GuestServices {
   unsigned selected = 0, prepared = 0, executed = 0, last = 0, random = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82a9b698) {
+      auto header = unsigned(s.r[3]);
+      if (!m.ReadU32(header))
+        m.WriteU32(header, 0x100000);
+      m.WriteU32(header + 4, 0);
+      return;
+    }
+    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
+        e == 0x82b1f798)
+      return;
     if (e == 0x82aa0740) {
       if (s.r[3] != 0x72000 || s.r[4] != 0 || s.r[5] != 1 || s.r[6] != 88 ||
           s.r[7] != 24)
@@ -36,10 +46,10 @@ struct ItemGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82acee70)
       return;
-    if (e == 0x82ab0d50) {
-      if (s.r[3] != 0x80000 || s.r[4] != 11)
+    if (e == 0x82acde40) {
+      if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 11)
         throw std::runtime_error("item configuration ABI");
-      selected = unsigned(s.r[5]);
+      selected = m.ReadU32(0x62000 + 92);
       if (selected)
         ++prepared;
       ++executed;

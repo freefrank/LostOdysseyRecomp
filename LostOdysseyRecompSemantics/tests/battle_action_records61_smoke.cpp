@@ -16,6 +16,16 @@ struct RecordGuest final : manager_release_context61::GuestServices {
   }
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82a9b698) {
+      auto header = unsigned(s.r[3]);
+      if (!m.ReadU32(header))
+        m.WriteU32(header, 0x100000);
+      m.WriteU32(header + 4, 0);
+      return;
+    }
+    if (e == 0x82acd3b0 || e == 0x82b21340 || e == 0x82b11df0 ||
+        e == 0x82b1f798)
+      return;
     if (e == 0x82ab31e0) {
       m.WriteU32(0x80000 + 14656, 0x100000);
       m.WriteU32(0x80000 + 14660, 1);
@@ -28,9 +38,9 @@ struct RecordGuest final : manager_release_context61::GuestServices {
       m.WriteU32(0x80000 + 14660, count + 1);
       return;
     }
-    if (e == 0x82ab0d50) {
-      if (s.r[3] != 0x80000 || s.r[4] != 7 || s.r[5] != 8)
-        throw std::runtime_error("record command configuration");
+    if (e == 0x82acde40) {
+      if (s.r[4] != 0x80000)
+        throw std::runtime_error("record configuration resource");
       ++configured;
       return;
     }
@@ -56,7 +66,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    regions.push_back({0x832c9000, 0x1000});
+    regions.push_back({0x832c9000, 0x4000});
+    regions.push_back({0x83245000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -115,13 +126,16 @@ int main() {
     m.WriteU32(0x80000 + 112, 99);
     m.WriteU32(0x80000 + 116, 99);
     run(0x82ab36c8, 0xffffffff, 0xffffffff, 0xffffffff, 0);
-    check(guest.marked == 1 && guest.advanced == 1 &&
-          !m.ReadU32(0x80000 + 112) && !m.ReadU32(0x80000 + 116));
+    check((m.ReadU32(0x62000 + 64) & 0x20000000) &&
+          m.ReadU32(0x80000 + 60) == 1 && !m.ReadU32(0x80000 + 112) &&
+          !m.ReadU32(0x80000 + 116));
+    m.WriteU32(0x80000 + 60, 0);
     run(0x82ab38f0, 0xffffffff, 0xffffffff, 0xffffffff, 1);
-    check(guest.marked == 1 && guest.advanced == 2);
+    check((m.ReadU32(0x62000 + 64) & 0x20000000) &&
+          m.ReadU32(0x80000 + 60) == 1);
     m.WriteU32(0x80000 + 60, 2);
     run(0x82ab36c8, 0xffffffff, 0xffffffff, 0xffffffff, 0);
-    check(guest.advanced == 2 && guest.configured == 2);
+    check(m.ReadU32(0x80000 + 60) == 2 && guest.configured == 2);
     std::cout << "battle_action_records61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {
