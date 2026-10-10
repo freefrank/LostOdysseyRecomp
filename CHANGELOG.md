@@ -10,11 +10,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 - At 60 FPS, scenes that can't quite hold 60 no longer drop straight to 30, for example on Steam Deck.
 - New VSync setting in Settings → Graphics: Off, On or FreeSync / G-SYNC Compatible. It replaces the FreeSync / G-SYNC Compatible switch.
+- New Voice volume in Settings → Audio: cutscene dialogue has its own volume instead of following Sound effects. Voices in battle still follow Sound effects (#394).
 
 ### 简体中文
 
 - 60 FPS 下，跑不满 60 的场景不再直接掉到 30（例如 Steam Deck）。
 - 设置 → 图形新增“垂直同步”：关、开或 FreeSync / G-SYNC Compatible，取代原来的 FreeSync / G-SYNC Compatible 开关。
+- 设置 → 声音新增“语音音量”：过场动画的对白有了自己的音量，不再跟随音效音量。战斗中的语音仍跟随音效音量（#394）。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
