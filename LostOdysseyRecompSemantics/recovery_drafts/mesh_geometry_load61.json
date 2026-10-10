@@ -1,6 +1,6 @@
 {
   "schema": "semantic-recovery-draft-v1",
-  "scope": "Packed mesh normal input with lazy 1024-vector guest lookup, original component permutation/sign masks and endian-aware halfword reads.",
+  "scope": "ICE/CVHL aggregate geometry load, pointer relocation, packed normals and ICE/CLHL geometry plus VALE adjacency load.",
   "entries": [
     {
       "address": "82BC69E0",
@@ -9,15 +9,34 @@
       "instruction_count": 144,
       "body_sha256": "930bbd8eb58efa0e93f18b4a4e7aa4c013c30642e301c6a5483f8f29d8448c15",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC6C20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 43201,
+      "instruction_count": 800,
+      "body_sha256": "661e2197bfd2f818b14aba52b23f826a870c76014a87b9c606b5f6de3bdf19f0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BC8638",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 46961,
+      "instruction_count": 61,
+      "body_sha256": "45590ea32cae99b206c1242c2011b803ec85f89f8487317a2e666e5c310adb58",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
-      "82BC69E0"
+      "82BC69E0",
+      "82BC6C20",
+      "82BC8638"
     ],
     "header": "include/lo_semantics/mesh_geometry_load61.h",
     "source": "src/mesh_geometry_load61.cpp",
-    "smoke": "tests/mesh_geometry_load61_smoke.cpp"
+    "smoke": "tests/mesh_geometry_load61_smoke.cpp",
+    "integration_smoke": "tests/mesh_cook_main61_smoke.cpp"
   },
   "validation": {
     "status": "compiled_with_focused_logic_smoke",
@@ -26,8 +45,8 @@
     "library_validated": true,
     "runtime_validated": false,
     "complete": false,
-    "focused_smoke_paths": 2,
-    "case_scope": "Six signed axis normals decoded in both byte orders through concrete memory input/halfword reader and recovered guest sine/cosine. First path builds the full lookup; second reuses it. Cursor, stack/low-LR, initialized flag and exactly one accepted exit callback830D9A60 checked. No full angle-grid/bitwiseFP/original Full72 or gameplay claim.",
+    "focused_smoke_paths": 5,
+    "case_scope": "Six signed axis normals decoded in both byte orders through concrete memory input/halfword reader and recovered guest sine/cosine. First path builds the full lookup; second reuses it. Cursor, stack/low-LR, initialized flag and exactly one accepted exit callback830D9A60 checked. No full angle-grid/bitwiseFP/original Full72 or gameplay claim. Three actual cook outputs (indexed, point-only, inflated point-only) reload through BC8638/BC6C20 and VALE, preserve expected geometry counts, consume the geometry segment and release all tracked allocations. Current-format logical roundtrip, not original full-RAM, legacy-version or gameplay equivalence.",
     "remaining_boundary": "First-use CRT registration82B7BE48 records the original no-op destructor target830D9A60; registry internals remain accepted guest service.",
     "private_constants": "LO_HULL_INCREMENTAL_CONSTANTS192-byte bundle and LO_NORMAL_DECODE_STEP4bytes at820D6954 from user XEX. Neither extracted input is published."
   }

@@ -319,3 +319,8 @@ BC7F98 recovers adjacency payload ownership, adaptive degree decoding and prefix
 ### Packed normal input
 
 BC69E0 now decodes packed normal indices using a lazily initialized guest lookup and recovered sine/cosine. Signed-axis cases cover both byte orders and lookup reuse. The original private angle step stays external; exhaustive angular/bitwise equivalence is unclaimed.
+
+
+### Cooked geometry readback
+
+BC6C20 now loads the ICE/CVHL aggregate geometry, relocates serialized polygon pointers, reconstructs adaptive triangle/edge indices and reads packed normals. BC8638 composes ICE/CLHL geometry and VALE adjacency. All three actual cook-main outputs (indexed, point-only, inflated point-only) reload their geometry and release every tracked allocation. No new input guards; original current-format ownership and mutation order retained. Older format branches are source-reviewed only. Overall BC5270 load and tree restoration remain next; no full-RAM, bitwise floating-point or gameplay acceptance.

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 125,
-    "distinct_entries": 381,
+    "distinct_entries": 383,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1295,10 +1295,12 @@
       {
         "unit": "mesh_geometry_load61",
         "entries": [
-          "82BC69E0"
+          "82BC69E0",
+          "82BC6C20",
+          "82BC8638"
         ],
-        "focused_smoke_paths": 2,
-        "validation": "Packed signed axis normal decode both byte orders; lazy guest lookup build/reuse; logical/ABI only"
+        "focused_smoke_paths": 5,
+        "validation": "Packed normals both endian modes and actual three-mode cooked geometry readback with full tracked cleanup; logical/ABI only"
       }
     ]
   },

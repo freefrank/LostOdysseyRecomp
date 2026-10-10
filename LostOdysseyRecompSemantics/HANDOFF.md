@@ -1,3 +1,7 @@
+## Root direct continuation: cooked geometry readback (2026-10-10 UTC)
+
+BC6C20 now loads the ICE/CVHL aggregate geometry, relocates serialized polygon pointers, reconstructs adaptive triangle/edge indices and reads packed normals. BC8638 composes ICE/CLHL geometry and VALE adjacency. All three actual cook-main outputs (indexed, point-only, inflated point-only) reload their geometry and release every tracked allocation. No new input guards; original current-format ownership and mutation order retained. Older format branches are source-reviewed only. Overall BC5270 load and tree restoration remain next; no full-RAM, bitwise floating-point or gameplay acceptance.
+
 ## Root direct continuation: packed normal input (2026-10-10 UTC)
 
 BC69E0 reads packed halfword normals, lazily generates the original 1024-entry sorted spherical lookup using concrete guest sine/cosine, and applies component/sign masks. Six signed axes pass both byte orders; lookup reuse and original830D9A60 registration target are checked. The angle step at820D6954 remains a private four-byte test input. CRT registration remains explicit. This prepares BC6C20 geometry loading; no full-grid/bitwiseFP/Full72/gameplay acceptance.
