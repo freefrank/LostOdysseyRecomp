@@ -149,3 +149,7 @@ The recovered execution layer now calls the resource action-record implementatio
 ## Action effects and lifecycle
 
 Four action-effect and lifecycle helpers now run inside resource record creation: command routing, reset sequencing, actor completion marking and the resource-state cycle. A focused fixture checks all command routes and state transitions; the five affected chain fixtures pass using actual completion fields. Record-array initialization and concrete effect services still require recovery, and native gameplay is unvalidated.
+
+## Action storage
+
+Four action-storage helpers now have logical implementations, including the 124208-byte record initializer and its nested defaults. A focused fixture verifies growth, repeated append, normal and alternate arrays, reset and ABI preservation. Existing ResizeArray logic is reused. String and destructor services remain boundaries; composition into the action execution chain is next. This is not native gameplay validation.
