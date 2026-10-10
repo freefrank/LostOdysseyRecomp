@@ -1,0 +1,158 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Scene object commands, inline text state, affordable action selection and queued flag commands.",
+  "entries": [
+    {
+      "address": "82B00508",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 29285,
+      "instruction_count": 98,
+      "body_sha256": "ed13240b5a722bdd44c52ec008abf634ea855487ec25dbe6a62a4a34e0776e22",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFCE18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 21103,
+      "instruction_count": 43,
+      "body_sha256": "a4c6c0de28e9bdb09cd55de06ba39974b0f000c0f9b673811f302cc7d2e85274",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB570",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17412,
+      "instruction_count": 27,
+      "body_sha256": "2157b8bc8055ff59a05295b72df9f04504b700034138c8c38b992c719d060f31",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFC6D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 20034,
+      "instruction_count": 46,
+      "body_sha256": "1ab3d1a79fe75e95d82738125fd6924874a73fab2ab4f32490b404246a7fd7e2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA5F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15081,
+      "instruction_count": 95,
+      "body_sha256": "a16186ca667f15ac42fb0031862a3e4c85142e6244d62bc799b17107e6ddfa49",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9920",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13119,
+      "instruction_count": 24,
+      "body_sha256": "a2ab9f8368e8d67798c1cc18ed98fe2d5ed296cc07911894eeca6936a5cf62c2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9A30",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13280,
+      "instruction_count": 21,
+      "body_sha256": "32186e1c7ca71e45661273b75a4664b27635cd84917412db1f9f473048348a2b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA850",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15428,
+      "instruction_count": 76,
+      "body_sha256": "5b3b1d56dbb13902964de51d34d01cb2751b15ead08907944494dde8fa00095b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B00398",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 29077,
+      "instruction_count": 35,
+      "body_sha256": "998032f19fcea89d4e4982579469c51312cc37575d43ab4c4a8d9ed6b5a5ff11",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA980",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15610,
+      "instruction_count": 34,
+      "body_sha256": "c4618c2b17efca7fe99dd5385f855c7b7ea4f4f5d1a63176641340550a959ab6",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAA08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15691,
+      "instruction_count": 23,
+      "body_sha256": "25e2772e871fc6f091c4dffb89ead582f73ad6b9645eb3247340e9de68560a34",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAA68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15747,
+      "instruction_count": 41,
+      "body_sha256": "5e0eb5d0375dfb93ebd8178db8e81d1155c55ceb14ed19381e29ef89ce4fb0e3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B00428",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 29160,
+      "instruction_count": 56,
+      "body_sha256": "6c93e1ab1b85009823ba34a633968c9e93d3991ec04827c25076380cce708bc0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFAB10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15843,
+      "instruction_count": 40,
+      "body_sha256": "44cd68691dd63f327e995b6b284fd9470e6d5d9039ed29c8ba0fc86bf094a83b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFABB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 15934,
+      "instruction_count": 36,
+      "body_sha256": "4966f62325f75dfa75a4da10493b5ad8a19f530772462499e360a708155bbfc8",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B00508",
+      "82AFCE18",
+      "82AFB570",
+      "82AFC6D8",
+      "82AFA5F0",
+      "82AF9920",
+      "82AF9A30",
+      "82AFA850",
+      "82B00398",
+      "82AFA980",
+      "82AFAA08",
+      "82AFAA68",
+      "82B00428",
+      "82AFAB10",
+      "82AFABB0"
+    ],
+    "header": "include/lo_semantics/battle_script_scene_state61.h",
+    "source": "src/battle_script_scene_state61.cpp",
+    "smoke": "tests/battle_script_scene_state61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture checks representative scene command branches, script/actor text buffers, affordable candidate filtering and random tag89, packed manager/actor flags, all four queued flag combinations, scene-buffer reset, object state/predicate calls, text suppression and original unused inline payload handling. Concrete scene services, cost provider, text resolver and random source remain explicit guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

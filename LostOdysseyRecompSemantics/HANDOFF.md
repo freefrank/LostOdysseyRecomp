@@ -1,3 +1,7 @@
+## Root direct continuation: battle script scene state (2026-10-10 UTC)
+
+Scene-state handlers now preserve inline text buffers and actor labels, dispatch object commands, queue flag changes and apply the original suppression/state predicates. Affordable action selection scans the twelve source candidates, retains cost-compatible entries and invokes the original random contract. A compact synthetic fixture checks these data and callback paths; native scene effects, concrete costs and text rendering remain unvalidated.
+
 ## Root direct continuation: battle script runtime commands (2026-10-10 UTC)
 
 Runtime commands now resolve group/resource identifiers, find script actors bound to runtime resources, count flagged bindings, and marshal scene commands through their original direct and virtual services. Target selection and scene predicates retain their original return conventions, including no cursor advance for unsupported predicate modes. The compact state/callback fixture passes; native scene and service behavior remains unvalidated.
