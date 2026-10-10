@@ -1,3 +1,7 @@
+## Root direct continuation: effect preparation (2026-10-10 UTC)
+
+Recovered and composed effect preparation: source/target and argument bindings, byte/word resets, secondary manager snapshots, target HP capture and source actor flag extraction. All ten effect adapters now initialize actual state before the remaining application callback. Focused fixture checks setup output, descriptor16 classification, low-byte input truncation and preservation of adjacent bytes. No full floating-point equivalence or native gameplay claim.
+
 ## Root direct continuation: battle descriptor effect adapters (2026-10-10 UTC)
 
 Recovered ten descriptor effect adapters and composed them into evaluator dispatch. Focused checks preserve mode-write timing, mutable global manager reload and secondary property/numeric callback arguments. The eligibility fixture still passes. Lower preparation/application services remain to be recovered; logical/ABI coverage does not imply runtime gameplay acceptance.

@@ -81,6 +81,14 @@
       "instruction_count": 34,
       "body_sha256": "22b62096f0e22e58b7d2ca6963c391a04413bd4e8ba70e17f56e77769ceae58d",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B21878",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 13365,
+      "instruction_count": 60,
+      "body_sha256": "bf7e8e6342c08d05a0667683c3ecf81e3ba47362a53c507a134c97dd64255946",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +102,8 @@
       "82B0D1A0",
       "82B0D088",
       "82B0D210",
-      "82B0D2C8"
+      "82B0D2C8",
+      "82B21878"
     ],
     "header": "include/lo_semantics/battle_evaluation_effects61.h",
     "source": "src/battle_evaluation_effects61.cpp",
@@ -108,6 +117,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixture checks all ten adapters, source mode-write timing before or after preparation, mutable manager reloading, operand ABI and optional property or numeric side effects. Entries are composed into the real descriptor dispatcher; preparation/application and secondary services remain explicit guest boundaries. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixture checks all ten adapters, source mode-write timing before or after preparation, mutable manager reloading, operand ABI and optional property or numeric side effects. Entries are composed into the real descriptor dispatcher; preparation/application and secondary services remain explicit guest boundaries. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "effect_preparation": "Recovered and composed effect preparation: source/target and argument bindings, byte/word resets, secondary manager snapshots, target HP capture and source actor flag extraction. All ten effect adapters now initialize actual state before the remaining application callback. Focused fixture checks setup output, descriptor16 classification, low-byte input truncation and preservation of adjacent bytes. No full floating-point equivalence or native gameplay claim."
   }
 }

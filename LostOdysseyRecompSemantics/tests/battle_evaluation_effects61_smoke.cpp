@@ -12,28 +12,26 @@ struct EffectGuest final : manager_release_context61::GuestServices {
       if (!b)
         throw std::runtime_error("effect callback ABI");
     };
-    if (e == 0x82b21878) {
-      check(step++ == 0 && s.r[3] == 0x70000 && s.r[4] == 0x80000 &&
-            s.r[5] == 0x90000 && s.r[6] == 36 && s.r[7] == 40 && s.r[8] == 0 &&
-            s.r[9] == 1);
-      check(m.ReadU32(0x73000 + 64) == (late ? 99 : mode));
-      m.WriteU32(0x832ca0cc, 0x71000);
-      return;
-    }
     if (e == 0x82b22948) {
-      check(step++ == 1 && s.r[3] == 0x71000 &&
+      check(step++ == 0 && s.r[3] == 0x70000 &&
             m.ReadU32(0x73000 + 64) == mode);
+      check(m.ReadU32(0x70004) == 0x80000 && m.ReadU32(0x70008) == 0x90000 &&
+            m.ReadU32(0x70000 + 28) == 36 && m.ReadU32(0x70000 + 32) == 40 &&
+            m.ReadU8(0x70000 + 45) == 1 && m.ReadU32(0x70000 + 56) == 1);
+      check(m.ReadU32(0x74000 + 4) == 0x80000 &&
+            m.ReadU32(0x74000 + 20) == 40 && m.ReadU8(0x70000 + 109) == 1 &&
+            m.ReadU32(0x70000 + 96) == 0x42c80000);
       return;
     }
     if (e == 0x82ac8ec8) {
-      check(step == 2 && s.r[3] == 0x80000 && s.r[4] == 3 && s.r[5] == 8 &&
+      check(step == 1 && s.r[3] == 0x80000 && s.r[4] == 3 && s.r[5] == 8 &&
             s.r[6] == 120 && s.r[7] == 0 && s.r[8] == 1 &&
             m.ReadU32(0x80000 + 188) == 0);
       ++side;
       return;
     }
     if (e == 0x82ac71e8 || e == 0x82ac80b8) {
-      check(step == 2 && s.r[3] == 0x72000 && s.r[4] == 0x90000 &&
+      check(step == 1 && s.r[3] == 0x72000 && s.r[4] == 0x90000 &&
             s.r[5] == 120);
       side = e == 0x82ac71e8 ? 1 : 2;
       return;
@@ -62,6 +60,14 @@ int main() {
       if (!b)
         throw std::runtime_error("effect state");
     };
+    m.WriteU32(0x832cb790, 0x74000);
+    m.WriteU32(0x832c9c54 + 44, 0x63000);
+    m.WriteU32(0x63004, 0x62000);
+    m.WriteU32(0x6300c, 1);
+    m.WriteU32(0x62008, 24);
+    m.WriteU32(0x80000 + 64, 24);
+    m.WriteU32(0x62000 + 64, 64);
+    m.WriteU32(0x90000 + 2588, 0x42c80000);
     m.WriteU32(0x73004, 0x80000);
     m.WriteU32(0x73008, 0x90000);
     m.WriteU32(0x73000 + 36, 36);
@@ -86,12 +92,24 @@ int main() {
         check(
             battle_evaluation_effects61::Apply(entries[i], m, {g, native}, s));
         check(s.r[1] == initial.r[1] && s.r[28] == initial.r[28] &&
-              s.r[31] == initial.r[31] && g.step == 2);
+              s.r[31] == initial.r[31] && g.step == 1);
         if (i >= 8)
           check(g.side == choice + 1);
         if (i == 7)
           check(g.side == 1);
       }
+    m.WriteU32(0x75000, 16);
+    m.WriteU32(0x70000 + 64, 0xffffffff);
+    s.r[3] = 0x70000;
+    s.r[4] = 0x80000;
+    s.r[5] = 0x90000;
+    s.r[6] = 36;
+    s.r[7] = 0x75000;
+    s.r[8] = 7;
+    s.r[9] = 258;
+    check(battle_evaluation_effects61::Apply(0x82b21878, m, {g, native}, s));
+    check(m.ReadU8(0x70000 + 108) == 1 && m.ReadU8(0x70000 + 45) == 2 &&
+          m.ReadU32(0x70000 + 40) == 7 && m.ReadU32(0x70000 + 64) == 0xffff);
     check(!battle_evaluation_effects61::Apply(0, m, {g, native}, s));
     std::cout << "battle_evaluation_effects61 smoke passed\n";
     return 0;
