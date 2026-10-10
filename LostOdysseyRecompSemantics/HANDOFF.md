@@ -1,3 +1,7 @@
+## Root direct continuation: archive startup (2026-10-10 UTC)
+
+Base archive startup now constructs the root and filename, normalizes directory separators while preserving multibyte trail bytes, loads the resident index through the recovered loader, and updates the source readiness flags. A synthetic startup chain passes with the expected path, index and service calls. The startup wrapper preserves its original unconditional success return, while the outer initialization returns the registry singleton result.
+
 ## Root direct continuation: FPI index loading (2026-10-10 UTC)
 
 The FPI loader now reads and converts the 64-byte header, enforces the original 1..512-sector size range, replaces the resident index buffer, and relocates archive descriptors and nested entry trees. Locked reads retain their guest status exchanges. Two endian variants and an invalid-sector sample pass with synthetic file services. Open/read/close, allocation, error reporting and atomic operations remain runtime boundaries. Auxiliary table relocation follows the original swap-only branch and has not been exercised by this fixture.
