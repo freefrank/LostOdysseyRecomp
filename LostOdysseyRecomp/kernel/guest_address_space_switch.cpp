@@ -38,6 +38,7 @@ constexpr unsigned kSvcUnmapProcessCodeMemory = 0x78;
 
 uint8_t* s_base = nullptr;
 VirtmemReservation* s_reservation = nullptr;
+Handle s_process = INVALID_HANDLE;
 std::mutex s_mutex;
 // One flag per 2 MiB chunk of the virtual view and of the A view. C and E are
 // committed together with A and never on their own.
@@ -48,6 +49,55 @@ bool ProcessMemorySyscallsAvailable()
 {
     return envIsSyscallHinted(kSvcMapProcessMemory) && envIsSyscallHinted(kSvcUnmapProcessMemory) &&
         envIsSyscallHinted(kSvcMapProcessCodeMemory) && envIsSyscallHinted(kSvcUnmapProcessCodeMemory);
+}
+
+struct HandleReceive
+{
+    Handle session;
+    Handle received;
+};
+
+void ReceiveOwnProcessHandle(void* arg)
+{
+    auto& receive = *static_cast<HandleReceive*>(arg);
+    void* tls = armGetTls();
+    hipcMakeRequestInline(tls);
+    s32 index = 0;
+    if (R_SUCCEEDED(svcReplyAndReceive(&index, &receive.session, 1, INVALID_HANDLE, UINT64_MAX)))
+    {
+        const HipcParsedRequest request = hipcParseRequest(tls);
+        if (request.meta.num_copy_handles == 1)
+            receive.received = request.data.copy_handles[0];
+    }
+    svcCloseHandle(receive.session);
+}
+
+// The process syscalls need a real handle to this process; they reject the
+// CUR_PROCESS_HANDLE pseudo-handle. hbloader passes one. Loaders that do not
+// (Ryujinx runs an NRO directly) get one the way hbloader does: send the
+// pseudo-handle to ourselves over a session, and the kernel copies a real one.
+Handle OwnProcessHandle()
+{
+    if (const Handle own = envGetOwnProcessHandle(); own != INVALID_HANDLE)
+        return own;
+    Handle server = INVALID_HANDLE, client = INVALID_HANDLE;
+    if (R_FAILED(svcCreateSession(&server, &client, 0, 0)))
+        return INVALID_HANDLE;
+    HandleReceive receive{ server, INVALID_HANDLE };
+    Thread thread;
+    if (R_FAILED(threadCreate(&thread, ReceiveOwnProcessHandle, &receive, nullptr, 0x1000, 0x20, -2)) ||
+        R_FAILED(threadStart(&thread)))
+    {
+        svcCloseHandle(server);
+        svcCloseHandle(client);
+        return INVALID_HANDLE;
+    }
+    hipcMakeRequestInline(armGetTls(), .num_copy_handles = 1).copy_handles[0] = CUR_PROCESS_HANDLE;
+    svcSendSyncRequest(client); // The receiver closes the session instead of replying.
+    svcCloseHandle(client);
+    threadWaitForExit(&thread);
+    threadClose(&thread);
+    return receive.received;
 }
 
 // Backs [offset, offset + size) of the window with fresh zeroed memory and,
@@ -68,22 +118,22 @@ bool MapChunk(size_t offset, size_t size)
     source = virtmemFindCodeMemory(size, kPage);
     if (source)
     {
-        rc = svcMapProcessCodeMemory(envGetOwnProcessHandle(), uintptr_t(source), uintptr_t(backing), size);
+        rc = svcMapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
         if (R_SUCCEEDED(rc))
-            rc = svcSetProcessMemoryPermission(envGetOwnProcessHandle(), uintptr_t(source), size, Perm_Rw);
+            rc = svcSetProcessMemoryPermission(s_process, uintptr_t(source), size, Perm_Rw);
     }
     virtmemUnlock();
     if (!source || R_FAILED(rc))
     {
         RecordFailure(FailureOperation::CreateBacking, rc, -1, source, size, offset);
         if (source && R_SUCCEEDED(rc))
-            svcUnmapProcessCodeMemory(envGetOwnProcessHandle(), uintptr_t(source), uintptr_t(backing), size);
+            svcUnmapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
         free(backing);
         return false;
     }
 
     auto map = [&](size_t destination, size_t sourceOffset, size_t length, int32_t view) {
-        rc = svcMapProcessMemory(s_base + destination, envGetOwnProcessHandle(),
+        rc = svcMapProcessMemory(s_base + destination, s_process,
             uintptr_t(source) + sourceOffset, length);
         if (R_FAILED(rc))
             RecordFailure(FailureOperation::MapView, rc, view, s_base + destination, length, offset);
@@ -115,6 +165,12 @@ uint8_t* Allocate()
     {
         // Typical cause: started from the album applet. Logged by main.cpp.
         RecordFailure(FailureOperation::ReserveAny, 0xFFFFFFFFu, -1, nullptr, kSize);
+        return nullptr;
+    }
+    s_process = OwnProcessHandle();
+    if (s_process == INVALID_HANDLE)
+    {
+        RecordFailure(FailureOperation::ReserveAny, 0xFFFFFFFEu, -1, nullptr, kSize);
         return nullptr;
     }
 
