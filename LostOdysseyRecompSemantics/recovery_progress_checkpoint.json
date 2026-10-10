@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 191,
-    "distinct_entries": 726,
+    "unit_count": 192,
+    "distinct_entries": 742,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2106,6 +2106,29 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A compact synthetic fixture covers inline label descriptor layout, allocator initialization and alignment, nonempty/empty copies, both flag-controlled commands across three modes, simple scene commands and nonzero predicate branching. Source offset overlap in 82B018C0 is preserved. Concrete allocator, string initialization and scene services remain boundaries; native gameplay is unvalidated. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_queues61",
+        "entries": [
+          "82AF7760",
+          "82AF77C0",
+          "82AFA2E8",
+          "82AF7810",
+          "82AF7890",
+          "82AFA388",
+          "82AFF4A8",
+          "82AFD670",
+          "82AF9870",
+          "82AFA440",
+          "82AF7AD0",
+          "82AFA500",
+          "82AF78F8",
+          "82AF7F18",
+          "82AFD150",
+          "82AF7F70"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One synthetic fixture exercises all fifteen handlers plus the bulk action reset helper: allocation sizes, expected and actual queue entries, duplicate two/three-record insertion, signed mismatch branches, resource fields, state bit masks, ID fallback, signed numeric ABI, activation flags and resource action reset. Concrete allocation and numerical scene services remain boundaries. No bitwise FP or native gameplay validation. Logical/ABI only"
       }
     ]
   },

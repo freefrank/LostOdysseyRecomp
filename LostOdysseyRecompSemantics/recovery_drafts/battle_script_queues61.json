@@ -1,0 +1,167 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle queue construction, comparison and resource state updates.",
+  "entries": [
+    {
+      "address": "82AF7760",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8082,
+      "instruction_count": 24,
+      "body_sha256": "571b392835e5c1e78eff3c8c96cd010994b115761060b78dda9f370b75e43e2a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF77C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8146,
+      "instruction_count": 20,
+      "body_sha256": "3da8ede77a3adf0e686902bf176ec7f7dee0b72e8d968a6d159fc99a19d02f12",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA2E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14620,
+      "instruction_count": 40,
+      "body_sha256": "e5d07f1c9f73f74d4fc494877b00e7b89567fa388e136a73f05db954d4d871bb",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7810",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8195,
+      "instruction_count": 32,
+      "body_sha256": "2a4d6c5dc0151c710717d6062fddaecab3427e6dd68d67e6f4a1c54300ba6ced",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7890",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8271,
+      "instruction_count": 26,
+      "body_sha256": "ed9f43ed6d2a3d3af304aa5352b6b5f3ff9066f1516cf6beeaa2b63aa9b84b3d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA388",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14716,
+      "instruction_count": 45,
+      "body_sha256": "fc0b053131de09a6f02885bc13a489857ad2d0989631ad30b7e3aae98ff619d6",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFF4A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 26820,
+      "instruction_count": 15,
+      "body_sha256": "db5bb5d69a7520344f1e87631bae94aad9988a7512ac14f9128d16b72179f8a8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD670",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 22367,
+      "instruction_count": 63,
+      "body_sha256": "7b1039f0e9bdbd2524169abe433eb8b278ecb11ff132853371a72b672d6e1d54",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF9870",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 13016,
+      "instruction_count": 44,
+      "body_sha256": "b1658a053090ca9339a9a55f9990caf5d741d6bfa1a916d17e59cbe3b40d61d3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA440",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14830,
+      "instruction_count": 47,
+      "body_sha256": "b4a836913b3984d6befd2cbed05d724b7864ea0312a1e669b1645c2e9c36493d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7AD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8592,
+      "instruction_count": 37,
+      "body_sha256": "fa4d7b84c15291f5e580c490dfb8904aa2b8f058351ad44e588eb95898699d08",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFA500",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 14947,
+      "instruction_count": 59,
+      "body_sha256": "916e1e3a59d472b4d1877bf349a6b05d85212f18fd4ed39597b644118774d83a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF78F8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 8339,
+      "instruction_count": 118,
+      "body_sha256": "df13516cf343983b7a37bd2249e22f483398734bacc11837d3dc0d2f07274e1c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7F18",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9223,
+      "instruction_count": 21,
+      "body_sha256": "c5e0b40e27dd7fc5865fb3d74277b71bbfabcf87d50d651660a2faabeb7603b1",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD150",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 21576,
+      "instruction_count": 50,
+      "body_sha256": "3b1adf36163a170924b7a215cd797de1cb96a06be13f49d4d64559609c76fd24",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7F70",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9274,
+      "instruction_count": 18,
+      "body_sha256": "0e610bdda2267835653c192021745d4cf7c4fb4c660403b9b2d93d0d59a07382",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AF7760",
+      "82AF77C0",
+      "82AFA2E8",
+      "82AF7810",
+      "82AF7890",
+      "82AFA388",
+      "82AFF4A8",
+      "82AFD670",
+      "82AF9870",
+      "82AFA440",
+      "82AF7AD0",
+      "82AFA500",
+      "82AF78F8",
+      "82AF7F18",
+      "82AFD150",
+      "82AF7F70"
+    ],
+    "header": "include/lo_semantics/battle_script_queues61.h",
+    "source": "src/battle_script_queues61.cpp",
+    "smoke": "tests/battle_script_queues61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One synthetic fixture exercises all fifteen handlers plus the bulk action reset helper: allocation sizes, expected and actual queue entries, duplicate two/three-record insertion, signed mismatch branches, resource fields, state bit masks, ID fallback, signed numeric ABI, activation flags and resource action reset. Concrete allocation and numerical scene services remain boundaries. No bitwise FP or native gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
