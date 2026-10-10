@@ -9,7 +9,7 @@ LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you
 3. Start MO2 and create a new instance. Pick **Lost Odyssey Recomp** and browse to the folder that holds `LostOdysseyRecomp.exe` (the extracted Windows ZIP). If that folder has no `mods/` subfolder yet, start the game once or create the folder.
 4. Install mod archives with MO2's install button, enable them, and start the game with MO2's **Run** button. Restart the game after you change mods.
 
-Both package layouts made by `lo_mod.py pack` install as they are, and so do texture and translation packs that hold an `overlay/` folder and language packs (a folder with a `language.ini`). The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`. Download the plugin again if MO2 says a language pack has no valid game data: version 1.1.0 knows them.
+Mod folders (`mods/<id>/mod.ini` with `mods/<id>/overlay/...`), older `mod.ini` packages, overlay packages (a top-level `overlay/` folder) and language packs (a folder with a `language.ini`) install as they are. The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`. An archive whose top holds `mod.ini` or `language.ini` itself (the inside of such a folder) is marked as invalid: put it in a folder named after the mod in MO2's manual installer. Download the plugin again if MO2 says a mod folder or language pack has no valid game data.
 
 ## Export the original assets
 
@@ -78,19 +78,19 @@ To translate the game into a new language:
 
 ## Which mod wins
 
-- **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins.
-- **Standalone packages** (the default layout): each mod has its own folder and `mod.ini`. The `priority` in `mod.ini` decides between them, not MO2's order. An overlay file beats any standalone mod.
+- **Mod folders** (the default layout of `lo_mod.py`): each mod has its own folder and `mod.ini`, so MO2 shows no conflict between them. The game's own mod order decides which one wins for the same file (`mod-list.ini` next to `settings.ini`, outside MO2's virtual folder), then the `priority` in `mod.ini`. Disabling a mod in MO2 removes its folder, so it stops loading; it keeps its place in the game's order for when you enable it again.
+- **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins. An overlay file beats every mod folder.
 - **Language packs**: MO2's order does not matter. Only the pack picked in **Settings > System > Game language** is used.
 
-To let MO2's order decide everything, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Standalone packages are then ignored; language packs still show in Settings.
+To let MO2's order decide everything, use overlay packages, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Mod folders are then ignored; language packs still show in Settings.
 
 ## What stays outside MO2
 
-Only `mods/` is virtual. Settings, saves (`profile/`), logs and shader caches stay in the game folder, so MO2 profiles do not separate saves.
+Only `mods/` is virtual. Settings, the game's mod order (`mod-list.ini`), saves (`profile/`), logs and shader caches stay in the game folder, so MO2 profiles do not separate them.
 
 ## Checking what loaded
 
-Every run writes `logs/runtime-*.log` in the game folder. Its `mods:` line shows the mods folder, the mode, the standalone mods it loaded and whether an `overlay` folder was visible; warnings about broken `mod.ini` files follow it. If an MO2 mod is missing there, make sure the game was started from MO2.
+Every run writes `logs/runtime-*.log` in the game folder. Its `mods:` line shows the mods folder, the mode, the mod folders it loaded (highest priority first) and whether an `overlay` folder was visible; warnings about broken `mod.ini` or `mod-list.ini` files follow it. If an MO2 mod is missing there, make sure the game was started from MO2.
 
 ## Other managers
 

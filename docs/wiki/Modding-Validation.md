@@ -12,9 +12,9 @@ python -m pip install Pillow
 python tools/tests/mod_tools_test.py
 ```
 
-The C++ target checks identity normalization, standalone priorities and disabled mods, generation/reload, provider fallback and recursion, external-manager isolation, invalid modes, payload identity/size/format checks, path traversal and bounded manifests. Symlink checks run when the host permits creating symlinks. Concurrent readers exercise immutable snapshots.
+The C++ target checks identity normalization, mod folder priorities and disabled mods, format v2 metadata and overlay discovery, `mod-list.ini` order and the manager's save, generation/reload, provider fallback and recursion, external-manager isolation, invalid modes, payload identity/size/format checks, path traversal and bounded manifests. Symlink checks run when the host permits creating symlinks. Concurrent readers exercise immutable snapshots.
 
-Python checks cover canonical keys and a fixed FNV path vector, UTF-8 identities, RGBA file layout, CSV filtering/deduplication, generated specifications, standalone and overlay ZIPs, deterministic output, duplicate identities, invalid dimensions, input containment, no-overwrite behavior and failed-output cleanup.
+Python checks cover canonical keys and a fixed FNV path vector, UTF-8 identities, RGBA file layout, CSV filtering/deduplication, generated specifications, mod folder and overlay ZIPs, mod folder texture packs, `overlay-to-mod` moves, dry run, refusals and rollback, deterministic output, duplicate identities, invalid dimensions, input containment, no-overwrite behavior and failed-output cleanup.
 
 The `Mod API and Wiki` GitHub Actions workflow runs the focused checks on Linux and Windows. Consult the workflow's actual status; the existence of this page is not evidence of a green build or a complete runtime build.
 
@@ -24,7 +24,7 @@ Use a game build containing the mod changes and your own imported game data. Rec
 
 Start with the unmodified native settings menu, then install an unmistakable `UI_MAIN_00` recolor preserving its 512x1024 dimensions. Check the visual difference, alpha blending and unchanged hit/layout behavior. Disable the mod and restart to verify the original. Repeat with a supported font texture page, preserving glyph positions and dimensions; confirm unchanged metrics and fallback behavior.
 
-Test two conflicting standalone mods at different priorities and at equal priority. Test missing/corrupt files, an identity mismatch and a deliberately wrong extent. Failures must restore original content without crashes. Capture `[mods]` diagnostics and compare game archive hashes before/after.
+Test two conflicting mod folders at different priorities, at equal priority and in `mod-list.ini` order. Test missing/corrupt files, an identity mismatch and a deliberately wrong extent. Failures must restore original content without crashes. Capture `[mods]` diagnostics and compare game archive hashes before/after.
 
 A synthetic payload test proves the wire contract and loader behavior. It does not establish a real-game screenshot result or coverage of an arbitrary guest texture.
 
