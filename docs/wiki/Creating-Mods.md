@@ -26,6 +26,8 @@ The game finds the files under `overlay/` by name, so `mod.ini` needs no file li
 
 Zip it with `mods/` at the top of the archive: `mods/<id>/mod.ini`, `mods/<id>/overlay/...`. Players extract the archive into the game folder; Mod Organizer 2 installs it as it is. Mod folders never conflict with each other. When two of them replace the same file, the in-game mod order decides, then `priority` in `mod.ini` (see [Modding API](Modding-API.md#order-and-mod-listini)). Changes take effect after a restart.
 
+Players manage installed mods in Settings → System → Mods: it shows each mod's `name`, `version` and `author`, turns it on or off and moves it up or down (LB / RB); the selected mod's `description` and folder appear in the help line. A broken `mod.ini` shows there with its first problem.
+
 To turn a top-level `overlay/` folder (an overlay pack) into a mod folder without packing it again:
 
 ```sh

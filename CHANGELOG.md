@@ -33,6 +33,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Fixed hitches the first time you enter an area, such as the world map.
 - Startup no longer waits for pipeline preparation; it continues in the background with a progress bar at the bottom of the screen.
 - Mods can now ship as one folder with their own overlay files and a name, version and author; Mod Organizer 2 installs them as they are.
+- Settings → System → Mods lists installed mods: turn them on or off and change their order (applies after a restart).
 
 ### 简体中文
 
@@ -61,6 +62,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 修复首次进入某个区域（例如世界地图）时的卡顿。
 - 启动时不再等待管线准备，改为在后台进行，屏幕底部显示进度条。
 - Mod 现在可以作为一个独立文件夹发布，自带 overlay 文件和名称、版本、作者信息；Mod Organizer 2 可以直接安装。
+- 设置 → 系统 → Mod 列出已安装的 Mod：可以开关、调整顺序（重启后生效）。
 
 ## [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) — 2026-10-08
 
