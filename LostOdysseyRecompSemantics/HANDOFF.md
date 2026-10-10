@@ -1,3 +1,7 @@
+## Root direct continuation: battle random ranges (2026-10-10 UTC)
+
+Recovered the shared battle random-range helper, preserving resource-group and call-tag cursor selection and wrap behavior. One compact fixture checks synthetic table values and endpoint paths. Composition into action and picker callers is next; native random-table data and gameplay behavior are unvalidated.
+
 ## Root direct continuation: compose action snapshots (2026-10-10 UTC)
 
 Execution now composes alternate-record snapshot preparation. Four execution/opcode fixtures pass with the actual backup state and independent normal/alternate storage, including an assertion that readiness early-return still creates the alternate snapshot. The shared synthetic allocator now represents separate live allocations. Record/effect caller fixtures also pass; native gameplay remains unvalidated.

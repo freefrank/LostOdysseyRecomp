@@ -193,3 +193,7 @@ Action snapshot preparation now has logical implementations for manager field up
 ## Composed action snapshots
 
 Execution now composes alternate-record snapshot preparation. Four execution/opcode fixtures pass with the actual backup state and independent normal/alternate storage, including an assertion that readiness early-return still creates the alternate snapshot. The shared synthetic allocator now represents separate live allocations. Record/effect caller fixtures also pass; native gameplay remains unvalidated.
+
+## Battle random ranges
+
+Recovered the shared battle random-range helper, preserving resource-group and call-tag cursor selection and wrap behavior. One compact fixture checks synthetic table values and endpoint paths. Composition into action and picker callers is next; native random-table data and gameplay behavior are unvalidated.
