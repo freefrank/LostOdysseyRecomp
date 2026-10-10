@@ -8,6 +8,9 @@ units = {}
 for path in sorted((root / 'recovery_drafts').glob('battle*.json')):
     implementation = json.loads(path.read_text())['implementation']
     units[path.stem] = implementation['entries']
+battle_count = len(units)
+for name in ("manager_release_context61", "string_storage_context61", "string_conversion_context61"):
+    units[name] = json.loads((root / "recovery_drafts" / f"{name}.json").read_text())["implementation"]["entries"]
 entries = {}
 for unit, addresses in units.items():
     for address in addresses:
@@ -26,4 +29,4 @@ for unit, addresses in units.items():
     lines += [f'    return {unit}::Apply({arguments});']
 lines += ['  default: return false;', '  }', '}', '}', '}']
 (root / 'src/battle_semantic_routes.inc').write_text('\n'.join(lines) + '\n')
-print(f'{len(units)} battle units, {len(entries)} routed guest entries')
+print(f'{battle_count} battle units, {len(units)-battle_count} shared units, {len(entries)} routed guest entries plus copy/fill support')

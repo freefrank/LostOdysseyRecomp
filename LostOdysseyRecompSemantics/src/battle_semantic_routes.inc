@@ -63,6 +63,9 @@
 #include "lo_semantics/battle_script_status61.h"
 #include "lo_semantics/battle_script_targets61.h"
 #include "lo_semantics/battle_script_text61.h"
+#include "lo_semantics/manager_release_context61.h"
+#include "lo_semantics/string_storage_context61.h"
+#include "lo_semantics/string_conversion_context61.h"
 namespace lo::semantic::gpu::battle_semantic_runtime61 {
 namespace {
 bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, Registers &state) {
@@ -642,6 +645,36 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82a9f1c0u:
   case 0x82a9f718u:
     return battle_script_text61::Apply(entry, memory, dependencies, state);
+  case 0x82388b58u:
+  case 0x823f3340u:
+  case 0x82bdb260u:
+    return manager_release_context61::Apply(entry, memory, dependencies, state);
+  case 0x82296830u:
+  case 0x82298938u:
+  case 0x82298a98u:
+  case 0x82298af8u:
+  case 0x8229f5e0u:
+  case 0x8229f678u:
+  case 0x822a06c0u:
+  case 0x822b3f50u:
+  case 0x822d02f8u:
+  case 0x822d03d8u:
+  case 0x8230bac0u:
+  case 0x82320328u:
+  case 0x8232d378u:
+  case 0x8232d418u:
+  case 0x823562a8u:
+  case 0x823577e8u:
+  case 0x82474348u:
+  case 0x82486c88u:
+  case 0x824c0658u:
+  case 0x82acc7a0u:
+    return string_storage_context61::Apply(entry, memory, dependencies, state);
+  case 0x8229c538u:
+  case 0x8229c560u:
+  case 0x823227c8u:
+  case 0x827ca660u:
+    return string_conversion_context61::Apply(entry, memory, dependencies, state);
   default: return false;
   }
 }

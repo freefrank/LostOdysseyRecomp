@@ -83,6 +83,26 @@ int main() {
     m.WriteU32(0xa0000, 99);
     run(0x82b63828, 0xa0000);
     check(!s.r[3] && !m.ReadU32(0xa0000) && g.direct == 1);
+    m.WriteU16(0xc0000, 'A');
+    m.WriteU16(0xc0002, 'B');
+    m.WriteU16(0xc0004, 0);
+    run(0x82296830, 0xc0000);
+    check(s.r[3] == 2);
+    s.r[3] = 0xc0101;
+    s.r[4] = 0x1234;
+    s.r[5] = 7;
+    check(battle_semantic_runtime61::Apply(0x82b7bc40, m, {g, native}, s));
+    for (unsigned i = 0; i < 7; ++i)
+      check(m.ReadU8(0xc0101 + i) == 0x34);
+    check(s.r[3] == 0xc0101 && s.r[4] == 0x34343434 && s.r[5] == 4 &&
+          s.r[6] == 0xc0108);
+    s.r[3] = 0xc0201;
+    s.r[4] = 0xc0101;
+    s.r[5] = 7;
+    check(battle_semantic_runtime61::Apply(0x82b7a0b0, m, {g, native}, s));
+    for (unsigned i = 0; i < 7; ++i)
+      check(m.ReadU8(0xc0201 + i) == 0x34);
+    check(s.r[3] == 0xc0201 && g.direct == 1 && g.indirect == 1);
     auto before = s.r[3];
     check(!battle_semantic_runtime61::Apply(0xdeadc0de, m, {g, native}, s) &&
           s.r[3] == before && s.r[1] == initial.r[1]);

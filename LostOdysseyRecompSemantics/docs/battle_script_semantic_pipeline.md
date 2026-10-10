@@ -525,3 +525,9 @@ Added an opt-in battle semantic runtime entry that routes all 511 currently reco
 Call `battle_semantic_runtime61::Apply(entry, memory, dependencies, registers)` to enter this opt-in graph. It retains one bridge for nested calls. Recovered direct and indirect targets route to handwritten implementations; unknown targets retain the original guest callback and all mutable register state. An unknown top-level entry returns false without invoking a callback. Existing narrow unit APIs are unchanged.
 
 After adding or changing battle recovery metadata, run `python tools/generate_battle_semantic_routes.py` from the semantics project (or pass its repository-relative path). The generator reads only recovery drafts, rejects duplicate entry ownership and rebuilds the checked-in route include. The route count is integration coverage, not new recovered-function credit or a game completion percentage. This API is not yet installed as a native game-runtime hook.
+
+## Shared support routing
+
+Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.
+
+The route generator also reads the three selected compatible shared-context metadata files. Copy/fill retain their existing accepted implementations and do not add catalog entries.

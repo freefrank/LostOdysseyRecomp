@@ -2888,14 +2888,19 @@
   },
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
-    "routed_units": 64,
-    "routed_distinct_entries": 511,
+    "routed_units": 67,
+    "routed_distinct_entries": 540,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
     "fixture": "tests/battle_semantic_runtime61_smoke.cpp",
     "library_validated": true,
     "runtime_gameplay_validated": false,
-    "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged."
+    "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
+    "routed_battle_units": 64,
+    "routed_battle_entries": 511,
+    "shared_context_entries": 27,
+    "accepted_copy_fill_entries": 2,
+    "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending."
   }
 }
