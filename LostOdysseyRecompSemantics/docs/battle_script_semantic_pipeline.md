@@ -711,3 +711,7 @@ Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicat
 ## Periodic battle effects
 
 Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed.
+
+## Battle settlement rewards
+
+Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only.

@@ -72,6 +72,7 @@
 #include "lo_semantics/battle_script_status61.h"
 #include "lo_semantics/battle_script_targets61.h"
 #include "lo_semantics/battle_script_text61.h"
+#include "lo_semantics/battle_settlement61.h"
 #include "lo_semantics/manager_release_context61.h"
 #include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/string_conversion_context61.h"
@@ -122,6 +123,7 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82ab06a0u:
   case 0x82ab0738u:
   case 0x82ab0958u:
+  case 0x82ab0a60u:
   case 0x82ac9768u:
   case 0x82ac9a28u:
     return battle_action_readiness61::Apply(entry, memory, dependencies, state);
@@ -796,6 +798,13 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82a9f1c0u:
   case 0x82a9f718u:
     return battle_script_text61::Apply(entry, memory, dependencies, state);
+  case 0x82ac0068u:
+  case 0x82ac1ce0u:
+  case 0x82ac1dc8u:
+  case 0x82ac1fa0u:
+  case 0x82ac22f8u:
+  case 0x82ac31b0u:
+    return battle_settlement61::Apply(entry, memory, dependencies, state);
   case 0x82388b58u:
   case 0x823f3340u:
   case 0x82bdb260u:

@@ -6,6 +6,7 @@ endif()
 
 # This target does not need the private XEX, generated PPC, a renderer, or SDKs.
 add_library(LostOdysseyRecompSemantics STATIC
+    src/battle_settlement61.cpp
     src/battle_periodic_effects61.cpp
     src/battle_phase_support61.cpp
     src/query.cpp
