@@ -322,6 +322,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_action_readiness61.cpp
     src/battle_action_parameters61.cpp
     src/battle_action_adjustments61.cpp
+    src/battle_action_finalize61.cpp
     src/battle_action_storage61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp

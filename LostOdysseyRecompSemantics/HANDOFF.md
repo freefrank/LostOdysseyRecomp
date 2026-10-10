@@ -1,3 +1,7 @@
+## Root direct continuation: final action parameters (2026-10-10 UTC)
+
+Recovered final action parameter application, including merging, property scaling, global/script overrides and final resource flags. The focused fixture preserves the source explicit 600/15000 arithmetic without assigning gameplay meaning. Top-level effect-chain composition is next; native gameplay and bitwise equivalence remain unvalidated.
+
 ## Root direct continuation: battle action adjustments (2026-10-10 UTC)
 
 Recovered action parameter percentage adjustments and composed them into multi-kind setup. Focused fixtures now exercise actual normalized fields, live-resource transitions, property-based reductions/boosts and zero-rate scaling. Linked-resource removal and virtual behavior remain external services; top-level action-effect integration is pending.

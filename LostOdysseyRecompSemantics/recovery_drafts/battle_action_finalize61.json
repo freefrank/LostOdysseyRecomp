@@ -1,0 +1,32 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Final action parameter merge, property scaling and resource/actor overrides.",
+  "entries": [
+    {
+      "address": "82ACDE40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 18529,
+      "instruction_count": 190,
+      "body_sha256": "215dde64030c25fb48a0a2813f91cd1c9d1d3a06bd248c086ad64731c87121da",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82ACDE40"
+    ],
+    "header": "include/lo_semantics/battle_action_finalize61.h",
+    "source": "src/battle_action_finalize61.cpp",
+    "smoke": "tests/battle_action_finalize61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused fixture checks initial copy versus preservation/reset, both merge orderings and nonzero remainder rule, alternate bypass, raw property-scaling word arithmetic, global mode 242, script ordering, actor overrides and final state bits. Runtime lookup, property helpers and mask indexing are composed. Top-level effect composition is pending; unusual scaling arithmetic is preserved literally, not interpreted as a gameplay formula. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
