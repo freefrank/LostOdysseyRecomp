@@ -1,0 +1,41 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Action parameter setup using resource numeric state, properties and shared random cursors.",
+  "entries": [
+    {
+      "address": "82B21340",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 12547,
+      "instruction_count": 68,
+      "body_sha256": "12fc4ad3fd8fe4aaf67f3d3e5ef66a4cda6651d9b08129237f92f90dd26055ea",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1F798",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 8353,
+      "instruction_count": 35,
+      "body_sha256": "c10ce71e7ee4b406ae28daa87889f0745802368c00aa16af01391142d386fda6",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B21340",
+      "82B1F798"
+    ],
+    "header": "include/lo_semantics/battle_action_parameters61.h",
+    "source": "src/battle_action_parameters61.cpp",
+    "smoke": "tests/battle_action_parameters61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture checks normal and alternate variants, truncating numeric input, doubled/clamped and halved/clamped property paths, kind-4 versus kind-5 setup, real random cursor selection and manager field writes. Recovered readiness, random-range and snapshot setter helpers are composed. Top-level effect dispatcher composition is pending; native meaning and gameplay are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

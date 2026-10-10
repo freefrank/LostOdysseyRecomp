@@ -205,3 +205,7 @@ Recovered resource property lookup and action-unavailability predicates, includi
 ## Composed action readiness
 
 Execution now calls the recovered readiness predicates. Four execution/opcode fixtures pass after replacing predicate mocks with actual resource flags, and marshaling failure checks now inspect the real actor busy count. Property lookup in target pickers remains a separate pending composition step. Logical validation only; native gameplay is unvalidated.
+
+## Action parameters
+
+Two concrete action parameter handlers now compose recovered resource properties, random-range selection and manager field updates. A compact fixture covers their normal/alternate and property-dependent branches. The field meanings remain neutral rather than inferred gameplay labels; effect-dispatcher integration is next.
