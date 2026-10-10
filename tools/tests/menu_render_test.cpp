@@ -373,6 +373,7 @@ int main(int argc, char **argv)
         };
         Require(differs(386, 110, 1026, 142), "Mods page title does not replace the tabs");
         Require(differs(400, 50, 1260, 84), "Mods page key legend is missing");
+        Require(!differs(1262, 50, 1280, 84), "Mods page key legend runs past its box");
         Require(differs(394, 150, 780, 191), "mod detail text is missing");
         Require(differs(settings::ModsMoveLeft, 150, settings::ModsMoveLeft + 2 * settings::ModsMoveWidth + settings::ModsMoveGap, 191),
                 "move cells beside the focused mod are missing");

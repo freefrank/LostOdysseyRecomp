@@ -480,8 +480,11 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 #ifdef LO_MENU_RENDER_TRACE
                 LoMenuRenderTrace(value, true);
 #endif
+                // Measure spaces the way they are drawn below, or right-aligned
+                // and centered text with spaces runs past its box.
                 double advance = 0;
-                for (const auto c : value) advance += int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
+                for (const auto c : value)
+                    advance += c == L' ' ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
                 const double desired = size >= 32 ? size * 1.25 : size * 1.30;
                 const double ratio = std::min({desired / font.height, double(h) / font.height, std::max(1.0, double(w - 8)) / std::max(1.0, advance)});
                 double left = x;
