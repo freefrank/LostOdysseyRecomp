@@ -1,3 +1,4 @@
+#include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/battle_action_destruction61.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_action_destruction61 {
@@ -96,7 +97,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       m.WriteU32(sp + 164, end);
       s.r[3] = end;
       s.ctr = callback;
-      if (!battle_action_destruction61::Apply(callback & ~3u, m, d, s))
+      if (!string_storage_context61::Apply(callback & ~3u, m, d, s) &&
+          !battle_action_destruction61::Apply(callback & ~3u, m, d, s))
         d.guest.CallIndirect(callback & ~3u, m, s);
     }
     m.WriteU32(sp + 80, 1);

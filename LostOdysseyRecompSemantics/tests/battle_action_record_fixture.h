@@ -19,8 +19,8 @@ inline void InitializeActionRecordFixture(lo::semantic::gpu::GuestMemory &m,
   m.WriteU32(resource + 14660, index + 1);
 }
 
-// Narrow synthetic boundaries only: empty strings, heap service, memset and
-// string destruction. Growth and nested record defaults execute recovered code.
+// Narrow synthetic boundaries only: heap service and memset. Growth and nested
+// record defaults execute recovered code.
 inline void SetupActionStorageFixture(lo::semantic::gpu::GuestMemory &m) {
   m.WriteU32(0x8330b608, 0x78000);
   m.WriteU32(0x78000, 0x78100);
@@ -37,19 +37,10 @@ inline bool ActionStorageDirectFixture(
       m.WriteU8(p + i, unsigned(s.r[4]));
     return true;
   }
-  if (e == 0x822d02f8) {
-    for (unsigned i = 0; i < 12; i += 4)
-      m.WriteU32(p + i, 0);
-    return true;
-  }
-  if (e == 0x82298938)
-    return true;
   return false;
 }
 inline bool ActionStorageIndirectFixture(
     unsigned e, lo::semantic::gpu::manager_release_context61::Registers &s) {
-  if (e == 0x82298938)
-    return true;
   if (e != 0x123400)
     return false;
   s.r[3] = s.r[5] ? 0x100000 : 0;

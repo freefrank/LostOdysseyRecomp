@@ -63,6 +63,7 @@ int main() {
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x8330b000, 0x1000});
+    regions.push_back({0x821a8000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();

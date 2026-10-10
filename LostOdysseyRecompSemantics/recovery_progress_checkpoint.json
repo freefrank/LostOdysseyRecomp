@@ -2234,7 +2234,8 @@
           "82A9B698"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One focused fixture checks capacity growth, append without reallocation, both record arrays, 512 string constructor/destructor calls per record, nested default fields, reset destruction order and register preservation. Allocator, string construction, destruction and memory services are fixture boundaries. Recovered action storage is now composed into record creation and the reset-effect wrapper. Six caller fixtures pass through real growth, zeroing and nested record initialization instead of the former synthetic initializer. Narrow allocator, empty-string and record-destructor services remain fixture boundaries. Native gameplay and bitwise floating-point acceptance remain unvalidated. Native gameplay is unvalidated. Logical/ABI only"
+        "validation": "One focused fixture checks capacity growth, append without reallocation, both record arrays, 512 string constructor/destructor calls per record, nested default fields, reset destruction order and register preservation. Allocator, string construction, destruction and memory services are fixture boundaries. Recovered action storage is now composed into record creation and the reset-effect wrapper. Six caller fixtures pass through real growth, zeroing and nested record initialization instead of the former synthetic initializer. Narrow allocator, empty-string and record-destructor services remain fixture boundaries. Native gameplay and bitwise floating-point acceptance remain unvalidated. Native gameplay is unvalidated. Logical/ABI only",
+        "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
       },
       {
         "unit": "battle_action_destruction61",
@@ -2245,7 +2246,8 @@
           "82B7AFA8"
         ],
         "focused_smoke_paths": 1,
-        "validation": "One focused fixture checks both 32-slot record sections, sixteen reverse-order string callbacks per slot, generic reverse and empty loops, cleanup routing and nonvolatile preservation. Storage reset composes these implementations, and storage plus execution caller fixtures pass. String destruction and exceptional cleanup continuation 82B7AE18 remain service boundaries. Native runtime and unwinding are unvalidated. Logical/ABI only"
+        "validation": "One focused fixture checks both 32-slot record sections, sixteen reverse-order string callbacks per slot, generic reverse and empty loops, cleanup routing and nonvolatile preservation. Storage reset composes these implementations, and storage plus execution caller fixtures pass. String destruction and exceptional cleanup continuation 82B7AE18 remain service boundaries. Native runtime and unwinding are unvalidated. Logical/ABI only",
+        "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
       },
       {
         "unit": "string_storage_context61",
@@ -2255,7 +2257,8 @@
           "82298A98"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A focused fixture checks empty and nonempty construction, local and heap conversion temporaries, UTF-16 copy extent, reset/release, zero-capacity owned storage and preserved nonvolatile registers. Existing ResizeArray, ResetTwoByteArray, ReleaseTwoByteArray and manager release implementations are reused. Byte-to-UTF16 conversion 823227C8 and copy/allocator services remain boundaries; caller composition is pending. Logical/ABI only"
+        "validation": "A focused fixture checks empty and nonempty construction, local and heap conversion temporaries, UTF-16 copy extent, reset/release, zero-capacity owned storage and preserved nonvolatile registers. Existing ResizeArray, ResetTwoByteArray, ReleaseTwoByteArray and manager release implementations are reused. Byte-to-UTF16 conversion 823227C8 and copy/allocator services remain boundaries; caller composition is pending. Logical/ABI only",
+        "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
       }
     ]
   },

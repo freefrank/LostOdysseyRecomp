@@ -165,3 +165,7 @@ Action record destruction now follows both 32-slot sections and their 16-string 
 ## String storage adapters
 
 String storage now has full-register logical adapters for construction, reset and release, reusing the accepted array and manager implementations. A compact fixture exercises empty/nonempty strings and local/heap conversion buffers. The conversion helper and allocator remain service boundaries, and action-chain composition is next. This is not native runtime or bitwise equivalence validation.
+
+## Composed string lifetime
+
+Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.

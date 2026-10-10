@@ -15,7 +15,12 @@ struct DestructionGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
-    if (e != 0x82298938 && e != 0x2220)
+    if (e == 0x3330) {
+      calls.push_back(unsigned(s.r[4]));
+      s.r[3] = 0;
+      return;
+    }
+    if (e != 0x2220)
       throw std::runtime_error("destructor callback");
     calls.push_back(unsigned(s.r[3]));
   }
@@ -23,7 +28,10 @@ struct DestructionGuest final : manager_release_context61::GuestServices {
 int main() {
   try {
     using namespace cook_main_smoke;
-    test::GuestWindow w(cook_main_smoke::Regions);
+    std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
+                                      cook_main_smoke::Regions.end());
+    regions.push_back({0x8330b000, 0x1000});
+    test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
     DestructionGuest g;
@@ -32,6 +40,15 @@ int main() {
       if (!b)
         throw std::runtime_error("destruction state");
     };
+    m.WriteU32(0x8330b608, 0x70000);
+    m.WriteU32(0x70000, 0x71000);
+    m.WriteU32(0x7100c, 0x3330);
+    for (unsigned section : {14884u, 36u})
+      for (unsigned slot = 0; slot < 32; ++slot)
+        for (unsigned text = 0; text < 16; ++text) {
+          auto p = 0x100000 + section + 464 * slot + 272 + 12 * text;
+          m.WriteU32(p, p);
+        }
     s.r[3] = 0x100000;
     check(battle_action_destruction61::Apply(0x828ae428, m, {g, native}, s));
     check(g.calls.size() == 1024);

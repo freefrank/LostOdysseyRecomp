@@ -1,3 +1,4 @@
+#include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/battle_action_destruction61.h"
 #include "lo_semantics/battle_action_storage61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -14,7 +15,8 @@ struct Runtime {
   unsigned owner;
   unsigned W(unsigned p) { return m.ReadU32(p); }
   void Call(unsigned e) {
-    if (!battle_action_storage61::Apply(e, m, d, s) &&
+    if (!string_storage_context61::Apply(e, m, d, s) &&
+        !battle_action_storage61::Apply(e, m, d, s) &&
         !battle_action_destruction61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }

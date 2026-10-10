@@ -54,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One focused fixture checks both 32-slot record sections, sixteen reverse-order string callbacks per slot, generic reverse and empty loops, cleanup routing and nonvolatile preservation. Storage reset composes these implementations, and storage plus execution caller fixtures pass. String destruction and exceptional cleanup continuation 82B7AE18 remain service boundaries. Native runtime and unwinding are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "One focused fixture checks both 32-slot record sections, sixteen reverse-order string callbacks per slot, generic reverse and empty loops, cleanup routing and nonvolatile preservation. Storage reset composes these implementations, and storage plus execution caller fixtures pass. String destruction and exceptional cleanup continuation 82B7AE18 remain service boundaries. Native runtime and unwinding are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries."
   }
 }
