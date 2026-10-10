@@ -42,10 +42,6 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
       ++reset;
       return;
     }
-    if (e == 0x82ac9a28) {
-      s.r[3] = 0;
-      return;
-    }
     if (e == 0x82acde40) {
       if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 0 ||
           m.ReadU32(0x62000 + 92) != 9)

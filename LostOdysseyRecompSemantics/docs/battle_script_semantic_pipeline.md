@@ -201,3 +201,7 @@ Recovered the shared battle random-range helper, preserving resource-group and c
 ## Action readiness
 
 Recovered resource property lookup and action-unavailability predicates, including the distinct standard and extended property sets. A compact synthetic fixture checks all predicate branches and the resource flag fallback. Execution and target-picker integration is next; no native status-name or gameplay inference is made.
+
+## Composed action readiness
+
+Execution now calls the recovered readiness predicates. Four execution/opcode fixtures pass after replacing predicate mocks with actual resource flags, and marshaling failure checks now inspect the real actor busy count. Property lookup in target pickers remains a separate pending composition step. Logical validation only; native gameplay is unvalidated.

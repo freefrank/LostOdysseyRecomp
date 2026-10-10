@@ -1,3 +1,7 @@
+## Root direct continuation: compose action readiness (2026-10-10 UTC)
+
+Execution now calls the recovered readiness predicates. Four execution/opcode fixtures pass after replacing predicate mocks with actual resource flags, and marshaling failure checks now inspect the real actor busy count. Property lookup in target pickers remains a separate pending composition step. Logical validation only; native gameplay is unvalidated.
+
 ## Root direct continuation: battle action readiness (2026-10-10 UTC)
 
 Recovered resource property lookup and action-unavailability predicates, including the distinct standard and extended property sets. A compact synthetic fixture checks all predicate branches and the resource flag fallback. Execution and target-picker integration is next; no native status-name or gameplay inference is made.

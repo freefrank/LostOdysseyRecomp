@@ -33,10 +33,6 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x80000;
       return;
     }
-    if (e == 0x82ac9a28) {
-      s.r[3] = 0;
-      return;
-    }
     if (e == 0x82acde40) {
       if (s.r[4] != 0x80000 || m.ReadU32(0x62000 + 88) != 11)
         throw std::runtime_error("item configuration ABI");
@@ -69,6 +65,7 @@ int main() {
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x8330b000, 0x1000});
     regions.push_back({0x821a8000, 0x1000});
+    regions.push_back({0x83213000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();

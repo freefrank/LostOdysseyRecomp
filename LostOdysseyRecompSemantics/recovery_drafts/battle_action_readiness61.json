@@ -54,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One compact fixture checks all nine unavailable-property paths, standard versus extended modes, resource flag fallback, property upper bound 262 and nonvolatile preservation. Uses synthetic property tables; execution and target-picker composition is pending. Native status meanings and gameplay are not asserted. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "One compact fixture checks all nine unavailable-property paths, standard versus extended modes, resource flag fallback, property upper bound 262 and nonvolatile preservation. Uses synthetic property tables; execution and target-picker composition is pending. Native status meanings and gameplay are not asserted. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "composition_update": "Execution now calls the recovered readiness predicates. Four execution/opcode fixtures pass after replacing predicate mocks with actual resource flags, and marshaling failure checks now inspect the real actor busy count. Property lookup in target pickers remains a separate pending composition step. Logical validation only; native gameplay is unvalidated."
   }
 }

@@ -5,8 +5,8 @@
 #include <iostream>
 #include "battle_action_record_fixture.h"
 struct MarshalGuest final : manager_release_context61::GuestServices {
-  unsigned prepared = 0, executed = 0, picker = 0, ok = 1, kind = 0, detail = 0,
-           labels = 0, flags = 0;
+  unsigned prepared = 0, picker = 0, ok = 1, kind = 0, detail = 0, labels = 0,
+           flags = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
@@ -60,11 +60,6 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = 0x80000;
-      return;
-    }
-    if (e == 0x82ac9a28) {
-      ++executed;
-      s.r[3] = 0;
       return;
     }
     if (e == 0x82acde40)
@@ -194,13 +189,13 @@ int main() {
     op(0x82b00d08);
     check(guest.picker == 0x82aff4e8 && guest.kind == 6);
     guest.ok = 0;
-    auto executions = guest.executed;
+    auto executions = m.ReadU32(actor + 96);
     m.WriteU32(vars, 2);
     op(0x82b00d08);
-    check(m.ReadU32(vars + 4) == 1 && guest.executed == executions);
+    check(m.ReadU32(vars + 4) == 1 && m.ReadU32(actor + 96) == executions);
     m.WriteU32(actor + 4, 0);
     op(0x82b00d08);
-    check(!m.ReadU32(vars + 4) && guest.executed == executions);
+    check(!m.ReadU32(vars + 4) && m.ReadU32(actor + 96) == executions);
     m.WriteU32(actor + 4, 0x80000);
     m.WriteU32(0x80000 + 64, 24);
     m.WriteU32(actor + 80, 0x66000);

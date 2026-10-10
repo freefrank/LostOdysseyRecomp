@@ -5,7 +5,7 @@
 #include "battle_action_record_fixture.h"
 #include <iostream>
 struct ExecutionGuest final : manager_release_context61::GuestServices {
-  unsigned predicate = 0, configured = 0, finalized = 0;
+  unsigned configured = 0, finalized = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (ActionStorageDirectFixture(e, m, s))
@@ -24,10 +24,6 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = s.r[4] == 24 ? 0x80000 : s.r[4] == 25 ? 0x90000 : 0xa0000;
-      return;
-    }
-    if (e == 0x82ac9a28) {
-      s.r[3] = predicate;
       return;
     }
 
@@ -118,7 +114,7 @@ int main() {
           m.ReadU32(record + 16) == 2 && m.ReadU32(actor + 88) == 7);
     m.WriteU32(actor + 300, 0);
     m.WriteU32(actor + 96, 0);
-    guest.predicate = 1;
+    m.WriteU32(resource + 124, m.ReadU32(resource + 124) | 0x10000);
     run(0x82b00698, 7, 8);
     check(m.ReadU32(record) == 0 && m.ReadU32(record + 14884) == 24 &&
           m.ReadU32(record + 16) == 1);
@@ -129,7 +125,7 @@ int main() {
           m.ReadU32(resource + 14672) == 1 &&
           m.ReadU32(0x200000 + 14884) == 24 &&
           m.ReadU32(resource + 156) == 0xfffffffe);
-    guest.predicate = 0;
+    m.WriteU32(resource + 124, m.ReadU32(resource + 124) & ~0x10000u);
     m.WriteU32(actor + 96, 0);
     m.WriteU32(actor + 64, 0x01000000);
     m.WriteU32(resource + 60, 0);
