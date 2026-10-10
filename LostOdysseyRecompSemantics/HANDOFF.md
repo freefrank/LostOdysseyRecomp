@@ -1,3 +1,7 @@
+## Root direct continuation: cloth cooking storage (2026-10-10 UTC)
+
+Started the adjacent NXS/CLTH cloth-cooking chain with concrete storage ownership: ten vector descriptors, nested mesh release, capacity-retaining clear, full destruction and a 32-bucket workspace. A focused lifecycle sample releases all tracked storage. Cloth serialization, topology and the cooking main entry are still pending; this does not claim simulation or gameplay support.
+
 ## Root direct continuation: triangle runtime views (2026-10-10 UTC)
 
 Triangle runtime views now expose channel count/format/stride metadata, optional auxiliary records and borrowed mass cache export. The three full-cook samples validate channel metadata and exported mass words after reload. Optional auxiliary data and absent-cache behavior remain source-reviewed; no defensive fallback or new runtime promise was introduced.

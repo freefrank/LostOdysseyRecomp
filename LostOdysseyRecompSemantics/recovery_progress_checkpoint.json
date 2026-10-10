@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 140,
-    "distinct_entries": 441,
+    "unit_count": 141,
+    "distinct_entries": 447,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1464,6 +1464,19 @@
         ],
         "focused_smoke_paths": 3,
         "validation": "The three complete triangle-cook fixtures also verify channel counts, formats, strides and 13-word mass cache export after concrete reload. Optional auxiliary bounds/range views and missing-cache guest access are source-reviewed only. Logical/ABI only"
+      },
+      {
+        "unit": "cloth_storage61",
+        "entries": [
+          "82B9CDD8",
+          "82BA7F10",
+          "82BA7F90",
+          "82BA8018",
+          "82BA8108",
+          "82BA8858"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "One focused fixture covers constructor fields, retaining ten vector capacities while clearing content and deleting nested meshes, final full vector destruction, workspace configuration, all 32 bucket frees and zero tracked allocations. No full cloth cooker or game runtime acceptance. Logical/ABI only"
       }
     ]
   },
