@@ -543,3 +543,7 @@ Recovered formation placement: side/class roster counting, matching formation ro
 ## Roster persistence
 
 Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance.
+
+## Profile restore and resource baseline
+
+Recovered profile-to-resource restore ABFC50 with actual seven-span copy and passive-state reset, plus ABFE38 baseline counters/level limits and ABFE90 active-state/group flag reset. Focused roster fixture now checks save/restore data, the deliberate passive reset, 32 initial limits and all group-dependent mask cases. Library and focused logic checks pass; no gameplay/full ABI acceptance is claimed.

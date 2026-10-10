@@ -8,6 +8,32 @@
 namespace lo::semantic::gpu::battle_resource_growth61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82abfe38) {
+    auto resource = Address(s.r[4]);
+    m.WriteU32(resource + 4940, 3);
+    for (unsigned off :
+         {4944u, 4948u, 4952u, 5088u, 5092u, 180u, 5100u, 5096u, 4956u})
+      m.WriteU32(resource + off, 0);
+    for (unsigned i = 0; i < 32; ++i)
+      m.WriteU32(resource + 4960 + 4 * i, 99);
+    return true;
+  }
+  if (e == 0x82abfe90) {
+    auto resource = Address(s.r[4]),
+         flags = m.ReadU32(resource + 124) & ~0x07200000u,
+         group = m.ReadU32(resource + 68);
+    m.WriteU32(resource + 132, 1);
+    for (unsigned off : {196u, 204u, 212u, 216u, 96u, 88u, 92u})
+      m.WriteU32(resource + off, 0);
+    m.WriteU32(resource + 200, m.ReadU32(resource + 200) & 0x7fffffff);
+    m.WriteU32(resource + 208, m.ReadU32(resource + 208) & 0x3fffffff);
+    m.WriteU32(resource + 100, m.ReadU32(resource + 100) & 0x7fffffff);
+    m.WriteU32(resource + 124,
+               (group == 1 || group == 2 || group == 3 || group == 5)
+                   ? (flags | 0x100000)
+                   : (flags & ~0x100000u));
+    return true;
+  }
   if (e != 0x82ac0588 && e != 0x82ac25e8 && e != 0x82ac3820)
     return false;
   auto owner = Address(s.r[3]), resource = Address(s.r[4]),

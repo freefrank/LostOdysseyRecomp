@@ -2,6 +2,7 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_roster_persistence61.h"
+#include "lo_semantics/battle_resource_growth61.h"
 struct PersistGuest final : manager_release_context61::GuestServices {
   unsigned synchronized = 0;
   void CallDirect(GuestAddress, GuestMemory &,
@@ -111,6 +112,47 @@ int main() {
     for (unsigned j = 0; j < 12288; ++j)
       check(m.ReadU8(profile + 157512 + j) == ((j * 7 + 3) & 255),
             "shared profile ranges");
+    constexpr unsigned restored = 0x1a0000;
+    s.r[4] = profile + 124;
+    s.r[5] = restored;
+    call(0x82abfc50);
+    for (unsigned i = 0; i < 7; ++i)
+      for (unsigned j = 0; j < sizes[i]; ++j) {
+        unsigned offset = offsets[i] + j;
+        auto expected =
+            (offset >= 4876 && offset < 4880) ? 0u : ((i * 31 + j) & 255);
+        check(m.ReadU8(restored + offset) == expected,
+              "profile restore spans and passive reset");
+      }
+    check(m.ReadU32(restored + 140) == 11, "profile restore level");
+    s.r[3] = owner;
+    s.r[4] = restored;
+    check(battle_resource_growth61::Apply(0x82abfe38, m, {guest, native}, s),
+          "baseline entry");
+    check(m.ReadU32(restored + 4940) == 3 && m.ReadU32(restored + 5088) == 0 &&
+              m.ReadU32(restored + 5100) == 0,
+          "baseline fields");
+    for (unsigned i = 0; i < 32; ++i)
+      check(m.ReadU32(restored + 4960 + 4 * i) == 99, "baseline level limits");
+    for (unsigned group : {0u, 1u, 2u, 3u, 4u, 5u, 6u}) {
+      m.WriteU32(restored + 68, group);
+      m.WriteU32(restored + 124, 0xffffffff);
+      m.WriteU32(restored + 200, 0xffffffff);
+      m.WriteU32(restored + 208, 0xffffffff);
+      m.WriteU32(restored + 100, 0xffffffff);
+      s.r[4] = restored;
+      check(battle_resource_growth61::Apply(0x82abfe90, m, {guest, native}, s),
+            "active reset entry");
+      unsigned expected = (group == 1 || group == 2 || group == 3 || group == 5)
+                              ? 0xf8dfffffu
+                              : 0xf8cfffffu;
+      check(m.ReadU32(restored + 124) == expected &&
+                m.ReadU32(restored + 132) == 1 &&
+                m.ReadU32(restored + 200) == 0x7fffffff &&
+                m.ReadU32(restored + 208) == 0x3fffffff &&
+                m.ReadU32(restored + 100) == 0x7fffffff,
+            "active reset masks and group bit");
+    }
     m.WriteU32(profile + 157512, 0x12345678);
     m.WriteU32(state + 28, 0x18000);
     call(0x82af5400);

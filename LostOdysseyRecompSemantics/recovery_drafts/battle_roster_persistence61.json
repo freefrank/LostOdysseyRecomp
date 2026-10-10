@@ -41,6 +41,14 @@
       "instruction_count": 81,
       "body_sha256": "d7f36b6f99800728ec0e67f7229f560e9451471f24f10a4daf362ac224b4c28d",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ABFC50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 21886,
+      "instruction_count": 49,
+      "body_sha256": "1e76131dc08f07f43a6646619cc18b14d415a8299ee08072dc3f3d946b970ad2",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -49,7 +57,8 @@
       "82AF5400",
       "82AF56A8",
       "82AF57D8",
-      "82AF5810"
+      "82AF5810",
+      "82ABFC50"
     ],
     "header": "include/lo_semantics/battle_roster_persistence61.h",
     "source": "src/battle_roster_persistence61.cpp",
@@ -63,6 +72,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance."
+    "case_scope": "Recovered roster persistence and group availability: refresh party resources through their virtual update, copy seven actual state spans back to profile rows, preserve inverse class flag, persist shared group ranges subject to script-mode suppression, and rebuild availability tiers with source short-circuit rules. Focused synthetic checks pass all copy spans, party filtering, count tiers and suppression. Uses accepted copy semantics without new raw data. Logical ABI coverage only, not gameplay or full ABI acceptance.",
+    "resource_restore": "Recovered profile-to-resource restore ABFC50 with actual seven-span copy and passive-state reset, plus ABFE38 baseline counters/level limits and ABFE90 active-state/group flag reset. Focused roster fixture now checks save/restore data, the deliberate passive reset, 32 initial limits and all group-dependent mask cases. Library and focused logic checks pass; no gameplay/full ABI acceptance is claimed."
   }
 }

@@ -15,6 +15,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   switch (e) {
   case 0x82af52f0:
     break;
+  case 0x82abfc50:
   case 0x82af5400:
     frame = 112;
     first = 30;
@@ -51,7 +52,24 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
     return Address(s.r[3]);
   };
-  if (e == 0x82af52f0) {
+  if (e == 0x82abfc50) {
+    auto row = Address(s.r[4]), resource = Address(s.r[5]);
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    m.WriteU32(resource + 136, m.ReadU32(row + 16));
+    m.WriteU32(resource + 144, m.ReadU32(row + 20));
+    m.WriteU32(resource + 140, m.ReadU32(row + 12));
+    copy(resource + 2468, row + 128, 60);
+    copy(resource + 2528, row + 188, 60);
+    copy(resource + 2588, row + 248, 2352);
+    m.WriteU32(resource + 4876, 0);
+    copy(resource + 5108, row + 2600, 48);
+    copy(resource + 5156, row + 2648, 5388);
+    copy(resource + 10544, row + 8036, 4096);
+    copy(resource + 232, row + 12132, 2176);
+  } else if (e == 0x82af52f0) {
     auto groups = m.ReadU32(m.ReadU32(owner + 48));
     auto group = m.ReadU32(groups + (((Address(s.r[4]) & 255) == 1) ? 4 : 0));
     m.WriteU32(group + 12676, 0);
