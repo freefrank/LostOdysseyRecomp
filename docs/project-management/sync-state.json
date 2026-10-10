@@ -3958,7 +3958,7 @@
         "Area": "User interface",
         "Status": "Done",
         "Delivery": "Released",
-        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded.",
+        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded. Update 2026-10-10: PR #347 (merged 2026-10-09T07:15:58Z as 1e532064, shipped in v0.9.22, not accepted) moves the menu like the retail menus: cursor slides and sways, rows fade in in turn. Release stays v0.8.61, the first release of the menu animation.",
         "Source key": "issue-151-animated-options-menu",
         "Release": "v0.8.61"
       }
@@ -3968,11 +3968,11 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Audio",
-        "Status": "Done",
+        "Status": "Awaiting validation",
         "Delivery": "Released",
-        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround (audio_output), applied live. The six channels pass through unmixed; fewer channels fall back to stereo with a log line and a help hint; 7.1 takes the 5.1 stream through SDL. PR #279 (merged 07:43:18Z, v0.8.53) names the Windows Sound control panel steps in that hint. Checked on psvita (Proton/WASAPI, null sinks): all six channels carry sound, the stereo fold matches within 0.1 dB, a 2-channel sink falls back, a 7.1 sink reopens. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1 in the classic Sound panel (log: 8 channels, 5.1 stream mapped; maintainer's report, before the release). Not tested: native Linux, macOS, Android, the commenter's 5.1 setup. Closed with the PR merge at 03:35:15Z. No reporter confirmation is recorded.",
+        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The maintainer asked for a new log if still stereo (2026-10-10T05:13:30Z). No reporter confirmation of v0.9.22; no game run with the v0.9.22 packages.",
         "Source key": "issue-174-surround-5-1-audio",
-        "Release": "v0.8.53"
+        "Release": "v0.9.22"
       }
     },
     "issue-198-rumble-intensity": {
@@ -4147,9 +4147,86 @@
         "Kind": "Feature",
         "Area": "Localization",
         "Status": "In Progress",
-        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research started the same day. Scope: language packs for modders. Export the game's text to editable files, import translated text back into the game, and add new languages selectable in Settings, first target Brazilian Portuguese, plus font glyph additions. Planned phases: research (text formats, archive read path, language selection, font glyph coverage), export, import, new language and font additions. No implementation, validation or reporter acceptance is recorded. Mods are supported on Windows only (PR #357).",
-        "Source key": "issue-369-more-language-options"
+        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research (PR #371) started the same day. Scope: language packs for modders: export the game's text to editable files, import translations, add languages selectable in Settings, and font glyph additions. Released as an experimental Windows path in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted): text export (PR #374), import (#378), Game language choice (#381), export and clean-for-sharing tool (#382), mod format v2 (#383) and a Mods page (#384). Not delivered: a Brazilian Portuguese language in the game (the maintainer's 2026-10-09 comment says modders can add one) and font glyph additions. The Issue stays open. No reporter confirmation and no game run with the v0.9.22 packages.",
+        "Source key": "issue-369-more-language-options",
+        "Delivery": "Released",
+        "Release": "v0.9.22"
       }
+    },
+    "issue-265-upscaled-cutscenes-sharp-text": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg6M",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Video playback",
+        "Status": "Todo",
+        "Delivery": "Research complete",
+        "Evidence": "Reopened (state OPEN, reason REOPENED; last update 2026-10-09T19:30:39Z). PR #345 (merged 2026-10-09T06:04:11Z as f72be6f9) adds docs/notes/hd-cutscene-replacement.zh-CN.md, a research note on HD and high-frame-rate CG replacement only. No game change for this Issue in v0.9.22 is recorded; the mod export of CG movies (PR #346) is a separate tool. Sharp text is not covered by the note. Not scheduled; no reporter confirmation is recorded.",
+        "Source key": "issue-265-upscaled-cutscenes-sharp-text"
+      }
+    },
+    "issue-323-vulkan-pipeline-build-crash": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg68",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Graphics backends",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Evidence": "Reported 2026-10-08: Vulkan crash while building the pipeline. PRs #334 (merged 2026-10-08T19:25:19Z as 6f34f9c4, skips the same-size swap chain rebuild at the first present) and #338 (merged 2026-10-08T21:56:15Z as 690e91b4, keeps ReShade's dxgi.dll out of Vulkan runs) both reference #323; the release notes credit the NVIDIA dxgi.dll crash. Shipped in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted). Closed as completed 2026-10-08T21:56:02Z after a reporter wrote 'It worked!' on a test build (21:08:48Z); that build is not v0.9.22. The crash log attached to the Issue was not read for this record. No game run with the v0.9.22 packages.",
+        "Source key": "issue-323-vulkan-pipeline-build-crash"
+      }
+    },
+    "issue-332-exclusive-fullscreen": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg7s",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics presentation",
+        "Status": "Done",
+        "Delivery": "Superseded",
+        "Release": "v0.9.22",
+        "Evidence": "Request: bring back Exclusive Fullscreen. The maintainer replied on 2026-10-08T19:28:11Z that it is not coming back; with DLSS, FSR or XeSS, a Render resolution above the screen supersamples, scaling the picture down to the window or screen without DSR. PR #335 (merged 2026-10-08T19:37:35Z as 3bbd944f, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) adds that. Closed as completed 2026-10-08T19:37:36Z. The exclusive mode itself is not restored, so Delivery is Superseded. The reporter said they would test the next update (2026-10-08T19:33:39Z); no confirmation of v0.9.22 and no game run is recorded.",
+        "Source key": "issue-332-exclusive-fullscreen"
+      }
+    },
+    "issue-339-main-menu-settings": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg84",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Settings",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Evidence": "Request: change settings from the main menu, or at least install content. The Issue was closed as completed on 2026-10-08T21:55:30Z, before the change below; the maintainer's reply was to import all discs from the beginning, or open a new game and import. PR #373 (merged 2026-10-10T00:27:21Z as 7d3c66a6, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) opens Settings from the title menu, the settings part of the request. Installing content from the main menu is not delivered. No reporter confirmation and no game run with v0.9.22 is recorded.",
+        "Source key": "issue-339-main-menu-settings"
+      }
+    },
+    "issue-342-npc-culling": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg-Q",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics quality",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Evidence": "Request: reduce culling of NPCs and decorations in general and when zoom is active. PR #348 (merged 2026-10-09T07:23:10Z as c41a1ee6, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) adds Settings > Graphics > Culling, 0% to 200%: 100% is the original; lower values keep characters and objects at the screen edges visible until they are fully off screen, higher values hide them sooner. Closed as completed 2026-10-09T22:54:42Z. No reporter confirmation and no game run with the v0.9.22 packages is recorded; the zoom case was not separately checked here.",
+        "Source key": "issue-342-npc-culling"
+      }
+    },
+    "release-v0-9-22": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_zg-w",
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": "2026-10-10",
+        "Target date": "2026-10-10",
+        "Evidence": "Published v0.9.22 at 2026-10-10T05:10:10Z: latest release, not prerelease, tag object a34cd171 peeled to d3888a0d (chore: release v0.9.22, PR #386). Assets: Windows ZIP 151,348,272 B (SHA-256 5717bad2...), Linux AppImage 77,339,128 B (2eac5de0...), Flatpak 54,949,400 B (f279d43c...), Android APK 46,057,478 B (53699b67...; CI-built) and macOS DMG 61,550,278 B (98a73e02...). Covers 46 first-parent commits, PRs #331 to #386: 5.1 WASAPI fix and Matrix surround (#174), supersampling (#332), #323 Vulkan fixes, Culling (#342), title-menu Settings (#339), language packs and Mods (#369). Published, not accepted: no game run with the v0.9.22 packages and no player acceptance recorded; Gitea run not read.",
+        "Source key": "release-v0-9-22"
+      },
+      "title": "Publish the 5.1 fix, Matrix surround, language packs and Mods in v0.9.22",
+      "body_sha256": "d319c8694e005f6c6825c384315e2f1ff0d742667630d3dd63b230d236729045"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
