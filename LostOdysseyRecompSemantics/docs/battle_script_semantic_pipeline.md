@@ -719,3 +719,7 @@ Recovered settlement reward aggregation, participant bonus collection, capped cu
 ## Settlement loot and level-up
 
 Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed.
+
+## Victory and skill settlement
+
+Recovered victory finalization AC6D88 and skill settlement AC6C60, AC6460 and AC6738. The phase machine now composes participant/reward/loot/progression/stat/skill settlement and roster persistence. Source behavior includes level-gated skill unlocks, inventory unlock flags, partner/equipment learning, duplicate-learning suppression and platform achievement boundaries. Focused composed checks cover SP bonus application, level skill unlock, linked skill completion, equipment progress, phase-13 bypass and empty-roster finalization. Normal populated end-to-end gameplay and platform achievement delivery are not acceptance-tested.

@@ -8,9 +8,15 @@
 #include "lo_semantics/recovery_abi.h"
 #include "battle_resource_growth_fixture.h"
 struct SettlementGuest final : manager_release_context61::GuestServices {
-  unsigned inventoryNotifications = 0;
+  unsigned inventoryNotifications = 0, achievementCalls = 0,
+           lastAchievement = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x828208f8) {
+      ++achievementCalls;
+      lastAchievement = unsigned(s.r[3]);
+      return;
+    }
     if (battle_semantic_runtime61::Apply(e, m, {*this, cook_main_smoke::native},
                                          s))
       return;
@@ -18,6 +24,8 @@ struct SettlementGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123428)
+      return;
     if (e == 0x123424) {
       ++inventoryNotifications;
       return;
@@ -162,6 +170,64 @@ int main() {
           get(owner + 668) == 80 && get(owner + 676) == 100);
     check(get(source + 2588) == get(source + 2592) - 20 &&
           get(source + 2616) == get(source + 2620) - 40);
+    m.WriteU32(0x93100 + 404, 0x123428);
+    m.WriteU32(owner + 92, 10);
+    m.WriteU8(owner + 660, 1);
+    put(source + 144, 0);
+    m.WriteU32(source + 152, 1);
+    m.WriteU32(0x130000 + 304, 0x150000);
+    m.WriteU32(0x130000 + 308, 1);
+    m.WriteU32(0x150000, 0);
+    m.WriteU32(0x150004, 7);
+    m.WriteU32(0x150008, 2);
+    m.WriteU32(0x15000c, 3);
+    m.WriteU32(0x150010, 4);
+    m.WriteU32(0x15001c, 1);
+    m.WriteU32(source + 16 * (7 + 330), 0);
+    m.WriteU32(source + 5156, 3);
+    for (unsigned i = 0; i < 3; ++i)
+      m.WriteU32(source + 5160 + 4 * i, 0);
+    run(0x82ac6c60);
+    check(get(source + 144) == 20 && m.ReadU32(owner + 92) == 20 &&
+          m.ReadU32(owner + 576) == 7 && m.ReadU32(source + 5160) == 7);
+    check((m.ReadU32(source + 16 * (7 + 330)) & 0x80000000u) &&
+          (m.ReadU32(0xe1000 + 72 + 4 * (3 + 2048)) & 0x80000000u));
+    m.WriteU32(source + 152, 0);
+    m.WriteU32(source + 9376, 1);
+    m.WriteU32(source + 9384, 1);
+    m.WriteU32(source + 9388, 8);
+    m.WriteU32(target + 68, 1);
+    m.WriteU32(source + 16 * (8 + 330), 0);
+    m.WriteU32(source + 16 * (8 + 330) + 4, 0);
+    m.WriteU32(0x120000 + 104 * 8 + 8, 10);
+    m.WriteU32(0x120000 + 104 * 8 + 12, 1);
+    m.WriteU32(0x120000 + 104 * 9 + 8, 50);
+    m.WriteU32(0x120000 + 104 * 9 + 12, 1);
+    m.WriteU32(0x180000 + 196 + 24, 9);
+    m.WriteU32(source + 5116, 1);
+    m.WriteU32(source + 16 * (9 + 330), 0);
+    m.WriteU32(source + 16 * (9 + 330) + 4, 0);
+    s.r[4] = source;
+    s.r[5] = owner + 576;
+    run(0x82ac6738);
+    check(m.ReadU32(owner + 576) == 8 &&
+          m.ReadU32(source + 16 * (8 + 330) + 4) == 10 &&
+          m.ReadU32(source + 16 * (9 + 330) + 4) == 20 &&
+          g.lastAchievement == 5);
+    m.WriteU32(0x832ca0e8 + 148, 0x8000);
+    run(0x82ac6d88);
+    check(m.ReadU32(0x832ca0e8 + 56) == 13);
+    m.WriteU32(0x832ca0e8 + 148, 0);
+    m.WriteU32(0x71004, 0);
+    for (unsigned i = 0; i < 32; ++i)
+      m.WriteU32(owner + 100 + 12 * i, 0);
+    for (unsigned i = 0; i < 5; ++i)
+      m.WriteU32(owner + 564 + 128 * i, 0);
+    for (unsigned i = 0; i < 10; ++i)
+      m.WriteU32(owner + 484 + 8 * i, 0);
+    run(0x82ac6d88);
+    check(m.ReadU8(0x832ca0e8 + 212) == 1 && m.ReadU32(owner + 88) == 0 &&
+          m.ReadU32(owner + 92) == 0);
     std::puts("settlement rewards, participants and progression smoke passed");
     return 0;
   } catch (const std::exception &e) {

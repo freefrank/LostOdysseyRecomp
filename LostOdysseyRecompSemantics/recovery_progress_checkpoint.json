@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 241,
-    "distinct_entries": 1198,
+    "distinct_entries": 1202,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -3061,11 +3061,16 @@
           "82AC1FA0",
           "82AC2140",
           "82AC20B0",
-          "82AC32C0"
+          "82AC32C0",
+          "82AC6D88",
+          "82AC6C60",
+          "82AC6460",
+          "82AC6738"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only.",
-        "settlement_loot_levelup": "Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed."
+        "settlement_loot_levelup": "Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed.",
+        "victory_skill_settlement": "Recovered victory finalization AC6D88 and skill settlement AC6C60, AC6460 and AC6738. The phase machine now composes participant/reward/loot/progression/stat/skill settlement and roster persistence. Source behavior includes level-gated skill unlocks, inventory unlock flags, partner/equipment learning, duplicate-learning suppression and platform achievement boundaries. Focused composed checks cover SP bonus application, level skill unlock, linked skill completion, equipment progress, phase-13 bypass and empty-roster finalization. Normal populated end-to-end gameplay and platform achievement delivery are not acceptance-tested."
       }
     ],
     "evaluator_descriptor_coverage": {
@@ -3151,7 +3156,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 77,
-    "routed_distinct_entries": 683,
+    "routed_distinct_entries": 687,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3160,7 +3165,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 74,
-    "routed_battle_entries": 654,
+    "routed_battle_entries": 658,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3209,6 +3214,7 @@
     "periodic_effect_prerequisites": "Recovered periodic-effect prerequisites AB06A0 and AB0738 paired-status predicates, plus B2BBA0 rounded HP/MP application. The latter shares result arithmetic with B2B9E0 but uses the source non-action damage flag and accepts only modes 0 through 7, leaving mode 8 inactive. Focused checks cover each status alternative, absence, rounded damage/healing, MP bounds, HP floor and unsupported mode. The encompassing periodic sweep ACB120 remains unclaimed.",
     "periodic_effects": "Recovered ACB120 periodic effect sweep: status countdown and linked expiry, growth/stat restoration, random status changes, petrification/death transitions, periodic HP damage, HP/MP regeneration, result snapshots, low-health flags, temporary-duration masks and both-side gauge maintenance. Guest constants and tables remain external. Focused composed checks cover expiring properties, damage followed by regeneration, action snapshots, duration 99 sentinel, preserved state and mode-zero gauge-only behavior. Random/status/death branches are source-derived but not exhaustively tested; no gameplay or bitwise floating-point acceptance claimed.",
     "settlement_rewards": "Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only.",
-    "settlement_loot_levelup": "Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed."
+    "settlement_loot_levelup": "Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed.",
+    "victory_skill_settlement": "Recovered victory finalization AC6D88 and skill settlement AC6C60, AC6460 and AC6738. The phase machine now composes participant/reward/loot/progression/stat/skill settlement and roster persistence. Source behavior includes level-gated skill unlocks, inventory unlock flags, partner/equipment learning, duplicate-learning suppression and platform achievement boundaries. Focused composed checks cover SP bonus application, level skill unlock, linked skill completion, equipment progress, phase-13 bypass and empty-roster finalization. Normal populated end-to-end gameplay and platform achievement delivery are not acceptance-tested."
   }
 }

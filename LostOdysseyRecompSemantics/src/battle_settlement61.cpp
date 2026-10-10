@@ -5,6 +5,9 @@
 #include "lo_semantics/battle_script_party61.h"
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_resource_stats61.h"
+#include "lo_semantics/battle_phase_support61.h"
+#include "lo_semantics/battle_roster_persistence61.h"
+#include "lo_semantics/battle_progression61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <limits>
@@ -13,6 +16,9 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_settlement61::Apply(e, m, d, s) &&
+      !battle_phase_support61::Apply(e, m, d, s) &&
+      !battle_roster_persistence61::Apply(e, m, d, s) &&
+      !battle_progression61::Apply(e, m, d, s) &&
       !battle_resource_growth61::Apply(e, m, d, s) &&
       !battle_resource_stats61::Apply(e, m, d, s) &&
       !battle_random_range61::Apply(e, m, d, s) &&
@@ -64,6 +70,23 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame, first, literal = 0;
   switch (e) {
+  case 0x82ac6d88:
+    frame = 96;
+    first = 31;
+    break;
+  case 0x82ac6c60:
+    frame = 160;
+    first = 26;
+    literal = 80;
+    break;
+  case 0x82ac6460:
+    frame = 144;
+    first = 26;
+    break;
+  case 0x82ac6738:
+    frame = 432;
+    first = 21;
+    break;
   case 0x82ac32c0:
     frame = 144;
     first = 27;
@@ -139,7 +162,193 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     }
   };
   auto F = [&](unsigned p) { return std::bit_cast<float>(W(p)); };
-  if (e == 0x82ac32c0) {
+  auto play = [&]() {
+    s.r[3] = W(0x83315fb4);
+    s.ctr = W(W(Address(s.r[3])) + 352);
+    d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+    Call(0x8229dfd8, m, d, s);
+    return Address(s.r[3]);
+  };
+  auto achievement = [](unsigned group) {
+    constexpr unsigned codes[] = {6, 7, 8, 9, 10, 11, 12, 14, 13, 13};
+    return codes[group];
+  };
+  if (e == 0x82ac6d88) {
+    manager();
+    auto battle = Address(s.r[3]);
+    if (W(battle + 148) & 0x8000u) {
+      manager();
+      s.r[4] = 13;
+      s.r[5] = 1;
+      Call(0x82aaa7c8, m, d, s);
+    } else {
+      s.r[3] = owner;
+      Call(0x82ac22f8, m, d, s);
+      s.r[3] = owner;
+      Call(0x82ac1ce0, m, d, s);
+      m.WriteU32(owner + 92, Address(s.r[3]));
+      s.r[3] = owner;
+      Call(0x82ac31b0, m, d, s);
+      m.WriteU32(owner + 88, Address(s.r[3]));
+      for (auto entry :
+           {0x82ac2140u, 0x82ac1dc8u, 0x82ac1fa0u, 0x82ac32c0u, 0x82ac6c60u}) {
+        s.r[3] = owner;
+        Call(entry, m, d, s);
+      }
+      manager();
+      Call(0x82af57d8, m, d, s);
+      manager();
+      m.WriteU8(Address(s.r[3]) + 212, 1);
+    }
+  } else if (e == 0x82ac6c60) {
+    for (unsigned i = 0; i < 5; ++i) {
+      auto slot = owner + 564 + 128 * i;
+      if (W(slot) && m.ReadU8(slot + 96) == 1) {
+        m.WriteU32(owner + 92, W(owner + 92) * 2);
+        break;
+      }
+    }
+    for (unsigned i = 0; i < 5; ++i) {
+      auto slot = owner + 576 + 128 * i, resource = W(slot - 12);
+      if (!resource || blocked(resource))
+        continue;
+      auto award = std::int32_t(W(owner + 92));
+      fp();
+      recovery_abi::WriteU64(m, sp + 88, std::uint64_t(std::int64_t(award)));
+      m.WriteU32(resource + 144, std::bit_cast<unsigned>(
+                                     float(float(award) + F(resource + 144))));
+      auto kind = W(resource + 152);
+      if (kind > 1)
+        continue;
+      s.r[3] = owner;
+      s.r[4] = resource;
+      s.r[5] = slot;
+      Call(kind == 1 ? 0x82ac6460 : 0x82ac6738, m, d, s);
+    }
+  } else if (e == 0x82ac6460) {
+    auto resource = Address(s.r[4]), output = Address(s.r[5]);
+    Call(0x82380a18, m, d, s);
+    Call(0x82ab0110, m, d, s);
+    auto inventory = W(W(Address(s.r[3])) + 4) + 72;
+    unsigned learned = 0;
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(W(W(0x832ca0d0) + 308));
+         ++i) {
+      auto row = W(W(0x832ca0d0) + 304) + 20 * i;
+      if (W(row) != W(resource + 68) ||
+          std::int32_t(W(row + 8)) > std::int32_t(W(resource + 140)))
+        continue;
+      if (learned >= 20)
+        break;
+      auto id = W(row + 4), flags = resource + 16 * (id + 330);
+      if (W(flags) & 0x80000000u)
+        continue;
+      m.WriteU32(output + 4 * learned++, id);
+      m.WriteU32(flags, W(flags) | 0x80000000u);
+      for (unsigned j = 0; std::int32_t(j) < std::int32_t(W(resource + 5156));
+           ++j)
+        if (!W(resource + 5160 + 4 * j)) {
+          m.WriteU32(resource + 5160 + 4 * j, id);
+          break;
+        }
+      m.WriteU32(sp + 80, W(row + 12));
+      m.WriteU32(sp + 84, W(row + 16));
+      for (unsigned j = 0; j < 2; ++j) {
+        auto item = W(sp + 80 + 4 * j), flag = inventory + 4 * (item + 2048);
+        if ((W(flag) & 0x80000000u) || !item)
+          continue;
+        for (unsigned k = 0; k < 512; ++k)
+          if (!W(inventory + 10240 + 4 * k)) {
+            m.WriteU32(inventory + 10240 + 4 * k, item);
+            break;
+          }
+        m.WriteU32(flag, W(flag) | 0x80000000u);
+      }
+      // The source checks the word at +28 of a 20-byte table row.
+      if (W(W(W(0x832ca0d0) + 304) + 20 * i + 28) == 0) {
+        auto group = W(resource + 68);
+        (void)play();
+        if (group <= 9) {
+          s.r[3] = owner;
+          s.r[4] = achievement(group);
+          Call(0x82ac3498, m, d, s);
+        }
+        break;
+      }
+    }
+  } else if (e == 0x82ac6738) {
+    auto resource = Address(s.r[4]), output = Address(s.r[5]), profile = play();
+    for (unsigned i = 0; i < 256; ++i)
+      m.WriteU8(sp + 80 + i, 0);
+    unsigned learned = 0;
+    auto notify = [&](unsigned code) {
+      auto p = play();
+      s.r[4] = code;
+      s.ctr = W(W(p) + 404);
+      d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
+      s.r[3] = code;
+      d.guest.CallDirect(0x828208f8, m, s);
+    };
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(W(resource + 9376));
+         ++i) {
+      auto row = resource + 9384 + 12 * i, group = W(row), id = W(row + 4),
+           shift = group & 63;
+      auto flag = shift < 32 ? 1u << shift : 0;
+      if (W(profile + 100) & flag)
+        break;
+      bool present = false;
+      for (unsigned j = 0; j < 5; ++j) {
+        auto peer = W(owner + 564 + 128 * j);
+        if (peer && W(peer + 68) == group) {
+          present = true;
+          break;
+        }
+      }
+      auto skill = resource + 16 * (id + 330),
+           definition = W(0x83264978 + 72) + 104 * id;
+      if (!present || (W(skill) & 0x80000000u))
+        continue;
+      auto points = W(skill + 4) + W(owner + 92);
+      m.WriteU32(skill + 4, points);
+      if (std::int32_t(W(definition + 8)) > std::int32_t(points))
+        continue;
+      m.WriteU32(skill + 4, W(definition + 8));
+      m.WriteU32(skill, W(skill) | 0x80000000u);
+      m.WriteU32(output + 4 * learned++, id);
+      m.WriteU8(sp + 80 + id, 1);
+      (void)play();
+      notify(5);
+    }
+    for (unsigned i = 0; i < 5; ++i) {
+      auto gear = W(resource + 5116 + 4 * i),
+           id = W(W(0x83264978) + 196 * gear + 24);
+      if (!id)
+        continue;
+      auto skill = resource + 16 * (id + 330),
+           definition = W(0x83264978 + 72) + 104 * id;
+      if ((W(skill) & 0x80000000u) || m.ReadU8(sp + 80 + id))
+        continue;
+      auto points = W(skill + 4) + W(owner + 92);
+      m.WriteU32(skill + 4, points);
+      if (std::int32_t(W(definition + 8)) > std::int32_t(points))
+        continue;
+      m.WriteU32(skill + 4, W(definition + 8));
+      m.WriteU32(skill, W(skill) | 0x80000000u);
+      m.WriteU32(output + 4 * learned++, id);
+    }
+    bool complete = true;
+    for (unsigned id = 0; id < 256; ++id)
+      if (W(W(0x83264978 + 72) + 104 * id + 12) &&
+          !(W(resource + 16 * (id + 330)) & 0x80000000u)) {
+        complete = false;
+        break;
+      }
+    if (complete) {
+      auto group = W(resource + 68);
+      (void)play();
+      if (group <= 9)
+        notify(achievement(group));
+    }
+  } else if (e == 0x82ac32c0) {
     Call(0x82380a18, m, d, s);
     Call(0x82ab0110, m, d, s);
     fp();
