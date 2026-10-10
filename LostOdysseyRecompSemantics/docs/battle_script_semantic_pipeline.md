@@ -445,3 +445,7 @@ Recovered active scene-object state lookup and removal, current-scene name match
 ## Scene task lifecycle
 
 Recovered tracked scene-task clear/reload orchestration and pointer-array append capacity growth. Script toggle handlers now compose actual task cleanup and profile-driven preset selection, including fallback names, two tracked task lists and descriptor state. Library and focused scene-task/runtime fixtures pass. Individual task factories/cancellation and folded name comparison remain service boundaries; this is script-flow recovery, not proof that an entire battle or game runs.
+
+## Task cancellation
+
+Recovered scene-task cancellation lookup, bulk row cleanup, paired membership lookup/removal and conditional task removal. Preset clear now executes these paths and real array compaction rather than mocking cancellation. Library and scene-task/runtime checks pass, including empty membership and clear-all release. Object destructors and final tracked-pointer removal remain lower service boundaries; no runtime acceptance is claimed.

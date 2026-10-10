@@ -27,16 +27,17 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = 21;
       return;
     }
-    if (e == 0x82b08410) {
-      if (s.r[4] != 8)
-        throw std::runtime_error("secondary cancellation");
+    if (e == 0x82b35568) {
+      if (s.r[3] != 0xa0000)
+        throw std::runtime_error("row destructor");
       ++removed;
       return;
     }
-    if (e == 0x82b1a2d0) {
-      if (s.r[4] != 21 || s.r[5] || s.r[6] != 12)
-        throw std::runtime_error("tracked cancellation");
+    if (e == 0x82388348) {
+      if (s.r[3] != 0x832cc0fc || s.r[4])
+        throw std::runtime_error("empty task removal");
       ++removed;
+      m.WriteU32(0x832cc0fc + 12, 0);
       return;
     }
     throw std::runtime_error("tasks direct");
@@ -139,9 +140,25 @@ int main() {
           m.ReadU32(0x832cc05c + 148) == row + 48);
     check(m.ReadU32(0x85000) == 11 && m.ReadU32(0x85004) == 41 &&
           m.ReadU32(0x86000) == 12 && m.ReadU32(0x86004) == 21);
+    m.WriteU32(0x832cb68c + 4, 0xa0000);
+    m.WriteU32(0x832cb68c + 8, 1);
+    m.WriteU32(0x832cb68c + 12, 1);
+    m.WriteU32(0xa0004, 8);
+    m.WriteU32(0x832cc0fc + 8, 0xa5000);
+    m.WriteU32(0x832cc0fc + 12, 1);
+    m.WriteU32(0xa5000, 0xa6000);
+    m.WriteU32(0xa6008, 21);
+    m.WriteU32(0xa6000 + 36, 0xa7000);
+    m.WriteU32(0xa6000 + 40, 1);
+    m.WriteU32(0xa6000 + 44, 1);
+    m.WriteU8(0xa7000, 0);
+    m.WriteU32(0xa6000 + 48, 0xa8000);
+    m.WriteU32(0xa6000 + 52, 1);
+    m.WriteU32(0xa6000 + 56, 1);
+    m.WriteU32(0xa8000, 12);
     m.WriteU32(0x832cb6f0, 9);
     run(0x82b035e0);
-    check(g.removed == 4 && g.freed == 2 && !m.ReadU32(0x832cc05c + 128) &&
+    check(g.removed == 4 && g.freed == 5 && !m.ReadU32(0x832cc05c + 128) &&
           !m.ReadU32(0x832cc05c + 140) && !m.ReadU32(0x832cc05c + 148));
     m.WriteU8(0x70000 + 133, 0);
     run(0x82b04c50);
@@ -150,6 +167,12 @@ int main() {
     m.WriteU32(0x88008, 2);
     check(run(0x82b1a560, 0x88000, 1) == 2 && m.ReadU32(0x88004) == 3 &&
           m.ReadU32(0x88008) == 36 && m.ReadU32(0x88000) == 0x90000);
+    // Clear-all uses the same destructor/array resize path.
+    m.WriteU32(0x832cb68c + 4, 0xa0000);
+    m.WriteU32(0x832cb68c + 8, 1);
+    m.WriteU32(0x832cb68c + 12, 1);
+    run(0x82b08410, 0x832cb68c, 0xffffffff);
+    check(g.removed == 5 && g.freed == 6 && !m.ReadU32(0x832cb68c + 8));
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

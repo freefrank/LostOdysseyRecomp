@@ -2,9 +2,130 @@
 #include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/recovery_abi.h"
+#include <utility>
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b35dd8) {
+    auto object = Address(s.r[3]);
+    auto tag = std::int8_t(Address(s.r[4]));
+    auto key = Address(s.r[5]), count = m.ReadU32(object + 40);
+    s.r[3] = std::uint64_t(-1);
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i)
+      if (std::int8_t(m.ReadU8(m.ReadU32(object + 36) + i)) == tag &&
+          m.ReadU32(m.ReadU32(object + 48) + 4 * i) == key) {
+        s.r[3] = i;
+        break;
+      }
+    return true;
+  }
+  if (e == 0x82b08410) {
+    auto owner = Address(s.r[3]), id = Address(s.r[4]);
+    if (std::int32_t(id) < 0) {
+      s.r[3] = owner + 4;
+      s.r[4] = 0;
+      return battle_scene_tasks61::Apply(0x82b080c0, m, d, s);
+    }
+    auto count = m.ReadU32(owner + 8);
+    if (std::int32_t(count) > 0) {
+      s.r[3] = owner + 4;
+      for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i)
+        if (m.ReadU32(m.ReadU32(owner + 4) + 18044 * i + 4) == id) {
+          s.r[4] = i;
+          s.r[5] = 1;
+          return battle_scene_tasks61::Apply(0x82b08058, m, d, s);
+        }
+    }
+    return true;
+  }
+  if (e == 0x82b08058 || e == 0x82b080c0 || e == 0x82b35e38 ||
+      e == 0x82b1a2d0) {
+    auto owner = Address(s.r[3]);
+    auto argument4 = s.r[4], argument5 = s.r[5], argument6 = s.r[6];
+    auto old = Address(s.r[1]);
+    unsigned frame = (e == 0x82b08058 || e == 0x82b080c0) ? 128 : 112,
+             first = (e == 0x82b08058 || e == 0x82b080c0) ? 27 : 30;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s) &&
+          !string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    if (e == 0x82b08058) {
+      auto index = Address(argument4), count = Address(argument5),
+           end = index + count;
+      if (std::int32_t(index) < std::int32_t(end))
+        for (unsigned i = 0; i < count; ++i) {
+          s.r[3] = m.ReadU32(owner) + 18044 * (index + i);
+          call(0x82b35568);
+        }
+      s.r[3] = owner;
+      s.r[4] = index;
+      s.r[5] = count;
+      s.r[6] = 18044;
+      s.r[7] = 8;
+      call(0x82298af8);
+    } else if (e == 0x82b080c0) {
+      for (unsigned i = 0; std::int32_t(i) < std::int32_t(m.ReadU32(owner + 4));
+           ++i) {
+        s.r[3] = m.ReadU32(owner) + 18044 * i;
+        call(0x82b35568);
+      }
+      auto capacity = m.ReadU32(owner + 8);
+      m.WriteU32(owner + 4, 0);
+      if (capacity != Address(argument4)) {
+        m.WriteU32(owner + 8, Address(argument4));
+        s.r[3] = owner;
+        s.r[4] = 18044;
+        s.r[5] = 8;
+        call(0x8229f678);
+      }
+    } else if (e == 0x82b35e38) {
+      call(0x82b35dd8);
+      auto index = Address(s.r[3]);
+      if (std::int32_t(index) >= 0)
+        for (auto pair : {std::pair{36u, 1u}, std::pair{48u, 4u}}) {
+          s.r[3] = owner + pair.first;
+          s.r[4] = index;
+          s.r[5] = 1;
+          s.r[6] = pair.second;
+          s.r[7] = 8;
+          call(0x82298af8);
+        }
+      s.r[3] = m.ReadU32(owner + 40) == 0;
+    } else {
+      auto count = m.ReadU32(owner + 12), data = m.ReadU32(owner + 8);
+      s.r[4] = argument5;
+      for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i) {
+        auto object = m.ReadU32(data + 4 * i);
+        if (m.ReadU32(object + 8) != Address(argument4))
+          continue;
+        bool remove = std::int8_t(Address(argument5)) < 0 ||
+                      std::int32_t(Address(argument6)) < 0;
+        if (!remove) {
+          s.r[3] = object;
+          s.r[5] = argument6;
+          call(0x82b35e38);
+          remove = (Address(s.r[3]) & 255) != 0;
+        }
+        if (remove) {
+          s.r[3] = owner;
+          s.r[4] = i;
+          call(0x82388348);
+        }
+        break;
+      }
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e != 0x82b035e0 && e != 0x82b04c50 && e != 0x82b1a560)
     return false;
   auto old = Address(s.r[1]), owner = Address(s.r[3]),
