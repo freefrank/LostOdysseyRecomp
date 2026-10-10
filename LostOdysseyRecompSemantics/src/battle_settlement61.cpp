@@ -1,6 +1,10 @@
 #include "lo_semantics/battle_settlement61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_manager_access61.h"
+#include "lo_semantics/battle_random_range61.h"
+#include "lo_semantics/battle_script_party61.h"
+#include "lo_semantics/battle_resource_growth61.h"
+#include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
 #include <limits>
@@ -8,7 +12,12 @@ namespace lo::semantic::gpu::battle_settlement61 {
 namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (!battle_action_readiness61::Apply(e, m, d, s) &&
+  if (!battle_settlement61::Apply(e, m, d, s) &&
+      !battle_resource_growth61::Apply(e, m, d, s) &&
+      !battle_resource_stats61::Apply(e, m, d, s) &&
+      !battle_random_range61::Apply(e, m, d, s) &&
+      !battle_script_party61::Apply(e, m, d, s) &&
+      !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_manager_access61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
@@ -55,6 +64,18 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame, first, literal = 0;
   switch (e) {
+  case 0x82ac32c0:
+    frame = 144;
+    first = 27;
+    break;
+  case 0x82ac2140:
+    frame = 160;
+    first = 24;
+    break;
+  case 0x82ac20b0:
+    frame = 144;
+    first = 26;
+    break;
   case 0x82ac31b0:
     frame = 160;
     first = 23;
@@ -87,6 +108,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     recovery_abi::WriteU64(m, old - 72, s.fpr_bits[30]);
     recovery_abi::WriteU64(m, old - 64, s.fpr_bits[31]);
   }
+  if (e == 0x82ac32c0) {
+    recovery_abi::WriteU64(m, old - 64, s.fpr_bits[30]);
+    recovery_abi::WriteU64(m, old - 56, s.fpr_bits[31]);
+  }
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -114,7 +139,124 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     }
   };
   auto F = [&](unsigned p) { return std::bit_cast<float>(W(p)); };
-  if (e == 0x82ac31b0) {
+  if (e == 0x82ac32c0) {
+    Call(0x82380a18, m, d, s);
+    Call(0x82ab0110, m, d, s);
+    fp();
+    auto hpCap = F(0x822184dc), mpCap = F(0x822181e4);
+    s.fpr_bits[30] = std::bit_cast<std::uint64_t>(double(mpCap));
+    s.fpr_bits[31] = std::bit_cast<std::uint64_t>(double(hpCap));
+    for (unsigned i = 0; i < 5; ++i) {
+      auto slot = owner + 572 + 128 * i, resource = W(slot - 8);
+      if (!resource || m.ReadU8(slot) != 1)
+        continue;
+      m.WriteU32(slot + 116, W(resource + 140));
+      constexpr unsigned offsets[] = {2588, 2616, 2592, 2620};
+      for (unsigned j = 0; j < 4; ++j) {
+        auto value = F(resource + offsets[j]), cap = (j & 1) ? mpCap : hpCap;
+        m.WriteU32(slot + 96 + 4 * j,
+                   std::bit_cast<unsigned>(value > cap ? cap : value));
+      }
+      m.WriteU32(resource + 140, W(resource + 140) + 1);
+      auto row = W(0x83264978 + 36) + 204 * W(resource + 68);
+      constexpr unsigned from[] = {124, 152, 108, 112, 120, 116, 128,
+                                   132, 140, 148, 144, 156, 136};
+      constexpr unsigned to[] = {2412, 2440, 2416, 2420, 2428, 2424, 2432,
+                                 2444, 2448, 2456, 2452, 2460, 2464};
+      for (unsigned j = 0; j < 13; ++j)
+        m.WriteU32(resource + to[j], W(row + from[j]));
+      m.WriteU32(resource + 152, W(row + 160));
+      s.r[3] = owner;
+      s.r[4] = resource;
+      Call(0x82ac25e8, m, d, s);
+      m.WriteU32(owner + 4, W(resource + 5108));
+      for (unsigned j = 0; j < 5; ++j)
+        m.WriteU32(owner + 12 + 4 * j, W(resource + 5116 + 4 * j));
+      s.r[3] = owner;
+      s.r[4] = resource;
+      Call(0x82ac3058, m, d, s);
+      auto hpDelta = float(F(resource + 2592) - F(slot + 104)),
+           mpDelta = float(F(resource + 2620) - F(slot + 108));
+      m.WriteU32(resource + 2588,
+                 std::bit_cast<unsigned>(float(hpDelta + F(resource + 2588))));
+      m.WriteU32(resource + 2616,
+                 std::bit_cast<unsigned>(float(mpDelta + F(resource + 2616))));
+    }
+  } else if (e == 0x82ac2140) {
+    auto maximum = 99u - W(owner + 1208) * 5u;
+    for (unsigned i = 0; i < 32; ++i) {
+      auto row = owner + 100 + 12 * i, id = W(row);
+      if (!id)
+        continue;
+      auto resourceID = W(row + 4);
+      manager();
+      s.r[4] = resourceID;
+      Call(0x8238e308, m, d, s);
+      auto resource = Address(s.r[3]);
+      if (m.ReadU8(resource + 124) & 1)
+        continue;
+      auto table = W(W(0x832ca0d0) + 120) + 140 * W(row);
+      bool drops = W(table + 104) == W(table + 108) &&
+                   W(table + 112) == W(table + 116) &&
+                   W(table + 104) == W(table + 116);
+      if (!drops) {
+        s.r[3] = W(0x83264558);
+        s.r[4] = 70;
+        s.r[5] = 0;
+        s.r[6] = W(resource + 64);
+        Call(0x82aa0838, m, d, s);
+        drops = (Address(s.r[3]) & 255) == 1;
+      }
+      unsigned item = 0;
+      if (drops) {
+        bool uniform = (W(table + 68) & 0x80000u) != 0;
+        s.r[3] = W(0x83264558);
+        s.r[4] = 0;
+        s.r[5] = uniform ? 3 : maximum;
+        s.r[6] = 1;
+        s.r[7] = W(resource + 64);
+        Call(0x82aa0740, m, d, s);
+        auto roll = Address(s.r[3]);
+        if (uniform) {
+          if (roll <= 3)
+            item = W(table + 104 + 4 * roll);
+        } else {
+          auto value = std::int32_t(roll);
+          item = W(table + (value < 5    ? 116
+                            : value < 10 ? 112
+                            : value < 50 ? 108
+                                         : 104));
+        }
+      }
+      s.r[3] = owner;
+      s.r[4] = item;
+      Call(0x82ac0068, m, d, s);
+    }
+    s.r[3] = owner;
+    Call(0x82ac20b0, m, d, s);
+  } else if (e == 0x82ac20b0) {
+    for (unsigned i = 0; i < 10; ++i) {
+      auto row = owner + 484 + 8 * i;
+      if (!W(row))
+        continue;
+      auto count = W(row + 4);
+      if (m.ReadU8(owner + 1213) == 1) {
+        s.r[3] = W(0x83264558);
+        s.r[4] = 5;
+        s.r[5] = 112;
+        s.r[6] = 0;
+        Call(0x82aa0838, m, d, s);
+        if ((Address(s.r[3]) & 255) == 1) {
+          count *= 2;
+          m.WriteU32(row + 4, count);
+        }
+      }
+      s.r[3] = 0x832c9c54;
+      s.r[4] = W(row);
+      s.r[5] = count;
+      Call(0x82a9e5e0, m, d, s);
+    }
+  } else if (e == 0x82ac31b0) {
     s.r[3] = W(0x83315fb4);
     s.ctr = W(W(Address(s.r[3])) + 352);
     d.guest.CallIndirect(Address(s.ctr) & ~3u, m, s);
@@ -246,6 +388,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82ac1fa0) {
     s.fpr_bits[30] = recovery_abi::ReadU64(m, old - 72);
     s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 64);
+  }
+  if (e == 0x82ac32c0) {
+    s.fpr_bits[30] = recovery_abi::ReadU64(m, old - 64);
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 56);
   }
   for (unsigned i = first; i < 32; ++i)
     s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));

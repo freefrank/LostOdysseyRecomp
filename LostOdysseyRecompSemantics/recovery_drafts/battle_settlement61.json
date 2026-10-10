@@ -49,6 +49,30 @@
       "instruction_count": 58,
       "body_sha256": "a5c30875825df1fd083100f72c6d16aae5136a59c12b79440942a1d3c6b58289",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC2140",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 27308,
+      "instruction_count": 108,
+      "body_sha256": "75d0cf670f0a09e1eda46d829db757084f886e7c0caebdb4568c7cfb7df08891",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC20B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 27221,
+      "instruction_count": 36,
+      "body_sha256": "3591fad0f33e10f0d5c6292ce02197c4097076bdc4de9999cfe32db9d39ac21b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC32C0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 29947,
+      "instruction_count": 117,
+      "body_sha256": "f02cedd8636a26665ff787f821ba4810bdb002e10418d393b6137c67ba327aae",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -58,7 +82,10 @@
       "82AC31B0",
       "82AC22F8",
       "82AC1DC8",
-      "82AC1FA0"
+      "82AC1FA0",
+      "82AC2140",
+      "82AC20B0",
+      "82AC32C0"
     ],
     "header": "include/lo_semantics/battle_settlement61.h",
     "source": "src/battle_settlement61.cpp",
@@ -72,6 +99,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only."
+    "case_scope": "Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only.",
+    "settlement_loot_levelup": "Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed."
   }
 }

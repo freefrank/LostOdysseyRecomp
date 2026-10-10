@@ -2,15 +2,26 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_settlement61.h"
+#include "lo_semantics/battle_semantic_runtime61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "battle_profile_fixture.h"
+#include "lo_semantics/recovery_abi.h"
+#include "battle_resource_growth_fixture.h"
 struct SettlementGuest final : manager_release_context61::GuestServices {
-  void CallDirect(GuestAddress, GuestMemory &,
-                  manager_release_context61::Registers &) override {
+  unsigned inventoryNotifications = 0;
+  void CallDirect(GuestAddress e, GuestMemory &m,
+                  manager_release_context61::Registers &s) override {
+    if (battle_semantic_runtime61::Apply(e, m, {*this, cook_main_smoke::native},
+                                         s))
+      return;
     throw std::runtime_error("unexpected settlement direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123424) {
+      ++inventoryNotifications;
+      return;
+    }
     if (!profile_fixture::Indirect(e, s))
       throw std::runtime_error("unexpected settlement virtual boundary");
   }
@@ -23,6 +34,11 @@ int main() {
     for (auto p : {0x83213000u, 0x832ca000u, 0x832cb000u, 0x83315000u,
                    0x832c1000u, 0x83264000u, 0x8201d000u})
       regions.push_back({p, 0x1000});
+    for (auto p : {0x832c9000u, 0x8204b000u})
+      regions.push_back({p, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
+    growth_fixture::Regions(regions);
+    regions.push_back({0x83291000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -105,6 +121,47 @@ int main() {
     put(source + 136, 98);
     run(0x82ac1fa0);
     check(get(source + 136) == 100);
+    m.WriteU32(0x83264558, 0xb0000);
+    m.WriteU32(0x832ca0e8 + 48, 0xde000);
+    m.WriteU32(0xde000, 0xe0000);
+    m.WriteU32(0xe0004, 0xe1000);
+    m.WriteU32(0x832c9c54 + 28, 0x93000);
+    m.WriteU32(0x93000, 0x93100);
+    m.WriteU32(0x93100 + 312, 0x123424);
+    put(0x8204bc58, 99);
+    for (unsigned i = 0; i < 20; ++i)
+      m.WriteU32(owner + 484 + 4 * i, 0);
+    for (unsigned i = 0; i < 4; ++i) {
+      m.WriteU32(table + 140 + 104 + 4 * i, 7);
+      m.WriteU32(table + 280 + 104 + 4 * i, 8);
+    }
+    m.WriteU8(owner + 1213, 1);
+    run(0x82ac2140);
+    check(m.ReadU32(owner + 484) == 7 && m.ReadU32(owner + 488) == 2 &&
+          m.ReadU32(owner + 492) == 8 && m.ReadU32(owner + 496) == 2);
+    check(get(0xe1000 + 72 + 4 * 7) == 2 && get(0xe1000 + 72 + 4 * 8) == 2 &&
+          g.inventoryNotifications == 2);
+    growth_fixture::Setup(m);
+    m.WriteU32(0x83291dc0, owner);
+    m.WriteU32(source + 68, 0);
+    m.WriteU32(source + 140, 1);
+    m.WriteU32(source + 4952, 0);
+    m.WriteU32(source + 5108, 0);
+    for (unsigned i = 0; i < 5; ++i)
+      m.WriteU32(source + 5116 + 4 * i, 0);
+    for (unsigned i = 0; i < 8; ++i)
+      m.WriteU32(source + 272 * i + 232, 0);
+    m.WriteU8(owner + 572, 1);
+    m.WriteU8(owner + 700, 0);
+    put(source + 2588, 80);
+    put(source + 2592, 100);
+    put(source + 2616, 20);
+    put(source + 2620, 60);
+    run(0x82ac32c0);
+    check(m.ReadU32(source + 140) == 2 && m.ReadU32(owner + 688) == 1 &&
+          get(owner + 668) == 80 && get(owner + 676) == 100);
+    check(get(source + 2588) == get(source + 2592) - 20 &&
+          get(source + 2616) == get(source + 2620) - 40);
     std::puts("settlement rewards, participants and progression smoke passed");
     return 0;
   } catch (const std::exception &e) {

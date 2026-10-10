@@ -715,3 +715,7 @@ Recovered ACB120 periodic effect sweep: status countdown and linked expiry, grow
 ## Battle settlement rewards
 
 Recovered settlement reward aggregation, participant bonus collection, capped currency awards, ten-slot item accumulation, per-character progression awards and threshold marking. Uses source row exclusions, signed arithmetic and guest-provided progression tables. Focused synthetic composition checks cover ineligible participants, bonus flags, excluded reward rows, currency cap, duplicate items, progression doubling, level marking and maximum-level cap. Overall victory finalization remains unclaimed; logical ABI checks only.
+
+## Settlement loot and level-up
+
+Recovered settlement item-roll selection AC2140, doubled-drop delivery AC20B0 and level-up stat rebuild AC32C0. Item selection preserves the source weighted thresholds, uniform-table mode, participant bonus bound and resource exclusion byte; deliveries compose existing script inventory updates. Level-up snapshots capped pre-growth values, reloads base stats, composes growth/equipment/derived-stat refresh and adds max-stat increases to current HP/MP. Focused checks cover real inventory delivery/notification, drop doubling, level snapshots and preserved HP/MP deficits. Full victory finalization remains unclaimed.

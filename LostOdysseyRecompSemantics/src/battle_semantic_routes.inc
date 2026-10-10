@@ -802,8 +802,11 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
   case 0x82ac1ce0u:
   case 0x82ac1dc8u:
   case 0x82ac1fa0u:
+  case 0x82ac20b0u:
+  case 0x82ac2140u:
   case 0x82ac22f8u:
   case 0x82ac31b0u:
+  case 0x82ac32c0u:
     return battle_settlement61::Apply(entry, memory, dependencies, state);
   case 0x82388b58u:
   case 0x823f3340u:
