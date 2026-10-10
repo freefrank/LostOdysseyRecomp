@@ -385,3 +385,7 @@ Recovered actual death transition: actor event queue or pending completion flag,
 ## Inventory table lookup
 
 Recovered inventory table lookup behind the existing manager selector. The theft fixture now resolves inventory through the actual accessor and retains grant/removal/depletion checks. Global manager access remains an external service.
+
+## Report string integration
+
+Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.

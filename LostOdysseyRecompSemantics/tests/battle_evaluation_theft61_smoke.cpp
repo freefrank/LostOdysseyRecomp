@@ -5,7 +5,7 @@
 #include "lo_semantics/battle_action_eligibility61.h"
 #include <iostream>
 struct TheftGuest final : manager_release_context61::GuestServices {
-  unsigned labels = 0, equipment = 0, inventoryNotices = 0;
+  unsigned equipment = 0, inventoryNotices = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -14,12 +14,6 @@ struct TheftGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = s.r[4] == 24 ? 0x80000 : s.r[4] == 25 ? 0x90000 : 0;
-      return;
-    }
-    if (e == 0x8229f5e0) {
-      if (s.r[3] < 0x100000 + 272 || s.r[3] > 0x100000 + 296)
-        throw std::runtime_error("label destination");
-      ++labels;
       return;
     }
     if (e == 0x8229dfd8) {
@@ -58,8 +52,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p : {0x83213000u, 0x83264000u, 0x83245000u, 0x83291000u,
-                   0x83315000u, 0x8204b000u})
+    for (auto p : {0x821a8000u, 0x83213000u, 0x83264000u, 0x83245000u,
+                   0x83291000u, 0x83315000u, 0x8204b000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
@@ -107,7 +101,7 @@ int main() {
             s.r[31] == initial.r[31]);
     };
     run();
-    check(m.ReadU32(0x75000 + 24) == 255 && g.labels == 2);
+    check(m.ReadU32(0x75000 + 24) == 255);
     m.WriteU32(0x73000 + 88, 0xbf800000);
     run();
     check(m.ReadU32(0x75000 + 24) == 254);

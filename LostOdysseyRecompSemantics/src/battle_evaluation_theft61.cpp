@@ -8,6 +8,7 @@
 #include "lo_semantics/battle_script_runtime61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/string_storage_context61.h"
 #include <bit>
 namespace lo::semantic::gpu::battle_evaluation_theft61 {
 namespace {
@@ -17,6 +18,7 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_action_eligibility61::Apply(e, m, d, s) &&
       !battle_evaluation_chance61::Apply(e, m, d, s) &&
       !battle_effect_followups61::Apply(e, m, d, s) &&
+      !string_storage_context61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
       !battle_script_party61::Apply(e, m, d, s) &&

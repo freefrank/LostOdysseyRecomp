@@ -10,6 +10,7 @@
 #include "lo_semantics/battle_script_party61.h"
 #include "lo_semantics/battle_random_range61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/string_storage_context61.h"
 #include <bit>
 #include <limits>
 namespace lo::semantic::gpu::battle_effect_followups61 {
@@ -20,6 +21,7 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_result_application61::Apply(e, m, d, s) &&
       !battle_effect_calculation61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s) &&
+      !string_storage_context61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
       !battle_action_adjustments61::Apply(e, m, d, s) &&

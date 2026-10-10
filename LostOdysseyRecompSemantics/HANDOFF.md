@@ -1,3 +1,7 @@
+## Root direct continuation: report string integration (2026-10-10 UTC)
+
+Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.
+
 ## Root direct continuation: inventory table lookup (2026-10-10 UTC)
 
 Recovered inventory table lookup behind the existing manager selector. The theft fixture now resolves inventory through the actual accessor and retains grant/removal/depletion checks. Global manager access remains an external service.

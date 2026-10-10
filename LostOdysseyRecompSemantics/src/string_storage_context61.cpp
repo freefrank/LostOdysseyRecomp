@@ -1,6 +1,7 @@
 #include "lo_semantics/string_conversion_context61.h"
 #include "lo_semantics/string_storage_context61.h"
 #include "lo_semantics/manager_facade.h"
+#include "lo_semantics/registered_metadata_string.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::string_storage_context61 {
 namespace {
@@ -66,11 +67,16 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82296830) {
+    s.r[3] = registered_metadata_string::Utf16Length(m, s.r[3]);
+    return true;
+  }
   unsigned frame = 96, first = 31;
   switch (e) {
   case 0x82298938:
   case 0x82298a98:
     break;
+  case 0x8229f5e0:
   case 0x82486c88:
     frame = 112;
     first = 30;
@@ -92,7 +98,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(sp, old);
   s.r[31] = header;
   Bridge b(m, d, s);
-  if (e == 0x82486c88)
+  if (e == 0x8229f5e0)
+    s.r[3] =
+        registered_metadata_string::AssignString(m, b, header, source, old);
+  else if (e == 0x82486c88)
     s.r[3] = AllocateManagerBuffer(m, b, header, old);
   else if (e == 0x82298938)
     s.r[3] = ResetTwoByteArray(m, b, header, old);

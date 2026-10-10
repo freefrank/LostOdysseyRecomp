@@ -4,14 +4,8 @@
 #include "lo_semantics/battle_effect_followups61.h"
 #include <iostream>
 struct FollowupGuest final : manager_release_context61::GuestServices {
-  unsigned stringSource = 0, stringTarget = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x8229f5e0) {
-      stringSource = unsigned(s.r[4]);
-      stringTarget = unsigned(s.r[3]);
-      return;
-    }
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x76000;
       return;
@@ -30,6 +24,12 @@ struct FollowupGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
                     manager_release_context61::Registers &s) override {
+    if (e == 0x123408) {
+      if (s.r[3] != 0x7f000 || s.r[6] != 8)
+        throw std::runtime_error("label allocation");
+      s.r[3] = s.r[5] ? 0x1a0000 : 0;
+      return;
+    }
     if (e != 0x123400)
       throw std::runtime_error("followup virtual");
     s.r[3] = 0;
@@ -40,7 +40,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p : {0x83213000u, 0x83264000u, 0x8201d000u, 0x8201f000u})
+    for (auto p : {0x821a8000u, 0x8330b000u, 0x83213000u, 0x83264000u,
+                   0x8201d000u, 0x8201f000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
@@ -165,6 +166,11 @@ int main() {
     put(0x8201dd2c, 100);
     mainRun();
     check(m.ReadU32(unsigned(initial.r[1]) - 208 + 80) == 100);
+    m.WriteU32(0x8330b608, 0x7f000);
+    m.WriteU32(0x7f000, 0x7f100);
+    m.WriteU32(0x7f100 + 8, 0x123408);
+    m.WriteU16(0x140000, 'K');
+    m.WriteU16(0x140002, 0);
     m.WriteU32(0x83264978 + 116, 0x120000);
     m.WriteU32(0x7e000 + 16, 0x130000);
     m.WriteU32(0x120000 + 84 * 7 + 52, 1);
@@ -173,14 +179,15 @@ int main() {
     s.r[4] = 7;
     s.r[5] = 2;
     check(battle_effect_followups61::Apply(0x82aa12e0, m, {g, native}, s) &&
-          g.stringSource == 0x140000 && g.stringTarget == 0x130000 + 296 &&
+          m.ReadU32(0x130000 + 300) == 2 &&
+          m.ReadU16(m.ReadU32(0x130000 + 296)) == 'K' &&
           s.r[1] == initial.r[1]);
     m.WriteU32(0x120000 + 84 * 7 + 52, 0);
     s.r[3] = 0x7e000;
     s.r[4] = 7;
     s.r[5] = 2;
     check(battle_effect_followups61::Apply(0x82aa12e0, m, {g, native}, s) &&
-          g.stringSource == 0x821a83d0);
+          !m.ReadU32(0x130000 + 296) && !m.ReadU32(0x130000 + 296 + 4));
     std::cout << "battle effect followups logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

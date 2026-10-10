@@ -92,6 +92,23 @@ int main() {
     m.WriteU32(0x80000, 0xa0000);
     run(0x82298938);
     g.Need(g.releases == 2 && !m.ReadU32(0x80000));
+    m.WriteU16(0x90000, 'H');
+    m.WriteU16(0x90002, 'i');
+    m.WriteU16(0x90004, 0);
+    run(0x8229f5e0);
+    g.Need(m.ReadU32(0x80004) == 3 && m.ReadU16(0xa0000) == 'H' &&
+           m.ReadU16(0xa0002) == 'i' && !m.ReadU16(0xa0004));
+    auto allocations = g.allocations;
+    s.r[3] = 0x80000;
+    s.r[4] = 0xa0000;
+    g.Need(string_storage_context61::Apply(0x8229f5e0, m, {g, native}, s) &&
+           g.allocations == allocations && s.r[1] == initial.r[1]);
+    s.r[3] = 0x90000;
+    g.Need(string_storage_context61::Apply(0x82296830, m, {g, native}, s) &&
+           s.r[3] == 2);
+    m.WriteU16(0x90000, 0);
+    run(0x8229f5e0);
+    g.Need(!m.ReadU32(0x80000) && !m.ReadU32(0x80004) && !m.ReadU32(0x80008));
     g.Need(!string_storage_context61::Apply(0, m, {g, native}, s));
     std::cout << "string_storage_context61 smoke passed\n";
     return 0;
