@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 160,
-    "distinct_entries": 504,
+    "unit_count": 162,
+    "distinct_entries": 508,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1667,6 +1667,24 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture checks normalization and adjusted input pointer, segmented-table indexing, overlay-first success, balanced lock boundaries and fallback to the base archive. Overlay path formatting and kernel lock/time services remain explicit guest boundaries. Logical/ABI only"
+      },
+      {
+        "unit": "cpx_lifecycle61",
+        "entries": [
+          "8284D6C8",
+          "82850AC0",
+          "82857820"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks middle-node removal, absent-node return, head removal, balanced guest lock calls and composed release of owned context buffers. Registry singleton construction and lock services remain guest boundaries. Logical/ABI only"
+      },
+      {
+        "unit": "cpx_stream61",
+        "entries": [
+          "8284E6B8"
+        ],
+        "focused_smoke_paths": 2,
+        "validation": "Synthetic split-reserve CPX and plain-stream fixtures check reserve growth, staged context construction, a one-block budget yield, decoded bytes, completion status and owned-buffer cleanup. Cross-boundary scratch assembly, preexisting output allocation and allocation failure are source-reviewed but not exercised here. File I/O, allocator, time-base conversion, registry construction and atomic status exchange remain explicit guest runtime boundaries; no native archive or concurrency acceptance is claimed. Logical/ABI only"
       }
     ]
   },

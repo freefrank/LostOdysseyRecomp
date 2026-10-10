@@ -268,6 +268,8 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/archive_index_fields61.cpp
     src/cpx_decode61.cpp
     src/cpx_context61.cpp
+    src/cpx_lifecycle61.cpp
+    src/cpx_stream61.cpp
     src/text_bank61.cpp
     src/archive_names61.cpp
     src/archive_metadata61.cpp

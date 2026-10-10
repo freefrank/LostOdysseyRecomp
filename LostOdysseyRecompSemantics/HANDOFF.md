@@ -1,3 +1,7 @@
+## Root direct continuation: CPX stream orchestration (2026-10-10 UTC)
+
+CPX stream orchestration now composes the recovered block decoder and context helpers with split reserve handling, chunked reads, time-budget yields and completion cleanup. Registry unlink and context shutdown are also recovered. Two small synthetic paths cover a split-reserve two-block stream and a plain read; a separate lifecycle fixture checks linked-list removal and ownership. Runtime I/O, clock, allocator, registry construction and atomic status exchange stay explicit service boundaries. Cross-boundary scratch assembly and allocation failures are source-reviewed only; this is not native archive or multithreaded acceptance.
+
 ## Root direct continuation: overlay archive lookup (2026-10-10 UTC)
 
 The archive lookup entry now normalizes case, slash and hyphen spelling, searches overlay archives in configured order under guest lock boundaries, and falls back to the base archive. It composes the recovered prefix/member lookup and preserves the original 240-byte output initialization. Synthetic overlay success and miss-to-base cases pass. Overlay root formatting and kernel locking/time services remain guest boundaries, not recovered filesystem behavior.
