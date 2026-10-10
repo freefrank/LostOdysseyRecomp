@@ -7,6 +7,10 @@ struct CalculationGuest final : manager_release_context61::GuestServices {
   unsigned defense = 5, attack = 20;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
+    if (e == 0x82b096e8) {
+      s.r[3] = 0;
+      return;
+    }
     throw std::runtime_error("calculation direct");
   }
   void CallIndirect(GuestAddress, GuestMemory &,
@@ -228,6 +232,89 @@ int main() {
     check(std::bit_cast<double>(s.fpr_bits[1]) == 0);
     for (unsigned i = 28; i < 32; ++i)
       check(s.fpr_bits[i] == initial.fpr_bits[i]);
+    m.WriteU8(0x73000 + 108, 0);
+    m.WriteU32(0x73000 + 68, 0x42c80000);
+    m.WriteU32(0x80000 + 76252, 1);
+    m.WriteU32(0x80000 + 4916, 2);
+    m.WriteU32(0x90000 + 4880, 1);
+    m.WriteU32(0x90000 + 4956, 0);
+    m.WriteU32(0x90000 + 5092, 0);
+    run(0x82b207a0);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 50 &&
+          m.ReadU32(0x73000 + 84) == 2);
+    m.WriteU32(0x90000 + 5092, 1);
+    run(0x82b207a0);
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 100);
+    m.WriteU32(0x90000 + 4956, 0x20);
+    m.WriteU32(0x73000 + 84, 99);
+    m.WriteU8(0x73000 + 64, 0);
+    run(0x82b207a0);
+    check(m.ReadU8(0x73000 + 64) == 1 && m.ReadU32(0x73000 + 84) == 99 &&
+          std::bit_cast<double>(s.fpr_bits[1]) == 0);
+    m.WriteU32(0x90000 + 4956, 0x40);
+    m.WriteU8(0x73000 + 64, 0);
+    run(0x82b207a0);
+    check(!m.ReadU8(0x73000 + 64));
+    m.WriteU32(0x80000 + 4916, 0);
+    m.WriteU32(0x90000 + 4956, 0x20);
+    run(0x82b207a0);
+    check(m.ReadU8(0x73000 + 64) == 1);
+    m.WriteU8(0x73000 + 64, 0);
+    m.WriteU32(0x90000 + 4956, 0x820);
+    run(0x82b207a0);
+    check(!m.ReadU8(0x73000 + 64));
+    m.WriteU32(0x90000 + 4956, 2);
+    run(0x82b207a0);
+    check(m.ReadU8(0x73000 + 64) == 1);
+    auto clearProperties = [&]() {
+      for (unsigned bank = 0; bank < 9; ++bank) {
+        m.WriteU32(0x80000 + 272 * bank + 232, 0);
+        m.WriteU32(0x90000 + 272 * bank + 232, 0);
+      }
+    };
+    clearProperties();
+    m.WriteU8(0x73000 + 108, 0);
+    m.WriteU8(0x73000 + 109, 0);
+    m.WriteU8(0x73000 + 45, 0);
+    m.WriteU32(0x73000 + 40, 0);
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x90000 + 4956, 0);
+    m.WriteU32(0x90000 + 7 * 272 + 232, 1u << 21);
+    run(0x82b1ff20);
+    check(m.ReadU32(0x73000 + 52) == 1);
+    clearProperties();
+    m.WriteU32(0x90000 + 4956, 4);
+    run(0x82b1ff20);
+    check(m.ReadU32(0x73000 + 52) == 2);
+    m.WriteU32(0x80000 + 7 * 272 + 232, 1u << 23);
+    run(0x82b1ff20);
+    check(!m.ReadU32(0x73000 + 52));
+    m.WriteU32(0x90000 + 4956, 0);
+    clearProperties();
+    m.WriteU32(0x90000 + 4 * 272 + 232, 1u << 11);
+    m.WriteU32(0x90000 + 68, 86);
+    run(0x82b1ff20);
+    check(m.ReadU32(0x73000 + 52) == 3);
+    clearProperties();
+    m.WriteU32(0x90000 + 7 * 272 + 232, 1u << 10);
+    m.WriteU32(0x90000 + 4 * (7 * 68 + 10 + 59), 100);
+    run(0x82b1ff20);
+    check(m.ReadU32(0x73000 + 52) == 4);
+    clearProperties();
+    m.WriteU32(0x90000 + 4 * 272 + 232, 1u << 13);
+    m.WriteU32(0x90000 + 232, 2);
+    m.WriteU32(0x90000 + 2616, 0x3f800000);
+    run(0x82b1ff20);
+    check(m.ReadU32(0x73000 + 52) == 5);
+    clearProperties();
+    m.WriteU32(0x90000 + 232, 1);
+    run(0x82b1ff20);
+    check(!m.ReadU32(0x73000 + 52));
+    clearProperties();
+    m.WriteU32(0x90000 + 4 * (7 * 68 + 8 + 59), 100);
+    check(run(0x82b1fdf8));
+    m.WriteU32(0x80000 + 7 * 272 + 232, 1u << 23);
+    check(!run(0x82b1fdf8));
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

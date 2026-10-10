@@ -1,3 +1,7 @@
+## Root direct continuation: elemental and target responses (2026-10-10 UTC)
+
+Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.
+
 ## Root direct continuation: trait bonus calculations (2026-10-10 UTC)
 
 Recovered category-two and category-eight trait bonus calculations using actual trait matching and interpolation. The focused fixture checks overlap gating, selected multiplier, target-specific extra bonus, result-record flag, skip behavior and FPR28-31 restoration. No trait service mock remains in these paths. Guest constants are synthetic in the fixture; full floating-point and native gameplay equivalence remain unvalidated.
