@@ -1,0 +1,104 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Party list/flags, inventory quantity updates, script scratch writes and reserved no-op aliases.",
+  "entries": [
+    {
+      "address": "82A9E5E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 2059,
+      "instruction_count": 54,
+      "body_sha256": "7548a0766de4ccfa30470d6891e242f1cd22da5bd0ef3acc304eb68177c602dc",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9EA80",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 2749,
+      "instruction_count": 25,
+      "body_sha256": "fad441f62d2d8b111a47440b3abfc1ff07e496861d4d053aa2dc8c4ff13ad980",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9EAE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 2810,
+      "instruction_count": 118,
+      "body_sha256": "00ef03d90fa81d0763745b818a7b64f4fb5c64c583ead1e6384ba4f5714794ae",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D4E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13738,
+      "instruction_count": 35,
+      "body_sha256": "b361ef2aa7ea269b64567d7f23dfea0e1428fc0783ea04f78b54e402efa1bf98",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D3C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13570,
+      "instruction_count": 34,
+      "body_sha256": "903000d3e425b445eb81cab22ce9fed426662f3965bd9385c5408d7edb773ed8",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D450",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13653,
+      "instruction_count": 35,
+      "body_sha256": "ae01765129d10b330a0887450016b13bd598c12cbb9e1c4ca5dcbce9d1842874",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9D1B8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 13263,
+      "instruction_count": 27,
+      "body_sha256": "6cb7aac2ce9214ef5ce0448323933fbb4f1252e8ec262368f57b312c304ef57b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9DA20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 362,
+      "instruction_count": 1,
+      "body_sha256": "ce8ff3e8cab79ef22563fbecec03fb16db29825b592a26046038ba39e944b09e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "822D3068",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.3.cpp",
+      "source_line": 6691,
+      "instruction_count": 1,
+      "body_sha256": "98ac30b8d5b697f13a86c1fe2a0d7e7cb4bc7a8f98df72414ee2fb43f5f276ac",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82A9E5E0",
+      "82A9EA80",
+      "82A9EAE8",
+      "82A9D4E0",
+      "82A9D3C8",
+      "82A9D450",
+      "82A9D1B8",
+      "82A9DA20",
+      "822D3068"
+    ],
+    "header": "include/lo_semantics/battle_script_party61.h",
+    "source": "src/battle_script_party61.cpp",
+    "smoke": "tests/battle_script_party61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused fixture checks the original multiple-vacancy party insertion, removal compaction, five-slot read/write snapshots, party bit branches, inventory quantity cap and notification, scratch index16 behavior, no-op cursor preservation and stack/r31 restoration. Inventory lookup and play-data notification remain guest services. Reserved aliases intentionally do not advance the cursor; invalid bytecode and scratch bounds are not hardened. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

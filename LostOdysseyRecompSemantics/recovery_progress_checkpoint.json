@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 174,
-    "distinct_entries": 572,
+    "unit_count": 175,
+    "distinct_entries": 581,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1833,6 +1833,22 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture checks actor flag/status calls, the different low-bit versus nonzero interpretations, inclusive range and mask branches, tick accumulation, signed remainder, and the original upper-only game-counter cap. The lower-ID actor lookup chain remains a guest boundary and is source-reviewed only; actor effect services are fixture callbacks, not native battle acceptance. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_party61",
+        "entries": [
+          "82A9E5E0",
+          "82A9EA80",
+          "82A9EAE8",
+          "82A9D4E0",
+          "82A9D3C8",
+          "82A9D450",
+          "82A9D1B8",
+          "82A9DA20",
+          "822D3068"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks the original multiple-vacancy party insertion, removal compaction, five-slot read/write snapshots, party bit branches, inventory quantity cap and notification, scratch index16 behavior, no-op cursor preservation and stack/r31 restoration. Inventory lookup and play-data notification remain guest services. Reserved aliases intentionally do not advance the cursor; invalid bytecode and scratch bounds are not hardened. Logical/ABI only"
       }
     ]
   },
