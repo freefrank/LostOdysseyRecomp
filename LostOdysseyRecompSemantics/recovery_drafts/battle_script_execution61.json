@@ -1,0 +1,68 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Action execution orchestration, linked targets and inventory consumption.",
+  "entries": [
+    {
+      "address": "82B00698",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 29535,
+      "instruction_count": 113,
+      "body_sha256": "f4a9a7bc2fba378502983b3e1a40c5e497a759fdef758831991821b580e7a103",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFDB90",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 23119,
+      "instruction_count": 75,
+      "body_sha256": "e57cf3ed974bc2d3047f6c34e8c3b05508e8f1edc8e1f81d23f0bc3abdff214d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFDCF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 23319,
+      "instruction_count": 84,
+      "body_sha256": "57a65a6ab0df53a95621833620b1ce5c6be86f42e183f705b1ee404af2c21000",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD970",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 22811,
+      "instruction_count": 133,
+      "body_sha256": "018e1be728daa54f8424090587f68b8238c584c837778cbd7cd1ac5eab8faffd",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6D60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6592,
+      "instruction_count": 44,
+      "body_sha256": "487d9ddfe09dc7abdf5a32d0eef355c9d86c5dffd8df87a2c8efdb3b3e041c1a",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B00698",
+      "82AFDB90",
+      "82AFDCF0",
+      "82AFD970",
+      "82AF6D60"
+    ],
+    "header": "include/lo_semantics/battle_script_execution61.h",
+    "source": "src/battle_script_execution61.cpp",
+    "smoke": "tests/battle_script_execution61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused execution fixture covers all five helpers, first/subsequent target arguments, delimiters, busy indices, kind1 counters, overrides, readiness bypass, ordered group links, target-group expansion and clamped stock decrement. The three affected opcode fixtures also pass after replacing mocked execution boundaries with the recovered chain. Lower-level resource action builders and target preparation remain service boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

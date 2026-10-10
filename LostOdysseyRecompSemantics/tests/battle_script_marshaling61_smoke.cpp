@@ -37,8 +37,18 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       s.r[3] = ok;
       return;
     }
-    if (e == 0x82b00698) {
-      fail(s.r[3] == 0x60000 && !m.ReadU32(0x80000 + 14680));
+    if (e == 0x8238e308) {
+      s.r[3] = 0x80000;
+      return;
+    }
+    if (e == 0x82ac9a28) {
+      s.r[3] = 0;
+      return;
+    }
+    if (e == 0x82ab36c8) {
+      if (unsigned(s.r[4]) == 0xffffffff)
+        return;
+      fail(s.r[3] == 0x80000 && !m.ReadU32(0x80000 + 14680));
       ++executed;
       kind = unsigned(s.r[4]);
       detail = unsigned(s.r[5]);
@@ -93,6 +103,9 @@ int main() {
     m.WriteU32(actor + 36, code);
     m.WriteU32(actor + 12, vars);
     m.WriteU32(actor + 4, 0x80000);
+    m.WriteU32(actor + 80, 0x66000);
+    m.WriteU32(actor + 84, 1);
+    m.WriteU8(0x66000, 24);
     m.WriteU32(0x82007784, 0x3f800000);
     auto le = [&](unsigned p, unsigned v) {
       m.WriteU8(p, v);
@@ -138,6 +151,9 @@ int main() {
     op(0x82b00d08);
     check(!m.ReadU32(vars + 4) && guest.executed == executions);
     m.WriteU32(actor + 4, 0x80000);
+    m.WriteU32(actor + 80, 0x66000);
+    m.WriteU32(actor + 84, 1);
+    m.WriteU8(0x66000, 24);
     le(code + 1, 0);
     le(code + 3, 1);
     le(code + 5, 2);

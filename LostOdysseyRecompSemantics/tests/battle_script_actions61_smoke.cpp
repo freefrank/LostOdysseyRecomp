@@ -28,9 +28,17 @@ struct ActionsGuest final : manager_release_context61::GuestServices {
       ++reset;
       return;
     }
-    if (e == 0x82b00698 || e == 0x82afdb90 || e == 0x82afdcf0) {
-      if (s.r[3] != 0x60000 || s.r[4] != 0 || s.r[5] != 9)
-        throw std::runtime_error("action arguments");
+    if (e == 0x82ac9a28) {
+      s.r[3] = 0;
+      return;
+    }
+    if (e == 0x82acee70)
+      return;
+    if (e == 0x82ab36c8 || e == 0x82ab38f0) {
+      if (unsigned(s.r[4]) == 0xffffffff)
+        return;
+      if (s.r[3] != 0x80000 || s.r[4] != 0 || s.r[5] != 9 || s.r[6] != 24)
+        throw std::runtime_error("action emission arguments");
       ++invoked;
       return;
     }
@@ -128,6 +136,7 @@ int main() {
     m.WriteU32(actor + 96, 0);
     for (unsigned event : {1u, 2u, 3u}) {
       m.WriteU32(actor + 60, event);
+      m.WriteU32(actor + 96, 0);
       op(0x82b00888);
     }
     if (guest.invoked != 3 || m.ReadU8(0x66000) != 24 ||

@@ -121,3 +121,7 @@ Ten remaining service-facing battle handlers now preserve scene command argument
 ## Constructor handler coverage
 
 The final two distinct handlers in the battle-script constructor table now have logical implementations: banked item-action selection and the 39-mode global transition instruction. Source tie-breaking, random tag88, zero-ID execution, first-group early exits and controller routing are preserved. Two small synthetic fixtures pass. Constructor handler coverage does not mean the engine service boundaries or native gameplay are complete.
+
+## Action execution chain
+
+Five action helpers are now implemented and composed into the existing action, preparation and item-selection opcodes. The chain emits first and subsequent target records, handles delimiters and busy indices, expands linked groups and consumes the correct inventory bank. A focused helper fixture and the three affected opcode fixtures pass. Concrete resource action builders and target preparation remain boundaries; native gameplay is unvalidated.

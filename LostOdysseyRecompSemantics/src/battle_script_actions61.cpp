@@ -2,6 +2,7 @@
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/battle_script_events61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_script_execution61.h"
 namespace lo::semantic::gpu::battle_script_actions61 {
 namespace {
 using recovery_abi::Address;
@@ -44,7 +45,10 @@ struct Actions {
     (void)battle_script_extensions61::Apply(0x8238c590, m, d, s);
     m.WriteU32(Actor() + 52, Address(s.r[3]));
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_script_execution61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   unsigned Manager() {
     Call(0x82380a18);
     Call(0x82389b78);

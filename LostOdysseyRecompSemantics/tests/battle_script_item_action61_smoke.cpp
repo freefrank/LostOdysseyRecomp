@@ -5,7 +5,7 @@
 #include <iostream>
 struct ItemGuest final : manager_release_context61::GuestServices {
   unsigned selected = 0, prepared = 0, executed = 0, last = 0, random = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82aa0740) {
       if (s.r[3] != 0x72000 || s.r[4] != 0 || s.r[5] != 1 || s.r[6] != 88 ||
@@ -15,19 +15,31 @@ struct ItemGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0;
       return;
     }
-    if (e == 0x82af6d60) {
-      if (s.r[3] != 0x60000 || s.r[5] != 0x80000)
-        throw std::runtime_error("item preparation ABI");
-      selected = unsigned(s.r[4]);
-      ++prepared;
+    if (e == 0x82380a18 || e == 0x82389b78) {
+      s.r[3] = 0x70000;
       return;
     }
-    if (e == 0x82b00698 || e == 0x82afdb90 || e == 0x82afdcf0) {
-      if (s.r[3] != 0x60000 || s.r[4] != 11)
-        throw std::runtime_error("item execution ABI");
+    if (e == 0x8238e308) {
+      s.r[3] = 0x80000;
+      return;
+    }
+    if (e == 0x82ac9a28) {
+      s.r[3] = 0;
+      return;
+    }
+    if (e == 0x82acee70)
+      return;
+    if (e == 0x82ab36c8 || e == 0x82ab38f0) {
+      if (unsigned(s.r[4]) == 0xffffffff)
+        return;
+      if (s.r[3] != 0x80000 || s.r[4] != 11)
+        throw std::runtime_error("item emission ABI");
       selected = unsigned(s.r[5]);
-      last = e;
+      if (selected)
+        ++prepared;
       ++executed;
+      auto mode = m.ReadU32(0x62000 + 60);
+      last = e == 0x82ab36c8 ? 0x82b00698 : mode == 2 ? 0x82afdcf0 : 0x82afdb90;
       return;
     }
     throw std::runtime_error("unexpected item service");
@@ -43,6 +55,7 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x83245000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -57,6 +70,12 @@ int main() {
     m.WriteU32(actor + 12, vars);
     m.WriteU32(actor + 4, resource);
     m.WriteU32(resource + 64, 24);
+    m.WriteU32(state + 4, actor);
+    m.WriteU32(state + 12, 1);
+    m.WriteU32(actor + 8, 24);
+    m.WriteU32(actor + 80, 0x6b000);
+    m.WriteU32(actor + 84, 1);
+    m.WriteU8(0x6b000, 24);
     m.WriteU32(0x83264978, table);
     m.WriteU32(0x83264558, 0x72000);
     for (unsigned i = 0; i < 4; ++i) {
@@ -69,7 +88,9 @@ int main() {
       if (!b)
         throw std::runtime_error("item selection result");
     };
-    auto op = [&]() {
+    auto op = [&](bool preserveBusy = false) {
+      if (!preserveBusy)
+        m.WriteU32(actor + 96, 0);
       s.r[3] = owner;
       m.WriteU32(actor + 52, 0);
       check(battle_script_item_action61::Apply(0x82b009b0, m, {guest, native},
@@ -78,13 +99,14 @@ int main() {
             s.r[26] == initial.r[26] && s.r[31] == initial.r[31]);
     };
     for (unsigned i : {2u, 3u}) {
-      m.WriteU32(state + 200 + 4 * i, 1);
+      m.WriteU32(state + 200 + 4 * i, 100);
       m.WriteU32(table + 196 * i + 148, 1);
       m.WriteU32(table + 196 * i + 152, 20);
     }
     m.WriteU32(vars + 12, 0);
     op();
-    check(!m.ReadU32(vars) && guest.selected == 3);
+    check(!m.ReadU32(vars) && guest.selected == 3 &&
+          m.ReadU32(state + 200 + 12) == 99);
     m.WriteU32(vars + 12, 1);
     op();
     check(guest.selected == 3);
@@ -106,10 +128,10 @@ int main() {
     check(guest.last == 0x82afdb90);
     m.WriteU32(actor + 96, 1);
     auto executed = guest.executed;
-    op();
+    op(true);
     check(m.ReadU32(vars) == 1 && guest.executed == executed);
     m.WriteU32(actor + 64, 0x01000000);
-    op();
+    op(true);
     check(!m.ReadU32(vars));
     m.WriteU32(vars + 4, 2);
     executed = guest.executed;
