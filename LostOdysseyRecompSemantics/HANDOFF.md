@@ -1,3 +1,7 @@
+## Root direct continuation: optional support-map load connected (2026-10-10 UTC)
+
+BC8438/BC62D8 close ICE/GAUS counts and ICE/SUPM combined dual-byte-table input. Both byte orders round-trip with original owned-buffer aliases and concrete cleanup. A 40-point Fibonacci-sphere input now exercises actual support sampling, emits 8568 bytes, loads completely, scales by two, exports and reloads with doubled positions and zero tracked allocations. Three smaller indexed/plain/inflated paths also pass. Fixture bump-allocation window and fixed output capacity were enlarged to accommodate the longer sample; no production guard or failure policy was added. Prior optional-support load boundary is now concrete. Legacy format branches, bitwise floating-point and gameplay remain unverified.
+
 ## Root direct continuation: complete load-scale-export chain (2026-10-10 UTC)
 
 BC4D80/BC5270 now bind and load complete cooked geometry, tree, bounds and mass data. BD15C8/BD1D08 restore OPC strategy and HBM mapping payloads; existing BD2200 ownership is reused without duplicate credit. B9C670 composes load, uniform scaling, export and cleanup. Actual indexed, point-only and inflated point-only files pass complete load, scale by two, export, reload, doubled coordinates and exact end cursor with no tracked allocations left. The inflated case includes a real quantized compact tree. Optional large-mesh/legacy support-map input remains a live untested callback. Logical/ABI scope only; no full-RAM, exhaustive legacy/endian or gameplay acceptance.

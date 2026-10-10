@@ -5,6 +5,10 @@
 #include "lo_semantics/mesh_stream_codec61.h"
 #include "lo_semantics/mesh_geometry_load61.h"
 #include "lo_semantics/mesh_cook_load61.h"
+#include "lo_semantics/mesh_support_load61.h"
+#include "lo_semantics/mesh_cook_support61.h"
+#include "lo_semantics/cube_projection_table61.h"
+#include "lo_semantics/projection_extrema61.h"
 #include "lo_semantics/tree_envelope_load61.h"
 #include "lo_semantics/mesh_cook_storage61.h"
 #include "lo_semantics/tree_mesh_lifetime61.h"
@@ -32,6 +36,7 @@
 #include "lo_semantics/tree_flat_write61.h"
 #include "object_sort_engine61_oracle_fixture.h"
 #include <cstdlib>
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <set>
@@ -44,7 +49,7 @@ constexpr GuestAddress Owner = 0x30000, Source = Owner + 156, Input = 0x32000,
                        PolygonData = 0x38000, TriangleData = 0x39000,
                        Allocate = 0x2000, Free = 0x2004;
 constexpr GuestAddress Writer = 0x40000, Table = 0x41000, Buffer = 0x42000;
-constexpr std::array<test::Region, 15> Regions{{{0, 0x400000},
+constexpr std::array<test::Region, 16> Regions{{{0, 0x2000000},
                                                 {0x82000000, 0x10000},
                                                 {0x83214000, 0x3000},
                                                 {0x832df000, 0x1000},
@@ -58,7 +63,8 @@ constexpr std::array<test::Region, 15> Regions{{{0, 0x400000},
                                                 {0x820d2000, 0x2000},
                                                 {0x82bc9000, 0x1000},
                                                 {0x820a6000, 0x1000},
-                                                {0x8204f000, 0x1000}}};
+                                                {0x8204f000, 0x1000},
+                                                {0x82bb3000, 0x1000}}};
 std::array<unsigned char, 184> constants{};
 std::array<unsigned char, 144> normal_constants{};
 std::array<unsigned char, 128> mass_constants{};
@@ -93,6 +99,11 @@ struct Guest final : manager_release_context61::GuestServices {
     std::copy(snap.begin(), snap.end(), ev.begin());
     ev.back() = e;
     events.push_back(ev);
+    if (cube_projection_table61::Apply(e, m, {*this, native}, s) ||
+        projection_extrema61::Apply(e, m, native, s))
+      return;
+    if (e == 0x822d3068u)
+      return; // Original callback is a bare return.
     if (e == 0x2008u) {
       ++refreshCalls;
       s.r[3] = 1;
@@ -102,7 +113,13 @@ struct Guest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU32(Address(s.r[3]) + (e == 0x82b9f188u ? 168 : 160));
       return;
     }
+    if (geometryDeps &&
+        mesh_cook_support61::Apply(
+            e, m, {geometryDeps->lifetime, geometryDeps->edge.diagnostics}, s))
+      return;
     if (geometryDeps && mesh_geometry_load61::Apply(e, m, *geometryDeps, s))
+      return;
+    if (mesh_support_load61::Apply(e, m, {*this, native}, s))
       return;
     if (mesh_stream_codec61::Apply(e, m, {*this, native}, s))
       return;
@@ -114,9 +131,9 @@ struct Guest final : manager_release_context61::GuestServices {
         tree_mesh_callbacks61::Apply(e, m, {*this, native}, s))
       return;
     if (e == Allocate) {
-      if (s.r[4] > 4096)
+      if (s.r[4] > 16384)
         throw std::runtime_error("edge allocation size");
-      s.r[3] = 0x90000 + 4096 * allocations++;
+      s.r[3] = 0x90000 + 16384 * allocations++;
       live.insert(std::uint32_t(s.r[3]));
     } else if (e == Free) {
       if (!live.erase(std::uint32_t(s.r[4])))
@@ -272,6 +289,15 @@ void Check(unsigned mode) {
   m.WriteU32(0x820d5d30 + 48, 0x82b9f188);
   m.WriteU32(0x820d5d30 + 52, 0x82b9f190);
   m.WriteU32(0x820d6970 + 4, 0x82bc8638);
+  m.WriteU32(0x820d6284, 0x82bb3430);
+  m.WriteU32(0x820d6288, 0x82bb34f8);
+  m.WriteU32(0x820d628c, 0x822d3068);
+  for (unsigned i = 0; i < 6; ++i)
+    m.WriteU32(0x82bb3988 + 4 * i, i < 2   ? 0x82bb39a0
+                                   : i < 4 ? 0x82bb39f8
+                                           : 0x82bb3a50);
+  m.WriteU32(0x820d6940, 0x82bc63c8);
+  m.WriteU32(0x820d6940 + 4, 0x82bc62d8);
   m.WriteU32(0x820d6c34 + 4, 0x82bd2200);
   m.WriteU32(0x820d6c34 + 28, 0x82bd1d08);
   m.WriteU32(0x820d6c34 + 8, 0x82bd22a8);
@@ -295,7 +321,7 @@ void Check(unsigned mode) {
     m.WriteU32(0x820d6e7c + 24 + 32 * i, read[i]);
   }
   m.WriteU32(Writer, Table);
-  m.WriteU32(Writer + 8, 8192);
+  m.WriteU32(Writer + 8, 16384);
   m.WriteU32(Writer + 12, Buffer);
   constexpr unsigned writers[]{0x82bde330, 0x82bde378, 0x82bde3c0,
                                0x82bde408, 0x82bde450, 0x82bde498};
@@ -315,6 +341,20 @@ void Check(unsigned mode) {
   for (unsigned i = 0; i < 12; ++i) {
     m.WriteU32(Positions + 4 * i, std::bit_cast<std::uint32_t>(xyz[i]));
     m.WriteU32(TriangleData + 4 * i, ix[i]);
+  }
+  if (mode == 16) {
+    m.WriteU32(Input, 40);
+    m.WriteU32(Input + 4, 0);
+    m.WriteU32(Input + 20, 0);
+    m.WriteU32(Input + 24, 4);
+    for (unsigned i = 0; i < 40; ++i) {
+      double z = 1.0 - 2.0 * (i + .5) / 40.0, r = std::sqrt(1 - z * z),
+             angle = i * 2.399963229728653;
+      float p[]{float(r * std::cos(angle)), float(r * std::sin(angle)),
+                float(z)};
+      for (unsigned j = 0; j < 3; ++j)
+        m.WriteU32(Positions + 12 * i + 4 * j, std::bit_cast<unsigned>(p[j]));
+    }
   }
   for (unsigned i = 0; i < 4; ++i)
     m.WriteU8(0x820d6954 + i, normal_decode_step[i]);
@@ -346,7 +386,8 @@ void Check(unsigned mode) {
   (void)mesh_geometry_load61::Apply(0x82bc8638, m, env.Deps(), st);
   if (st.r[3] != 1 || m.ReadU32(Source + 12) < 4 || m.ReadU32(Source + 4) < 4)
     throw std::runtime_error("CLHL geometry readback");
-  if (mode != 12 && (m.ReadU32(Source + 12) != 4 || m.ReadU32(Source + 4) != 4))
+  if (mode != 12 && mode != 16 &&
+      (m.ReadU32(Source + 12) != 4 || m.ReadU32(Source + 4) != 4))
     throw std::runtime_error("tetrahedron readback counts");
   if (m.ReadU32(reader + 4) <= Buffer + 16 ||
       m.ReadU32(reader + 4) >= Buffer + m.ReadU32(Writer + 4))
@@ -377,7 +418,7 @@ void Check(unsigned mode) {
     throw std::runtime_error("full cooked load cleanup");
   constexpr unsigned scaledWriter = 0x62000, scaledBuffer = 0x63000;
   m.WriteU32(scaledWriter, Table);
-  m.WriteU32(scaledWriter + 8, 8192);
+  m.WriteU32(scaledWriter + 8, 16384);
   m.WriteU32(scaledWriter + 12, scaledBuffer);
   m.WriteU32(reader + 4, Buffer);
   st.r[3] = reader;
@@ -404,7 +445,7 @@ void Check(unsigned mode) {
   (void)mesh_cook_storage61::Apply(0x82b9e518, m, env.Deps().lifetime, st);
   if (!env.guest.live.empty())
     throw std::runtime_error("scaled reload cleanup");
-  std::printf("PASS cook main mode %u tetrahedron -> %u bytes NXS/CVXM; "
+  std::printf("PASS cook main mode %u sample -> %u bytes NXS/CVXM; "
               "full readback, scale2/export/reload and zero live allocations\n",
               mode, m.ReadU32(Writer + 4));
 }
@@ -431,6 +472,7 @@ int main() {
     Check(0);
     Check(4);
     Check(12);
+    Check(16);
     return 0;
   } catch (const std::exception &e) {
     std::fprintf(stderr, "%s\n", e.what());

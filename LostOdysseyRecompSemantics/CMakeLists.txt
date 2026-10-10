@@ -220,6 +220,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_cook_storage61.cpp
     src/mesh_stream_write61.cpp
     src/mesh_support_stream61.cpp
+    src/mesh_support_load61.cpp
     src/mesh_valence_stream61.cpp
     src/mesh_edge_build61.cpp
     src/mesh_cache_lifetime61.cpp

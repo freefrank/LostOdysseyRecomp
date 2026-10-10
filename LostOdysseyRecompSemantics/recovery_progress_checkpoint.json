@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 127,
-    "distinct_entries": 388,
+    "unit_count": 128,
+    "distinct_entries": 390,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1308,8 +1308,8 @@
           "82BD15C8",
           "82BD1D08"
         ],
-        "focused_smoke_paths": 3,
-        "validation": "Three actual cook files load, scale/export and reload with doubled points and zero owned allocations; logical/ABI only"
+        "focused_smoke_paths": 4,
+        "validation": "Three actual cook files load, scale/export and reload with doubled points and zero owned allocations; logical/ABI only; additional 40-point support-map whole-chain case passed"
       },
       {
         "unit": "mesh_cook_load61",
@@ -1318,8 +1318,17 @@
           "82BC5270",
           "82B9C670"
         ],
+        "focused_smoke_paths": 4,
+        "validation": "Three actual cook files load, scale/export and reload with doubled points and zero owned allocations; logical/ABI only; additional 40-point support-map whole-chain case passed"
+      },
+      {
+        "unit": "mesh_support_load61",
+        "entries": [
+          "82BC8438",
+          "82BC62D8"
+        ],
         "focused_smoke_paths": 3,
-        "validation": "Three actual cook files load, scale/export and reload with doubled points and zero owned allocations; logical/ABI only"
+        "validation": "Both endian section roundtrip and actual >32-point whole-chain load/scale/export with complete ownership cleanup"
       }
     ]
   },

@@ -44,8 +44,8 @@
     "library_validated": true,
     "runtime_validated": false,
     "complete": false,
-    "focused_smoke_paths": 3,
-    "case_scope": "Actual indexed, point-only and inflated point-only cook files load completely, then B9C670 loads/scales by two/exports and the result loads again with doubled vertex coordinates, exact end cursor and zero tracked allocations after each cleanup. Inflated path restores a real quantized compact tree. Logical/ABI only; no legacy-version, exhaustive tree-format/endian or gameplay claim.",
-    "remaining_boundary": "Optional support-map virtual reader for legacy formats or more than 32 vertices remains an explicit live callback and is not exercised here. CRT lazy normal registration is an accepted guest service. Original failure behavior retained without new guards."
+    "focused_smoke_paths": 4,
+    "case_scope": "Actual indexed, point-only and inflated point-only cook files load completely, then B9C670 loads/scales by two/exports and the result loads again with doubled vertex coordinates, exact end cursor and zero tracked allocations after each cleanup. Inflated path restores a real quantized compact tree. Logical/ABI only; no legacy-version, exhaustive tree-format/endian or gameplay claim. Additional 40-point sphere closes optional support-map loading and full scale/export/reload.",
+    "remaining_boundary": "CRT lazy normal registration remains an accepted guest service. Optional support-map virtual input now resolves to concrete mesh_support_load61 in the actual large-mesh fixture; legacy formats remain untested."
   }
 }
