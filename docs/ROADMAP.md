@@ -94,11 +94,11 @@ Parallel tracks:
 ## v1.0.0 deferred plan
 
 - [ ] **Cheaper upscaler motion data:** replay only the draws that moved since the previous frame and take static geometry from camera reprojection, without new ghosting on moving characters ([#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172); scheduled on 2026-10-08).
-- [ ] **Production HUDless/UI separation handoff:** establish and validate a dedicated scene/UI composition contract independently of v0.8.0 composited-backbuffer FG.
+- [ ] **Faster Android frames with the same image:** measure the TB321FU baseline first, then remove the repeated binding calls in the render-thread record path, make targeted Turnip fixes from a `TU_DEBUG=perf` run and add an ADPF performance hint session; the picture must not change ([Project](https://github.com/users/freefrank/projects/3); scheduled on 2026-10-10).
 
 ## Later backlog
 
-DX11, HDR coverage beyond the experimental output of v0.7.35, v0.8.0 and v0.8.5, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing, WMV playback, Linux AArch64 packaging (moved past v1.0.0 on 2026-10-06), the remaining temporal P0 coverage (physical-display classification, failure injection and settings restart; moved out of v0.9.0 on 2026-10-07), PM4 translator removal and the paused Switch work retain their individual Project scope. Deferred research and the SDK synchronization exception are recorded as Paused / Deferred rather than active Todo; they are not cancelled.
+DX11, HDR coverage beyond the experimental output of v0.7.35, v0.8.0 and v0.8.5, higher-resolution shadows, SSAO/depth access, GI/reflections, ray tracing, WMV playback, Linux AArch64 packaging (moved past v1.0.0 on 2026-10-06), HUDless/UI separation (moved past v1.0.0 on 2026-10-10), the remaining temporal P0 coverage (physical-display classification, failure injection and settings restart; moved out of v0.9.0 on 2026-10-07), PM4 translator removal and the paused Switch work retain their individual Project scope. Deferred research and the SDK synchronization exception are recorded as Paused / Deferred rather than active Todo; they are not cancelled.
 
 See the [Project](https://github.com/users/freefrank/projects/3) for individual evidence and the [historical roadmap](archive/ROADMAP-2026-09-10.md) for earlier detail. This reconciliation did not rerun builds, games or tests.
 

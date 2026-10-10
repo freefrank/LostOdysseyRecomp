@@ -6211,13 +6211,13 @@
     },
     {
       "key": "v100-ui-separation-production-handoff",
-      "title": "v1.0.0: Deliver production HUDless/UI separation handoff",
-      "body": "<!-- lo-project:v100-ui-separation-production-handoff -->\n\n## Summary and objectives\n\nDeliver a production HUDless/UI separation and handoff path for v1.0.0.\n\n## Scope and completion criteria\n\n- [ ] Produce a full-output-resolution HUDless scene source at the correct presentation boundary.\n- [ ] Represent guest UI layers with a verified alpha/composition contract.\n- [ ] Hand HUDless scene and UI to the presentation provider without screen subtraction or shader/ordinal whitelists.\n- [ ] Validate dialogue, combat HUD, Aim Ring, damage numbers, subtitles, transparent effects, resize, mode changes, and recovery.\n\n## Status and scope — 2026-09-27\n\nThe user deferred this work to v1.0.0. It is independent from v0.8.0 composited-backbuffer FG delivery and has no implementation or validation claim here.\n\nstage_detail: Deferred by user to v1.0.0; implementation and validation not started\n\n## Sources\n\n- docs/ROADMAP.md\n- docs/ROADMAP.zh-CN.md\n- docs/notes/v0.8.0-fg-checked-completion-20260927.md\n",
+      "title": "Deliver production HUDless/UI separation handoff",
+      "body": "<!-- lo-project:v100-ui-separation-production-handoff -->\n\n## Summary and objectives\n\nDeliver a production HUDless/UI separation and handoff path for v1.0.0.\n\n## Scope and completion criteria\n\n- [ ] Produce a full-output-resolution HUDless scene source at the correct presentation boundary.\n- [ ] Represent guest UI layers with a verified alpha/composition contract.\n- [ ] Hand HUDless scene and UI to the presentation provider without screen subtraction or shader/ordinal whitelists.\n- [ ] Validate dialogue, combat HUD, Aim Ring, damage numbers, subtitles, transparent effects, resize, mode changes, and recovery.\n\n## Status and scope — 2026-09-27\n\nThe user deferred this work to v1.0.0. It is independent from v0.8.0 composited-backbuffer FG delivery and has no implementation or validation claim here.\n\nstage_detail: Deferred by user to v1.0.0; implementation and validation not started\n\n## Status — 2026-10-10\n\nThe maintainer decided on 2026-10-10 that this item does not block v1.0.0 and moved it after v1.0.0. Status stays Paused and Delivery Deferred; no implementation or validation has started.\n\nResearch on 2026-10-10 (read-only; no build, no game run; the note is local and not in the repository):\n\n- Every frame-generation path (DLSS-G, FSR, XeSS and MetalFX) receives only the composited backbuffer, depth and motion vectors. The HUDless and UI slots are empty, and the production contract requires `ui == Unavailable` (`LostOdysseyRecomp/gpu/frame_generation_composite.h:71`).\n- A keyword search of the 122 GitHub Issues found no report of UI distortion caused by frame generation.\n- Estimates, not measurements: the full item 18 to 30 days; HUDless alone about 6 to 10 days.\n- The only SDK path that needs a UI layer (DLSS-G) has no test hardware.\n\n## Sources\n\n- docs/ROADMAP.md\n- docs/ROADMAP.zh-CN.md\n- docs/notes/v0.8.0-fg-checked-completion-20260927.md\n",
       "fields": {
         "Status": "Paused",
         "Delivery": "Deferred",
         "Kind": "Infrastructure",
-        "Release": "v1.0.0",
+        "Release": "After v1.0.0",
         "Area": "Temporal rendering",
         "Source key": "v100-ui-separation-production-handoff"
       }
@@ -7323,12 +7323,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Audio",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
         "Release": "v0.9.22",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The maintainer asked for a new log if still stereo (2026-10-10T05:13:30Z). No reporter confirmation of v0.9.22; no game run with the v0.9.22 packages."
+        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The Issue was closed as completed at 2026-10-10T08:30:58Z; the reporter wrote at 09:26:16Z that it works perfectly now, after the maintainer's v0.9.22 reply."
       }
     },
     {
@@ -7684,6 +7684,33 @@
         "Source key": "loading-and-save-speed-2026-10-10"
       },
       "source_refs": [],
+      "source_lines": [],
+      "record_type": "backlog"
+    },
+    {
+      "key": "android-frame-time-v100",
+      "title": "v1.0.0: Faster Android frames with the same image",
+      "body": "<!-- lo-project:android-frame-time-v100 -->\n\n## Summary and objectives\n\nThe v0.9.0 Reddit post lists \"Better Android performance\" under Coming in 1.0.0. Cut Android frame time without changing the image: lower resolution or fewer effects do not count (maintainer, 2026-10-07). Target device: Lenovo TB321FU (Adreno 750), the Android test device.\n\n## Scope and completion criteria\n\n- [ ] Measure first: re-baseline v0.9.22 (local debug build) on TB321FU in Uhra Residential and one fixed battle (`LO_DEBUG_BATTLE_FILE`), with the Android defaults and a high profile (GTAO, shadow 4x, FXAA), native resolution, `LO_FPS=0`, thermal status ≤1 at the start, startup pipeline preparation finished. Record `draw_ms`, record phases (`LO_RECORD_TIMING=1`), GPU queue time, frame interval, gpubusy and CPU clocks; decide the limiting side.\n- [ ] One Turnip diagnostic run (`TU_DEBUG=perf` through a debug-only `LO_TU_DEBUG`); act on LRZ, flush or UBWC warnings that cost time.\n- [ ] Ship only same-output changes picked from the baseline: remove the repeated binding calls in the render-thread record path, targeted Turnip fixes from the `TU_DEBUG=perf` run, and an ADPF performance hint session.\n- [ ] Render-thread limited: median `draw_ms` at least 15% lower; GPU limited: median GPU queue time at least 8% lower; in both scenes and both profiles, at matched thermal status. Median frame interval no worse anywhere. Screenshots at fixed views byte-identical.\n- [ ] Adaptive occlusion checked in one interior view on Android (not slower than `LO_ZPD_MODE=fast`).\n- [ ] Optional: one before/after pair on the maintainer's OPPO PLP110, only with permission.\n\n## Status — 2026-10-10\n\nResearch done 2026-10-10; scheduled for v1.0.0 by the maintainer on 2026-10-10. Not started.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/pull/302\n- https://github.com/freefrank/LostOdysseyRecomp/pull/303\n- https://github.com/freefrank/LostOdysseyRecomp/pull/313\n- https://github.com/freefrank/LostOdysseyRecomp/pull/315\n- https://github.com/freefrank/LostOdysseyRecomp/pull/268 (TB321FU pipeline runs)\n- https://github.com/freefrank/LostOdysseyRecomp/pull/316\n- https://github.com/freefrank/LostOdysseyRecomp/pull/379\n- LostOdysseyRecomp/gpu/record_timing.h\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics performance",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v1.0.0",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "The v0.9.0 Reddit post lists \"Better Android performance\" for 1.0.0; no item existed. Research 2026-10-10: the OPPO PLP110 (Adreno 840, PurpleVK) is GPU-bound once hot (gpubusy 100%, thermal status 3 within 10-60 s); same-output wins #302 #303 #304 #310 #313 #314 #315 shipped. The only TB321FU data (v0.8.45-dev, 1280x800, SSAO, Uhra) was render-thread bound: draw_ms 54-69, record_ms 25-34 (3.5x the phone), gpu_ms 44-59, ~15 FPS. No run used the Android defaults. Closed: forced GMEM (3x slower), keep-color on Adreno (-9%), HDR sidecar batching (0.3-0.8 ms), appCategory=game (no change). Untested on Android: adaptive occlusion (#316), background startup pipelines (#379). Scheduled for v1.0.0 by the maintainer on 2026-10-10. Not started."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/302",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/303",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/313",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/315",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/268",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/316",
+        "https://github.com/freefrank/LostOdysseyRecomp/pull/379"
+      ],
       "source_lines": [],
       "record_type": "backlog"
     }
