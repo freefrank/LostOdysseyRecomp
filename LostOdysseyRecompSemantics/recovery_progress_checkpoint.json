@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 130,
-    "distinct_entries": 405,
+    "unit_count": 131,
+    "distinct_entries": 408,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1358,6 +1358,16 @@
         ],
         "focused_smoke_paths": 2,
         "validation": "Triangle owner/array/normal cache and deleting/non-deleting lifecycle smoke; logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_tree61",
+        "entries": [
+          "82BB4138",
+          "82BB4160",
+          "82BC5DE8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Nine-triangle real tree build/reorder/write/read and cleanup; logical/ABI only"
       }
     ]
   },

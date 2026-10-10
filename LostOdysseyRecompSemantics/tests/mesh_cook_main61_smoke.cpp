@@ -7,6 +7,7 @@
 #include "lo_semantics/mesh_cook_load61.h"
 #include "lo_semantics/mesh_support_load61.h"
 #include "lo_semantics/mesh_cook_support61.h"
+#include "lo_semantics/mesh_triangle_tree61.h"
 #include "lo_semantics/cube_projection_table61.h"
 #include "lo_semantics/projection_extrema61.h"
 #include "lo_semantics/tree_envelope_load61.h"
@@ -113,6 +114,8 @@ struct Guest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU32(Address(s.r[3]) + (e == 0x82b9f188u ? 168 : 160));
       return;
     }
+    if (geometryDeps && mesh_triangle_tree61::Apply(e, m, *geometryDeps, s))
+      return;
     if (geometryDeps &&
         mesh_cook_support61::Apply(
             e, m, {geometryDeps->lifetime, geometryDeps->edge.diagnostics}, s))

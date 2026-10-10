@@ -1,3 +1,7 @@
+## Root direct continuation: triangle tree and remapping (2026-10-10 UTC)
+
+BB4160 builds the triangle spatial tree with a live BB4138 callback into existing mesh_attribute_reorder61 (BB3CF8, no duplicate implementation or credit). BC5DE8 binds geometry and replaces/loads the tree. A nine-separated-triangle path exercises actual reordering, keeps material/face mappings aligned, writes OPC/HBM through the linked writer, reloads through concrete memory input and releases all tracked allocations. The descriptor callback at82BB4138 is executable code, not a vtable. Nondefault limits remain source-reviewed. Logical/ABI scope only; higher triangle cooking still pending.
+
 ## Root direct continuation: triangle mesh storage and normals (2026-10-10 UTC)
 
 Triangle mesh recovery now includes construction/defaults, vertex/triangle/material/remap arrays, layered release and deleting teardown in mesh_triangle_storage61. BC5D70/B9E0D8 lazily provide normals through mesh_triangle_normals61: BCA2E8 uses recovered guest atan2 for corner weights, BCC470 computes oriented faces, accumulates weighted vertices and retains first-face/Y-axis fallback. Two focused lifecycle paths validate normal values, cache reuse, prefixed nested links, sentinel ownership and complete tracked cleanup. Existing F2B308/BC3EC0/empty leaves are reused without duplicate credit. Floating-point/volatile equivalence and full triangle cooking/loading are not yet claimed.

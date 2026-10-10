@@ -256,6 +256,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_boundary_walk61.cpp
     src/mesh_triangle_links61.cpp
     src/mesh_triangle_storage61.cpp
+    src/mesh_triangle_tree61.cpp
     src/mesh_triangle_normals61.cpp
     src/mesh_polygon_plane61.cpp
     src/mesh_vertex_normals61.cpp
