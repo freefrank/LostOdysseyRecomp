@@ -1,3 +1,7 @@
+## Root direct continuation: battle action eligibility (2026-10-10 UTC)
+
+Recovered the action-kind eligibility dispatcher, raw property-zero query and result wrapper. The fixture checks the source gate distinctions and actor/manager restrictions while retaining setup and evaluation as explicit service boundaries. Picker/action integration is next; no native gameplay claim is made.
+
 ## Root direct continuation: numeric skill cost adjustment (2026-10-10 UTC)
 
 Recovered and composed the property-based numeric cost adjustment: property 236 subtracts a truncating signed quarter; property 97 then forces zero. The cost fixture exercises actual table values, discount/free paths and category-specific NaN comparisons. Picker and marshaling fixtures pass without cost-service mocks; the picker retry case changes MP through its existing mutable virtual boundary. Native gameplay is unvalidated.

@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 213,
-    "distinct_entries": 815,
+    "unit_count": 214,
+    "distinct_entries": 818,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2377,6 +2377,16 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture checks eligibility, side-biased and all-pool selection, synthetic random cursor tags, NaN/inactive exclusion, source empty-pool behavior and saved FPR/GPR state. Preparation composes preferred selection; preparation, execution, action and marshaling fixtures pass. Manager/list/resource lookup remains a service boundary; no native target behavior is claimed. Logical/ABI only"
+      },
+      {
+        "unit": "battle_action_eligibility61",
+        "entries": [
+          "8238ABE0",
+          "82AD0C10",
+          "82B143B0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks all 32 action-kind routes plus out-of-range, raw property-zero mask, manager/actor restrictions, source-group exception and configured result-byte combinations. Runtime actor lookup and property helpers are composed. Evaluator setup and dispatch remain mutable guest boundaries, and picker/action caller composition is pending; native gameplay is unvalidated. Logical/ABI only"
       }
     ]
   },

@@ -1,0 +1,50 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Action-kind eligibility gates and configured-result evaluation.",
+  "entries": [
+    {
+      "address": "8238ABE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 21254,
+      "instruction_count": 19,
+      "body_sha256": "5f4af232b47ec81f64aa8897161ad84a8720d05ba07933c42264a45ee50a12e6",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AD0C10",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 25205,
+      "instruction_count": 105,
+      "body_sha256": "3e3ba1e6d69f3c86492e88e4d0e06b9013f8188fdb321b0796f8fad200dbcf45",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B143B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 19218,
+      "instruction_count": 29,
+      "body_sha256": "d7c911a14aa675f911889a3d67544520f1f7f092e3360219e838a009338b72e4",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238ABE0",
+      "82AD0C10",
+      "82B143B0"
+    ],
+    "header": "include/lo_semantics/battle_action_eligibility61.h",
+    "source": "src/battle_action_eligibility61.cpp",
+    "smoke": "tests/battle_action_eligibility61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused fixture checks all 32 action-kind routes plus out-of-range, raw property-zero mask, manager/actor restrictions, source-group exception and configured result-byte combinations. Runtime actor lookup and property helpers are composed. Evaluator setup and dispatch remain mutable guest boundaries, and picker/action caller composition is pending; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
