@@ -262,6 +262,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/cloth_triangle_edges61.cpp
     src/cloth_tetra_constraints61.cpp
     src/cloth_permutation61.cpp
+    src/cloth_schedule_support61.cpp
     src/cloth_import61.cpp
     src/cloth_face_map61.cpp
     src/cloth_topology_support61.cpp
