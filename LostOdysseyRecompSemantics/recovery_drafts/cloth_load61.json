@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "CLTH owner readback with retained vectors, inverse permutation and nested records.",
+  "entries": [
+    {
+      "address": "82BAA130",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 36099,
+      "instruction_count": 1230,
+      "body_sha256": "a31918ea7c35e1fff4c6a35fc4044ae50e6ae9e30459cd52b031fac210acd03c",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BAA130"
+    ],
+    "header": "include/lo_semantics/cloth_load61.h",
+    "source": "src/cloth_load61.cpp",
+    "smoke": "tests/cloth_load61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 4,
+    "case_scope": "Both topology types and both endian modes round-trip writer output twice into the same owned object. Checks include exact cursor, vector bytes/counts, inverse permutation, nested records, type1 sentinel halves, complete cleanup and ABI. Uses an in-place SDK realloc fixture; moving realloc, malformed streams and independent native assets remain unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "private_constants": "No private constant bundle required for this serialization sample."
+  }
+}

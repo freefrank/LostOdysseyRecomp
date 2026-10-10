@@ -1,3 +1,7 @@
+## Root direct continuation: cloth stream readback (2026-10-10 UTC)
+
+BAA130 now reads CLTH into owned guest vectors, retaining existing capacity across repeated loads, growing through the SDK allocator, building/shrinking an inverse permutation and restoring nested records. Both source topology types round-trip in both endian modes with exact cursor and complete cleanup. A repeated read verifies reuse and nested replacement. Fixture realloc is in-place; moving realloc and native-asset/gameplay integration remain unvalidated. Full cloth topology generation and cooking orchestration are still pending.
+
 ## Root direct continuation: cloth serialization (2026-10-10 UTC)
 
 BA7760 now writes NXS/CLTH version3 streams for the two source topology types, including positions, indices, per-face data, auxiliary arrays and nested 32-byte constraint records with their distinct packed wire layouts. Four focused type/endian combinations verify key fields and exact 162/166-byte lengths. The cloth loader, topology generation and complete cooker remain pending; no native-asset or game-runtime acceptance is claimed.
