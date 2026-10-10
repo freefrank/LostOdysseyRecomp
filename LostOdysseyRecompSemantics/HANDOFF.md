@@ -1,3 +1,7 @@
+## Root direct continuation: battle property removal (2026-10-10 UTC)
+
+Recovered the property-removal query and tail alias, including clearing both associated payload fields. Linked action adjustment now executes real property removal; its fixture checks both resource and peer masks. The peer virtual predicate remains a service boundary, with no native gameplay claim.
+
 ## Root direct continuation: compose final action-effect chain (2026-10-10 UTC)
 
 Top-level action effects now compose all recovered parameter handlers, percentage adjustments, manager setter and final resource application. The effect fixture executes all 32 kinds plus the default route and checks real resource fields. Five record/execution/opcode caller fixtures pass after removal of parameter/finalizer mocks, using actual actor fields and random cursors for observations. Imported character conversion, heap virtuals and linked-resource removal still remain platform/service boundaries; native gameplay is unvalidated.

@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_action_adjustments61.h"
 #include <iostream>
 struct AdjustmentGuest final : manager_release_context61::GuestServices {
-  unsigned inactive = 0, removed = 0;
+  unsigned inactive = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -15,10 +15,6 @@ struct AdjustmentGuest final : manager_release_context61::GuestServices {
       if (s.r[4] != 7)
         throw std::runtime_error("adjustment peer");
       s.r[3] = 0xa0000;
-      return;
-    }
-    if (e == 0x82ac9000) {
-      ++removed;
       return;
     }
     throw std::runtime_error("adjustment direct");
@@ -128,11 +124,14 @@ int main() {
     m.WriteU32(0xa1000 + 300, 0x123400);
     reset();
     run(0x82acd770, 0, 0);
-    check(total() == 15 && !g.removed);
+    check(total() == 15 && (m.ReadU32(0x80000 + 7 * 272 + 232) & (1u << 20)));
+    m.WriteU32(0xa0000 + 7 * 272 + 232, 1u << 19);
     g.inactive = 1;
     reset();
     run(0x82acd770, 0, 0);
-    check(total() == 30 && g.removed == 2);
+    check(total() == 30 && !(m.ReadU32(0x80000 + 7 * 272 + 232) & (1u << 20)) &&
+          !m.ReadU32(0xa0000 + 7 * 272 + 232) &&
+          !m.ReadU32(0x80000 + 4 * (20 + 567)));
     s.r[3] = 244;
     check(battle_action_adjustments61::Apply(0x82ac84e8, m, {g, native}, s) &&
           s.r[3] == 20);

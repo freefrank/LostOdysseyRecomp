@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -5,7 +6,8 @@ namespace lo::semantic::gpu::battle_action_adjustments61 {
 namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (!battle_action_adjustments61::Apply(e, m, d, s) &&
+  if (!battle_property_mutation61::Apply(e, m, d, s) &&
+      !battle_action_adjustments61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
