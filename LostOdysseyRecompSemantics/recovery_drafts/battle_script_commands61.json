@@ -1,0 +1,113 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Scene command services, resource level refresh and message dispatch.",
+  "entries": [
+    {
+      "address": "82AFB210",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16897,
+      "instruction_count": 26,
+      "body_sha256": "e342f7efc1ac12aa95fc690972f3da43848940d5dff28dc829c4f86ff560ed95",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB278",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 16963,
+      "instruction_count": 26,
+      "body_sha256": "c3b34266ed251a55ad722e7b1fa1384049b2a04f694f5739111010693345d6b5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB2E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17029,
+      "instruction_count": 51,
+      "body_sha256": "18ec8f2eccf2befba4336525b04a817af8eec9f45a69f34efdb48511b97a8832",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB3B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17145,
+      "instruction_count": 26,
+      "body_sha256": "796d62571a8463b1cc1e9d743b060b0296b4b659fca389249fbd69b7c3a1024a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB418",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17211,
+      "instruction_count": 27,
+      "body_sha256": "67eeec8cc1ede06640f024543c8e189abdaac2187387788e6fe8b3dec3985ad3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB488",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17276,
+      "instruction_count": 29,
+      "body_sha256": "fdabc65aeade95e7a49ce5f4cadf49a6ca2633d0fdd1b56099d5654c2ded20c5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFB500",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 17347,
+      "instruction_count": 27,
+      "body_sha256": "2cba16e1381e34ea29a0e39ef50a86d758080b44d07cf5064b13f2245b4329b2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD038",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 21410,
+      "instruction_count": 70,
+      "body_sha256": "a32158e0396f4dda215721570312e9242455eec1afd5abb1137abe4eec62bc5b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F8D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 4921,
+      "instruction_count": 90,
+      "body_sha256": "1ab7b31e99a4c7328928047b8653bb607ab9db1f4c8c68c2d670891ac78f7ad4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9F790",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 4720,
+      "instruction_count": 81,
+      "body_sha256": "eac97ff8d0d035c80f83f4c3ba39408c0d87a7ab91a68345e03331fe15aff83f",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AFB210",
+      "82AFB278",
+      "82AFB2E0",
+      "82AFB3B0",
+      "82AFB418",
+      "82AFB488",
+      "82AFB500",
+      "82AFD038",
+      "82A9F8D8",
+      "82A9F790"
+    ],
+    "header": "include/lo_semantics/battle_script_commands61.h",
+    "source": "src/battle_script_commands61.cpp",
+    "smoke": "tests/battle_script_commands61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture covers all ten handlers: source overlapping operand offsets, inline label ABI, nonzero predicates, both resource refresh branches and invalid levels, all four message routes, special circle/square glyph substitutions, zero-coordinate fallback and invalid message mode. Concrete scene, refresh and message services remain boundaries. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

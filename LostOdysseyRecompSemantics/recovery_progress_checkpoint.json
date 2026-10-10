@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 192,
-    "distinct_entries": 742,
+    "unit_count": 193,
+    "distinct_entries": 752,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2129,6 +2129,23 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One synthetic fixture exercises all fifteen handlers plus the bulk action reset helper: allocation sizes, expected and actual queue entries, duplicate two/three-record insertion, signed mismatch branches, resource fields, state bit masks, ID fallback, signed numeric ABI, activation flags and resource action reset. Concrete allocation and numerical scene services remain boundaries. No bitwise FP or native gameplay validation. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_commands61",
+        "entries": [
+          "82AFB210",
+          "82AFB278",
+          "82AFB2E0",
+          "82AFB3B0",
+          "82AFB418",
+          "82AFB488",
+          "82AFB500",
+          "82AFD038",
+          "82A9F8D8",
+          "82A9F790"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A compact fixture covers all ten handlers: source overlapping operand offsets, inline label ABI, nonzero predicates, both resource refresh branches and invalid levels, all four message routes, special circle/square glyph substitutions, zero-coordinate fallback and invalid message mode. Concrete scene, refresh and message services remain boundaries. Native gameplay is unvalidated. Logical/ABI only"
       }
     ]
   },

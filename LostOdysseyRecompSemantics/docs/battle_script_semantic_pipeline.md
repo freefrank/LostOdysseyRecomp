@@ -113,3 +113,7 @@ Seven scene handlers now build the original owned UTF16 label descriptors, prese
 ## Queues and resource state
 
 Fifteen additional battle handlers and the bulk resource-action reset helper now implement expected/actual queue construction and comparison, source duplicate insertions, resource field updates and flag transitions. Allocation sizes, signed jump targets and numeric argument conversion follow the source. One compact synthetic fixture passes; concrete external services and gameplay remain unvalidated.
+
+## Scene and message commands
+
+Ten remaining service-facing battle handlers now preserve scene command arguments, resource level refresh ordering, health and MP refill fields, four-way message routing and short-label glyph substitutions. Overlapping source operand offsets and zero-coordinate fallback remain intact. A compact synthetic fixture passes; concrete scene, resource refresh and message services and native gameplay remain unvalidated.
