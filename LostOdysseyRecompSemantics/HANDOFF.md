@@ -1,3 +1,7 @@
+## Root direct continuation: VALE adjacency loading (2026-10-09)
+
+BC7F98 now reads ICE/VALE, replaces its owned combined degree/edge buffer, expands packed degrees into four-byte degree/prefix records, reads adjacency bytes and computes halfword offsets with the existing BC7F48 wrapping-prefix semantics (no duplicate entry credit). Existing writer and new reader round-trip both byte orders with concrete stream adapters and full tracked cleanup. Original writer differential coverage stays separate from these logical reader checks. Allocation failure/count mutation order is retained; no new guards. Full geometry loader remains pending.
+
 ## Root direct continuation: ICE/adaptive index input (2026-10-09)
 
 Eleven additional mesh_stream_codec61 entries cover six borrowed reader tailcalls, ICE header parsing, halfword/word spans and adaptive u8/u16/u32 index decoding. Existing two-endian smoke paths now parse ICE through actual wrapper tails and exercise all three input widths into word output. Halfword-output adaptive mode and floating adapter tails remain compile/source-reviewed. Stack probing is reused for temporary widening buffers. No extra input bounds/rollback policy. Geometry/valence loading remains next.

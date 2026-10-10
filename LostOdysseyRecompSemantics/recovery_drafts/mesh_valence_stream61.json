@@ -41,6 +41,14 @@
       "instruction_count": 56,
       "body_sha256": "3193737749c54246ec2c78ada7c3500802c6aad2438560c2c386f0131f87b929",
       "status": "focused_original_ppc_validated"
+    },
+    {
+      "address": "82BC7F98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 45988,
+      "instruction_count": 141,
+      "body_sha256": "a63bde55933bc2656448d03c19bb3cf3c2a317703e9cbed4f40312855e274b68",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -49,11 +57,13 @@
       "82BD83A0",
       "82BBCC28",
       "82BADFA0",
-      "82BD8668"
+      "82BD8668",
+      "82BC7F98"
     ],
     "header": "include/lo_semantics/mesh_valence_stream61.h",
     "source": "src/mesh_valence_stream61.cpp",
-    "oracle": "tests/mesh_valence_stream61_oracle.cpp"
+    "oracle": "tests/mesh_valence_stream61_oracle.cpp",
+    "read_smoke": "tests/mesh_stream_codec61_smoke.cpp"
   },
   "validation": {
     "status": "passed_focused_linux_mapping_pending",
@@ -65,6 +75,8 @@
     "library_validated": true,
     "case_scope": "VALE degree maximum, compact8/wide16 output, native/swapped and empty cases, temporary allocation/free before adjacency payload. Composed original local chain shares concrete header/scalar/growable/allocator lowers. Full72/RAM/callback and independent bytes/lifetime. Word maximum and three packed widths, retaining original float path for full words.",
     "platform": "Linux x64 Clang 19.1.7; pinned regenerated PPC; mmap guest overlay",
-    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit."
+    "mapping_limit": "Historical catalog membership unverified; no baseline mapping credit.",
+    "focused_logic_read_roundtrips": 2,
+    "read_case_scope": "Both-endian ICE/VALE degree/adjacency roundtrip with concrete writer/reader/borrowed adapter. Packed degrees widen into interleaved degree/prefix records, raw adjacency restored, full cursor consumption and tracked cleanup. Existing eight original-writer cases remain separate; reader is logical/ABI, not Full72 or failure-matrix acceptance. Prefix helper mirrors the already-owned BC7F48 semantics; no duplicate mapped entry credit is added."
   }
 }

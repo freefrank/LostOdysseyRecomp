@@ -104,9 +104,49 @@ int main() {
                  {'B', 'A', 'D', '!', cook_main_smoke::Count, cook_main_smoke::Count + 4, reader});
             if (s.r[3] != 0 || m.ReadU32(reader + 4) != cook_main_smoke::Buffer + 8)
                 throw std::runtime_error("wrong tag consumption");
+            m.WriteU32(0x83216624, AllocatorTable);
+            m.WriteU32(AllocatorTable, Allocate | 1);
+            m.WriteU32(AllocatorTable + 12, Free | 3);
+            m.WriteU32(0x832dc180, swap ? 0 : 1);
+            m.WriteU32(Writer + 4, 0);
+            m.WriteU32(reader + 4, cook_main_smoke::Buffer);
+            constexpr unsigned source = Owner + 88, destination = Owner + 200;
+            m.WriteU32(source + 4, 3);
+            m.WriteU32(source + 8, 6);
+            m.WriteU32(source + 12, Polygons);
+            m.WriteU32(source + 16, Positions);
+            constexpr unsigned degree[]{2, 3, 1}, prefix[]{0, 2, 5};
+            for (unsigned j = 0; j < 3; ++j) {
+                m.WriteU16(Polygons + 4 * j, degree[j]);
+                m.WriteU16(Polygons + 4 * j + 2, prefix[j]);
+            }
+            for (unsigned j = 0; j < 6; ++j)
+                m.WriteU8(Positions + j, j + 10);
+            s.r[3] = source;
+            s.r[4] = Writer;
+            (void)mesh_valence_stream61::Apply(0x82bbcc28, m, {env.guest, native}, s);
+            if (s.r[3] != 1)
+                throw std::runtime_error("valence write");
+            s.r[3] = destination;
+            s.r[4] = view;
+            (void)mesh_valence_stream61::Apply(0x82bc7f98, m, {env.guest, native}, s);
+            if (s.r[3] != 1 || m.ReadU32(destination + 4) != 3 || m.ReadU32(destination + 8) != 6)
+                throw std::runtime_error("valence read counts");
+            for (unsigned j = 0; j < 3; ++j)
+                if (m.ReadU16(m.ReadU32(destination + 12) + 4 * j) != degree[j] ||
+                    m.ReadU16(m.ReadU32(destination + 12) + 4 * j + 2) != prefix[j])
+                    throw std::runtime_error("valence degree/prefix");
+            for (unsigned j = 0; j < 6; ++j)
+                if (m.ReadU8(m.ReadU32(destination + 16) + j) != j + 10)
+                    throw std::runtime_error("valence edges");
+            s.r[4] = m.ReadU32(destination);
+            env.guest.CallIndirect(Free, m, s);
+            if (!env.guest.live.empty() ||
+                m.ReadU32(reader + 4) != cook_main_smoke::Buffer + m.ReadU32(Writer + 4))
+                throw std::runtime_error("valence cursor/cleanup");
         }
         std::puts(
-            "PASS NXS and scalar/array stream roundtrips in both byte orders, wrong-tag rejection");
+            "PASS NXS/ICE/adaptive indices and VALE adjacency roundtrips in both byte orders");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "%s\n", e.what());

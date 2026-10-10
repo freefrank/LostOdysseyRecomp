@@ -1,4 +1,5 @@
 #include "lo_semantics/mesh_valence_stream61.h"
+#include "lo_semantics/mesh_stream_codec61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/serialization_control61.h"
 namespace lo::semantic::gpu::mesh_valence_stream61 {
@@ -140,6 +141,86 @@ struct Valence {
         }
         Leave(28);
     }
+    void Prefix(unsigned self) {
+        auto degrees = Word(self + 12);
+        m.WriteU16(degrees + 2, 0);
+        for (unsigned i = 1; i < Word(self + 4); ++i)
+            m.WriteU16(degrees + 4 * i + 2, std::uint16_t(m.ReadU16(degrees + 4 * (i - 1)) +
+                                                          m.ReadU16(degrees + 4 * (i - 1) + 2)));
+    }
+    bool ReadBody(unsigned self, unsigned stream) {
+        auto sp = Address(s.r[1]);
+        s.r[3] = 'V';
+        s.r[4] = 'A';
+        s.r[5] = 'L';
+        s.r[6] = 'E';
+        s.r[7] = sp + 88;
+        s.r[8] = sp + 80;
+        s.r[9] = stream;
+        s.lr = 0x82bc7fccu;
+        (void)mesh_stream_codec61::Apply(0x82bd81b0u, m, d, s);
+        if (!(s.r[3] & 255u))
+            return false;
+        auto swap = m.ReadU8(sp + 80);
+        auto scalar = [&]() {
+            s.r[3] = swap;
+            s.r[4] = stream;
+            (void)mesh_stream_codec61::Apply(0x82bad8b8u, m, d, s);
+            return Address(s.r[3]);
+        };
+        Store(self + 4, scalar());
+        Store(self + 8, scalar());
+        if (Word(self)) {
+            Lower(0x82bd0798u, 0x82bc808cu);
+            s.r[4] = Word(self);
+            s.r[11] = Word(Word(s.r[3]) + 12);
+            Call(0x82bc80a0u);
+            Store(self, 0);
+        }
+        auto bytes = 4 * Word(self + 4) + Word(self + 8);
+        Lower(0x82bd0798u, 0x82bc80bcu);
+        s.r[4] = bytes;
+        s.r[5] = 0;
+        s.r[11] = Word(Word(s.r[3]));
+        Call(0x82bc80d4u);
+        auto block = Address(s.r[3]);
+        Store(self, block);
+        if (!block)
+            return false;
+        Store(self + 12, block);
+        Store(self + 16, block + 4 * Word(self + 4));
+        auto maximum = scalar();
+        s.r[3] = maximum & 65535u;
+        s.r[4] = Word(self + 4);
+        s.r[5] = block;
+        s.r[6] = stream;
+        s.r[7] = swap;
+        s.lr = 0x82bc8158u;
+        (void)mesh_stream_codec61::Apply(0x82bd8468u, m, d, s);
+        for (unsigned i = Word(self + 4); i > 0; --i)
+            m.WriteU16(Word(self + 12) + 4 * (i - 1), m.ReadU16(block + 2 * (i - 1)));
+        s.r[3] = stream;
+        s.r[4] = Word(self + 16);
+        s.r[5] = Word(self + 8);
+        s.r[11] = Word(Word(stream) + 24);
+        Call(0x82bc81b8u);
+        Prefix(self);
+        return true;
+    }
+    void Read() {
+        auto self = Address(s.r[3]), stream = Address(s.r[4]);
+        auto old = s.r[1];
+        Store(old - 8, s.lr);
+        for (unsigned i = 14; i < 32; ++i)
+            recovery_abi::WriteU64(m, Address(old - 16 - 8 * (31 - i)), s.r[i]);
+        s.r[1] -= 512;
+        Store(s.r[1], old);
+        s.r[3] = ReadBody(self, stream) ? 1 : 0;
+        s.r[1] += 512;
+        for (unsigned i = 14; i < 32; ++i)
+            s.r[i] = recovery_abi::ReadU64(m, Address(s.r[1] - 16 - 8 * (31 - i)));
+        s.lr = Word(s.r[1] - 8);
+    }
     void Write() {
         Enter(27, 0x82bbcc30u);
         auto &r = s.r;
@@ -233,6 +314,9 @@ struct Valence {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Valence v{m, d, s};
     switch (e) {
+    case 0x82bc7f98u:
+        v.Read();
+        return true;
     case 0x82bd8360u:
         v.Maximum();
         return true;

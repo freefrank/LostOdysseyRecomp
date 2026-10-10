@@ -309,3 +309,8 @@ The NXS reader and scalar/array codec are concrete. Both endian modes round-trip
 ### Borrowed ICE readers and packed indices
 
 Six input adapter tails and ICE header parsing are concrete. Adaptive indices decode u8/u16/u32 sources through live block-read callbacks and guest stack scratch. Both byte orders and all input widths pass the focused word-output smoke. Geometry/valence parser composition is pending.
+
+
+### VALE adjacency input
+
+BC7F98 recovers adjacency payload ownership, adaptive degree decoding and prefix offsets. Existing ICE/VALE writer round-trips both byte orders through the reader with full consumption and cleanup. Reader checks are logical/ABI, separate from earlier original-writer differentials.
