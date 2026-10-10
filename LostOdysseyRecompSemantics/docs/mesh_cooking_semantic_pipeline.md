@@ -343,9 +343,14 @@ Triangle mesh recovery now includes construction/defaults, vertex/triangle/mater
 
 ### Triangle tree and coupled remapping
 
-BB4160 builds the triangle spatial tree with a live BB4138 callback into existing mesh_attribute_reorder61 (BB3CF8, no duplicate implementation or credit). BC5DE8 binds geometry and replaces/loads the tree. A nine-separated-triangle path exercises actual reordering, keeps material/face mappings aligned, writes OPC/HBM through the linked writer, reloads through concrete memory input and releases all tracked allocations. The descriptor callback at82BB4138 is executable code, not a vtable. Nondefault limits remain source-reviewed. Logical/ABI scope only; higher triangle cooking still pending.
+BB4160 builds the triangle spatial tree with a live BB4138 callback into existing mesh_attribute_reorder61 (BB3CF8, no duplicate implementation or credit). BC5DE8 binds geometry and replaces/loads the tree. A nine-separated-triangle path exercises actual reordering, keeps material/face mappings aligned, writes OPC/HBM through the linked writer, reloads through concrete memory input and releases all tracked allocations. The descriptor callback at82BB4138 is executable code, not a vtable. Nondefault axis-plane options remain source-reviewed. Logical/ABI scope only; higher triangle cooking still pending.
 
 
 ### Triangle cleanup and edge separation
 
 BB4540 now composes existing indexed workspace cleanup, replaces position/triangle arrays, preserves changed original-face/material mapping, builds edge incidence and separates extra triangle pairs on nonmanifold edges with the original small bit-pattern position perturbation. BD9188 replaces the first matching triangle index. A four-face shared-edge fixture welds seven vertices to six, separates to eight, verifies every undirected edge has at most two incident faces and releases all tracked storage. A missing fixture growth constant initially collapsed buffers; seeding the original ordinary value 2 resolved it without implementation changes. Logical/ABI scope only; broader triangle orchestration remains.
+
+
+### Triangle edge flags and bounds
+
+BB42E8/BB4F40/BB5230 now sort and group triangle edges, retain incident face IDs and derive per-face flags. A coplanar quad gives expected diagonal bits with repeated replacement and full cleanup. BA6458/B9D410 reuse guest power and sphere solvers for bounds/tolerance and distinguish the two axis-plane sides. Negative-plane extension and both axis encodings pass. The descriptor option previously described as a nondefault leaf limit is an axis-plane option; corrected that earlier wording. No additional guards or full floating-point/gameplay claim.

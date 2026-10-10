@@ -2,6 +2,7 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/mesh_triangle_storage61.h"
+#include "lo_semantics/mesh_triangle_bounds61.h"
 int main() {
   try {
     using namespace cook_main_smoke;
@@ -85,6 +86,68 @@ int main() {
             throw std::runtime_error(
                 "triangle angle weighted normals/fallback");
         }
+      std::array<unsigned char, 1448> power{};
+      std::ifstream pf(std::getenv("LO_POWER_CONSTANTS"), std::ios::binary);
+      pf.read(reinterpret_cast<char *>(power.data()), power.size());
+      if (pf.gcount() != 1448)
+        throw std::runtime_error("private power constants");
+      unsigned offset = 0;
+      for (auto region : std::array<test::Region, 6>{{{0x82000e00, 768},
+                                                      {0x820d2f68, 512},
+                                                      {0x83215500, 40},
+                                                      {0x822181a0, 112},
+                                                      {0x83214fc0, 8},
+                                                      {0x820d5e30, 8}}})
+        for (unsigned i = 0; i < region.size; ++i)
+          m.WriteU8(region.base + i, power[offset++]);
+      std::array<unsigned char, 8> bounds{};
+      std::ifstream bf(std::getenv("LO_BOUNDS_CONSTANTS"), std::ios::binary);
+      bf.read(reinterpret_cast<char *>(bounds.data()), 8);
+      if (bf.gcount() != 8)
+        throw std::runtime_error("private bounds constants");
+      for (unsigned i = 0; i < 4; ++i) {
+        m.WriteU8(0x820d6a18 + i, bounds[i]);
+        m.WriteU8(0x82000d70 + i, bounds[4 + i]);
+      }
+      m.WriteU32(0x8201f9f0, std::bit_cast<unsigned>(.5f));
+      m.WriteU32(0x82003660, std::bit_cast<unsigned>(2.5f));
+      m.WriteU32(0x82000e50, 0);
+      m.WriteU32(0x82000d64,
+                 std::bit_cast<unsigned>(-std::numeric_limits<float>::max()));
+      m.WriteU32(0x82000e0c,
+                 std::bit_cast<unsigned>(std::numeric_limits<float>::max()));
+      if (deleting) {
+        m.WriteU32(owner + 176, 0);
+        m.WriteU32(owner + 180, std::bit_cast<unsigned>(-1.f));
+      }
+      s.r[3] = owner;
+      (void)mesh_triangle_bounds61::Apply(0x82ba6458, m, env.Deps(), s);
+      for (unsigned i = 0; i < 3; ++i) {
+        float expected = deleting && i == 0 ? -1.f : 0.f;
+        if (std::bit_cast<float>(m.ReadU32(owner + 128 + 4 * i)) != expected ||
+            std::bit_cast<float>(m.ReadU32(owner + 140 + 4 * i)) != 1.f)
+          throw std::runtime_error("triangle bounds");
+      }
+      if (deleting && m.ReadU32(owner + 172) != 0)
+        throw std::runtime_error("triangle axis classification");
+      if (deleting) {
+        m.WriteU32(owner + 180, std::bit_cast<unsigned>(2.f));
+        s.r[3] = owner;
+        (void)mesh_triangle_bounds61::Apply(0x82b9d410, m, env.Deps(), s);
+        if (m.ReadU32(owner + 172) != 8)
+          throw std::runtime_error("opposite axis side");
+      }
+      auto radius = std::bit_cast<float>(m.ReadU32(owner + 164));
+      for (unsigned i = 0; i < 4; ++i) {
+        float distance = 0;
+        for (unsigned j = 0; j < 3; ++j) {
+          float delta = points[3 * i + j] -
+                        std::bit_cast<float>(m.ReadU32(owner + 152 + 4 * j));
+          distance += delta * delta;
+        }
+        if (distance > radius * radius + 1e-5f)
+          throw std::runtime_error("triangle sphere containment");
+      }
       auto allocations = env.guest.allocations;
       s.r[3] = owner;
       s.r[4] = 0;
@@ -116,7 +179,8 @@ int main() {
         throw std::runtime_error("triangle storage ABI");
     }
     std::puts(
-        "PASS triangle mesh angle-weighted normals, cached view, array "
+        "PASS triangle mesh bounds/sphere, angle-weighted normals, cached "
+        "view, array "
         "ownership, nested prefixed links, sentinel and deleting cleanup");
     return 0;
   } catch (const std::exception &e) {

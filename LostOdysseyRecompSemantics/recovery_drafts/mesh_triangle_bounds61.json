@@ -1,0 +1,42 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Triangle min/max, relative tolerance, minimal candidate sphere and axis-plane side classification.",
+  "entries": [
+    {
+      "address": "82B9D410",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 5743,
+      "instruction_count": 45,
+      "body_sha256": "dc33d001b084dffe7307b50af0517971c0d7670f0bcf8bdd5417ee2bfb0a7f2c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BA6458",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.179.cpp",
+      "source_line": 27245,
+      "instruction_count": 90,
+      "body_sha256": "19c8a81b07a3269d16b4023c6ff6d61902881704657c67bde7b7fb246b232974",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82B9D410",
+      "82BA6458"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_bounds61.h",
+    "source": "src/mesh_triangle_bounds61.cpp",
+    "smoke": "tests/mesh_triangle_storage61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 2,
+    "case_scope": "Both lifecycle samples verify bounds, enclosing sphere and complete cleanup. An axis-plane sample checks negative-plane bound extension and both side encodings (axis versus axis|8). A crossing-plane diagnostic remains unexercised. High-level logical/ABI recovery; no Full72, bitwise floating-point or gameplay acceptance.",
+    "private_constants": "Bounds and power use existing private user-XEX bundles, never published."
+  }
+}

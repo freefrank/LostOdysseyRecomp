@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 132,
-    "distinct_entries": 410,
+    "unit_count": 134,
+    "distinct_entries": 415,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1377,6 +1377,25 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "Welding and nonmanifold edge separation with material mapping and complete cleanup; logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_flags61",
+        "entries": [
+          "82BB42E8",
+          "82BB4F40",
+          "82BB5230"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Coplanar two-triangle quad produces the expected shared-diagonal bits (2/1); repeated replacement frees the prior flags and all temporary/owner allocations. Noncoplanar, excess-incidence and invalid-input branches are source-reviewed only. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_bounds61",
+        "entries": [
+          "82B9D410",
+          "82BA6458"
+        ],
+        "focused_smoke_paths": 2,
+        "validation": "Both lifecycle samples verify bounds, enclosing sphere and complete cleanup. An axis-plane sample checks negative-plane bound extension and both side encodings (axis versus axis|8). A crossing-plane diagnostic remains unexercised. Logical/ABI only"
       }
     ]
   },

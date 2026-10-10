@@ -1,0 +1,51 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Lexicographic edge sorting, incident-face grouping and geometric per-triangle edge flags.",
+  "entries": [
+    {
+      "address": "82BB42E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 4,
+      "instruction_count": 111,
+      "body_sha256": "37ef16192c1f4776e860d0c84b35c3ef36952cf5e482862325e8f5eddfc02b9e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BB4F40",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 1759,
+      "instruction_count": 188,
+      "body_sha256": "3911e29092ea8e6f8737b269f47f4173bae4a2a79b1c9adc4a07b39aab5c36f3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BB5230",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 2183,
+      "instruction_count": 186,
+      "body_sha256": "5f7e2182d036cb5cf24d86a1a94ecec2e1e2a1912c2027d30b72b46be029d4bc",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB42E8",
+      "82BB4F40",
+      "82BB5230"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_flags61.h",
+    "source": "src/mesh_triangle_flags61.cpp",
+    "smoke": "tests/mesh_triangle_flags61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Coplanar two-triangle quad produces the expected shared-diagonal bits (2/1); repeated replacement frees the prior flags and all temporary/owner allocations. Noncoplanar, excess-incidence and invalid-input branches are source-reviewed only. High-level logical/ABI recovery; no Full72, bitwise floating-point or gameplay acceptance.",
+    "private_constants": "Bounds and power use existing private user-XEX bundles, never published."
+  }
+}

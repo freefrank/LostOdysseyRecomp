@@ -45,6 +45,6 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Nine separated triangles execute the actual tree builder and BB4138 reorder callback. Triangle indices, material IDs and existing original-face mapping stay aligned via already recovered BB3CF8. OPC/HBM serializes through a concrete linked writer, then BC5DE8 replaces and reloads the tree through actual memory input, checks end cursor and mapping count, and frees all tracked allocations. Nondefault leaf limits are source-reviewed only. Logical/ABI scope, no Full72 or gameplay acceptance."
+    "case_scope": "Nine separated triangles execute the actual tree builder and BB4138 reorder callback. Triangle indices, material IDs and existing original-face mapping stay aligned via already recovered BB3CF8. OPC/HBM serializes through a concrete linked writer, then BC5DE8 replaces and reloads the tree through actual memory input, checks end cursor and mapping count, and frees all tracked allocations. Nondefault axis-plane options are source-reviewed only. Logical/ABI scope, no Full72 or gameplay acceptance."
   }
 }
