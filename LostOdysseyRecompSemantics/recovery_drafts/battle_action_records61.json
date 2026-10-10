@@ -1,0 +1,59 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Resource action records, target append and linked-member insertion.",
+  "entries": [
+    {
+      "address": "82AB36C8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 14873,
+      "instruction_count": 137,
+      "body_sha256": "a20f2554ff5bc887620f92612ba5c261f37cdf0f3be9c6ea94c91f783f6ffeb0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB38F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 15177,
+      "instruction_count": 134,
+      "body_sha256": "d069e909bb1de431277d7311771b3de0a4070d934e66acd212426ac577336058",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB0B28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 8156,
+      "instruction_count": 27,
+      "body_sha256": "60be48282328859c38e07ffe50325ea81330662e70b80e78077ae9d5d10734f7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB0B98",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 8217,
+      "instruction_count": 40,
+      "body_sha256": "0e7b89e1b85579790b64896b32cbf3abaafe1d5ee8b70a8999529af0d48056fb",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AB36C8",
+      "82AB38F0",
+      "82AB0B28",
+      "82AB0B98"
+    ],
+    "header": "include/lo_semantics/battle_action_records61.h",
+    "source": "src/battle_action_records61.cpp",
+    "smoke": "tests/battle_action_records61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One compact fixture covers both action record writers, first and subsequent targets, inherited record flags, actor mode metadata, alternate action flags, first-free linked member insertion, deduplicated additional targets and termination callbacks. Array reset/growth, command configuration and finalization remain service boundaries. The model is compiled and independently validated; replacing execution-layer emission boundaries is the next integration step. Native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

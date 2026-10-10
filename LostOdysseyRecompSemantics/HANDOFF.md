@@ -1,3 +1,7 @@
+## Root direct continuation: battle resource action records (2026-10-10 UTC)
+
+Four lower-level resource action-record routines now have logical implementations. They write record metadata, append target IDs, preserve prior-record flags, insert linked members and deduplicate additional targets. A compact synthetic fixture passes. Array initialization, command configuration and finalization remain service boundaries; integration into the execution-layer emission calls is pending, with no native gameplay claim.
+
 ## Root direct continuation: battle script skill cost and kind classification (2026-10-10 UTC)
 
 Skill availability and action-kind classification now run inside the recovered picker chain. The source property-mask gate, category-specific cost table, signed kind thresholds and distinct unordered comparison behavior are retained. A compact helper fixture and the affected picker and marshaling fixtures pass. Dynamic cost adjustment remains a service boundary; native gameplay is unvalidated.
