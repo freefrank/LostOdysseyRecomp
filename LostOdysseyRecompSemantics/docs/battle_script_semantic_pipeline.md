@@ -257,3 +257,7 @@ Recovered the action-kind eligibility dispatcher, raw property-zero query and re
 ## Eligibility configuration and dispatch
 
 Recovered and composed evaluator configuration and descriptor-based tail dispatch. Category setup resolves skill, item, special and inventory descriptors, permits property-zero targets only for descriptors 7/18, and rejects inactive targets. The leaf dispatcher preserves stack depth and invokes the descriptor callback through CTR. Targeted fixture passes actual setup and all dispatch categories; parameter initializer 82B121B0 and descriptor callbacks remain guest boundaries. Logical/ABI recovery only; native gameplay remains unvalidated.
+
+## Eligibility parameter initialization
+
+Recovered and composed category-specific evaluator parameter initialization: skill/item/special/inventory rows, paired field copies, adjusted costs, preserved untouched fields and random element selection. The focused fixture covers categories 0 through 32, actual cost/property helpers and random selection. Eligibility configuration now has no setup or initialization mock; only descriptor-specific evaluation callbacks and manager access remain boundaries. Logical/ABI recovery only, with no Full72, bitwise FP or native gameplay acceptance.

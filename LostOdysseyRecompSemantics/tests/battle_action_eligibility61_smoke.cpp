@@ -4,17 +4,11 @@
 #include "lo_semantics/battle_action_eligibility61.h"
 #include <iostream>
 struct EligibilityGuest final : manager_release_context61::GuestServices {
-  unsigned resultByte = 1, otherByte = 0, configured = 0, evaluated = 0;
+  unsigned resultByte = 1, otherByte = 0, evaluated = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x70000;
-      return;
-    }
-    if (e == 0x82b121b0) {
-      if (s.r[3] != 0x73000 || s.r[4] != m.ReadU32(0x73000 + 20))
-        throw std::runtime_error("initializer arguments");
-      ++configured;
       return;
     }
     throw std::runtime_error("eligibility direct");
@@ -33,6 +27,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x831f3000, 0x21000});
+    regions.push_back({0x83291000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
@@ -132,6 +128,48 @@ int main() {
     }
     m.WriteU32(0x90000 + 132, 0);
     check(!setup(2, 2));
+    // Real row initialization, including category-specific untouched fields.
+    m.WriteU32(0x90000 + 132, 1);
+    m.WriteU32(0x90000 + 232, 0);
+    for (unsigned kind = 0; kind <= 32; ++kind) {
+      bool skill = kind == 2 || (kind >= 6 && kind <= 9) || kind == 15;
+      bool item = kind == 3 || kind == 5 || (kind >= 25 && kind <= 29);
+      bool special = kind == 10, inventory = kind == 11;
+      unsigned row = item ? 0x110000 : special ? 0x130000 : 0x100000;
+      unsigned start = item ? 48 : special ? 20 : 36;
+      m.WriteU32(0x73000 + 44, 0x100000);
+      m.WriteU32(0x73000 + 48, 0x110000);
+      m.WriteU32(0x73000 + 52, 0x130000);
+      m.WriteU32(0x73004, 0x80000);
+      for (unsigned i = 0; i < 8; ++i)
+        m.WriteU32(row + start + 4 * i, 100 + i);
+      m.WriteU32(row + (item ? 24 : 16), 12);
+      m.WriteU32(row + (special ? 4 : 12), 8);
+      m.WriteU32(row + (item ? 92 : 88), 123);
+      m.WriteU32(0x73000 + 84, 0x3f800000);
+      m.WriteU32(0x73000 + 164, 0xdeadbeef);
+      s.r[3] = 0x73000;
+      s.r[4] = kind;
+      check(battle_action_eligibility61::Apply(0x82b121b0, m, {g, native}, s));
+      check(s.r[1] == initial.r[1]);
+      check(m.ReadU32(0x73000 + 132) ==
+            (skill || item || special || inventory ? 100u : 0u));
+      check(m.ReadU32(0x73000 + 100) ==
+            (skill || item || special || inventory ? 101u : 0u));
+      check(m.ReadU32(0x73000 + 212) == (skill || item ? 12u : 0u));
+      if (inventory || !(skill || item || special))
+        check(m.ReadU32(0x73000 + 84) == 0x3f800000);
+      if (!(skill || item || special || inventory))
+        check(m.ReadU32(0x73000 + 164) == 0xdeadbeef);
+    }
+    m.WriteU32(0x83264558, 0x76000);
+    m.WriteU32(0x80000 + 64, 25);
+    m.WriteU32(0x831f3300, 2);
+    m.WriteU32(0x100000 + 12, 64);
+    s.r[3] = 0x73000;
+    s.r[4] = 2;
+    check(battle_action_eligibility61::Apply(0x82b121b0, m, {g, native}, s));
+    check(m.ReadU32(0x73000 + 124) == 4 && m.ReadU32(0x73000 + 164) == 64);
     check(!battle_action_eligibility61::Apply(0, m, {g, native}, s));
     std::cout << "battle_action_eligibility61 smoke passed\n";
     return 0;
