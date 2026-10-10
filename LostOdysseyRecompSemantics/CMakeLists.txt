@@ -204,6 +204,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/tree_quantized_load61.cpp
     src/tree_scalar_write61.cpp
     src/tree_envelope_write61.cpp
+    src/tree_envelope_load61.cpp
     src/tree_quantized_write61.cpp
     src/tree_compact_flatten61.cpp
     src/tree_compact_strategy61.cpp
@@ -226,6 +227,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_geometry_stream61.cpp
     src/mesh_geometry_load61.cpp
     src/mesh_cook_stream61.cpp
+    src/mesh_cook_load61.cpp
     src/mesh_cook_tree61.cpp
     src/mesh_cook_scale61.cpp
     src/mesh_cook_support61.cpp

@@ -324,3 +324,8 @@ BC69E0 now decodes packed normal indices using a lazily initialized guest lookup
 ### Cooked geometry readback
 
 BC6C20 now loads the ICE/CVHL aggregate geometry, relocates serialized polygon pointers, reconstructs adaptive triangle/edge indices and reads packed normals. BC8638 composes ICE/CLHL geometry and VALE adjacency. All three actual cook-main outputs (indexed, point-only, inflated point-only) reload their geometry and release every tracked allocation. No new input guards; original current-format ownership and mutation order retained. Older format branches are source-reviewed only. Overall BC5270 load and tree restoration remain next; no full-RAM, bitwise floating-point or gameplay acceptance.
+
+
+### Complete load-scale-export chain
+
+BC4D80/BC5270 now bind and load complete cooked geometry, tree, bounds and mass data. BD15C8/BD1D08 restore OPC strategy and HBM mapping payloads; existing BD2200 ownership is reused without duplicate credit. B9C670 composes load, uniform scaling, export and cleanup. Actual indexed, point-only and inflated point-only files pass complete load, scale by two, export, reload, doubled coordinates and exact end cursor with no tracked allocations left. The inflated case includes a real quantized compact tree. Optional large-mesh/legacy support-map input remains a live untested callback. Logical/ABI scope only; no full-RAM, exhaustive legacy/endian or gameplay acceptance.

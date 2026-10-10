@@ -4,6 +4,10 @@
 #include "lo_semantics/memory_input61.h"
 #include "lo_semantics/mesh_stream_codec61.h"
 #include "lo_semantics/mesh_geometry_load61.h"
+#include "lo_semantics/mesh_cook_load61.h"
+#include "lo_semantics/tree_envelope_load61.h"
+#include "lo_semantics/mesh_cook_storage61.h"
+#include "lo_semantics/tree_mesh_lifetime61.h"
 #include "lo_semantics/owned_tree_mesh_build61.h"
 #include "lo_semantics/tree_mesh_callbacks61.h"
 #include "lo_semantics/crt_copy_full_context.h"
@@ -73,6 +77,7 @@ struct Guest final : manager_release_context61::GuestServices {
   unsigned allocations = 0;
   unsigned refreshCalls = 0;
   bool acceptExitRegistration = false;
+  mesh_geometry_load61::Dependencies *geometryDeps = nullptr;
   std::vector<GuestAddress> exitCallbacks;
   void CallDirect(GuestAddress e, GuestMemory &, Registers &s) override {
     if (acceptExitRegistration && e == 0x82b7be48u) {
@@ -97,11 +102,15 @@ struct Guest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU32(Address(s.r[3]) + (e == 0x82b9f188u ? 168 : 160));
       return;
     }
+    if (geometryDeps && mesh_geometry_load61::Apply(e, m, *geometryDeps, s))
+      return;
     if (mesh_stream_codec61::Apply(e, m, {*this, native}, s))
       return;
     if (memory_input61::Apply(e, m, native, s))
       return;
-    if (owned_tree_mesh_build61::Apply(e, m, {*this, native}, s) ||
+    if (tree_envelope_load61::Apply(e, m, {*this, native}, s) ||
+        tree_mesh_lifetime61::Apply(e, m, {*this, native}, s) ||
+        owned_tree_mesh_build61::Apply(e, m, {*this, native}, s) ||
         tree_mesh_callbacks61::Apply(e, m, {*this, native}, s))
       return;
     if (e == Allocate) {
@@ -171,6 +180,8 @@ void Check(unsigned mode) {
   w.Fill(0);
   auto m = w.Memory();
   Environment env(w);
+  auto geometryDeps = env.Deps();
+  env.guest.geometryDeps = &geometryDeps;
   for (unsigned i = 0; i < 128; ++i)
     m.WriteU8(0x83214e08 + i, normal_constants[i]);
   constexpr GuestAddress extra[]{0x820d60a8, 0x820d6454, 0x82000e40,
@@ -260,6 +271,9 @@ void Check(unsigned mode) {
   m.WriteU8(0x83216670, 1);
   m.WriteU32(0x820d5d30 + 48, 0x82b9f188);
   m.WriteU32(0x820d5d30 + 52, 0x82b9f190);
+  m.WriteU32(0x820d6970 + 4, 0x82bc8638);
+  m.WriteU32(0x820d6c34 + 4, 0x82bd2200);
+  m.WriteU32(0x820d6c34 + 28, 0x82bd1d08);
   m.WriteU32(0x820d6c34 + 8, 0x82bd22a8);
   m.WriteU32(0x820d6c34 + 24, 0x82bd1bf8);
   constexpr std::array<GuestAddress, 5> triangle{
@@ -272,11 +286,13 @@ void Check(unsigned mode) {
   constexpr GuestAddress cleanup[]{0x82bddac0, 0x82bddcd8, 0x82bddd38,
                                    0x82bddd98},
       bind[]{0x82bdd058, 0x82bdd1e8, 0x82bdbd90, 0x82bdc208},
-      write[]{0x82bddb20, 0x82bdb660, 0x82bdd868, 0x82bdc838};
+      write[]{0x82bddb20, 0x82bdb660, 0x82bdd868, 0x82bdc838},
+      read[]{0x82bdb350, 0x82bdb7f8, 0x82bdbed8, 0x82bdc9f0};
   for (unsigned i = 0; i < 4; ++i) {
     m.WriteU32(0x820d6e7c + 32 * i, cleanup[i]);
     m.WriteU32(0x820d6e80 + 32 * i, bind[i]);
     m.WriteU32(0x820d6e90 + 32 * i, write[i]);
+    m.WriteU32(0x820d6e7c + 24 + 32 * i, read[i]);
   }
   m.WriteU32(Writer, Table);
   m.WriteU32(Writer + 8, 8192);
@@ -339,8 +355,57 @@ void Check(unsigned mode) {
   (void)mesh_auxiliary_storage61::Apply(0x82bc85f0, m, env.Deps().lifetime, st);
   if (!env.guest.live.empty())
     throw std::runtime_error("readback cleanup");
+  constexpr unsigned adapters[]{0x82b9d4c8, 0x824b9f18, 0x824b9f30,
+                                0x82b9c788, 0x82b9c7a0, 0x82b9d4e0};
+  for (unsigned i = 0; i < 6; ++i)
+    m.WriteU32(0x820d5b24 + 4 + 4 * i, adapters[i]);
+  m.WriteU32(reader + 4, Buffer);
+  st.r[3] = Owner;
+  (void)mesh_cook_storage61::Apply(0x82b9e4b0, m, env.Deps().lifetime, st);
+  st.r[3] = Owner;
+  st.r[4] = reader;
+  (void)mesh_cook_load61::Apply(0x82bc5270, m, env.Deps(), st);
+  if (st.r[3] != 1 || m.ReadU32(reader + 4) != Buffer + m.ReadU32(Writer + 4))
+    throw std::runtime_error("full cooked load cursor");
+  std::vector<float> originalPoints;
+  for (unsigned i = 0; i < 3 * m.ReadU32(Owner + 168); ++i)
+    originalPoints.push_back(
+        std::bit_cast<float>(m.ReadU32(m.ReadU32(Owner + 172) + 4 * i)));
+  st.r[3] = Owner;
+  (void)mesh_cook_storage61::Apply(0x82b9e518, m, env.Deps().lifetime, st);
+  if (!env.guest.live.empty())
+    throw std::runtime_error("full cooked load cleanup");
+  constexpr unsigned scaledWriter = 0x62000, scaledBuffer = 0x63000;
+  m.WriteU32(scaledWriter, Table);
+  m.WriteU32(scaledWriter + 8, 8192);
+  m.WriteU32(scaledWriter + 12, scaledBuffer);
+  m.WriteU32(reader + 4, Buffer);
+  st.r[3] = reader;
+  st.r[5] = scaledWriter;
+  st.fpr_bits[1] = std::bit_cast<std::uint64_t>(2.0);
+  (void)mesh_cook_load61::Apply(0x82b9c670, m, env.Deps(), st);
+  if (st.r[3] != 1 || !env.guest.live.empty() ||
+      m.ReadU32(scaledWriter + 4) < 100)
+    throw std::runtime_error("load scale export");
+  st.r[3] = Owner;
+  (void)mesh_cook_storage61::Apply(0x82b9e4b0, m, env.Deps().lifetime, st);
+  m.WriteU32(reader + 4, scaledBuffer);
+  st.r[3] = Owner;
+  st.r[4] = reader;
+  (void)mesh_cook_load61::Apply(0x82bc5270, m, env.Deps(), st);
+  if (st.r[3] != 1 || 3 * m.ReadU32(Owner + 168) != originalPoints.size() ||
+      m.ReadU32(reader + 4) != scaledBuffer + m.ReadU32(scaledWriter + 4))
+    throw std::runtime_error("scaled reload");
+  for (unsigned i = 0; i < originalPoints.size(); ++i)
+    if (std::bit_cast<float>(m.ReadU32(m.ReadU32(Owner + 172) + 4 * i)) !=
+        2.f * originalPoints[i])
+      throw std::runtime_error("scaled vertices");
+  st.r[3] = Owner;
+  (void)mesh_cook_storage61::Apply(0x82b9e518, m, env.Deps().lifetime, st);
+  if (!env.guest.live.empty())
+    throw std::runtime_error("scaled reload cleanup");
   std::printf("PASS cook main mode %u tetrahedron -> %u bytes NXS/CVXM; "
-              "geometry readback and zero live allocations\n",
+              "full readback, scale2/export/reload and zero live allocations\n",
               mode, m.ReadU32(Writer + 4));
 }
 } // namespace cook_main_smoke
