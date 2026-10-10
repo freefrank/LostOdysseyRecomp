@@ -1,3 +1,7 @@
+## Root direct continuation: complete triangle cooking (2026-10-10 UTC)
+
+The default triangle cook entry B9CC00 now composes BA65C0 descriptor handling and BA6238 strided import with the actual clean/weld, BC1F00 convex grouping, BB4CF0 owner export, tree, bounds, edge flags, mass and NXS/MESH serialization. A tetrahedron succeeds through word-indexed, half-indexed and nonindexed inputs, then reloads with exact cursor and zero tracked ownership. One convex group and four angular categories are verified. The focused sample uses synthetic version17, so native asset compatibility and gameplay remain unproven. Complex concave/degenerate grouping, optional user callback and axis-plane variants are source-reviewed only. This supersedes the earlier pending-default-triangle-entry note.
+
 ## Root direct continuation: triangle partition support (2026-10-10 UTC)
 
 Triangle partition support now initializes and releases label arrays, merges sufficiently aligned face labels using guest atan2, compacts labels, traverses edge-incidence components with a guest FIFO, and applies the original two-sided plane acceptance before extending a convex group. A focused sample checks merging, relabeling, FIFO reset, connected traversal and face acceptance with complete cleanup. The higher-level BC1F00 partition orchestrator remains pending; these helpers alone do not constitute the full default triangle processing entry.

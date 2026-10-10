@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 137,
-    "distinct_entries": 429,
+    "unit_count": 139,
+    "distinct_entries": 434,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1431,6 +1431,25 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture verifies coplanar merge versus perpendicular faces, dense relabeling, FIFO empty/reset, a two-face connected component, seed and coplanar face acceptance, and full cleanup. Geometry rejection branches remain source-reviewed. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_partition61",
+        "entries": [
+          "82BC1F00",
+          "82BB4CF0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A closed tetrahedron passes edge classification, connected components, weighted root ordering, convex acceptance, category merge/compaction and owner export: one convex group, four angular categories, zero live allocations. More complex concave and degenerate cases remain source-reviewed. Logical/ABI only"
+      },
+      {
+        "unit": "mesh_triangle_cook61",
+        "entries": [
+          "82BA6238",
+          "82BA65C0",
+          "82B9CC00"
+        ],
+        "focused_smoke_paths": 3,
+        "validation": "Three tetrahedron inputs (word indices, halfword indices and nonindexed vertices) pass the concrete default-axis path: clean/weld, convex grouping, tree, bounds, edge flags, mass, NXS/MESH write, complete readback and cleanup. Readback has four vertices/faces, one convex group, four categories, mass 1/6 and exact cursor. Uses synthetic header version17 and private math bundles; this is not an independently captured native asset or gameplay acceptance. Optional descriptor callback, axis-plane option and invalid input paths remain source-reviewed. Logical/ABI only"
       }
     ]
   },
