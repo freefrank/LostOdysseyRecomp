@@ -4249,11 +4249,25 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Release": "v1.0.0",
-        "Evidence": "The v0.9.0 Reddit post lists \"Better Android performance\" for 1.0.0; no item existed. Research 2026-10-10: the OPPO PLP110 (Adreno 840, PurpleVK) is GPU-bound once hot (gpubusy 100%, thermal status 3 within 10-60 s); same-output wins #302 #303 #304 #310 #313 #314 #315 shipped. The only TB321FU data (v0.8.45-dev, 1280x800, SSAO, Uhra) was render-thread bound: draw_ms 54-69, record_ms 25-34 (3.5x the phone), gpu_ms 44-59, ~15 FPS. No run used the Android defaults. Closed: forced GMEM (3x slower), keep-color on Adreno (-9%), HDR sidecar batching (0.3-0.8 ms), appCategory=game (no change). Untested on Android: adaptive occlusion (#316), background startup pipelines (#379). Scheduled for v1.0.0 by the maintainer on 2026-10-10. Not started.",
+        "Evidence": "Reddit v0.9.0 lists \"Better Android performance\" for 1.0.0; no item existed. Same-output wins #302 #303 #304 #310 #313 #314 #315 shipped. OPPO PLP110 (Adreno 840): GPU-bound once hot. Closed: forced GMEM (3x slower), keep-color on Adreno (-9%), HDR sidecar batching (0.3-0.8 ms). Untested on Android: adaptive occlusion (#316), background startup pipelines (#379). Older TB321FU run (v0.8.45-dev, 1280x800, SSAO, Uhra, not defaults): render-thread bound, draw_ms 54-69, ~15 FPS. Hot baseline 2026-10-10, TB321FU, v0.9.22 defaults (native 2560x1600): Uhra 23.1-23.9 FPS, GPU 40.5-41.5 ms, render thread 25-26 ms; battle 24.9-27.0 FPS, GPU 36-39 ms; high settings Uhra 17.2 FPS (GPU 56.3 ms), battle 20.1 FPS (GPU 48.1 ms). All GPU-limited. TU_DEBUG=perf: about 230 LRZ-disabled lines per frame. The factory default Render resolution is now 720p on all platforms (PR #402, unreleased). Targets wait for render-pass-merging-v100. Scheduled for v1.0.0 on 2026-10-10. Not started.",
         "Source key": "android-frame-time-v100"
       },
       "title": "v1.0.0: Faster Android frames with the same image",
-      "body_sha256": "d3d873e71d0201f854500797874df059df84f09b79a0dc4569e0809814c73b98"
+      "body_sha256": "d12aa99b947bbc44c11fd8cd42fb302f0a3bb96da763add80916cfa35510023e"
+    },
+    "render-pass-merging-v100": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_6qcw",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics performance",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v1.0.0",
+        "Evidence": "Maintainer decided 2026-10-10 that pass merging is required for v1.0.0. TB321FU (Adreno 750, Turnip), v0.9.22, native 2560x1600, hot: Uhra about 23 FPS; GPU 40-43 ms (gpubusy 99-100%), GPU-limited. About 320 Vulkan render passes per frame (about 187 full-screen), about 268 framebuffer switches and 51 barriers. Turnip runs the whole frame in sysmem; forced GMEM is 3x slower. TU_DEBUG=perf shows LRZ disabled often (for example after CmdClearAttachments). Design and per-pass baseline in progress; implementation not started. Sources: docs/ROADMAP.md, docs/ROADMAP.zh-CN.md, android-frame-time-v100.",
+        "Source key": "render-pass-merging-v100"
+      },
+      "title": "v1.0.0: Merge render passes so tile-based GPUs keep work on chip",
+      "body_sha256": "6219edadb4ac7d326d0847b2e9beaf1069792143fed8185c0232e8b9343583eb"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"

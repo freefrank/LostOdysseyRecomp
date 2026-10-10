@@ -94,7 +94,8 @@ Parallel tracks:
 ## v1.0.0 deferred plan
 
 - [ ] **Cheaper upscaler motion data:** replay only the draws that moved since the previous frame and take static geometry from camera reprojection, without new ghosting on moving characters ([#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172); scheduled on 2026-10-08).
-- [ ] **Faster Android frames with the same image:** measure the TB321FU baseline first, then remove the repeated binding calls in the render-thread record path, make targeted Turnip fixes from a `TU_DEBUG=perf` run and add an ADPF performance hint session; the picture must not change ([Project](https://github.com/users/freefrank/projects/3); scheduled on 2026-10-10).
+- [ ] **Faster Android frames with the same image:** measure the TB321FU baseline first, then remove the repeated binding calls in the render-thread record path, make targeted Turnip fixes from a `TU_DEBUG=perf` run and add an ADPF performance hint session; the picture must not change, and its targets wait for the render-pass merge results ([Project](https://github.com/users/freefrank/projects/3); scheduled on 2026-10-10).
+- [ ] **Merge render passes for tile-based GPUs:** cut the per-frame render-pass count and full-screen passes so Adreno/Turnip, Apple and Mali GPUs can keep work on chip; the picture must not change and desktop must not slow down ([Project](https://github.com/users/freefrank/projects/3); scheduled on 2026-10-10).
 
 ## Later backlog
 

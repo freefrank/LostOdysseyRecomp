@@ -126,3 +126,34 @@ The README said 306 managed items. The baseline plan showed 307 before this chan
 - No build and no game run. The Android baseline on the TB321FU has not been taken.
 - The 18–30 and 6–10 day figures and the Android timing targets are estimates, not measurements.
 - The research notes are local and are not in the repository.
+
+## Render-pass merge decision — 2026-10-10
+
+The maintainer decided on 2026-10-10 that merging render passes is required and is scheduled for v1.0.0. This section records the new draft and the Android item update. Only `items.json`, the two roadmaps, this file and the README were changed here; `sync-state.json` changes only when the apply runs. No Issue, pull request, comment, code or build was touched, and no game was run.
+
+### Changes
+
+| Key | Change | Evidence boundary |
+| --- | --- | --- |
+| `render-pass-merging-v100` (new draft) | Kind Feature, Area Graphics performance, Status Todo, Delivery Not started, Release v1.0.0; body with the TB321FU background facts, scope and completion criteria | Scheduled; design research in progress; implementation not started. The per-pass baseline has not been taken. Dates and targets unset. |
+| `android-frame-time-v100` | Evidence (951 characters) and the body's Status section extended with the 2026-10-10 hot TB321FU baseline on v0.9.22 defaults; the completion bullet with the 15% `draw_ms` and 8% GPU targets replaced by a target re-set from `render-pass-merging-v100`; PR #402 (unreleased; factory default 720p) noted | One maintainer run set on the TB321FU. The earlier render-thread-bound run is kept and labelled as not using defaults. |
+
+Roadmaps (English and Chinese): the v1.0.0 section gained the "Merge render passes" line, and the Android line now says its targets wait for the render-pass merge results.
+
+### Judgment calls
+
+- **Baseline resolution.** The Android baseline is labelled native 2560x1600 because the render-pass facts were measured at that resolution on v0.9.22. The Android default before PR #402 is taken to be native; the maintainer should confirm.
+- **Older run kept.** The earlier TB321FU run (v0.8.45-dev, render-thread bound) stays in Evidence, labelled "not defaults", because it is the only other TB321FU data. The 2026-10-10 hot baseline supersedes it for the default profile.
+- **Status Todo.** Status stays Todo as the brief asked. Design research is recorded in the body; Delivery stays Not started.
+- **Sources.** The TB321FU measurements are local and not in the repository. The new draft cites the roadmaps and the Android item; no URL was invented.
+- **Shortened Android Evidence.** Older history, the closed-experiment list and some phone-only figures were shortened to stay under 1000 characters.
+
+### Plan results
+
+- Baseline before edits: created 0, updated 0, unchanged 307, conflicts 1 (`issue-37-portforge-integration`), operations 0.
+- Plan after edits, before apply: created 1, updated 1, unchanged 306, conflicts 1, operations 10. Operations: `render-pass-merging-v100` create draft and seven fields (Kind, Area, Status, Delivery, Release, Evidence, Source key); `android-frame-time-v100` update draft text and Evidence. The draft-text check passed (the stored body digest matched the remote body).
+- Length: Android Evidence 975 characters, new Evidence 600 characters, both under the 1024 cap.
+
+### Applied
+
+`python -B tools/project_management/sync.py --apply` on 2026-10-10: created 1, updated 1, unchanged 306, conflicts 1 (`issue-37` only), operations 10. Re-plan: created 0, updated 0, unchanged 308, conflicts 1, operations 0. Readback (`gh project item-list 3 --owner freefrank --limit 400`, 309 items): "v1.0.0: Merge render passes so tile-based GPUs keep work on chip" Todo / Not started / v1.0.0, Evidence 600 characters; "v1.0.0: Faster Android frames with the same image" Todo / Not started / v1.0.0, Evidence 975 characters.

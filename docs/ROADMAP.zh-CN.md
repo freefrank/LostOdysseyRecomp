@@ -94,7 +94,8 @@ Gate 1 backlog：调查已知 SDK `PRESENT-AFTER-WRITE` 同步例外并补充显
 ## v1.0.0 延后计划
 
 - [ ] **更省的超分运动信息：**只重画上一帧之后动过的物体，静止几何改用相机重投影，且移动角色不能出现新的鬼影（[#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172)；2026-10-08 排期）。
-- [ ] **Android 帧时间优化（画面不变）：**先在 TB321FU 上测基线，再精简渲染线程 record 路径里重复的绑定调用，根据 `TU_DEBUG=perf` 诊断定点修 Turnip 问题，并加入 ADPF performance hint session；画面必须不变（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
+- [ ] **Android 帧时间优化（画面不变）：**先在 TB321FU 上测基线，再精简渲染线程 record 路径里重复的绑定调用，根据 `TU_DEBUG=perf` 诊断定点修 Turnip 问题，并加入 ADPF performance hint session；画面必须不变；性能目标待 render pass 合并的结果再定（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
+- [ ] **合并 render pass，让分块渲染 GPU 把工作留在片上：**减少每帧的 render pass 数和全屏 pass，让 Adreno/Turnip、Apple 和 Mali 的 GPU 能把工作留在片上；画面必须不变，桌面端不能变慢（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
 
 ## 后续积压
 
