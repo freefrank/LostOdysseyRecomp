@@ -50,6 +50,9 @@ COMMON = r'''
 #include <unistd.h>
 #include "byteswap.h"
 // EXTRACTED_GUEST_TYPES
+namespace modding::text_overlay {
+struct Range { uint64_t offset = 0; std::shared_ptr<const std::vector<uint8_t>> bytes; };
+}
 constexpr uint64_t PPC_MEMORY_SIZE = 0x100000000ull;
 constexpr uint32_t STATUS_SUCCESS = 0, STATUS_END_OF_FILE = 0xC0000011u,
     STATUS_INVALID_HANDLE = 0xC0000008u, STATUS_NOT_IMPLEMENTED = 0xC0000002u,
@@ -439,6 +442,38 @@ static void DirectoryCases() {
     Check(NtQueryDirectoryFile(1, 0, 0, 0, &iosb, nullptr, bytes.size(), nullptr, 0) == STATUS_INVALID_PARAMETER &&
         currentHandle->nextEntry == 1, "null directory output consumed item");
 }
+// Language-pack ranges: bytes over the file, a gap of zeros past its end and a tail.
+static void RangeReadCases(bool scatter) {
+    FileFixture();
+    using modding::text_overlay::Range;
+    std::vector<uint8_t> tail(4096);
+    for (size_t i = 0; i < tail.size(); ++i) tail[i] = uint8_t(i * 13 + 1);
+    currentHandle->ranges = {Range{0, std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t>{'x', 'y'})},
+                             Range{2048, std::make_shared<const std::vector<uint8_t>>(tail)}};
+    currentHandle->fileSize = 6;
+    currentHandle->size = 2048 + tail.size();
+    std::vector<uint8_t> expected(currentHandle->size, 0);
+    memcpy(expected.data(), "xyCDEF", 6);
+    memcpy(expected.data() + 2048, tail.data(), tail.size());
+    XIO_STATUS_BLOCK iosb{}; completionBlock = &iosb;
+    be<uint64_t> offset = 0, segments[] = {0x1000, 0x3000};
+    std::array<uint8_t, 8192> output{};
+    g_memory.bytes.fill(0xA5);
+    auto oldEvents = events;
+    auto status = scatter ? NtReadFileScatter(1, 2, 4, 8, &iosb, segments, 8192, &offset)
+                          : NtReadFile(1, 2, 4, 8, &iosb, output.data(), 8192, &offset);
+    Complete(status, iosb, STATUS_SUCCESS, unsigned(expected.size()), oldEvents);
+    Check(currentHandle->position == expected.size(), "range read did not stop at the extended size");
+    Check(scatter ? !memcmp(g_memory.bytes.data() + 0x1000, expected.data(), 4096) &&
+                        !memcmp(g_memory.bytes.data() + 0x3000, expected.data() + 4096, expected.size() - 4096)
+                  : !memcmp(output.data(), expected.data(), expected.size()), "range read bytes");
+    offset = expected.size();
+    oldEvents = events;
+    status = scatter ? NtReadFileScatter(1, 2, 4, 8, &iosb, segments, 4096, &offset)
+                     : NtReadFile(1, 2, 4, 8, &iosb, output.data(), 4096, &offset);
+    Complete(status, iosb, STATUS_END_OF_FILE, 0, oldEvents);
+    completionBlock = nullptr;
+}
 int main(int argc, char** argv) try {
     Check(argc == 2, "fixture directory argument missing");
     std::filesystem::current_path(argv[1]);
@@ -457,6 +492,7 @@ int main(int argc, char** argv) try {
     InvalidHandleCases();
     ReadCases(false); ReadCases(true);
     MultiPageReadCases(false); MultiPageReadCases(true);
+    RangeReadCases(false); RangeReadCases(true);
     SetCases(); DirectoryCases();
     currentHandle.reset();
     std::cout << "PASS production file I/O: " << checks << " checks; buffer bounds, partial output, seek/read/resize errors, EOF, scatter, directory retry\n";
@@ -481,7 +517,8 @@ def main() -> int:
     handle = between(source, "struct FileHandle : KernelObject", "void FileSystem::TraceHandleClose(")
     lock = between(source, "class FileIoLock\n", "// Semantics follow Xenia")
     queue_apc = between(source, "static void QueueIoApc(", "namespace\n{")
-    reads = between(source, "uint32_t NtReadFile(", "uint32_t NtWriteFile(")
+    reads = between(source, "// Reads a handle that has language-pack ranges", "uint32_t NtReadFile(")
+    reads += between(source, "uint32_t NtReadFile(", "uint32_t NtWriteFile(")
     query_set_directory = between(source, "uint32_t NtQueryInformationFile(", "uint32_t NtQueryFullAttributesFile(")
     scatter = between(source, "uint32_t NtReadFileScatter(", "GUEST_FUNCTION_HOOK(__imp__NtCreateFile,")
     cpp = COMMON.replace("// EXTRACTED_GUEST_TYPES", guest_types) + helpers + schemas + handle + lock + FIXTURES + queue_apc + reads + query_set_directory + scatter + TESTS
