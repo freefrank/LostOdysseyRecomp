@@ -247,9 +247,13 @@ bool Route(GuestAddress entry, GuestMemory &memory, Dependencies dependencies, R
     return battle_formation61::Apply(entry, memory, dependencies, state);
   case 0x82ac6e60u:
   case 0x82ac6f08u:
+  case 0x82ac7000u:
+  case 0x82ac7178u:
+  case 0x82ac71e8u:
   case 0x82ac7550u:
   case 0x82ac7b08u:
   case 0x82ac7fc8u:
+  case 0x82ac80b8u:
   case 0x82ac8448u:
   case 0x82afd218u:
     return battle_group_gauge61::Apply(entry, memory, dependencies, state);

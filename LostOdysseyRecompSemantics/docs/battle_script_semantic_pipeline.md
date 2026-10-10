@@ -571,3 +571,7 @@ Recovered battle startup AD20C0 and descriptor callback manager constructor AD13
 ## Script loading and initial dispatch
 
 Recovered script loading and initial execution: asset lookup, per-capacity actor buffers/defaults, little-endian header/events/constants decode, bytecode allocation/copy, source failure release, profile-based startup and initial event dispatch. Reuses actual script-state allocation, integer decoding and opcode dispatch. Battle startup now composes actual script startup entries. Focused fixture covers loaded and spare actors, constants and code bytes, initial cursor writeback, missing assets, zero-code/capacity failure and no-script profile shortcut. Complex encounter layout remains external; no gameplay/full ABI acceptance.
+
+## Group gauge mutations
+
+Recovered group gauge mutation AC7000/AC7178/AC71E8/AC80B8: property-adjusted depletion, capped addition, max-HP division and roster-share application. Preserves source behavior that applies each eligible share to the original resource, rather than silently changing it to each iterated peer. Focused checks cover caps, property multipliers, divide mode, repeated original-target reduction and actual removed-amount accounting. Logical ABI checks pass; no gameplay/full ABI or FP acceptance.

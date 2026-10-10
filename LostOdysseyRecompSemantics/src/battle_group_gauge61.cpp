@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_group_gauge61.h"
+#include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_evaluation_theft61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
@@ -8,6 +9,7 @@ namespace {
 using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_group_gauge61::Apply(e, m, d, s) &&
+      !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_evaluation_theft61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
@@ -15,6 +17,19 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   unsigned frame = 0, first = 32;
   switch (e) {
+  case 0x82ac7178:
+    break;
+  case 0x82ac7000:
+    frame = 144;
+    first = 27;
+    break;
+  case 0x82ac71e8:
+    frame = 96;
+    break;
+  case 0x82ac80b8:
+    frame = 144;
+    first = 26;
+    break;
   case 0x82ac6e60:
     break;
   case 0x82ac7550:
@@ -39,6 +54,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     return false;
   }
   auto old = Address(s.r[1]), owner = Address(s.r[3]), mode = Address(s.r[4]);
+  auto argument = Address(s.r[5]);
   bool initializeCurrent = (Address(s.r[5]) & 255) == 1;
   if (frame) {
     m.WriteU32(old - 8, Address(s.lr));
@@ -64,7 +80,109 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
                                       : std::int32_t(value);
   };
   auto row = owner + 24 * mode;
-  if (e == 0x82ac7b08) {
+  if (e == 0x82ac7178) {
+    auto resource = mode, flags = m.ReadU32(resource + 124),
+         side = (flags >> 28) & 1;
+    if (m.ReadU8(owner + 24 * (side + 1)) && (flags & 0x40000000)) {
+      auto value = m.ReadU32(resource + 188) + argument;
+      m.WriteU32(resource + 188, value);
+      recovery_abi::WriteU64(m, old - 16,
+                             std::uint64_t(std::int64_t(std::int32_t(value))));
+      fp();
+      auto hp = get(resource + 2592);
+      if (float(std::int32_t(value)) > hp)
+        m.WriteU32(resource + 188, unsigned(trunc(hp)));
+    }
+  } else if (e == 0x82ac7000) {
+    m.WriteU32(Address(s.r[1]) + 80, 0x8204a1d8);
+    auto resource = mode;
+    if (m.ReadU8(owner + 24 * (((m.ReadU32(resource + 124) >> 28) & 1) + 1))) {
+      auto property = [&](unsigned id) {
+        s.r[3] = resource;
+        s.r[4] = id;
+        Call(0x8238e368, m, d, s);
+        return (Address(s.r[3]) & 255) != 0;
+      };
+      unsigned amount = argument;
+      if (property(227))
+        amount = unsigned(std::int32_t(amount * 150u) / 100);
+      if (property(248) && amount) {
+        auto half = std::int32_t(amount) / 2;
+        amount = half > 0 ? unsigned(half) : 1u;
+      }
+      auto flags = m.ReadU32(resource + 124);
+      if (flags & 0x40000000) {
+        auto current = m.ReadU32(resource + 188), remaining = current - amount;
+        if (std::int32_t(remaining) < 0) {
+          remaining = 0;
+          amount = current;
+        }
+        m.WriteU32(resource + 188, remaining);
+        recovery_abi::WriteU64(
+            m, Address(s.r[1]) + 88,
+            std::uint64_t(std::int64_t(std::int32_t(amount))));
+        fp();
+        auto group = owner + 24 * ((flags >> 28) & 1);
+        auto next = float(get(group + 4) - float(std::int32_t(amount)));
+        put(group + 4, next);
+        auto zero = get(0x82000e50);
+        if (next < zero) {
+          group = owner + 24 * ((m.ReadU32(resource + 124) >> 28) & 1);
+          put(group + 4, zero);
+        }
+      }
+    }
+    m.WriteU32(Address(s.r[1]) + 80, 0x8204a1d8);
+  } else if (e == 0x82ac71e8) {
+    recovery_abi::WriteU64(m, Address(s.r[1]) + 80,
+                           std::uint64_t(std::int64_t(std::int32_t(argument))));
+    fp();
+    auto amount = unsigned(
+        trunc(float(get(mode + 2592) / float(std::int32_t(argument)))));
+    m.WriteU32(Address(s.r[1]) + 80, amount);
+    s.r[5] = amount;
+    Call(0x82ac7000, m, d, s);
+  } else if (e == 0x82ac80b8) {
+    auto resource = mode;
+    fp();
+    auto maximum =
+        trunc(get(owner + 24 * ((m.ReadU32(resource + 124) >> 28) & 1) + 16));
+    m.WriteU32(Address(s.r[1]) + 80, unsigned(maximum));
+    auto total = unsigned(maximum / 4) * argument;
+    unsigned count = 0;
+    auto visit = [&](auto action) {
+      Call(0x82380a18, m, d, s);
+      Call(0x8238e2f8, m, d, s);
+      auto list = Address(s.r[3]);
+      for (unsigned i = 0;; ++i) {
+        Call(0x82380a18, m, d, s);
+        Call(0x8238e2f8, m, d, s);
+        if (std::int32_t(i) >= std::int32_t(m.ReadU32(Address(s.r[3]) + 4)))
+          break;
+        auto candidate = m.ReadU32(m.ReadU32(list) + 4 * i);
+        if ((m.ReadU32(candidate + 124) ^ m.ReadU32(resource + 124)) &
+            0x10000000)
+          continue;
+        s.r[3] = owner;
+        s.r[4] = candidate;
+        Call(0x82ac7550, m, d, s);
+        if ((Address(s.r[3]) & 255) == 1)
+          action();
+      }
+    };
+    visit([&]() { ++count; });
+    if (count) {
+      auto amount = unsigned(std::int64_t(std::int32_t(total)) /
+                             std::int64_t(std::int32_t(count)));
+      visit([&]() { // The source reapplies each share to the original resource,
+                    // not the iterated peer.
+        s.r[3] = owner;
+        s.r[4] = resource;
+        s.r[5] = amount;
+        Call(0x82ac7000, m, d, s);
+      });
+    }
+  } else if (e == 0x82ac7b08) {
     unsigned maximum = 0, current = 0;
     bool hasEligible = false, hasOrdinary = false;
     auto sp = Address(s.r[1]);

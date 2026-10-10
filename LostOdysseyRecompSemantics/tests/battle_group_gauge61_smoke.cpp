@@ -33,7 +33,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p : {0x832cb000u, 0x832ae000u, 0x8201d000u, 0x8201f000u})
+    for (auto p :
+         {0x832cb000u, 0x832ae000u, 0x8201d000u, 0x8201f000u, 0x83213000u})
       regions.push_back({p, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -129,6 +130,42 @@ int main() {
     s.r[5] = 0;
     run(0x82ac7b08, 0);
     check(!m.ReadU8(owner + 24) && !(m.ReadU32(one + 12644) & 0x80000000));
+    for (unsigned i = 0; i < 32; ++i) {
+      m.WriteU32(0x83213438 + 8 * i, 0);
+      m.WriteU32(0x8321343c + 8 * i, 1u << i);
+    }
+    m.WriteU8(owner + 24, 1);
+    m.WriteU8(owner + 48, 1);
+    m.WriteU32(two + 124, 0x40000000);
+    m.WriteU32(three + 124, 0x40000000);
+    m.WriteU32(two + 188, 80);
+    put(two + 2592, 100);
+    put(owner + 4, 180);
+    s.r[5] = 30;
+    run(0x82ac7178, two);
+    check(m.ReadU32(two + 188) == 100);
+    s.r[5] = 20;
+    run(0x82ac7000, two);
+    check(m.ReadU32(two + 188) == 80 && get(owner + 4) == 160);
+    m.WriteU32(two + 232 + 7 * 272, (1u << 3) | (1u << 24));
+    s.r[5] = 10;
+    run(0x82ac7000, two);
+    check(m.ReadU32(two + 188) == 73 && get(owner + 4) == 153);
+    m.WriteU32(two + 232 + 7 * 272, 0);
+    s.r[5] = 4;
+    run(0x82ac71e8, two);
+    check(m.ReadU32(two + 188) == 48 && get(owner + 4) == 128);
+    m.WriteU32(two + 188, 100);
+    m.WriteU32(three + 188, 80);
+    put(owner + 4, 180);
+    put(owner + 16, 240);
+    s.r[5] = 1;
+    run(0x82ac80b8, two);
+    check(m.ReadU32(two + 188) == 40 && m.ReadU32(three + 188) == 80 &&
+          get(owner + 4) == 120);
+    s.r[5] = 999;
+    run(0x82ac7000, two);
+    check(!m.ReadU32(two + 188) && get(owner + 4) == 80);
     check(!battle_group_gauge61::Apply(0, m, {guest, native}, s));
     std::cout << "battle group gauge logic smoke passed\n";
   } catch (const std::exception &e) {
