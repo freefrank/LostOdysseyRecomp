@@ -67,7 +67,14 @@ struct Guest final : manager_release_context61::GuestServices {
     std::set<GuestAddress> live;
     unsigned allocations = 0;
     unsigned refreshCalls = 0;
-    void CallDirect(GuestAddress, GuestMemory &, Registers &) override {
+    bool acceptExitRegistration = false;
+    std::vector<GuestAddress> exitCallbacks;
+    void CallDirect(GuestAddress e, GuestMemory &, Registers &s) override {
+        if (acceptExitRegistration && e == 0x82b7be48u) {
+            exitCallbacks.push_back(Address(s.r[3]));
+            s.r[3] = 0;
+            return;
+        }
         throw std::runtime_error("cache build direct boundary");
     }
     void CallIndirect(GuestAddress e, GuestMemory &m, Registers &s) override {

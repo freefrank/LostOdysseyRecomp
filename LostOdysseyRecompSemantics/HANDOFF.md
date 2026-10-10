@@ -1,3 +1,7 @@
+## Root direct continuation: packed normal input (2026-10-10 UTC)
+
+BC69E0 reads packed halfword normals, lazily generates the original 1024-entry sorted spherical lookup using concrete guest sine/cosine, and applies component/sign masks. Six signed axes pass both byte orders; lookup reuse and original830D9A60 registration target are checked. The angle step at820D6954 remains a private four-byte test input. CRT registration remains explicit. This prepares BC6C20 geometry loading; no full-grid/bitwiseFP/Full72/gameplay acceptance.
+
 ## Root direct continuation: VALE adjacency loading (2026-10-09)
 
 BC7F98 now reads ICE/VALE, replaces its owned combined degree/edge buffer, expands packed degrees into four-byte degree/prefix records, reads adjacency bytes and computes halfword offsets with the existing BC7F48 wrapping-prefix semantics (no duplicate entry credit). Existing writer and new reader round-trip both byte orders with concrete stream adapters and full tracked cleanup. Original writer differential coverage stays separate from these logical reader checks. Allocation failure/count mutation order is retained; no new guards. Full geometry loader remains pending.

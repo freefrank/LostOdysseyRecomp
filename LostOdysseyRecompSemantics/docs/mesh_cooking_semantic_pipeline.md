@@ -314,3 +314,8 @@ Six input adapter tails and ICE header parsing are concrete. Adaptive indices de
 ### VALE adjacency input
 
 BC7F98 recovers adjacency payload ownership, adaptive degree decoding and prefix offsets. Existing ICE/VALE writer round-trips both byte orders through the reader with full consumption and cleanup. Reader checks are logical/ABI, separate from earlier original-writer differentials.
+
+
+### Packed normal input
+
+BC69E0 now decodes packed normal indices using a lazily initialized guest lookup and recovered sine/cosine. Signed-axis cases cover both byte orders and lookup reuse. The original private angle step stays external; exhaustive angular/bitwise equivalence is unclaimed.
