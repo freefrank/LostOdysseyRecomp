@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 170,
-    "distinct_entries": 552,
+    "unit_count": 171,
+    "distinct_entries": 557,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1785,6 +1785,18 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused synthetic fixture checks the constructor header, preserved unrelated fields, selected core handler registrations and the composed arithmetic/conditional/wait/end program using the registered table. All 272 installed pointer slots are represented, but registration itself does not implement their targets or establish complete opcode coverage. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_calls61",
+        "entries": [
+          "82A9C5E8",
+          "82A9C650",
+          "82A9C928",
+          "82A9C9A8",
+          "82A9CA28"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused synthetic fixture runs a registered call/multiply/return/end program, checks signed division, operand swap and the original 32-deep call-stack stop. Existing core registration/arithmetic paths are included in the fixture. Division keeps the source zero-result branch; invalid signed-overflow inputs and runtime fault equivalence are not covered. Logical/ABI only"
       }
     ]
   },

@@ -1,0 +1,68 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle multiply/divide/swap and subroutine call/return handlers.",
+  "entries": [
+    {
+      "address": "82A9C5E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11595,
+      "instruction_count": 25,
+      "body_sha256": "7978917d9eae31ecf98863967527cfa1cb29dcdab859669108587a184f7eed88",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C650",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 11656,
+      "instruction_count": 33,
+      "body_sha256": "cbf9e73ec4dbb5221bcc26cae390e3bbe72d612f08831c85f50b7f522850df05",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C928",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12070,
+      "instruction_count": 32,
+      "body_sha256": "b1bf6dc0f9532bf62a312fba10665b08cab55e243eba01b0fe64bb96c90ba194",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9C9A8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12146,
+      "instruction_count": 31,
+      "body_sha256": "3c08efc29f870ce2d0d44a540f39d2cd7cc00b7651035332a9c6c79dbe94389f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9CA28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12214,
+      "instruction_count": 61,
+      "body_sha256": "e6a2a18d6e3e03b97d1c23f456b7bd7f6ff2bdb8c35fb2692f52329b123eab85",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82A9C5E8",
+      "82A9C650",
+      "82A9C928",
+      "82A9C9A8",
+      "82A9CA28"
+    ],
+    "header": "include/lo_semantics/battle_script_calls61.h",
+    "source": "src/battle_script_calls61.cpp",
+    "smoke": "tests/battle_script_calls61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused synthetic fixture runs a registered call/multiply/return/end program, checks signed division, operand swap and the original 32-deep call-stack stop. Existing core registration/arithmetic paths are included in the fixture. Division keeps the source zero-result branch; invalid signed-overflow inputs and runtime fault equivalence are not covered. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
