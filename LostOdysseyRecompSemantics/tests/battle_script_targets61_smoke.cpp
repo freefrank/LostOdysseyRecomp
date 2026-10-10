@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_targets61.h"
 #include <iostream>
 struct TargetsGuest final : manager_release_context61::GuestServices {
-  unsigned randoms = 0;
+  unsigned randoms = 0, randomTag = 84;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78 || e == 0x8238e2f8) {
@@ -28,7 +28,7 @@ struct TargetsGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x82aa0740) {
-      if (s.r[4] || s.r[5] != 2 || s.r[6] != 84 || s.r[7] != 1)
+      if (s.r[4] || s.r[5] != 2 || s.r[6] != randomTag || s.r[7] != 1)
         throw std::runtime_error("target random arguments");
       ++randoms;
       s.r[3] = 1;
@@ -98,6 +98,7 @@ int main() {
         throw std::runtime_error("target pool categories");
     for (unsigned i = 0; i < 5; ++i)
       m.WriteU8(code + 1 + 2 * i, i);
+    unsigned entry = 0x8238d148;
     auto select = [&](unsigned filter, unsigned param, unsigned pool,
                       unsigned selection) {
       m.WriteU32(vars, filter);
@@ -106,7 +107,7 @@ int main() {
       m.WriteU32(vars + 12, selection);
       m.WriteU32(actor + 52, 0);
       s.r[3] = owner;
-      (void)battle_script_targets61::Apply(0x8238d148, m, {guest, native}, s);
+      (void)battle_script_targets61::Apply(entry, m, {guest, native}, s);
       if (s.r[1] != initial.r[1] || s.r[14] != initial.r[14] ||
           s.r[19] != initial.r[19] || s.r[31] != initial.r[31] ||
           s.fpr_bits[30] != initial.fpr_bits[30] ||
@@ -160,6 +161,37 @@ int main() {
     select(5, 0, 0, 0);
     if (m.ReadU32(actor + 76))
       throw std::runtime_error("unimplemented source filter clears result");
+    auto refine = [&](unsigned filter, unsigned parameter, unsigned pool,
+                      unsigned selection) {
+      entry = 0x8238d148;
+      select(0, 0, 0, 0);
+      entry = 0x82af86a8;
+      guest.randomTag = 85;
+      select(filter, parameter, pool, selection);
+    };
+    m.WriteU32(0x88000 + 124, m.ReadU32(0x88000 + 124) | 0x10000000);
+    refine(0, 0, 2, 0);
+    if (m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 3)
+      throw std::runtime_error("refinement uses bit28 and team flag");
+    refine(0, 0, 6, 0);
+    if (m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 2)
+      throw std::runtime_error("refinement lower opposing group");
+    for (unsigned i = 0; i < 3; ++i)
+      m.WriteU32(0x80000 + 0x4000 * i + 2620, std::bit_cast<unsigned>(100.f));
+    m.WriteU32(0x88000 + 2616, std::bit_cast<unsigned>(30.f));
+    refine(5, 15, 0, 0);
+    if (m.ReadU32(actor + 76) != 2 || m.ReadU8(0x66000) != 1 ||
+        m.ReadU8(0x66001) != 2)
+      throw std::runtime_error("refinement secondary stat threshold");
+    refine(0, 0, 0, 1);
+    if (guest.randoms != 2 || m.ReadU32(actor + 76) != 1 ||
+        m.ReadU8(0x66000) != 2)
+      throw std::runtime_error("refinement random service tag");
+    m.WriteU32(actor + 76, 0);
+    entry = 0x82af86a8;
+    select(0, 0, 0, 0);
+    if (m.ReadU32(actor + 76))
+      throw std::runtime_error("empty refinement result");
     std::cout << "battle_script_targets61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

@@ -112,20 +112,25 @@ struct Targets {
     }
     return false;
   }
-  void Select() {
+  void Select(bool refine) {
     auto filter = Get(1), parameter = Get(3), pool = Get(5), selection = Get(7);
     m.WriteU32(sp + 88, 0x8204a1d8);
-    s.r[3] = owner;
-    s.r[4] = sp + 912;
-    s.r[5] = sp + 1168;
-    s.r[6] = sp + 656;
-    s.r[7] = sp + 112;
-    s.r[8] = 0;
-    (void)battle_script_targets61::Apply(0x8238de58, m, d, s);
-    m.WriteU32(Actor() + 76, 0);
+    unsigned candidateBase = sp + (refine ? 112 : 144),
+             resultBase = sp + (refine ? 368 : 400);
+    auto initialCount = W(Actor() + 76);
+    if (!refine) {
+      s.r[3] = owner;
+      s.r[4] = sp + 912;
+      s.r[5] = sp + 1168;
+      s.r[6] = sp + 656;
+      s.r[7] = sp + 112;
+      s.r[8] = 0;
+      (void)battle_script_targets61::Apply(0x8238de58, m, d, s);
+      m.WriteU32(Actor() + 76, 0);
+    }
     for (unsigned i = 0; i < 64; ++i) {
-      m.WriteU32(sp + 144 + 4 * i, 0);
-      m.WriteU32(sp + 400 + 4 * i, 0);
+      m.WriteU32(candidateBase + 4 * i, 0);
+      m.WriteU32(resultBase + 4 * i, 0);
     }
     unsigned candidates = 0, selected = 0;
     auto appendPool = [&](unsigned source, unsigned count, bool omitSelf) {
@@ -134,11 +139,40 @@ struct Targets {
         auto id = W(source + 4 * i);
         if (omitSelf && id == W(resource + 64))
           continue;
-        m.WriteU32(sp + 144 + 4 * candidates++, id);
+        m.WriteU32(candidateBase + 4 * candidates++, id);
       }
     };
-    bool valid = pool <= 7 && filter <= 18 && filter != 5;
-    if (valid) {
+    bool valid = pool <= 7 && filter <= 18 && (refine || filter != 5) &&
+                 (!refine || initialCount != 0);
+    if (refine) {
+      if (pool <= 7 && initialCount != 0) {
+        auto resource = W(Actor() + 4);
+        for (unsigned i = 0;
+             std::int32_t(i) < std::int32_t((pool >= 1 && pool <= 6)
+                                                ? W(Actor() + 76)
+                                                : initialCount);
+             ++i) {
+          auto id = unsigned(m.ReadU8(W(Actor() + 72) + i));
+          bool include = pool == 0;
+          if (pool == 7)
+            include = resource && id != W(resource + 64);
+          else if (pool >= 1 && pool <= 6) {
+            auto flags = W(Find(id) + 124);
+            bool upper = flags & 0x10000000, team = flags & 0x40000000;
+            include = pool == 1   ? upper
+                      : pool == 2 ? (upper && team)
+                      : pool == 3 ? (upper && !team)
+                      : pool == 4 ? !upper
+                      : pool == 5 ? (!upper && team)
+                                  : (!upper && !team);
+            id = m.ReadU8(W(Actor() + 72) + i);
+          }
+          if (include)
+            m.WriteU32(candidateBase + 4 * candidates++, id);
+        }
+      }
+      m.WriteU32(Actor() + 76, 0);
+    } else if (valid) {
       switch (pool) {
       case 0:
         appendPool(sp + 656, W(sp + 132), false);
@@ -171,13 +205,13 @@ struct Targets {
       }
     }
     auto append = [&](unsigned id) {
-      m.WriteU32(sp + 400 + 4 * selected++, id);
+      m.WriteU32(resultBase + 4 * selected++, id);
     };
     unsigned group = 0xffffffff;
     std::int32_t best = filter == 8 ? 999999 : filter == 10 ? 9999 : 0;
     if (valid && filter == 7)
       for (unsigned i = 0; i < candidates; ++i) {
-        auto resource = Find(W(sp + 144 + 4 * i));
+        auto resource = Find(W(candidateBase + 4 * i));
         if (W(resource + 64) == parameter) {
           group = W(resource + 68);
           break;
@@ -200,10 +234,10 @@ struct Targets {
           }
       if (has)
         for (unsigned i = 0; i < candidates; ++i)
-          append(W(sp + 144 + 4 * i));
+          append(W(candidateBase + 4 * i));
     } else if (valid)
       for (unsigned i = 0; i < candidates; ++i) {
-        auto id = W(sp + 144 + 4 * i);
+        auto id = W(candidateBase + 4 * i);
         if (filter == 0) {
           append(id);
           continue;
@@ -211,11 +245,12 @@ struct Targets {
         auto resource = Find(id);
         bool include = false;
         switch (filter) {
-        case 1: {
-          auto limit =
-              float(float(F(resource + 2592) * float(std::int32_t(parameter))) *
-                    F(0x82000d7c));
-          include = !(F(resource + 2588) > limit);
+        case 1:
+        case 5: {
+          auto limit = float(float(F(resource + (filter == 5 ? 2620 : 2592)) *
+                                   float(std::int32_t(parameter))) *
+                             F(0x82000d7c));
+          include = !(F(resource + (filter == 5 ? 2616 : 2588)) > limit);
           break;
         }
         case 2:
@@ -235,7 +270,7 @@ struct Targets {
               filter == 6 ? !(float(best) > value) : !(float(best) < value);
           if (better) {
             best = std::int32_t(Int(value));
-            m.WriteU32(sp + 400, id);
+            m.WriteU32(resultBase, id);
             selected = 1;
           }
           break;
@@ -252,7 +287,7 @@ struct Targets {
           auto value = std::int32_t(Int(F(resource + 2600)));
           if (best >= value) {
             best = value;
-            m.WriteU32(sp + 400, id);
+            m.WriteU32(resultBase, id);
             selected = 1;
           }
           break;
@@ -285,7 +320,7 @@ struct Targets {
     if (valid && selection == 0) {
       for (unsigned i = 0; i < selected; ++i) {
         auto actor = Actor();
-        m.WriteU8(W(actor + 72) + i, W(sp + 400 + 4 * i));
+        m.WriteU8(W(actor + 72) + i, W(resultBase + 4 * i));
         actor = Actor();
         m.WriteU32(actor + 76, W(actor + 76) + 1);
       }
@@ -295,10 +330,10 @@ struct Targets {
       s.r[3] = W(0x83264558);
       s.r[4] = 0;
       s.r[5] = selected - 1;
-      s.r[6] = 84;
+      s.r[6] = refine ? 85 : 84;
       s.r[7] = resource ? W(resource + 64) : 31;
       Call(0x82aa0740);
-      auto id = W(sp + 400 + 4 * Address(s.r[3]));
+      auto id = W(resultBase + 4 * Address(s.r[3]));
       m.WriteU8(W(Actor() + 72), id);
       m.WriteU32(Actor() + 76, 1);
       result = 1;
@@ -314,11 +349,12 @@ struct Targets {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (e != 0x8238de58 && e != 0x8238d148)
+  if (e != 0x8238de58 && e != 0x8238d148 && e != 0x82af86a8)
     return false;
   auto owner = Address(s.r[3]), old = Address(s.r[1]);
-  unsigned first = e == 0x8238de58 ? 14 : 19,
-           frame = e == 0x8238de58 ? 256 : 1552;
+  unsigned first = e == 0x8238de58 ? 14 : 19, frame = e == 0x8238de58   ? 256
+                                                      : e == 0x82af86a8 ? 752
+                                                                        : 1552;
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
@@ -334,7 +370,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     t.Pools(Address(s.r[4]), Address(s.r[5]), Address(s.r[6]), Address(s.r[7]),
             Address(s.r[8]));
   else
-    t.Select();
+    t.Select(e == 0x82af86a8);
   s.r[1] += frame;
   for (unsigned i = ffirst; i < 32; ++i)
     s.fpr_bits[i] = recovery_abi::ReadU64(m, old - foffset - 8 * (31 - i));
