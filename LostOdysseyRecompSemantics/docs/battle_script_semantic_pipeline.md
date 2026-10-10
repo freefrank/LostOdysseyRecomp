@@ -305,3 +305,7 @@ Recovered special target property admission with same-resource exclusion and opp
 ## Action record result flags
 
 Recovered seven action-record result flag operations and the descriptor tail adapter that selects the global result manager. Focused checks cover exact row/index stores and preserved neighbors; descriptor dispatch composition and the eligibility fixture pass. No full-equivalence or native gameplay acceptance is claimed.
+
+## Property-derived chance gates
+
+Recovered numeric property lookup, target penalty and two chance gates using actual property/random helpers. Focused checks cover bonus subtraction, generic payload, override, rejection and threshold outcomes. These helpers are ready for upper descriptor composition; no full floating-point or gameplay equivalence is claimed.
