@@ -16,7 +16,9 @@
 // A cutscene's dialogue is the language track of one of its streams: the
 // channel playing snd\stream\be0200.xwv (path at channel + 127) has a second
 // voice, handle at channel + 124, that sub_82B6D7E0 opens on the same name
-// under the language folder (sub_82851800: snd\int\stream\be0200.xwv). The
+// under the language folder (sub_82851800: snd\int\stream\be0200.xwv). Every
+// stream under a language folder has a twin of that name in snd\stream (all
+// four discs), so dialogue always plays as such a language track. The
 // stream volume update sub_82B6C650(channel, voice) runs for both voices and
 // multiplies in the channel's category gain from sub_82B71E68(channel). For
 // the language track, return master * Voice volume there instead; at 100 it

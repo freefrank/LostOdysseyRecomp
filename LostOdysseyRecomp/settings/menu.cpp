@@ -2839,8 +2839,8 @@ PPC_FUNC(sub_822F19B0)
         else if (tab == 1 && row == AudioVoiceVolumeRow)
         {
             // Like Vibration: applied and saved at once, in the retail volume
-            // rows' steps. Re-applying the retail volumes makes the game
-            // refresh its channels' gains.
+            // rows' steps, and handed to the game like a retail volume change.
+            // Streams started afterwards use it.
             const auto volume = uint32_t(std::clamp(int(edit.voiceVolume) + delta * 4, 0, 100));
             if (volume != edit.voiceVolume)
             {
