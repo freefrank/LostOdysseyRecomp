@@ -409,3 +409,8 @@ BA8AE8/BA9530 now append strided triangle/tetrahedral inputs into owned cooking 
 ### Cloth triangle edge constraints
 
 BAB468 now groups canonical edges from nonduplicate triangle faces and emits 68-byte cloth constraints, with endpoint/opposite vertices, edge lengths, opposite-vertex separation and the original polynomial angle approximation. A quad plus a duplicate face yields five edges and one shared diagonal with full cleanup. Only a private local 20-byte coefficient bundle is used; no original constants are published. The cloth scheduling/packing stages and full cooker remain pending.
+
+
+### Cloth tetrahedral constraints
+
+BABE50 now builds one 68-byte constraint per tetrahedron, retaining input vertex order, signed six-volume and six edge lengths. Sorted endpoint/cell records assign each shared edge to its first cell, with negative lengths in later cells. A two-cell shared-face sample checks output shrinking, repeated reuse and full cleanup. Reallocation is in-place in this fixture; this is logical/ABI recovery, not bitwise FP or full cloth cooking.

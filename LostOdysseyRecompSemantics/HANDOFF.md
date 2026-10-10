@@ -1,3 +1,7 @@
+## Root direct continuation: cloth tetrahedral constraints (2026-10-10 UTC)
+
+BABE50 now builds one 68-byte constraint per tetrahedron, retaining input vertex order, signed six-volume and six edge lengths. Sorted endpoint/cell records assign each shared edge to its first cell, with negative lengths in later cells. A two-cell shared-face sample checks output shrinking, repeated reuse and full cleanup. Reallocation is in-place in this fixture; this is logical/ABI recovery, not bitwise FP or full cloth cooking.
+
 ## Local findings incorporated (2026-10-10 UTC)
 
 Continuation is based on maintainer commit 72a5abdb6310e9ba43e232a19b6ab73706e79e23. Consult [guest function findings](../docs/notes/guest-function-findings.md) and its linked Ghidra annotations before selecting or naming further recovery targets. The ledger has 538 address rows (349 functions, 86 instruction sites, 56 globals, 33 data, 14 vtables); these are evidence/search labels, not implementation or runtime credit. Its archive/CPX, language/text-bank and battle-script chains provide concrete next targets after the current cloth chain. Source paths refer to main at 7d3c66a6 or explicitly named maintainer-local research, so unavailable local sources must not be presented as independently verified. Existing post-resume implementation overlap is 822A2FE0; retain its documented call-site evidence without promoting its uncertain purpose. No cloth cooking entries are supplied by this ledger.
