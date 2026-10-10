@@ -114,6 +114,21 @@ class MotionReplayGPU {
     uint64_t maskBatchAllocations_ = 0;
     uint32_t compilingModules_ = 0;
     static constexpr uint32_t kMaxCompilingModules = 2;
+public:
+    // Render-thread work on the slow paths only (first sight of a shader,
+    // module/pipeline creation, target allocation); read by LO_RECORD_TIMING.
+    struct WorkStats {
+        uint32_t translated = 0, shadersCreated = 0, pipelinesCreated = 0, pendingDraws = 0, sceneBegins = 0;
+        double translateMs = 0, shaderCreateMs = 0, pipelineMs = 0, sceneMs = 0;
+    };
+    const WorkStats& Work() const { return work_; }
+private:
+    WorkStats work_;
+    struct AddElapsed {
+        double& total;
+        std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+        ~AddElapsed() { total += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count(); }
+    };
     static constexpr const char* kMaskShader = R"HLSL(
 Texture2D<float2> motionDepth : register(t0);
 Texture2D<uint> motionTag : register(t1);
@@ -163,6 +178,8 @@ float pixel(float4 p : SV_Position) : SV_Target {
         auto [it, inserted] = cache.try_emplace(hash);
         auto& m = it->second;
         if (inserted) {
+            AddElapsed timer{work_.translateMs};
+            ++work_.translated;
             // Endian conversion is identical to Renderer::GetShader.
             xenos::TranslatedShader translated;
             if (count && guestWords) {
@@ -203,8 +220,12 @@ float pixel(float4 p : SV_Position) : SV_Target {
         m.source.clear();
         if (!compiled.ok) { m.error = compiled.errors; m.failure = Module::Failure::Translation; return m; }
         if (testFailNextModuleAllocation_) testFailNextModuleAllocation_ = false;
-        else m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
-            vulkan_ ? plume::RenderShaderFormat::SPIRV : plume::RenderShaderFormat::DXIL);
+        else {
+            AddElapsed timer{work_.shaderCreateMs};
+            ++work_.shadersCreated;
+            m.shader = device_->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main",
+                vulkan_ ? plume::RenderShaderFormat::SPIRV : plume::RenderShaderFormat::DXIL);
+        }
         if (!m.shader) {
             m.error = "Replay shader module allocation failed";
             m.failure = Module::Failure::GpuAllocation;
@@ -312,6 +333,8 @@ public:
         uint32_t width, uint32_t height) {
         if (!initialized_ || aborted_ || finalized_ || !commands || !depth || !width || !height || width > 7680 || height > 4320) return false;
         if (cleared_) return allocation_ == allocation && width_ == width && height_ == height && boundDepth_ == depth;
+        AddElapsed timer{work_.sceneMs};
+        ++work_.sceneBegins;
         FlushQueued(commands);
         if (width_ != width || height_ != height) {
             ++targetGeneration_;
@@ -370,6 +393,7 @@ public:
         if (!vs.shader || !ps.shader) {
             if (vs.error.empty() && ps.error.empty()) {
                 pendingThisFrame_ = true;
+                ++work_.pendingDraws;
                 setStatus(PipelinePrepareStatus::Pending);
                 return nullptr;
             }
@@ -387,7 +411,12 @@ public:
         desc.renderTargetFormat[2] = plume::RenderFormat::R32_UINT;
         for (unsigned i = 0; i < 3; ++i) desc.renderTargetBlend[i] = plume::RenderBlendDesc::Copy();
         desc.dynamicBlendConstantsEnabled = false; // Copy blends never read it.
-        auto pipeline = device_->createGraphicsPipeline(desc);
+        std::unique_ptr<plume::RenderPipeline> pipeline;
+        {
+            AddElapsed timer{work_.pipelineMs};
+            ++work_.pipelinesCreated;
+            pipeline = device_->createGraphicsPipeline(desc);
+        }
         auto* result = pipeline.get();
         if (!result) { ++failedDraws_; resourceFailedThisFrame_ = true; error_ = "MV pipeline allocation failed"; setStatus(PipelinePrepareStatus::Failed); return nullptr; }
         pipelines_.emplace(key, std::move(pipeline));
