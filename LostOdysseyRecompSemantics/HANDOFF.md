@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor bounded damage properties (2026-10-10 UTC)
+
+Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
 ## Root direct continuation: descriptor extra MP damage (2026-10-10 UTC)
 
 Recovered B0BA98 physical damage with randomized extra MP loss and property followups. Draws the extra MP amount before eligibility, applies it separately after normal HP damage, and combines it with damage in MP-first mode before HP spillover. Retains source stack layout, property payload/mask bookkeeping and saved floating registers. Focused checks cover separate HP/MP damage and combined MP-hit spillover. Descriptor callback coverage now 73 of 83 distinct targets; remaining 10 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.

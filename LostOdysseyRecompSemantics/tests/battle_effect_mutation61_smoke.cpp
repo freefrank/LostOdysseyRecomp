@@ -688,6 +688,32 @@ int main() {
     check(get(target + 2588) == 79 && get(target + 2616) == 0 &&
               get(owner + 172) == 21,
           "combined MP hit spills into HP");
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 100, 2);
+    m.WriteU32(owner + 108, 4);
+    m.WriteU32(owner + 96, 4);
+    m.WriteU32(owner + 104, 8);
+    m.WriteU32(owner + 112, 5);
+    m.WriteU32(owner + 120, 0);
+    put(owner + 80, 10);
+    put(target + 2588, 100);
+    call(0x82b0bfd0);
+    check(get(target + 2588) == 90 && get(owner + 172) == 10 &&
+              m.ReadU32(target + 4 * (68 * 3 + 1 + 59)) == 4 &&
+              m.ReadU32(target + 4 * (68 * 4 + 3 + 59)) == 5,
+          "bounded damage and dual property values");
+    m.WriteU32(owner + 120, 1);
+    call(0x82b0bfd0);
+    check(get(target + 2588) == 90 && get(owner + 172) == 0,
+          "property-only damage suppression");
+    put(owner + 80, 9999);
+    m.WriteU32(owner + 184, 1);
+    put(target + 2588, 20000);
+    put(target + 2592, 20000);
+    call(0x82b0bfd0);
+    check(get(target + 2588) == 10001 && get(owner + 172) == 9999,
+          "sentinel direct damage precedes mode suppression");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
