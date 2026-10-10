@@ -17,12 +17,21 @@
       "instruction_count": 13,
       "body_sha256": "c94061b3733fcace11a535594ba778c8f55f89d150c88b2ebaca18ec7e547700",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC1AF0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 26369,
+      "instruction_count": 29,
+      "body_sha256": "939506246b57e984f6ea76646ec1dec3ea0b39f24e8fea7d71cdf8f295379646",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82AC9AA8",
-      "82B08B80"
+      "82B08B80",
+      "82AC1AF0"
     ],
     "header": "include/lo_semantics/battle_script_skill_cost61.h",
     "source": "src/battle_script_skill_cost61.cpp",
@@ -36,6 +45,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "A compact fixture covers both categories, property-mask blocking, MP cost comparisons, negative cost, distinct unordered comparison behavior, fallback categories and signed kind thresholds. Picker and marshaling fixtures now pass through these recovered helpers. Cost adjustment remains an explicit service boundary. Logical floating-point behavior only; no bitwise FP or native gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "A compact fixture covers both categories, property-mask blocking, MP cost comparisons, negative cost, distinct unordered comparison behavior, fallback categories and signed kind thresholds. Picker and marshaling fixtures now pass through these recovered helpers. Cost adjustment remains an explicit service boundary. Logical floating-point behavior only; no bitwise FP or native gameplay validation. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "cost_adjustment_composition": "Recovered and composed the property-based numeric cost adjustment: property 236 subtracts a truncating signed quarter; property 97 then forces zero. The cost fixture exercises actual table values, discount/free paths and category-specific NaN comparisons. Picker and marshaling fixtures pass without cost-service mocks; the picker retry case changes MP through its existing mutable virtual boundary. Native gameplay is unvalidated."
   }
 }

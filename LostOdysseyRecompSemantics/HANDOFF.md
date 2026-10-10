@@ -1,3 +1,7 @@
+## Root direct continuation: numeric skill cost adjustment (2026-10-10 UTC)
+
+Recovered and composed the property-based numeric cost adjustment: property 236 subtracts a truncating signed quarter; property 97 then forces zero. The cost fixture exercises actual table values, discount/free paths and category-specific NaN comparisons. Picker and marshaling fixtures pass without cost-service mocks; the picker retry case changes MP through its existing mutable virtual boundary. Native gameplay is unvalidated.
+
 ## Root direct continuation: compose selection random state (2026-10-10 UTC)
 
 Preparation, target filtering/refinement, skill picking and item selection now compose the recovered random-range helper. Five focused fixtures pass using actual per-group/per-tag cursors and controlled synthetic table values instead of random-service stubs, including self-target retry and equal-range no-advance behavior. Four existing record/execution/effect fixtures also pass with the shared synthetic random table. Native random-table data, statistical behavior and gameplay remain unvalidated.

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 213,
-    "distinct_entries": 814,
+    "distinct_entries": 815,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2205,10 +2205,12 @@
         "unit": "battle_script_skill_cost61",
         "entries": [
           "82AC9AA8",
-          "82B08B80"
+          "82B08B80",
+          "82AC1AF0"
         ],
         "focused_smoke_paths": 1,
-        "validation": "A compact fixture covers both categories, property-mask blocking, MP cost comparisons, negative cost, distinct unordered comparison behavior, fallback categories and signed kind thresholds. Picker and marshaling fixtures now pass through these recovered helpers. Cost adjustment remains an explicit service boundary. Logical floating-point behavior only; no bitwise FP or native gameplay validation. Logical/ABI only"
+        "validation": "A compact fixture covers both categories, property-mask blocking, MP cost comparisons, negative cost, distinct unordered comparison behavior, fallback categories and signed kind thresholds. Picker and marshaling fixtures now pass through these recovered helpers. Cost adjustment remains an explicit service boundary. Logical floating-point behavior only; no bitwise FP or native gameplay validation. Logical/ABI only",
+        "cost_adjustment_composition": "Recovered and composed the property-based numeric cost adjustment: property 236 subtracts a truncating signed quarter; property 97 then forces zero. The cost fixture exercises actual table values, discount/free paths and category-specific NaN comparisons. Picker and marshaling fixtures pass without cost-service mocks; the picker retry case changes MP through its existing mutable virtual boundary. Native gameplay is unvalidated."
       },
       {
         "unit": "battle_action_records61",

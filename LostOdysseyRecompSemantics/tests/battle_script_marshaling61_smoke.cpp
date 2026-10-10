@@ -34,10 +34,6 @@ struct MarshalGuest final : manager_release_context61::GuestServices {
       prepared = unsigned(s.r[4]) + 1;
       return;
     }
-    if (e == 0x82ac1af0) {
-      s.r[3] = ok ? 0 : 20;
-      return;
-    }
     if (e == 0x82ad0c10) {
       s.r[3] = ok;
       return;

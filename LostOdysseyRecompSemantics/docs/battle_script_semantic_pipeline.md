@@ -245,3 +245,7 @@ Added the probability wrapper 82AA0838, preserving threshold >= a 0..99 draw. Pr
 ## Composed selection random state
 
 Preparation, target filtering/refinement, skill picking and item selection now compose the recovered random-range helper. Five focused fixtures pass using actual per-group/per-tag cursors and controlled synthetic table values instead of random-service stubs, including self-target retry and equal-range no-advance behavior. Four existing record/execution/effect fixtures also pass with the shared synthetic random table. Native random-table data, statistical behavior and gameplay remain unvalidated.
+
+## Numeric skill cost adjustment
+
+Recovered and composed the property-based numeric cost adjustment: property 236 subtracts a truncating signed quarter; property 97 then forces zero. The cost fixture exercises actual table values, discount/free paths and category-specific NaN comparisons. Picker and marshaling fixtures pass without cost-service mocks; the picker retry case changes MP through its existing mutable virtual boundary. Native gameplay is unvalidated.

@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_pickers61.h"
 #include <iostream>
 struct PickerGuest final : manager_release_context61::GuestServices {
-  unsigned gate = 1, skip = 0, checks = 0, enabled = 0, predicate = 1;
+  unsigned gate = 1, skip = 0, enabled = 0, predicate = 1;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -17,10 +17,6 @@ struct PickerGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x8238e308) {
       s.r[3] = s.r[4] == 20 ? 0x90000 : 0x80000;
-      return;
-    }
-    if (e == 0x82ac1af0) {
-      s.r[3] = ++checks <= skip || gate != 1 ? 20 : 0;
       return;
     }
     if (e == 0x82ad0c10) {
@@ -37,8 +33,10 @@ struct PickerGuest final : manager_release_context61::GuestServices {
     }
     throw std::runtime_error("unexpected picker service");
   }
-  void CallIndirect(GuestAddress e, GuestMemory &,
+  void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (skip)
+      m.WriteU32(0x80000 + 2616, 0x41200000);
     if (s.r[3] != 0x90000)
       throw std::runtime_error("picker target virtual");
     s.r[3] = e == 0x2000 + enabled;
@@ -85,6 +83,8 @@ int main() {
       m.WriteU32(p + 2588, 0x42c80000);
       m.WriteU32(p + 2616, 0x41200000);
     }
+    for (unsigned id = 0; id < 400; ++id)
+      m.WriteU32(0xa0000 + 96 * id + 16, 1);
     unsigned slot = 0;
     for (unsigned i = 0; i < 25; ++i) {
       m.WriteU32(0x832139e8 + 4 * i, 100 + i);
@@ -107,7 +107,8 @@ int main() {
       s.r[4] = 0;
       s.r[5] = output;
       s.r[6] = output + 4;
-      guest.checks = 0;
+      m.WriteU32(0x80000 + 2616,
+                 (guest.gate != 1 || guest.skip) ? 0 : 0x41200000);
       for (unsigned tag = 0; tag < 128; ++tag)
         m.WriteU32(0x72000 + 4 * (128 * 15 + tag + 3), tag == 83 ? 1 : 0);
       check(battle_script_pickers61::Apply(e, m, {guest, native}, s));
