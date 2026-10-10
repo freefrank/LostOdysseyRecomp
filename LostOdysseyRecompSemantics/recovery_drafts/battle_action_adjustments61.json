@@ -1,0 +1,68 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Property-selected percentage adjustment of action parameter pairs.",
+  "entries": [
+    {
+      "address": "82AC84E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 5601,
+      "instruction_count": 20,
+      "body_sha256": "f1a4e439c3dd1c1fc068204c42b31814cc7a3aee03d069e322b901bb278da35e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACD680",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 17375,
+      "instruction_count": 58,
+      "body_sha256": "1ee7a2d4c801789931dcf2a1a9d3a994c1800f1ce6ed2ec4e010fc592a5fdf07",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACD770",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 17501,
+      "instruction_count": 125,
+      "body_sha256": "7f3e81fbf5de997a3cd4fae4da5b80aff17710761565182c61897212004d164a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACDB50",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 18082,
+      "instruction_count": 47,
+      "body_sha256": "03acc0b11a55a359c223f7dc50f3f9a5d82405893646b52631a7b3bec5ac47d2",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACDDA0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 18431,
+      "instruction_count": 28,
+      "body_sha256": "017a37cff311c9454f3806c4c96c7d5c4a2689e561d1fdd6b6720a726ca26464",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AC84E8",
+      "82ACD680",
+      "82ACD770",
+      "82ACDB50",
+      "82ACDDA0"
+    ],
+    "header": "include/lo_semantics/battle_action_adjustments61.h",
+    "source": "src/battle_action_adjustments61.cpp",
+    "smoke": "tests/battle_action_adjustments61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "One focused fixture checks property mask indexing, pair and live-resource scaling, global mode 242 bypass, state-bit transition, item/special rates, skill reductions/boosts, zero-rate behavior and linked-resource virtual/removal paths. Parameter setup composes these implementations; its fixture passes with real adjustment state instead of mocks. Linked-resource removal and virtual behavior remain boundaries; native gameplay and exception behavior are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

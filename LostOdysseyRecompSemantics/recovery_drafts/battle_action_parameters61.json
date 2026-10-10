@@ -46,6 +46,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "A compact fixture checks normal and alternate variants, truncating numeric input, doubled/clamped and halved/clamped property paths, kind-4 versus kind-5 setup, real random cursor selection and manager field writes. Recovered readiness, random-range and snapshot setter helpers are composed. Top-level effect dispatcher composition is pending; native meaning and gameplay are unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "complex_parameters_update": "Added 82B11DF0 parameter setup for skill, item and special action branches, composing shared random selection and manager state writes. The focused fixture covers table fields, 25-unit normalization, value-99 cases, alternate override, resource-group override and mutable adjustment callbacks. Three adjustment helpers remain explicit guest boundaries; top-level effect-dispatch composition and native gameplay are unvalidated."
+    "complex_parameters_update": "Added 82B11DF0 parameter setup for skill, item and special action branches, composing shared random selection and manager state writes. The focused fixture covers table fields, 25-unit normalization, value-99 cases, alternate override, resource-group override and mutable adjustment callbacks. Three adjustment helpers remain explicit guest boundaries; top-level effect-dispatch composition and native gameplay are unvalidated.",
+    "adjustment_composition": "All three parameter adjustment helpers now compose battle_action_adjustments61; the parameter fixture uses actual property-dependent scaling rather than mutable callback mocks."
   }
 }
