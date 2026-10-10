@@ -49,6 +49,22 @@
       "instruction_count": 83,
       "body_sha256": "e06c36743ee8ef1648239a5e5b03830a2b2afe1520f1c753e975c159428a9689",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1F830",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 8435,
+      "instruction_count": 45,
+      "body_sha256": "0be468b55ec3ea2b2e3bc171142bf99491787b6ae01938ca2f12ee8ad93af97e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1F918",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.167.cpp",
+      "source_line": 8574,
+      "instruction_count": 109,
+      "body_sha256": "fcdff9a489dd401fb8d3dc546cb4bcb9ee91972ac2b3371d15c01cd6595ebd3c",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -58,7 +74,9 @@
       "82B1FCC8",
       "82B204C8",
       "82B21068",
-      "82B20650"
+      "82B20650",
+      "82B1F830",
+      "82B1F918"
     ],
     "header": "include/lo_semantics/battle_effect_calculation61.h",
     "source": "src/battle_effect_calculation61.cpp",
@@ -72,6 +90,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "base_calculations": "Recovered and composed attack and defense base calculations using real numeric properties and guest-loaded floating constants. The initial amount stage no longer mocks either stat calculation. Focused checks cover nonnegative difference, negative defense stat adjustment, status-dependent floor and preserved nonvolatile FPRs. Fixtures use synthetic constants; bitwise floating-point, exception flags and native gameplay equivalence remain unvalidated."
   }
 }

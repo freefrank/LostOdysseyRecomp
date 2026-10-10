@@ -7,14 +7,6 @@ struct CalculationGuest final : manager_release_context61::GuestServices {
   unsigned defense = 5, attack = 20;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82b1f918) {
-      s.r[3] = defense;
-      return;
-    }
-    if (e == 0x82b1f830) {
-      s.r[3] = attack;
-      return;
-    }
     throw std::runtime_error("calculation direct");
   }
   void CallIndirect(GuestAddress, GuestMemory &,
@@ -27,6 +19,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
+    regions.push_back({0x8201d000, 0x1000});
+    regions.push_back({0x82218000, 0x1000});
     regions.push_back({0x83213000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
@@ -94,11 +88,29 @@ int main() {
     m.WriteU8(0x73000 + 64, 0);
     run(0x82b21068);
     check(std::bit_cast<double>(s.fpr_bits[1]) == 1);
+    m.WriteU32(0x8201dd2c, 0x42c80000);
+    m.WriteU32(0x82000d7c, 0x3c23d70a);
+    m.WriteU32(0x80000 + 2596, 0x42c80000);
+    m.WriteU32(0x90000 + 2600, 0x42200000);
     run(0x82b20650);
-    check(std::bit_cast<double>(s.fpr_bits[1]) == 15);
-    g.attack = 1;
+    check(std::bit_cast<double>(s.fpr_bits[1]) == 60);
+    m.WriteU32(0x90000 + 2600, 0x43480000);
     run(0x82b20650);
     check(std::bit_cast<double>(s.fpr_bits[1]) == 0);
+    m.WriteU32(0x90000 + 4 * 127, 0xffffffff);
+    m.WriteU32(0x90000 + 232, 1u << 19);
+    m.WriteU32(0x90000 + 2600, 0x42c80000);
+    run(0x82b1f918);
+    check(s.r[3] == 110); // signed negative stat, property19's floor
+    m.WriteU32(0x90000 + 3 * 272 + 232, 1u << 12);
+    run(0x82b1f918);
+    check(s.r[3] == 130);
+    m.WriteU32(0x90000 + 4 * 127, 0);
+    m.WriteU32(0x82218420, 0x40000000);
+    run(0x82b1f918);
+    check(s.r[3] == 200);
+    check(s.fpr_bits[29] == initial.fpr_bits[29] &&
+          s.fpr_bits[30] == initial.fpr_bits[30]);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

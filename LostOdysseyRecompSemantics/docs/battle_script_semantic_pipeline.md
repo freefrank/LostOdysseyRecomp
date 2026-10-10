@@ -321,3 +321,7 @@ Recovered four upper effect descriptors: chance-gated property insertion/removal
 ## Initial effect calculation stages
 
 Recovered six effect calculation stages and the status-result record setter. Targeted checks pass actual numeric property, random and result state paths, with attack/defense base services still explicit dependencies. The main effect application sequence is pending; no full floating-point or native gameplay acceptance is claimed.
+
+## Attack and defense bases
+
+Recovered and composed attack and defense base calculations using real numeric properties and guest-loaded floating constants. The initial amount stage no longer mocks either stat calculation. Focused checks cover nonnegative difference, negative defense stat adjustment, status-dependent floor and preserved nonvolatile FPRs. Fixtures use synthetic constants; bitwise floating-point, exception flags and native gameplay equivalence remain unvalidated.

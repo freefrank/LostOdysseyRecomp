@@ -27,6 +27,18 @@ std::int32_t Trunc(double x) {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   unsigned frame = 112, first = 31, literal = 0, saveFloat = 0;
   switch (e) {
+  case 0x82b1f830:
+    frame = 144;
+    first = 29;
+    literal = 88;
+    saveFloat = 40;
+    break;
+  case 0x82b1f918:
+    frame = 160;
+    first = 28;
+    literal = 80;
+    saveFloat = 48;
+    break;
   case 0x82b1fb00:
     frame = 144;
     first = 29;
@@ -63,6 +75,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
   if (saveFloat)
     recovery_abi::WriteU64(m, old - saveFloat, s.fpr_bits[31]);
+  if (e == 0x82b1f918) {
+    recovery_abi::WriteU64(m, old - 64, s.fpr_bits[29]);
+    recovery_abi::WriteU64(m, old - 56, s.fpr_bits[30]);
+  }
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
@@ -95,7 +111,73 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     m.WriteU32(sp + offset, unsigned(n));
     return n;
   };
-  if (e == 0x82b1fb00 || e == 0x82b1fc18) {
+  if (e == 0x82b1f830 || e == 0x82b1f918) {
+    bool attack = e == 0x82b1f830;
+    auto resource = m.ReadU32(owner + (attack ? 4 : 8));
+    auto numeric = [&](unsigned id) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      Call(0x82ac9858, m, d, s);
+      return std::int32_t(Address(s.r[3]));
+    };
+    std::int32_t stat = 0;
+    if (attack)
+      stat = std::int32_t(unsigned(numeric(47)) * 5u);
+    float bonus = 0;
+    if (!attack)
+      bonus = readFloat(0x82000e50, 29);
+    float base = readFloat(resource + (attack ? 2596 : 2600), 0),
+          extra = readFloat(resource + (attack ? 2536 : 2540), 13);
+    float sum = float(base + extra);
+    f(31, double(sum));
+    if (attack) {
+      auto other = std::int32_t(unsigned(numeric(37)) * 30u);
+      if (stat < other)
+        stat = other;
+    } else
+      stat = numeric(32);
+    auto signedScale = attack ? stat : std::int32_t(unsigned(stat) * 10u);
+    if (!attack && stat >= 0 && property(resource, 19)) {
+      auto factor =
+          readFloat(property(resource, 108) ? 0x82218420 : 0x822185dc, 0);
+      bonus = float(sum * factor);
+      f(29, double(bonus));
+    }
+    if (!attack && stat < 0) {
+      bool present = property(resource, 19);
+      auto scale = readFloat(0x82000d7c, 30);
+      if (present) {
+        unsigned bias = property(resource, 108) ? 140 : 120;
+        auto adjusted = std::int32_t(unsigned(signedScale) + bias);
+        recovery_abi::WriteU64(m, sp + 88,
+                               std::uint64_t(std::int64_t(adjusted)));
+        f(0, double(float(adjusted)));
+        auto product = float(float(adjusted) * sum);
+        f(0, double(product));
+        bonus = float(product * scale);
+        f(29, double(bonus));
+      }
+    }
+    unsigned scratch = attack ? 80 : 88;
+    recovery_abi::WriteU64(m, sp + scratch,
+                           std::uint64_t(std::int64_t(signedScale)));
+    f(0, double(signedScale));
+    auto factor = float(signedScale);
+    f(13, double(factor));
+    auto bias = readFloat(0x8201dd2c, 0);
+    factor = float(factor + bias);
+    f(0, double(factor));
+    auto product = float(factor * sum);
+    f(attack || stat >= 0 ? 13 : 0, double(product));
+    auto scale = std::bit_cast<float>(m.ReadU32(0x82000d7c));
+    if (attack || stat >= 0)
+      readFloat(0x82000d7c, 0);
+    auto value = float(product * scale);
+    f(0, double(value));
+    auto selected = !attack && !(bonus <= value) ? bonus : value;
+    auto result = integer(selected, scratch);
+    s.r[3] = unsigned(result);
+  } else if (e == 0x82b1fb00 || e == 0x82b1fc18) {
     auto source = m.ReadU32(owner + 4), target = m.ReadU32(owner + 8);
     auto base = readFloat(e == 0x82b1fb00 ? source + 2604 : target + 2608, 31);
     if (e == 0x82b1fb00) {
@@ -209,6 +291,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   s.r[1] += frame;
   for (unsigned i = first; i < 32; ++i)
     s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+  if (e == 0x82b1f918) {
+    s.fpr_bits[29] = recovery_abi::ReadU64(m, old - 64);
+    s.fpr_bits[30] = recovery_abi::ReadU64(m, old - 56);
+  }
   if (saveFloat)
     s.fpr_bits[31] = recovery_abi::ReadU64(m, old - saveFloat);
   s.lr = m.ReadU32(old - 8);
