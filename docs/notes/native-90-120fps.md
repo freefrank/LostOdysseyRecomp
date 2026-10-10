@@ -11,9 +11,11 @@
 | 原生目标 | 已识别游戏Present调用的interval | 宿主目标周期 | 宿主VSync策略 |
 |---|---|---|---|
 | 30 FPS | 保留2 | 33.333 ms | 保留该交换链原有策略 |
-| 60 FPS | 2→1，保留原实现 | 16.667 ms | 保留该交换链原有策略 |
+| 60 FPS | 2→0（immediate） | 16.667 ms | 保留该交换链原有策略 |
 | 90 FPS | 2→0（immediate） | 11.111 ms | 请求关闭，由宿主deadline限帧 |
 | 120 FPS | 2→0（immediate） | 8.333 ms | 请求关闭，由宿主deadline限帧 |
+
+2026-10-10 起 60 FPS 档也改为 immediate。原来的 interval 1 下，单帧超过 16.667 ms 就要等下一个虚拟 VBlank，帧率直接掉到 30 FPS（Steam Deck 玩家看到帧率和 GPU 占用都只剩一半）。现在由宿主 deadline 限帧，慢帧只损失超出的那部分时间；宿主 VSync 策略不变，不会因此撕裂。30 FPS 档仍保留原版 interval 2。
 
 间隔修改仍严格限定在调用者`0x827B4A4C`、原始interval=2的路径；其他调用者、其他interval及标志位不变，原函数仍只转发一次。游戏时间增量、PPC timebase、内核计时、音频时钟均不缩放，虚拟VBlank仍为60 Hz。原有deadline算法保持不变；慢帧不额外等待一个完整周期，长暂停后不集中补发过期帧。
 
