@@ -126,6 +126,22 @@ int main() {
     g.metadata = 0;
     check(run(0x82b1aa50, 0x20000002) == 0xffffffff && g.deleted == 1 &&
           m.ReadU32(owner + 28) == 4);
+    g.metadata = 0xb0000;
+    m.WriteU8(g.metadata + 9, 0);
+    s.r[3] = owner;
+    s.r[4] = 0x20000003;
+    s.r[5] = (std::uint64_t(std::bit_cast<unsigned>(10.f)) << 32) |
+             std::bit_cast<unsigned>(15.f);
+    s.r[6] = std::uint64_t(std::bit_cast<unsigned>(20.f)) << 32;
+    s.r[7] = 0;
+    s.r[8] = 77;
+    check(battle_scene_requests61::Apply(0x82b1afe8, m, {g, native}, s) &&
+          s.r[3] == 5 && s.r[1] == initial.r[1]);
+    auto positional = m.ReadU32(0x90010);
+    check(m.ReadU32(positional + 80) == 0xffffffff &&
+          m.ReadU32(positional + 84) == std::bit_cast<unsigned>(10.f) &&
+          m.ReadU32(positional + 88) == std::bit_cast<unsigned>(15.f) &&
+          m.ReadU32(positional + 92) == std::bit_cast<unsigned>(20.f));
     std::cout << "battle scene requests logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

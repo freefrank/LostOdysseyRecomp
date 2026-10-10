@@ -509,3 +509,7 @@ Recovered active scene-handle selection B63828, status probe B19CC0, cached para
 ## Scene request factories
 
 Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance.
+
+## Positional scene requests
+
+Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance.

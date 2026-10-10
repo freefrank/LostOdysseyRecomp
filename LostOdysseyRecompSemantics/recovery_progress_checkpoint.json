@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 231,
-    "distinct_entries": 1052,
+    "distinct_entries": 1054,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2795,10 +2795,13 @@
           "82B357C8",
           "82B35640",
           "82B1AA50",
-          "82B1ACA8"
+          "82B1ACA8",
+          "82B1AFE8",
+          "82B356B0"
         ],
         "focused_smoke_paths": 1,
-        "validation": "Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance."
+        "validation": "Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance.",
+        "positional_scene_requests": "Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {

@@ -39,13 +39,6 @@ struct SceneGuest final : manager_release_context61::GuestServices {
         (s.r[3] != 0x832cc05c || s.r[4] != ~std::uint64_t(0) || s.r[5] != 20 ||
          s.r[6] != 30 || s.r[7] || s.r[8] != 11))
       throw std::runtime_error("signed scene argument");
-    if (e == 0x82b1afe8 &&
-        (s.r[3] != 0x832cc0fc || s.r[4] != 0x61000000 ||
-         s.r[5] != ((std::uint64_t(std::bit_cast<unsigned>(10.f)) << 32) |
-                    std::bit_cast<unsigned>(15.f)) ||
-         s.r[6] != (std::uint64_t(std::bit_cast<unsigned>(20.f)) << 32) ||
-         s.r[7] || s.r[8] != 60 || s.r[9] != 1))
-      throw std::runtime_error("packed XYZ callback");
     if (e == 0x82b1b2e8 &&
         (m.ReadU16(s.r[3]) != 0x3042 || m.ReadU16(s.r[3] + 64) ||
          s.r[4] != 0xffffffff || s.r[5] != 255 || s.r[6] != 0x33301 ||
@@ -130,9 +123,14 @@ int main() {
     op(0x82afc8a0);
     if (m.ReadU32(actor + 52) != 14)
       throw std::runtime_error("packed command cursor");
+    auto positioned = m.ReadU32(0x90000);
+    if (m.ReadU32(positioned + 84) != std::bit_cast<unsigned>(10.f) ||
+        m.ReadU32(positioned + 88) != std::bit_cast<unsigned>(15.f) ||
+        m.ReadU32(positioned + 92) != std::bit_cast<unsigned>(20.f))
+      throw std::runtime_error("composed scene XYZ request");
     guest.expected = 0x82b1aa50;
     op(0x82afc790);
-    if (m.ReadU32(vars) != 99)
+    if (m.ReadU32(vars) != 100)
       throw std::runtime_error("scene returned identifier");
     m.WriteU8(code + 1, 2);
     le(code + 4, 100);

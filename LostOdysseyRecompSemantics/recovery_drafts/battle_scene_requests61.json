@@ -81,6 +81,22 @@
       "instruction_count": 195,
       "body_sha256": "64d4a9e54d03069cdcacbc6823ce1afcb13ad7498235c85f9471bff40a6911b6",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1AFE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 35849,
+      "instruction_count": 181,
+      "body_sha256": "f09ee6d1127e34072c42cf6f3837d3ca5338ff9cf99b002fa1f873653af1785b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B356B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 28180,
+      "instruction_count": 30,
+      "body_sha256": "7aa408ec2fa3dbe9a960c68364c9b91570646cd71de62fff30d82f68678e54b7",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -94,7 +110,9 @@
       "82B357C8",
       "82B35640",
       "82B1AA50",
-      "82B1ACA8"
+      "82B1ACA8",
+      "82B1AFE8",
+      "82B356B0"
     ],
     "header": "include/lo_semantics/battle_scene_requests61.h",
     "source": "src/battle_scene_requests61.cpp",
@@ -108,6 +126,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance."
+    "case_scope": "Recovered scene request key classification, default parameter blocks, tracked-parent lookup, 100-byte task construction and initialization, object attachment, collision-free IDs, duplicate suppression and failed-initialization cleanup. Script scene requests and periodic parameter events now compose the factories. Platform metadata lookup, immediate handle release and packed-vector conversion remain service boundaries. Library and focused request-factory, scene-command and periodic-parameter fixtures pass. Logical ABI coverage only; no runtime playback/gameplay or complete volatile-register acceptance.",
+    "positional_scene_requests": "Added positional scene request factory B1AFE8 and packed XYZ assignment B356B0, composing the existing request constructor, parent selection and duplicate suppression. Scene script packed-coordinate requests now write actual task coordinates instead of using callback fixtures. Library and focused scene-request and scene-command checks pass. Packed half-vector conversion remains a platform boundary; logical ABI coverage only, not runtime playback or complete volatile-register acceptance."
   }
 }

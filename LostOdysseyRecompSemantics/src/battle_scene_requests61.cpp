@@ -16,7 +16,8 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   auto owner = Address(s.r[3]), arg4 = Address(s.r[4]), arg5 = Address(s.r[5]),
-       arg6 = Address(s.r[6]);
+       arg6 = Address(s.r[6]), arg7 = Address(s.r[7]), arg8 = Address(s.r[8]);
+  auto packed4 = s.r[4], packed5 = s.r[5], packed6 = s.r[6];
   if (e == 0x82b35a20) {
     auto high = owner >> 16;
     s.r[3] = std::uint64_t(-1);
@@ -64,6 +65,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     frame = 112;
     first = 30;
     break;
+  case 0x82b356b0:
   case 0x82b35778:
     frame = 96;
     first = 31;
@@ -75,6 +77,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   case 0x82b1aa50:
     frame = 144;
     first = 26;
+    break;
+  case 0x82b1afe8:
+    frame = 160;
+    first = 24;
     break;
   case 0x82b1aca8:
     frame = 176;
@@ -92,6 +98,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   s.r[1] -= frame;
   auto sp = Address(s.r[1]);
   m.WriteU32(sp, old);
+  if (e == 0x82b1afe8)
+    recovery_abi::WriteU64(m, old + 40, packed6);
   auto call = [&](unsigned a) { Call(a, m, d, s); };
   auto reset = [&]() {
     m.WriteU8(owner + 14, 0);
@@ -109,7 +117,21 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     (void)battle_manager_access61::Apply(0x82380d30, m, d, s);
     return Address(s.r[3]);
   };
-  if (e == 0x82b35918) {
+  if (e == 0x82b356b0) {
+    recovery_abi::WriteU64(m, old + 32, packed4);
+    recovery_abi::WriteU64(m, old + 40, packed5);
+    m.WriteU32(owner + 80, 0xffffffff);
+    m.WriteU32(owner + 84, unsigned(packed4 >> 32));
+    m.WriteU32(owner + 88, unsigned(packed4));
+    m.WriteU32(owner + 92, unsigned(packed5 >> 32));
+    s.r[4] = owner + 84;
+    if (m.ReadU8(owner + 12)) {
+      m.WriteU8(owner + 14, 0);
+      s.r[3] = owner + 68;
+      call(0x82377168);
+      m.WriteU32(owner + 56, 1);
+    }
+  } else if (e == 0x82b35918) {
     m.WriteU32(owner, 0x820010a8);
     m.WriteU32(owner + 8, 0xffffffff);
     m.WriteU8(owner + 4, 0);
@@ -168,7 +190,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       m.WriteU8(owner + 13, (m.ReadU8(metadata + 13) >> 1) & 1);
       auto kind = m.ReadU8(metadata + 9);
       auto zero = m.ReadU32(0x82000e50);
-      if(s.cached_fp_control & 0x8040){s.cached_fp_control &= ~0x8040u;d.fp.SetHostFpControl(s.cached_fp_control);}
+      if (s.cached_fp_control & 0x8040) {
+        s.cached_fp_control &= ~0x8040u;
+        d.fp.SetHostFpControl(s.cached_fp_control);
+      }
       s.fpr_bits[31] =
           std::bit_cast<std::uint64_t>(double(std::bit_cast<float>(zero)));
       if (kind != 9 && kind != 10 && kind != 11) {
@@ -193,7 +218,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[3] = initialize();
   } else {
     auto create = [&]() -> std::uint64_t {
-      bool attached = e == 0x82b1aca8;
+      bool attached = e == 0x82b1aca8, positioned = e == 0x82b1afe8;
       auto key = arg4, object = attached ? findScene(arg5) : 0;
       if (object &&
           (m.ReadU32(object + 556) == 139 || m.ReadU32(object + 556) == 140) &&
@@ -216,9 +241,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       call(0x82b35a20);
       auto type = Address(s.r[3]);
       unsigned parent = 0xffffffff;
+      if (type == 0 && positioned)
+        object = findScene(arg8);
       if (type == 0 || type == 2) {
-        if (type == 0 &&
-            (!attached || !object || (m.ReadU32(object + 604) & 0x6000)))
+        if (type == 0 && ((!attached && !positioned) || !object ||
+                          (m.ReadU32(object + 604) & 0x6000)))
           return std::uint64_t(-1);
         auto required =
             type == 2 ? m.ReadU32(0x83213d74) : m.ReadU32(object + 1312);
@@ -273,7 +300,13 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       s.r[4] = 1;
       call(0x82b1a560);
       m.WriteU32(m.ReadU32(owner + 24) + 4 * index, task);
-      if (object) {
+      if (positioned) {
+        s.r[3] = task;
+        s.r[4] = packed5;
+        s.r[5] = packed6 & 0xffffffff00000000ull;
+        s.r[6] = arg7;
+        call(0x82b356b0);
+      } else if (object) {
         s.r[3] = task;
         s.r[4] = arg5;
         s.r[5] = arg6;
