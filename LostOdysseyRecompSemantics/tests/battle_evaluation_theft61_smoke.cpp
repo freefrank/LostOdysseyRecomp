@@ -25,13 +25,8 @@ struct TheftGuest final : manager_release_context61::GuestServices {
       return;
     }
     if (e == 0x82ac0888) {
-      m.WriteU32(unsigned(s.r[4]) + 2472, 0x42c80000);
-      return;
-    }
-    if (e == 0x82ac2468) {
-      if (s.r[4] != 0x90000)
-        throw std::runtime_error("equipment target");
       ++equipment;
+      m.WriteU32(unsigned(s.r[4]) + 2472, 0x42c80000);
       return;
     }
     throw std::runtime_error("theft direct " + std::to_string(e));

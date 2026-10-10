@@ -67,6 +67,18 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x8230bac0) {
+    auto dest = Address(s.r[3]);
+    do {
+      auto word = m.ReadU16(Address(s.r[4]));
+      s.r[4] += 2;
+      m.WriteU16(dest, word);
+      dest += 2;
+      if (!word)
+        break;
+    } while (true);
+    return true;
+  }
   if (e == 0x82296830) {
     s.r[3] = registered_metadata_string::Utf16Length(m, s.r[3]);
     return true;

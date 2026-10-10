@@ -1,3 +1,11 @@
+## Root direct continuation: inline UTF-16 copy (2026-10-10 UTC)
+
+Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.
+
+## Root direct continuation: equipment contributions (2026-10-10 UTC)
+
+Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated.
+
 ## Root direct continuation: resource stat refresh (2026-10-10 UTC)
 
 Recovered gear-derived property clearing, aggregate HP/MP and battle-stat calculation, and equipment refresh orchestration. Theft now runs this refresh after removing equipment. Focused fixtures cover caps/refill, low-HP state, stat sums, two-bank removal and refresh order. Skill recomputation AC0888 and equipment aggregation AC2468 remain external dependencies; no gameplay, Full72 or bitwise FP acceptance is claimed.

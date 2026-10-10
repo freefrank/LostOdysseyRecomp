@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 225,
-    "distinct_entries": 939,
+    "distinct_entries": 944,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2271,13 +2271,15 @@
           "82298A98",
           "82486C88",
           "8229F5E0",
-          "82296830"
+          "82296830",
+          "8230BAC0"
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture checks empty and nonempty construction, local and heap conversion temporaries, UTF-16 copy extent, reset/release, zero-capacity owned storage and preserved nonvolatile registers. Existing ResizeArray, ResetTwoByteArray, ReleaseTwoByteArray and manager release implementations are reused. Byte-to-UTF16 conversion 823227C8 and copy/allocator services remain boundaries; caller composition is pending. Logical/ABI only",
         "composition_update": "Action creation and destruction now compose recovered string construction/reset/release. Empty record labels execute the constructor directly; record cleanup executes string release instead of synthetic destructor callbacks. The destruction fixture observes all 1024 actual manager releases in source order. Storage and six caller fixtures pass. Nonempty character conversion, allocator internals, exceptional cleanup continuation and native gameplay remain unvalidated boundaries.",
         "allocation_adapter_update": "Added the full-register 82486C88 allocation adapter by reusing AllocateManagerBuffer. Long-string conversion now reaches the manager virtual allocator through recovered code; both string conversion and storage fixtures pass.",
-        "report_strings": "Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed."
+        "report_strings": "Added guest-register adapters for the already recovered UTF-16 assignment and length semantics, reusing registered_metadata_string rather than duplicating its algorithms. Battle reward and source/target report labels now call real string assignment instead of a UI-copy mock. Focused checks cover copied text, alias no-op, empty assignment release, length and report-label integration. Allocation remains a guest service; no gameplay or full ABI acceptance is claimed.",
+        "equipment_contributions": "Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed."
       },
       {
         "unit": "string_conversion_context61",
@@ -2608,10 +2610,15 @@
         "entries": [
           "82AC1860",
           "82AC0620",
-          "82AC3058"
+          "82AC3058",
+          "82AC0100",
+          "82AC0170",
+          "82AC0388",
+          "82AC2468"
         ],
         "focused_smoke_paths": 1,
-        "validation": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI only"
+        "validation": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI only",
+        "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated."
       }
     ],
     "evaluator_descriptor_coverage": {

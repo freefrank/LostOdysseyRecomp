@@ -37,7 +37,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p : {0x83213000u, 0x83264000u, 0x83291000u, 0x82218000u})
+    for (auto p : {0x821a8000u, 0x8201f000u, 0x832c0000u, 0x83213000u,
+                   0x83264000u, 0x83291000u, 0x82218000u})
       regions.push_back({p, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -58,6 +59,11 @@ int main() {
       m.WriteU32(0x83213438 + 8 * i, 0);
       m.WriteU32(0x8321343c + 8 * i, 1u << i);
     }
+    m.WriteU32(0x83264978, 0x150000);
+    m.WriteU32(0x150000 + 17 * 196 + 124, 8);
+    m.WriteU32(0x150000 + 17 * 196 + 128, 50);
+    m.WriteU32(0x82000d7c, 0x3c23d70a);
+    m.WriteU32(0x8201f9f0, 0x3f000000);
     m.WriteU32(0x83264978 + 72, 0x100000);
     m.WriteU32(0x83291dc0, 0x73000);
     m.WriteU32(0x82007784, 0x3f800000);
@@ -111,8 +117,45 @@ int main() {
     for (unsigned i = 0; i < 5; ++i)
       m.WriteU32(0x80000 + 5116 + 4 * i, i + 1);
     run(0x82ac3058);
-    check(g.step == 2 && get(2592) == 150 && get(2588) == 150 &&
+    check(g.step == 1 && get(2592) == 150 && get(2588) == 150 &&
           m.ReadU32(0x73000 + 4) == 17 && m.ReadU32(0x73000 + 28) == 5);
+    auto effect = [&](unsigned kind, unsigned value, unsigned slot) {
+      m.WriteU32(0x180000 + 124, kind);
+      m.WriteU32(0x180000 + 128, value);
+      s.r[3] = 0x73000;
+      s.r[4] = 0x80000;
+      s.r[5] = 0x180000;
+      s.r[6] = slot;
+      check(battle_resource_stats61::Apply(0x82ac0170, m, {g, native}, s));
+    };
+    effect(9, 15, 0);
+    check(get(2532) == 35);
+    effect(10, 7, 0);
+    check(get(2544) == 7);
+    effect(12, 0, 2);
+    check(m.ReadU32(0x80000 + 4840) == 12);
+    for (auto [input, expected] :
+         {std::pair{15.9, 15.}, std::pair{16., 20.}, std::pair{14., 10.}}) {
+      s.fpr_bits[1] = std::bit_cast<std::uint64_t>(input);
+      check(battle_resource_stats61::Apply(0x82ac0100, m, {g, native}, s) &&
+            std::bit_cast<double>(s.fpr_bits[1]) == expected &&
+            s.r[1] == initial.r[1]);
+    }
+    m.WriteU32(0x80000 + 5112, 9);
+    put(2536, 0);
+    m.WriteU32(0x150000 + 9 * 196 + 56, 0x40400000);
+    for (unsigned i = 0; i < 3; ++i) {
+      m.WriteU32(0x150000 + 9 * 196 + 184 + 4 * i, i + 1);
+      auto row = 0x150000 + 196 * (769 + i);
+      m.WriteU32(row + 184, i + 1);
+      m.WriteU32(row + 188, 2u << i);
+      m.WriteU32(row + 192, 11 + i);
+    }
+    run(0x82ac0388);
+    check(get(2536) == 3 && m.ReadU32(0x80000 + 4916) == 2 &&
+          m.ReadU32(0x80000 + 4828) == 4 && m.ReadU32(0x80000 + 2652) == 8 &&
+          m.ReadU32(0x80000 + 76252) == 1 && m.ReadU32(0x80000 + 76272) == 8 &&
+          m.ReadU32(0x80000 + 76284) == 13);
     std::cout << "battle resource stats logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

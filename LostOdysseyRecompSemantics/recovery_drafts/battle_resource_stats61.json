@@ -25,13 +25,49 @@
       "instruction_count": 48,
       "body_sha256": "ea6ff49b0584b8a9fe84265bf76cc6ad25d0321157abe8550cdbe075d73d12a3",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC0100",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 22562,
+      "instruction_count": 28,
+      "body_sha256": "f24278ba7a19b4ac16e6242d1b578c0bde7bc49db538e9121876cfb3770fc0a5",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC0170",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 22629,
+      "instruction_count": 134,
+      "body_sha256": "083ec047889152f278a74962c29e37742ce157cfdb08524c67cd8aa345ec538e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC0388",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 22951,
+      "instruction_count": 128,
+      "body_sha256": "13754754dbab7ff5677dd04cc2a5fbc9160a9c912eb35e40b6e5d150fb91f131",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC2468",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 27780,
+      "instruction_count": 86,
+      "body_sha256": "40d5e46a0c529b282cfaa91f98ed94dd5531b23ff33a0fe17dd4d766aacc32e2",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "82AC1860",
       "82AC0620",
-      "82AC3058"
+      "82AC3058",
+      "82AC0100",
+      "82AC0170",
+      "82AC0388",
+      "82AC2468"
     ],
     "header": "include/lo_semantics/battle_resource_stats61.h",
     "source": "src/battle_resource_stats61.cpp",
@@ -45,6 +81,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated."
   }
 }
