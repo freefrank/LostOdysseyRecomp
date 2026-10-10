@@ -7,6 +7,109 @@
 namespace lo::semantic::gpu::battle_scene_tasks61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82b33570 || e == 0x82b040d0) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]), kind = Address(s.r[4]),
+         arg5 = Address(s.r[5]), arg6 = Address(s.r[6]), text = Address(s.r[7]),
+         priority = Address(s.r[8]);
+    unsigned frame = e == 0x82b33570 ? 192 : 688,
+             first = e == 0x82b33570 ? 21 : 23;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    auto call = [&](unsigned a) {
+      if (!battle_scene_tasks61::Apply(a, m, d, s) &&
+          !string_storage_context61::Apply(a, m, d, s))
+        d.guest.CallDirect(a, m, s);
+    };
+    auto virt = [&](unsigned off) {
+      auto method = m.ReadU32(m.ReadU32(owner) + off);
+      s.r[3] = owner;
+      s.ctr = method;
+      d.guest.CallIndirect(method & ~3u, m, s);
+    };
+    if (e == 0x82b33570) {
+      m.WriteU32(sp + 212, owner);
+      m.WriteU32(owner, 0x8200341c);
+      for (auto off : {12u, 24u, 44u, 56u, 92u}) {
+        m.WriteU32(sp + 80, owner + off);
+        for (auto word : {0u, 4u, 8u})
+          m.WriteU32(owner + off + word, 0);
+      }
+      for (auto off : {4u, 5u, 6u, 7u, 8u, 10u})
+        m.WriteU8(owner + off, 0);
+      m.WriteU8(owner + 9, 255);
+      for (auto off : {36u, 80u, 84u, 88u})
+        m.WriteU32(owner + off, 0);
+      for (auto off : {40u, 68u, 72u})
+        m.WriteU32(owner + off, 0xffffffff);
+      m.WriteU32(owner + 76, 4);
+      s.r[3] = owner;
+    } else {
+      s.r[5] = text;
+      virt(84);
+      auto existing = Address(s.r[3]);
+      if (std::int32_t(existing) >= 0) {
+        s.r[4] = existing;
+        s.r[5] = arg5;
+        s.r[6] = arg6;
+        virt(104);
+        s.r[4] = existing;
+        virt(72);
+        if (std::int8_t(Address(s.r[3])) > std::int8_t(priority)) {
+          s.r[4] = existing;
+          s.r[5] = priority;
+          virt(136);
+        }
+        s.r[3] = existing;
+      } else {
+        s.r[3] = kind;
+        s.r[4] = text;
+        s.r[5] = sp + 96;
+        call(0x82b037c8);
+        auto id = m.ReadU32(owner + 4);
+        s.r[4] = id;
+        virt(116);
+        while (std::int32_t(Address(s.r[3])) >= 0) {
+          id = (id + 1) & 65535;
+          s.r[4] = id;
+          virt(116);
+        }
+        auto index = m.ReadU32(owner + 12);
+        s.r[3] = owner + 8;
+        s.r[4] = 1;
+        call(0x82b1a560);
+        s.r[3] = 104;
+        call(0x82486c88);
+        m.WriteU32(sp + 80, Address(s.r[3]));
+        if (Address(s.r[3]))
+          call(0x82b33570);
+        else
+          s.r[3] = 0;
+        m.WriteU32(m.ReadU32(owner + 8) + 4 * index, Address(s.r[3]));
+        auto object = m.ReadU32(m.ReadU32(owner + 8) + 4 * index);
+        m.WriteU32(object + 40, id);
+        s.r[3] = m.ReadU32(m.ReadU32(owner + 8) + 4 * index);
+        s.r[4] = kind;
+        s.r[5] = arg5;
+        s.r[6] = arg6;
+        s.r[7] = sp + 96;
+        s.r[8] = 16;
+        call(0x82b33f70);
+        object = m.ReadU32(m.ReadU32(owner + 8) + 4 * index);
+        m.WriteU8(object + 10, priority);
+        m.WriteU32(owner + 4, (id + 1) & 65535);
+        s.r[3] = id;
+      }
+    }
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b08318 || e == 0x82b34ee0 || e == 0x82b355d8) {
     auto old = Address(s.r[1]), owner = Address(s.r[3]), name = Address(s.r[4]),
          mode = Address(s.r[5]);

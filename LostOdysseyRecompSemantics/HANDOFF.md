@@ -1,3 +1,7 @@
+## Root direct continuation: scene object factory (2026-10-10 UTC)
+
+Recovered generic scene task reuse/create selection and object default initialization. Secondary row activation now composes duplicate reuse, parameter update, signed priority selection, wrapped ID search, pointer-list growth and actual manager allocation. Focused scene-task checks pass existing-object and new-object paths, constructor defaults and preserved padding. Path building and task-specific initialization remain services; no gameplay or full ABI acceptance is claimed.
+
 ## Root direct continuation: scene row creation (2026-10-10 UTC)
 
 Recovered secondary scene-row creation, zero/default initialization and activation forwarding. Profile preset loading now uses actual row allocation and identifier collision scanning, including 16-bit identifier wrap, rather than a row-factory mock. Library and focused scene-task checks pass creation, later cleanup and collision handling. Generic task activation remains an external boundary; inventory growth is not a game-completion percentage.

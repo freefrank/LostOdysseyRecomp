@@ -177,6 +177,22 @@
       "instruction_count": 26,
       "body_sha256": "08b1691c1eec7c4f647c8cdbb01992890c0ccf882e1066b81714f422179fd2fb",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B040D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 5148,
+      "instruction_count": 104,
+      "body_sha256": "3bda9da840b24c2aa2b70f3d13282ac63447c334b877d8f90022c0e50bd8edf4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B33570",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.168.cpp",
+      "source_line": 22996,
+      "instruction_count": 130,
+      "body_sha256": "60ce2634fb74a37f95494e7f17b7ffcacf571ff4efd190f07027b0e1ae97d6ed",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -202,7 +218,9 @@
       "82B01ED0",
       "82B08318",
       "82B34EE0",
-      "82B355D8"
+      "82B355D8",
+      "82B040D0",
+      "82B33570"
     ],
     "header": "include/lo_semantics/battle_scene_tasks61.h",
     "source": "src/battle_scene_tasks61.cpp",
@@ -221,6 +239,7 @@
     "task_unlink": "Recovered final tracked-object unlinking and queue-reference cancellation for task types0/1/4/5/6. Cleanup now removes matching references from both 44-byte event queues, respects the mode13 second-queue exemption, invokes the object destructor and compacts the pointer list. Focused scene-task checks pass actual paired membership, repeated reference removal and array release. Event payload destructors remain explicit services; no gameplay or full ABI acceptance is claimed.",
     "event_payload_cleanup": "Recovered event payload destruction and nested string-array cleanup, plus the capacity-reset tail adapter. Queue-reference removal now destroys payload names and nested strings through existing storage semantics instead of a destructor mock. Library and focused scene-task/storage fixtures pass with actual header clearing and allocation-service release counts. Reuses existing typed reset/array semantics; allocator callbacks and full volatile ABI remain outside acceptance.",
     "scene_row_cleanup": "Recovered large scene-row destruction, nested row-array reset/removal and virtual scene-handle release. Cancellation now composes real row cleanup instead of a destructor mock, reusing recovered memory fill and storage helpers. Focused scene-task checks pass actual buffer clearing, nested release, identifier reset and virtual removal arguments. Allocator and object-specific virtual methods remain explicit services; no native gameplay or full ABI acceptance is claimed.",
-    "scene_row_creation": "Recovered secondary scene-row creation, zero/default initialization and activation forwarding. Profile preset loading now uses actual row allocation and identifier collision scanning, including 16-bit identifier wrap, rather than a row-factory mock. Library and focused scene-task checks pass creation, later cleanup and collision handling. Generic task activation remains an external boundary; inventory growth is not a game-completion percentage."
+    "scene_row_creation": "Recovered secondary scene-row creation, zero/default initialization and activation forwarding. Profile preset loading now uses actual row allocation and identifier collision scanning, including 16-bit identifier wrap, rather than a row-factory mock. Library and focused scene-task checks pass creation, later cleanup and collision handling. Generic task activation remains an external boundary; inventory growth is not a game-completion percentage.",
+    "scene_object_factory": "Recovered generic scene task reuse/create selection and object default initialization. Secondary row activation now composes duplicate reuse, parameter update, signed priority selection, wrapped ID search, pointer-list growth and actual manager allocation. Focused scene-task checks pass existing-object and new-object paths, constructor defaults and preserved padding. Path building and task-specific initialization remain services; no gameplay or full ABI acceptance is claimed."
   }
 }

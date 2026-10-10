@@ -5,7 +5,9 @@
 #include "battle_profile_fixture.h"
 #include <iostream>
 struct TasksGuest final : manager_release_context61::GuestServices {
-  unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0;
+  unsigned removed = 0, freed = 0, rawFreed = 0, virtualRemoved = 0,
+           initialized = 0;
+  bool factoryMode = false;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18)
@@ -14,11 +16,16 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       s.r[3] = m.ReadU16(unsigned(s.r[3])) != m.ReadU16(unsigned(s.r[4]));
       return;
     }
-    if (e == 0x82b040d0) {
-      if (s.r[3] != 0x832cc05c || s.r[4] != 16 || s.r[5] || s.r[6] ||
-          s.r[7] != 0x99000 || (s.r[8] != 1 && s.r[8] != 12))
-        throw std::runtime_error("secondary activation");
-      s.r[3] = 99;
+    if (e == 0x82b037c8) {
+      m.WriteU16(unsigned(s.r[5]), 'X');
+      m.WriteU16(unsigned(s.r[5]) + 2, 0);
+      return;
+    }
+    if (e == 0x82b33f70) {
+      if (s.r[3] != 0x110000 || s.r[4] != 16 || s.r[5] != 7 || s.r[6] != 9 ||
+          m.ReadU16(unsigned(s.r[7])) != 'X' || s.r[8] != 16)
+        throw std::runtime_error("object initialization arguments");
+      ++initialized;
       return;
     }
     if (e == 0x82b1a7f0) {
@@ -38,8 +45,24 @@ struct TasksGuest final : manager_release_context61::GuestServices {
       ++rawFreed;
       return;
     }
+    if (e == 0x123454) {
+      s.r[3] = factoryMode ? std::uint64_t(-1) : 99;
+      return;
+    }
+    if (e == 0x123468 || e == 0x123488)
+      return;
+    if (e == 0x123448) {
+      s.r[3] = 14;
+      return;
+    }
+    if (e == 0x123404) {
+      if (s.r[4] != 104 || s.r[5] != 8)
+        throw std::runtime_error("object allocation");
+      s.r[3] = 0x110000;
+      return;
+    }
     if (e == 0x123474) {
-      s.r[3] = 2;
+      s.r[3] = factoryMode ? (s.r[4] == 44 ? 0 : std::uint64_t(-1)) : 2;
       return;
     }
     if (e == 0x123484) {
@@ -120,6 +143,10 @@ int main() {
     m.WriteU32(0x73000 + 48, 0x123430);
     m.WriteU32(0x73000 + 116, 0x123474);
     m.WriteU32(0x73000 + 132, 0x123484);
+    m.WriteU32(0x73000 + 84, 0x123454);
+    m.WriteU32(0x73000 + 104, 0x123468);
+    m.WriteU32(0x73000 + 72, 0x123448);
+    m.WriteU32(0x73000 + 136, 0x123488);
     m.WriteU32(0x832cb68c, 8);
     m.WriteU32(0x832cb68c + 4, 0xa0000);
     m.WriteU32(0x832cb68c + 12, 2);
@@ -238,6 +265,10 @@ int main() {
     m.WriteU32(0x8f00c, 0x12340c);
     m.WriteU32(0x73000 + 116, 0x123474);
     m.WriteU32(0x73000 + 132, 0x123484);
+    m.WriteU32(0x73000 + 84, 0x123454);
+    m.WriteU32(0x73000 + 104, 0x123468);
+    m.WriteU32(0x73000 + 72, 0x123448);
+    m.WriteU32(0x73000 + 136, 0x123488);
     m.WriteU8(0xd0000, 3);
     m.WriteU32(0xd0000 + 12, 17);
     m.WriteU32(0xd0000 + 24, 0xd5000);
@@ -266,6 +297,25 @@ int main() {
     check(m.ReadU32(0xf0000 + 18044 + 4) == 0 &&
           m.ReadU32(0xf0000 + 18044 + 12) == 99 &&
           m.ReadU8(0xf0000 + 18044) == 1);
+    g.factoryMode = true;
+    m.WriteU32(0x832cc05c + 4, 44);
+    m.WriteU32(0x832cc05c + 8, 0x112000);
+    m.WriteU32(0x832cc05c + 12, 0);
+    m.WriteU32(0x832cc05c + 16, 4);
+    m.WriteU32(0x8f004, 0x123404);
+    m.WriteU8(0x110000 + 11, 0xaa);
+    s.r[3] = 0x832cc05c;
+    s.r[4] = 16;
+    s.r[5] = 7;
+    s.r[6] = 9;
+    s.r[7] = 0x99000;
+    s.r[8] = 3;
+    check(battle_scene_tasks61::Apply(0x82b040d0, m, {g, native}, s) &&
+          s.r[3] == 45 && g.initialized == 1);
+    check(m.ReadU32(0x112000) == 0x110000 &&
+          m.ReadU32(0x110000) == 0x8200341c && m.ReadU32(0x110000 + 40) == 45);
+    check(m.ReadU32(0x832cc05c + 4) == 46 && m.ReadU8(0x110000 + 10) == 3 &&
+          m.ReadU8(0x110000 + 11) == 0xaa && m.ReadU32(0x110000 + 76) == 4);
     std::cout << "battle scene tasks logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
