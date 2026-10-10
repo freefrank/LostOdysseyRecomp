@@ -74,3 +74,55 @@ Plan after the manifest edit (read-only, scratch report): `{"created": 6, "updat
 The maintainer ran `python -B tools/project_management/sync.py --apply` from this worktree on 2026-10-10. Its report: `{"created": 6, "updated": 3, "conflicts": 1, "operations": 56}`, the conflict being `issue-37-portforge-integration` as above; `sync-state.json` was rewritten by the run. The plan run afterwards reported `{"created": 0, "updated": 0, "unchanged": 305, "conflicts": 1, "operations": 0}`.
 
 Readback (`gh project item-list 3 --owner freefrank --format json`, 306 Project items): `release-v0-9-22` Done / Released / v0.9.22; `issue-323-vulkan-pipeline-build-crash`, `issue-339-main-menu-settings` and `issue-342-npc-culling` Done / Released / v0.9.22; `issue-332-exclusive-fullscreen` Done / Superseded / v0.9.22; `issue-265-upscaled-cutscenes-sharp-text` Todo / Research complete / no Release; `issue-174-surround-5-1-audio` Awaiting validation / Released / v0.9.22; `issue-369-more-language-options` In Progress / Released / v0.9.22; `issue-151-animated-options-menu` Done / Released / v0.8.61. Every Evidence field read back at 440 to 993 characters.
+
+## Scope decisions — 2026-10-10
+
+The maintainer made two v1.0.0 scope decisions on 2026-10-10. This section applies them to the manifest, the Project and both roadmaps. Only `items.json`, `sync-state.json` (rewritten by the apply), the two roadmaps, this file and the README were changed. No Issue, pull request, comment, code or build was touched, and no game was run. The research notes behind the decisions are local (`out/v100-research`) and are not in the repository.
+
+### Changes
+
+| Key | Change | Evidence boundary |
+| --- | --- | --- |
+| `v100-ui-separation-production-handoff` | Release `v1.0.0` → `After v1.0.0`; Status Paused and Delivery Deferred kept; the `v1.0.0:` title prefix removed; a `## Status — 2026-10-10` section added before `## Sources` | A scope decision only: no implementation or validation. The 18–30 day (full) and 6–10 day (HUDless) figures are research estimates, not measurements. |
+| `android-frame-time-v100` (new draft) | Kind Feature, Area Graphics performance, Status Todo, Delivery Not started, Release v1.0.0, dates unset; body from the research note with the scope narrowed to the three named changes; Evidence 744 characters | Scheduled for v1.0.0, not started. The TB321FU baseline has not been measured. |
+
+Roadmaps (English and Chinese): the HUDless line was removed from the v1.0.0 section and added to the backlog paragraph; an Android frame-time line was added to the v1.0.0 section, linking the Project.
+
+### Judgment calls
+
+- **Title prefix removed** from the HUDless item. The `v1.0.0:` prefix marks items for v1.0.0, and `linux-aarch64-platform` has no prefix after its move to After v1.0.0. The alternative is to keep the prefix.
+- **Status section before Sources**, so Sources stays last, as in `loading-and-save-speed-2026-10-10`. The brief said "end of body".
+- **Android scope.** `fast-linked pipeline replacement` was removed from the completion criteria, and the three named changes stay. The adaptive-occlusion check and the optional OPPO pair were kept as measurement and validation criteria, not optimization scope. If "范围只包括" is read strictly, both can be removed.
+- **Android Evidence** keeps the draft text with the final "Not started." followed by the schedule sentence "Scheduled for v1.0.0 by the maintainer on 2026-10-10." Length 744 characters.
+- **Chinese roadmap** uses 挪到, the verb already in that paragraph, not 移到.
+- **Source URLs** for the Android item are the pull requests from the draft. The annotation on pull request 268 was dropped from the URL field; the body keeps it.
+
+### #174 brought in line with the Project
+
+`issue-174-surround-5-1-audio` was the second conflict in the plan results below: the Project Status read `Done`, while the manifest and sync state held `Awaiting validation` from the v0.9.22 record. Issue #174 is CLOSED as COMPLETED at 2026-10-10T08:30:58Z, and the reporter wrote "Works perfectly now, thanks!" at 2026-10-10T09:26:16Z, after the maintainer's v0.9.22 reply. The close moved the Project item to Done. As with the earlier stale Status records, the manifest followed the remote value: Status `Done` in `items.json` and in the tracked `sync-state.json` value, and the Evidence tail now records the close and the reporter's reply (1000 characters). Plan: created 0, updated 1, unchanged 306, conflicts 1 (`issue-37` only), operations 1 (Evidence). Apply wrote it; the re-plan reported created 0, updated 0, unchanged 307, conflicts 1, operations 0. Readback: "[Feature] 5.1 Audio" Done / Released / v0.9.22, Evidence 1000 characters.
+
+### Plan results
+
+- Baseline before edits: created 0, updated 0, unchanged 306, conflicts 2 (`issue-37-portforge-integration`, `issue-174-surround-5-1-audio` Status), operations 0.
+- Plan after edits, before apply: created 1, updated 1, unchanged 305, conflicts 2, operations 10. The operations were: HUDless `update draft text` and Release; Android `create draft` and seven fields.
+- Apply: created 1, updated 1, unchanged 305, conflicts 2, operations 10, exit code 2 because of the two conflicts only.
+- Re-plan after apply: created 0, updated 0, unchanged 307, conflicts 2, operations 0, exit code 2 (the same two conflicts).
+
+### Readback
+
+`gh project item-list 3 --owner freefrank --limit 400`, 308 items.
+
+- `v100-ui-separation-production-handoff`: title "Deliver production HUDless/UI separation handoff"; Paused / Deferred / After v1.0.0; Infrastructure; Temporal rendering; the body contains the 2026-10-10 Status section.
+- `android-frame-time-v100`: title "v1.0.0: Faster Android frames with the same image"; Todo / Not started / v1.0.0; Feature; Graphics performance; Evidence 744 characters; the body contains the schedule line and no fast-link wording.
+
+The Project holds 308 items: the 307 managed items (`issue-37` absent) plus the keyless Issue #17 link.
+
+### Count correction
+
+The README said 306 managed items. The baseline plan showed 307 before this change; `loading-and-save-speed-2026-10-10` (#389) had been added to the manifest without updating that count. The manifest now holds 308 items, and the README was corrected to 308 and 307 present in the Project.
+
+### Evidence gaps
+
+- No build and no game run. The Android baseline on the TB321FU has not been taken.
+- The 18–30 and 6–10 day figures and the Android timing targets are estimates, not measurements.
+- The research notes are local and are not in the repository.

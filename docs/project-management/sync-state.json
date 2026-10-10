@@ -3099,12 +3099,12 @@
         "Status": "Paused",
         "Delivery": "Deferred",
         "Kind": "Infrastructure",
-        "Release": "v1.0.0",
+        "Release": "After v1.0.0",
         "Area": "Temporal rendering",
         "Source key": "v100-ui-separation-production-handoff"
       },
-      "title": "v1.0.0: Deliver production HUDless/UI separation handoff",
-      "body_sha256": "75c280240a0ad6630e6d2067edce17edb91e6d88f9a20f9721035100a859c25b"
+      "title": "Deliver production HUDless/UI separation handoff",
+      "body_sha256": "6ce44946802b32fbfd66be841f9e326e65a23d255230e2a0cc5608c6ab37b96e"
     },
     "streamline-vulkan-present-after-write": {
       "id": "PVTI_lAHOAAsUY84Biy1azg9F10Q",
@@ -3968,9 +3968,9 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Audio",
-        "Status": "Awaiting validation",
+        "Status": "Done",
         "Delivery": "Released",
-        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The maintainer asked for a new log if still stereo (2026-10-10T05:13:30Z). No reporter confirmation of v0.9.22; no game run with the v0.9.22 packages.",
+        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The Issue was closed as completed at 2026-10-10T08:30:58Z; the reporter wrote at 09:26:16Z that it works perfectly now, after the maintainer's v0.9.22 reply.",
         "Source key": "issue-174-surround-5-1-audio",
         "Release": "v0.9.22"
       }
@@ -4240,6 +4240,20 @@
       },
       "title": "Faster loading, and fewer steps when saving and loading",
       "body_sha256": "a7ad8a20fe32e0eb0406de3e9a897f25fb390b42c6a64f16de0a47769d46cdc8"
+    },
+    "android-frame-time-v100": {
+      "id": "PVTI_lAHOAAsUY84Biy1azg_5c7U",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics performance",
+        "Status": "Todo",
+        "Delivery": "Not started",
+        "Release": "v1.0.0",
+        "Evidence": "The v0.9.0 Reddit post lists \"Better Android performance\" for 1.0.0; no item existed. Research 2026-10-10: the OPPO PLP110 (Adreno 840, PurpleVK) is GPU-bound once hot (gpubusy 100%, thermal status 3 within 10-60 s); same-output wins #302 #303 #304 #310 #313 #314 #315 shipped. The only TB321FU data (v0.8.45-dev, 1280x800, SSAO, Uhra) was render-thread bound: draw_ms 54-69, record_ms 25-34 (3.5x the phone), gpu_ms 44-59, ~15 FPS. No run used the Android defaults. Closed: forced GMEM (3x slower), keep-color on Adreno (-9%), HDR sidecar batching (0.3-0.8 ms), appCategory=game (no change). Untested on Android: adaptive occlusion (#316), background startup pipelines (#379). Scheduled for v1.0.0 by the maintainer on 2026-10-10. Not started.",
+        "Source key": "android-frame-time-v100"
+      },
+      "title": "v1.0.0: Faster Android frames with the same image",
+      "body_sha256": "d3d873e71d0201f854500797874df059df84f09b79a0dc4569e0809814c73b98"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
