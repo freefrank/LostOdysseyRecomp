@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 228,
-    "distinct_entries": 1024,
+    "unit_count": 229,
+    "distinct_entries": 1031,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2746,6 +2746,20 @@
         "scene_path": "Recovered scene resource-path construction for six type-specific platform roots and direct-copy fallback. Generic scene task creation now uses actual UTF-16 concatenation, header assignment, temporary release and final copy instead of a path-building mock. Focused scene-task checks cover types11/13/14/15/16/17 and type12 fallback with synthetic guest strings; library passes. Platform root lookup and task-specific initialization remain service boundaries; no private strings or runtime acceptance are included.",
         "task_initialization": "Recovered scene task reset and task-specific initialization, paired byte/word membership append and bounded UTF-16 comparison. Factory creation now composes actual member storage, full/relative resource names, prefix handling, state flags and owned-resource cleanup rather than an initialization mock. Library and focused scene-task/storage checks pass creation, reinitialization, relative-name trimming and owned/raw cleanup. Platform object release callbacks remain services; no native gameplay or full ABI acceptance is claimed.",
         "tracked_factory": "Recovered tracked scene-task lookup/create, constructor, membership extension, initialization and reference reset. Profile preset loading now creates actual named tracked objects and reuses matching names without duplicate membership. Focused checks cover real allocation/name storage, duplicate reuse, cancellation composition, slot-cache invalidation and scene-object reference clearing. Library passes. Remaining platform release and folded-name comparison calls stay explicit boundaries; this is logical coverage, not gameplay acceptance."
+      },
+      {
+        "unit": "battle_group_gauge61",
+        "entries": [
+          "82AC7550",
+          "82AC7B08",
+          "82AC7FC8",
+          "82AC6E60",
+          "82AC6F08",
+          "82AC8448",
+          "82AFD218"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Recovered group gauge eligibility, roster HP aggregation and initialization, current-value clamping, ratio/rank thresholds, resource snapshot synchronization, two-group refresh and disabling. Binding and global script modes now compose these seven functions and existing inventory lookup. Focused gauge, binding and global-mode fixtures pass; library builds. Synthetic fixtures establish logical ABI behavior only, not gameplay, Full72, bitwise floating-point or full volatile-register equivalence."
       }
     ],
     "evaluator_descriptor_coverage": {

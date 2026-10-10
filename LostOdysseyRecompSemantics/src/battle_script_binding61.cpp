@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_script_binding61.h"
+#include "lo_semantics/battle_group_gauge61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_script_binding61 {
@@ -52,11 +53,11 @@ struct Binding {
     if (e == 0x82a9da60) {
       auto mode = Address(s.r[4]);
       m.WriteU8(owner + 24 * (mode + 1), 0);
-      d.guest.CallDirect(0x82ac7b08, m, s);
+      (void)battle_group_gauge61::Apply(0x82ac7b08, m, d, s);
       for (auto target : {0x82ac7fc8u, 0x82ac6e60u, 0x82ac6f08u}) {
         s.r[3] = owner;
         s.r[4] = mode;
-        d.guest.CallDirect(target, m, s);
+        (void)battle_group_gauge61::Apply(target, m, d, s);
       }
       return;
     }

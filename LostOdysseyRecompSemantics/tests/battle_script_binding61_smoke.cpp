@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_script_binding61.h"
 #include <iostream>
 struct BindingGuest final : manager_release_context61::GuestServices {
-  unsigned callbacks = 0, transitions = 0;
+  unsigned transitions = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18) {
@@ -25,10 +25,11 @@ struct BindingGuest final : manager_release_context61::GuestServices {
       ++transitions;
       return;
     }
-    unsigned calls[]{0x82ac7b08, 0x82ac7fc8, 0x82ac6e60, 0x82ac6f08};
-    if (e != calls[callbacks % 4] || s.r[3] != 0x73000 || s.r[4] != 1)
-      throw std::runtime_error("binding callback sequence");
-    ++callbacks;
+    if (e == 0x82ab0110) {
+      s.r[3] = 0x71200;
+      return;
+    }
+    throw std::runtime_error("binding direct boundary");
   }
   void CallIndirect(GuestAddress, GuestMemory &,
                     manager_release_context61::Registers &) override {
@@ -42,6 +43,7 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832ca000, 0x2000});
     regions.push_back({0x832ae000, 0x1000});
+    regions.push_back({0x8201d000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -59,6 +61,9 @@ int main() {
     m.WriteU32(actors + 12, vars);
     m.WriteU32(actors + 472 + 4, r0);
     m.WriteU32(actors + 472 + 8, 24);
+    m.WriteU32(0x71200, 0x71300);
+    m.WriteU32(0x71300, r0);
+    m.WriteU32(0x71304, r1);
     m.WriteU32(0x71000, 0x71100);
     m.WriteU32(0x71004, 2);
     m.WriteU32(0x71100, r0);
@@ -104,14 +109,14 @@ int main() {
     m.WriteU8(0x73000 + 48, 99);
     op(0x82a9e988);
     if (!(m.ReadU32(actors + 64) & 0x40000000) ||
-        !(m.ReadU32(r0 + 124) & 0x400000) || guest.callbacks != 4 ||
-        m.ReadU8(0x73000 + 48))
+        !(m.ReadU32(r0 + 124) & 0x400000) ||
+        m.ReadU8(0x73000 + 48) != 1)
       throw std::runtime_error("binding visibility state");
     m.WriteU32(0x832ca0e0 + 5784, 233);
     m.WriteU8(code + 1, 2);
     op(0x82a9e988);
     if ((m.ReadU32(actors + 64) & 0x40000000) ||
-        (m.ReadU32(r0 + 124) & 0x400000) || guest.callbacks != 4)
+        (m.ReadU32(r0 + 124) & 0x400000))
       throw std::runtime_error("original exception and low bit");
     m.WriteU8(code + 1, 0);
     m.WriteU32(0x72000 + 56, 9);

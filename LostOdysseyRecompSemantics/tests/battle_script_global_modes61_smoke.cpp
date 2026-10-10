@@ -11,6 +11,10 @@ struct ModeGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x70000;
       return;
     }
+    if (e == 0x82ab0110) {
+      s.r[3] = 0x71200;
+      return;
+    }
     if (e == 0x82389aa0) {
       s.r[3] = 0x74000;
       return;
@@ -29,9 +33,7 @@ struct ModeGuest final : manager_release_context61::GuestServices {
     }
     if (e == 0x82abdfd0 || e == 0x82aab870 || e == 0x82af5ba8 ||
         e == 0x82afd2f0 || e == 0x8285ff08 || e == 0x8285f9b8 ||
-        e == 0x8285fea8 || e == 0x82afd218 || e == 0x82ac8448 ||
-        e == 0x82ac7b08 || e == 0x82ac7fc8 || e == 0x82ac6e60 ||
-        e == 0x82ac6f08)
+        e == 0x8285fea8)
       return;
     throw std::runtime_error("unexpected global mode service");
   }
@@ -50,6 +52,7 @@ int main() {
          {test::Region{0x832c9000, 0x4000}, test::Region{0x83265000, 0x1000},
           test::Region{0x832ae000, 0x1000}, test::Region{0x83315000, 0x1000}})
       regions.push_back(r);
+    regions.push_back({0x8201d000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -67,6 +70,9 @@ int main() {
     m.WriteU32(state + 4, actor);
     m.WriteU32(state + 12, 1);
     m.WriteU32(0x832c9c54 + 44, state);
+    m.WriteU32(0x71200, 0x71300);
+    m.WriteU32(0x71300, resource);
+    m.WriteU32(0x71304, resource);
     m.WriteU32(0x71000, 0x71100);
     m.WriteU32(0x71004, 1);
     m.WriteU32(0x71100, resource);

@@ -1,0 +1,86 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Battle group gauge state and resource synchronization.",
+  "entries": [
+    {
+      "address": "82AC7550",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 3319,
+      "instruction_count": 61,
+      "body_sha256": "97d199a6ad483cf7b96e703ea3f4141794f52789ffc8acf2a633ffcb127f8916",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC7B08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 4132,
+      "instruction_count": 155,
+      "body_sha256": "982d42937a81cd6a4a6502ff066520efd45e1770021c8145ca469110a4b8f8b7",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC7FC8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 4829,
+      "instruction_count": 60,
+      "body_sha256": "95e22b260824b17d382465f4d7b42e02ed4cc24d2f210716357dbf915003631c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC6E60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 2267,
+      "instruction_count": 41,
+      "body_sha256": "59f22e7e0b2144a35e83a8fa024c63df5e17c49d22e713010acf0053de0c2060",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC6F08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 2374,
+      "instruction_count": 37,
+      "body_sha256": "455daa1b1c40942ce7c02f3346ec15dc7d58ba2dd1bda1d7656bf78eabc08a91",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8448",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 5503,
+      "instruction_count": 28,
+      "body_sha256": "781102a96b7d44cde759c927f80fa75d62689287a12d8191d13500d8c96f4a5b",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AFD218",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 21720,
+      "instruction_count": 24,
+      "body_sha256": "5fa86aa80d3d1be0b926ddbb079f4332b8832f0beea8c82a667cdb6a602f4d6f",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82AC7550",
+      "82AC7B08",
+      "82AC7FC8",
+      "82AC6E60",
+      "82AC6F08",
+      "82AC8448",
+      "82AFD218"
+    ],
+    "header": "include/lo_semantics/battle_group_gauge61.h",
+    "source": "src/battle_group_gauge61.cpp",
+    "smoke": "tests/battle_group_gauge61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Recovered group gauge eligibility, roster HP aggregation and initialization, current-value clamping, ratio/rank thresholds, resource snapshot synchronization, two-group refresh and disabling. Binding and global script modes now compose these seven functions and existing inventory lookup. Focused gauge, binding and global-mode fixtures pass; library builds. Synthetic fixtures establish logical ABI behavior only, not gameplay, Full72, bitwise floating-point or full volatile-register equivalence."
+  }
+}
