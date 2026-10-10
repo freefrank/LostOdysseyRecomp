@@ -1,3 +1,11 @@
+## Root direct continuation: trait probability (2026-10-10 UTC)
+
+Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration.
+
+## Root direct continuation: post-hit effect follow-ups (2026-10-10 UTC)
+
+Recovered additional-effect application and orchestration after actual damage: status-mask insertion, HP/MP return, allied distribution, trait probability and pending actor effects. Main execution now composes real follow-up logic. Reward chance and report-label routing are recovered, with positive item grant relying on existing inventory semantics and remaining platform/UI services. Focused fixtures and library build pass; no native gameplay, Full72 or bitwise floating-point proof is claimed.
+
 ## Root direct continuation: result modes and damage cleanup (2026-10-10 UTC)
 
 Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance.

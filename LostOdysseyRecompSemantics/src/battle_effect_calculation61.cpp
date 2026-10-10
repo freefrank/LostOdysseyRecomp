@@ -27,6 +27,52 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82aa0db0) {
+    auto resource = Address(s.r[4]), value = Address(s.r[5]),
+         category = Address(s.r[6]);
+    s.r[3] = 0;
+    for (unsigned i = 0; i < 3; ++i)
+      if (m.ReadU32(resource + 76252 + 4 * i) == category) {
+        auto mode = m.ReadU32(m.ReadU32(0x832ca0cc) + 100);
+        if (mode == 2)
+          s.r[3] = value;
+        else if (mode == 1)
+          s.r[3] = std::uint64_t(std::int64_t(std::int32_t(value) / 4));
+        break;
+      }
+    return true;
+  }
+  if (e == 0x82aa0e98) {
+    auto old = Address(s.r[1]), resource = Address(s.r[4]),
+         slot = Address(s.r[5]);
+    m.WriteU32(old - 8, Address(s.lr));
+    s.r[1] -= 96;
+    m.WriteU32(Address(s.r[1]), old);
+    unsigned result = 0;
+    if (m.ReadU32(resource + 4 * (slot + 19063)) == 3) {
+      auto type = m.ReadU32(resource + 4 * (slot + 19069));
+      if (type == 1 || type == 2 || type == 3 || type == 11 || type == 12 ||
+          type == 13) {
+        auto group = type >= 11 ? type - 10 : type;
+        s.r[4] = resource;
+        s.r[5] = group == 1 ? 30 : group == 2 ? 60 : 100;
+        s.r[6] = 3;
+        Call(0x82aa0db0, m, d, s);
+        if (Address(s.r[3])) {
+          s.r[4] = s.r[3];
+          s.r[3] = m.ReadU32(0x83264558);
+          s.r[5] = 57 + group;
+          s.r[6] = m.ReadU32(resource + 64);
+          Call(0x82aa0838, m, d, s);
+          result = Address(s.r[3]);
+        }
+      }
+    }
+    s.r[3] = result;
+    s.r[1] += 96;
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b096e8)
     return battle_effect_calculation61::Apply(0x82b09470, m, d, s);
   if (e == 0x82aa0890) {

@@ -369,6 +369,25 @@ int main() {
     m.WriteU32(0x80000 + 4 * (127 + 16), 0);
     run(0x82b21480);
     check(std::bit_cast<float>(m.ReadU32(0x100000 + 4 * (116 + 34))) == 19);
+    m.WriteU32(0x832ca0cc, 0x77000);
+    m.WriteU32(0x77000 + 100, 1);
+    m.WriteU32(0x80000 + 76252, 3);
+    m.WriteU32(0x80000 + 76276, 13);
+    s.r[4] = 0x80000;
+    s.r[5] = unsigned(-7);
+    s.r[6] = 3;
+    check(battle_effect_calculation61::Apply(0x82aa0db0, m, {g, native}, s) &&
+          std::int64_t(s.r[3]) == -1);
+    m.WriteU32(0x77000 + 100, 2);
+    s.r[4] = 0x80000;
+    s.r[5] = 0;
+    check(battle_effect_calculation61::Apply(0x82aa0e98, m, {g, native}, s) &&
+          s.r[3] == 1 && s.r[1] == initial.r[1]);
+    m.WriteU32(0x77000 + 100, 0);
+    s.r[4] = 0x80000;
+    s.r[5] = 0;
+    check(battle_effect_calculation61::Apply(0x82aa0e98, m, {g, native}, s) &&
+          s.r[3] == 0);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

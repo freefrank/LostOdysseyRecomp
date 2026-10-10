@@ -4,7 +4,7 @@
 #include "lo_semantics/battle_effect_execution61.h"
 #include <iostream>
 struct ExecutionGuest final : manager_release_context61::GuestServices {
-  unsigned applied = 0, guarded = 0, listQueries = 0;
+  unsigned guarded = 0, listQueries = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -25,12 +25,6 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
     if (e == 0x82ac34f8) {
       if (s.r[4] != 2)
         throw std::runtime_error("damage counter category");
-      return;
-    }
-    if (e == 0x82b22100) {
-      if (s.r[3] != 0x73000)
-        throw std::runtime_error("application receiver");
-      ++applied;
       return;
     }
     if (e == 0x82af6a48) {
@@ -92,7 +86,7 @@ int main() {
     m.WriteU32(0x8204fc20, 0x447a0000);
     m.WriteU32(0x82000e40, 0xbf800000);
     auto reset = [&]() {
-      g.applied = g.guarded = 0;
+      g.guarded = 0;
       for (unsigned bank = 0; bank < 9; ++bank) {
         m.WriteU32(0x80000 + 272 * bank + 232, 0);
         m.WriteU32(0x90000 + 272 * bank + 232, 0);
@@ -132,24 +126,23 @@ int main() {
     };
     reset();
     run();
-    check(g.applied == 1 && m.ReadU32(0x76000 + 192) == 90 &&
+    check(m.ReadU32(0x76000 + 192) == 90 &&
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3726)) == 90 &&
           std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 110);
     reset();
     m.WriteU32(0x80000 + 2604, 0);
     m.WriteU32(0x90000 + 2608, 0x447a0000);
     run();
-    check(!g.applied && m.ReadU32(0x76000 + 192) == 777);
+    check(m.ReadU32(0x76000 + 192) == 777);
     reset();
     m.WriteU32(0x90000 + 4956, 4);
     run();
-    check(g.guarded == 1 && !g.applied && m.ReadU32(0x73000 + 52) == 2 &&
+    check(g.guarded == 1 && m.ReadU32(0x73000 + 52) == 2 &&
           m.ReadU32(0x100000 + 4 * 3758) == 1 && m.ReadU32(0x76000 + 192) == 0);
     reset();
     m.WriteU32(0x90000 + 7 * 272 + 232, 1u << 21);
     run();
-    check(m.ReadU32(0x73000 + 52) == 1 && m.ReadU32(0x76000 + 192) == 0 &&
-          g.applied == 1);
+    check(m.ReadU32(0x73000 + 52) == 1 && m.ReadU32(0x76000 + 192) == 0);
     reset();
     m.WriteU32(0x80000 + 4916, 1);
     m.WriteU32(0x90000 + 272 + 232, 1u << 16);
@@ -157,7 +150,6 @@ int main() {
     run();
     check(m.ReadU32(0x73000 + 52) == 8 &&
           std::bit_cast<float>(m.ReadU32(0x100000 + 4 * 3730)) == 90 &&
-          g.applied == 1 &&
           std::bit_cast<float>(m.ReadU32(0x90000 + 2588)) == 200 &&
           m.ReadU32(0x76000 + 192) == 0);
     reset();

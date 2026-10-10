@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 221,
-    "distinct_entries": 918,
+    "unit_count": 222,
+    "distinct_entries": 923,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2519,7 +2519,9 @@
           "82B1FF20",
           "82B09470",
           "82B096E8",
-          "82B21480"
+          "82B21480",
+          "82AA0DB0",
+          "82AA0E98"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks source/target numeric properties, special stat override, opposed-stat hit threshold, boss override, status selection/result recording, zero-amount handling, minimum jitter and nonnegative base difference. Property/random/result helpers are composed; attack and defense base services remain explicit boundaries. Logical/ABI only, without bitwise floating-point or native gameplay proof. Logical/ABI only",
@@ -2529,7 +2531,8 @@
         "trait_bonuses": "Recovered category-two and category-eight trait bonus calculations using actual trait matching and interpolation. The focused fixture checks overlap gating, selected multiplier, target-specific extra bonus, result-record flag, skip behavior and FPR28-31 restoration. No trait service mock remains in these paths. Guest constants are synthetic in the fixture; full floating-point and native gameplay equivalence remain unvalidated.",
         "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
         "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.",
-        "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated."
+        "return_amount": "Recovered status-counter consumption and return-amount recording, composed with property removal, source response classification and result flags. Focused fixture checks counter expiry, weakness rounding including odd amounts, lethal-damage cap, absorption/zero-response record fields and source result marking. Guest constants remain synthetic in tests; full floating-point and native gameplay equivalence are unvalidated.",
+        "trait_probability": "Recovered trait probability scaling by battle mode and per-slot trait chance dispatch. Category3 details1/11,2/12,3/13 select thresholds30/60/100 and random tags58/59/60. Focused checks cover signed quarter scaling, full mode success and zero mode rejection; composed into post-hit follow-up orchestration."
       },
       {
         "unit": "battle_effect_execution61",
@@ -2557,6 +2560,16 @@
         "focused_smoke_paths": 1,
         "validation": "Focused fixtures cover shield retention/depletion, capped healing, damage suppression, low-HP/death service arguments, survival property consumption, revived property removal, repeated source absorption, source/target HP and MP application, skipped records and FPR/frame restoration. Main execution now applies actual result records to HP/MP; manager lookup, achievement counting and status insertion remain guest boundaries. Logical/ABI only",
         "resource_modes": "Recovered damage-triggered status cleanup and nine-way HP/MP result dispatch, including proportional HP adjustment, fixed/threshold HP caps, resource floors and critical-hit healing refunds. Actual effect execution no longer mocks post-damage cleanup, and the critical refund path is exercised through the real heal dispatcher. Focused checks cover resource writes/returns, excluded cleanup masks, wake-state reset and unchanged-HP behavior. Achievement counting, manager notifications and additional effects remain service boundaries. Logical recovery only, not native gameplay or full FP/ABI acceptance."
+      },
+      {
+        "unit": "battle_effect_followups61",
+        "entries": [
+          "82B21970",
+          "82B22100",
+          "82AA12E0"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Focused fixtures cover added status, existing-status skip, HP/MP return, same-side sharing, random eligible ally transfer, forced percentage, blocked response, actor pending-effect consumption, trait-driven healing, reward chance computation and label routing. Main execution now calls this implementation instead of mocking additional effects. Positive item grant and UI copy remain unvalidated service-composed paths; no native gameplay acceptance is claimed. Logical/ABI only"
       }
     ]
   },
