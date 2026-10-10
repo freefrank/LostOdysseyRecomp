@@ -66,3 +66,7 @@ The archive lookup entry now normalizes case, slash and hyphen spelling, searche
 ## CPX stream orchestration
 
 CPX stream orchestration now composes the recovered block decoder and context helpers with split reserve handling, chunked reads, time-budget yields and completion cleanup. Registry unlink and context shutdown are also recovered. Two small synthetic paths cover a split-reserve two-block stream and a plain read; a separate lifecycle fixture checks linked-list removal and ownership. Runtime I/O, clock, allocator, registry construction and atomic status exchange stay explicit service boundaries. Cross-boundary scratch assembly and allocation failures are source-reviewed only; this is not native archive or multithreaded acceptance.
+
+## FPI index loading
+
+The FPI loader now reads and converts the 64-byte header, enforces the original 1..512-sector size range, replaces the resident index buffer, and relocates archive descriptors and nested entry trees. Locked reads retain their guest status exchanges. Two endian variants and an invalid-sector sample pass with synthetic file services. Open/read/close, allocation, error reporting and atomic operations remain runtime boundaries. Auxiliary table relocation follows the original swap-only branch and has not been exercised by this fixture.
