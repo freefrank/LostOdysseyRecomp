@@ -7313,7 +7313,7 @@
         "Release": "v0.8.61",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded."
+        "Evidence": "Request (2026-10-02): the host Settings menu has no animations. PR #317 (merged 2026-10-08T06:07:26Z as 07e2de78, shipped in v0.8.61, published 08:33:11Z, not accepted) eases the menu, presentation only: the content fades in over 220 ms on open, and tab switches, cursor moves, value changes, dialogs and the display countdown cross-fade over 150 ms; closing stays instant. Checked with LoMenuRenderTest, LoMenuFlowTest, CPU contracts 33/33 and settings_menu contracts 5/5; in game only one psvita run before the timer fix, none on the merged code. The Issue was closed with the merge at 06:07:27Z; the maintainer commented the release on 2026-10-08 at 08:34:55Z. No reporter confirmation is recorded. Update 2026-10-10: PR #347 (merged 2026-10-09T07:15:58Z as 1e532064, shipped in v0.9.22, not accepted) moves the menu like the retail menus: cursor slides and sways, rows fade in in turn. Release stays v0.8.61, the first release of the menu animation."
       }
     },
     {
@@ -7323,12 +7323,12 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Audio",
-        "Status": "Done",
+        "Status": "Awaiting validation",
         "Delivery": "Released",
-        "Release": "v0.8.53",
+        "Release": "v0.9.22",
         "Start date": null,
         "Target date": null,
-        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround (audio_output), applied live. The six channels pass through unmixed; fewer channels fall back to stereo with a log line and a help hint; 7.1 takes the 5.1 stream through SDL. PR #279 (merged 07:43:18Z, v0.8.53) names the Windows Sound control panel steps in that hint. Checked on psvita (Proton/WASAPI, null sinks): all six channels carry sound, the stereo fold matches within 0.1 dB, a 2-channel sink falls back, a 7.1 sink reopens. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1 in the classic Sound panel (log: 8 channels, 5.1 stream mapped; maintainer's report, before the release). Not tested: native Linux, macOS, Android, the commenter's 5.1 setup. Closed with the PR merge at 03:35:15Z. No reporter confirmation is recorded."
+        "Evidence": "Request (2026-10-03): add 5.1 audio output, since the original mix is 5.1. PR #271 (merged 2026-10-07T03:35:13Z as a5fa8961, shipped in v0.8.53, published 2026-10-07T08:09:55Z, not accepted) adds Settings > Audio > Audio output: Stereo (default) or 5.1 surround; fewer channels fall back to stereo. Checked on psvita (null sinks): six channels carry sound; a 2-channel sink falls back. The maintainer confirmed 5.1 on an HDMI soundbar set to 7.1, before the release. Reopened (maintainer comment 2026-10-09T19:45:52Z): an optical-output reporter on v0.8.61 got stereo; the game took that output for stereo and never tried 5.1. PR #362 (merged 2026-10-09T19:30:22Z as a74f9ec0, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) picks 5.1 from the WASAPI mix format; PRs #365, #366 and #367 (v0.9.22) add Matrix surround output. The maintainer asked for a new log if still stereo (2026-10-10T05:13:30Z). No reporter confirmation of v0.9.22; no game run with the v0.9.22 packages."
       }
     },
     {
@@ -7563,12 +7563,111 @@
         "Kind": "Feature",
         "Area": "Localization",
         "Status": "In Progress",
-        "Delivery": null,
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research (PR #371) started the same day. Scope: language packs for modders: export the game's text to editable files, import translations, add languages selectable in Settings, and font glyph additions. Released as an experimental Windows path in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted): text export (PR #374), import (#378), Game language choice (#381), export and clean-for-sharing tool (#382), mod format v2 (#383) and a Mods page (#384). Not delivered: a Brazilian Portuguese language in the game (the maintainer's 2026-10-09 comment says modders can add one) and font glyph additions. The Issue stays open. No reporter confirmation and no game run with the v0.9.22 packages."
+      }
+    },
+    {
+      "key": "issue-265-upscaled-cutscenes-sharp-text",
+      "title": "[Feature]  Upscaled Cutscenes and Sharp Text",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/265",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Video playback",
+        "Status": "Todo",
+        "Delivery": "Research complete",
         "Release": null,
         "Start date": null,
         "Target date": null,
-        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research started the same day. Scope: language packs for modders. Export the game's text to editable files, import translated text back into the game, and add new languages selectable in Settings, first target Brazilian Portuguese, plus font glyph additions. Planned phases: research (text formats, archive read path, language selection, font glyph coverage), export, import, new language and font additions. No implementation, validation or reporter acceptance is recorded. Mods are supported on Windows only (PR #357)."
+        "Evidence": "Reopened (state OPEN, reason REOPENED; last update 2026-10-09T19:30:39Z). PR #345 (merged 2026-10-09T06:04:11Z as f72be6f9) adds docs/notes/hd-cutscene-replacement.zh-CN.md, a research note on HD and high-frame-rate CG replacement only. No game change for this Issue in v0.9.22 is recorded; the mod export of CG movies (PR #346) is a separate tool. Sharp text is not covered by the note. Not scheduled; no reporter confirmation is recorded."
       }
+    },
+    {
+      "key": "issue-323-vulkan-pipeline-build-crash",
+      "title": "[Bug] Crashing when building Pipeline on Vulkan",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/323",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Graphics backends",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Reported 2026-10-08: Vulkan crash while building the pipeline. PRs #334 (merged 2026-10-08T19:25:19Z as 6f34f9c4, skips the same-size swap chain rebuild at the first present) and #338 (merged 2026-10-08T21:56:15Z as 690e91b4, keeps ReShade's dxgi.dll out of Vulkan runs) both reference #323; the release notes credit the NVIDIA dxgi.dll crash. Shipped in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted). Closed as completed 2026-10-08T21:56:02Z after a reporter wrote 'It worked!' on a test build (21:08:48Z); that build is not v0.9.22. The crash log attached to the Issue was not read for this record. No game run with the v0.9.22 packages."
+      }
+    },
+    {
+      "key": "issue-332-exclusive-fullscreen",
+      "title": "[Feature] Bring back Exclusive Fullscreen",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/332",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics presentation",
+        "Status": "Done",
+        "Delivery": "Superseded",
+        "Release": "v0.9.22",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Request: bring back Exclusive Fullscreen. The maintainer replied on 2026-10-08T19:28:11Z that it is not coming back; with DLSS, FSR or XeSS, a Render resolution above the screen supersamples, scaling the picture down to the window or screen without DSR. PR #335 (merged 2026-10-08T19:37:35Z as 3bbd944f, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) adds that. Closed as completed 2026-10-08T19:37:36Z. The exclusive mode itself is not restored, so Delivery is Superseded. The reporter said they would test the next update (2026-10-08T19:33:39Z); no confirmation of v0.9.22 and no game run is recorded."
+      }
+    },
+    {
+      "key": "issue-339-main-menu-settings",
+      "title": "[Feature] Allow people to change settings from the main menu or, at the very least, install content.",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/339",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Settings",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Request: change settings from the main menu, or at least install content. The Issue was closed as completed on 2026-10-08T21:55:30Z, before the change below; the maintainer's reply was to import all discs from the beginning, or open a new game and import. PR #373 (merged 2026-10-10T00:27:21Z as 7d3c66a6, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) opens Settings from the title menu, the settings part of the request. Installing content from the main menu is not delivered. No reporter confirmation and no game run with v0.9.22 is recorded."
+      }
+    },
+    {
+      "key": "issue-342-npc-culling",
+      "title": "[Feature] Reduce Culling on NPC characters or decorations in general, and also when zoom is active",
+      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/342",
+      "fields": {
+        "Kind": "Feature",
+        "Area": "Graphics quality",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": null,
+        "Target date": null,
+        "Evidence": "Request: reduce culling of NPCs and decorations in general and when zoom is active. PR #348 (merged 2026-10-09T07:23:10Z as c41a1ee6, shipped in v0.9.22, published 2026-10-10T05:10:10Z, not accepted) adds Settings > Graphics > Culling, 0% to 200%: 100% is the original; lower values keep characters and objects at the screen edges visible until they are fully off screen, higher values hide them sooner. Closed as completed 2026-10-09T22:54:42Z. No reporter confirmation and no game run with the v0.9.22 packages is recorded; the zoom case was not separately checked here."
+      }
+    },
+    {
+      "key": "release-v0-9-22",
+      "title": "Publish the 5.1 fix, Matrix surround, language packs and Mods in v0.9.22",
+      "body": "<!-- lo-project:release-v0-9-22 -->\n\nv0.9.22 于 2026-10-10T05:10:10Z 发布。它不是草稿或预发布版本，是当前最新的正式版本，包含 v0.9.0 之后合并到 `main` 的全部工作（`git log --first-parent v0.9.0..v0.9.22` 共 46 个提交，PR #331 到 #386）。发布不等于验收：没有玩家验收，维护者尚未验收 v0.9.22，也没有用 v0.9.22 的安装包运行过游戏。\n\n## Scope and completion criteria\n\n- [x] 带注释的 tag `v0.9.22`（tag 对象 `a34cd171`）指向 `main` 上的提交 `d3888a0d`（`chore: release v0.9.22 (#386)`）\n- [x] GitHub 发布页不是草稿、不是预发布，为 Latest；五个附件\n- [ ] 取得玩家对 v0.9.22 的确认：#174（已重新打开，等待报告者的新日志或确认）、#332、#339、#342 和 #323（#323 的测试构建确认不是 v0.9.22 的确认）\n- [ ] 取得玩家对 #369 语言包实验功能的确认（未交付的部分见该 Issue）\n- [ ] 维护者验收 v0.9.22\n\n## Delivery verification\n\n发布页 [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) 的五个附件（大小和 SHA-256 为 GitHub API 在 2026-10-10 读取的值）：\n\n| 附件 | 字节数 | SHA-256 |\n| --- | ---: | --- |\n| `LostOdysseyRecomp-windows-x64-v0.9.22.zip` | 151,348,272 | `5717bad21db2534b250263468192aef50d44917bf066b2f3aa169335aa3fe9b6` |\n| `LostOdysseyRecomp-linux-x64-v0.9.22.AppImage` | 77,339,128 | `2eac5de070d7beb17e156a047c4754d2f9d470efbe261f6bfb6fe4e713d9628f` |\n| `LostOdysseyRecomp-linux-x64-v0.9.22.flatpak` | 54,949,400 | `f279d43c23b55b94ae41bef223d860c16f1e250108e97080ff309cb5949f06b2` |\n| `LostOdysseyRecomp-android-arm64-v0.9.22.apk` | 46,057,478 | `53699b67b6cf77ed6cca8de5a42baeb7c28b1edb3c3f0349677a10efc3293307` |\n| `LostOdysseyRecomp-macos-arm64-v0.9.22.dmg` | 61,550,278 | `98a73e027052fe16f6eef916270dd7dc480c7823c62e5aef4ef00afc72bf5c8b` |\n\n没有下载、解包或运行过这些附件。\n\n## 本版本包含的工作\n\n- 音频：PR #362 从 WASAPI 混音格式选取 5.1（#174 重新打开后的修复）；PR #365、#366、#367 新增 Matrix 环绕输出（相位、测试音和后方角度）。\n- 图形与渲染：PR #335 超采样（#332）；PR #334 和 #338（#323）；PR #341 DLSS 5 神经渲染；PR #370 DLSS 模型 M 或 L；PR #343 设置页分组；PR #368 转场期间保持 SR、FG 和 AO；PR #364 短暂暂停时保留 DLSS-G 资源；PR #340 HDR 页预览；PR #376、#379 启动和运动矢量管线后台准备。\n- 设置：PR #348（#342，Culling）；PR #347（#151，菜单动效）；PR #373（#339，从标题菜单打开设置）；PR #372 Windows 首次启动不再显示设置页；PR #384 系统页的 Mods 页；PR #385 Mods 图例宽度。\n- 模组与语言包（仅 Windows，实验性）：PR #344 Mod Organizer 2 插件；PR #346、#349、#351 纹理与影片导出和上采样；PR #352、#353、#356、#361 纹理替换；PR #374、#378、#381、#382、#383 语言包（#369）；PR #380 导出工具指南；PR #350、#371 研究文档；PR #357 模组仅支持 Windows。\n- 诊断与其他：PR #354 TAA 数据改为可选的日志收集；PR #336 不向 Discord 播报预发布版本；PR #345 CG 替换研究笔记（#265）；PR #355 修复主构建。\n\n本记录只为上面列出的 Issue 和已有项建立对应，其余 PR 见 CHANGELOG.md 和发布页，没有单独建项。\n\n## Validation and acceptance\n\n没有用 v0.9.22 安装包做过游戏运行。Gitea 构建 run 没有在本记录中读取。发布不是玩家确认，也不是维护者验收。\n\nstage_detail: Published; not accepted\n\n## Sources\n\n- [v0.9.22 发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22)\n- [v0.9.0…v0.9.22 对比](https://github.com/freefrank/LostOdysseyRecomp/compare/v0.9.0...v0.9.22)\n- [提交 d3888a0d](https://github.com/freefrank/LostOdysseyRecomp/commit/d3888a0d879a23ff26197a3ad29fe64975b4b6b8)\n- [CHANGELOG.md](https://github.com/freefrank/LostOdysseyRecomp/blob/d3888a0d879a23ff26197a3ad29fe64975b4b6b8/CHANGELOG.md)\n",
+      "issue_url": null,
+      "fields": {
+        "Kind": "Release",
+        "Area": "Release Engineering",
+        "Status": "Done",
+        "Delivery": "Released",
+        "Release": "v0.9.22",
+        "Start date": "2026-10-10",
+        "Target date": "2026-10-10",
+        "Evidence": "Published v0.9.22 at 2026-10-10T05:10:10Z: latest release, not prerelease, tag object a34cd171 peeled to d3888a0d (chore: release v0.9.22, PR #386). Assets: Windows ZIP 151,348,272 B (SHA-256 5717bad2...), Linux AppImage 77,339,128 B (2eac5de0...), Flatpak 54,949,400 B (f279d43c...), Android APK 46,057,478 B (53699b67...; CI-built) and macOS DMG 61,550,278 B (98a73e02...). Covers 46 first-parent commits, PRs #331 to #386: 5.1 WASAPI fix and Matrix surround (#174), supersampling (#332), #323 Vulkan fixes, Culling (#342), title-menu Settings (#339), language packs and Mods (#369). Published, not accepted: no game run with the v0.9.22 packages and no player acceptance recorded; Gitea run not read."
+      },
+      "source_refs": [
+        "https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22",
+        "https://github.com/freefrank/LostOdysseyRecomp/compare/v0.9.0...v0.9.22",
+        "https://github.com/freefrank/LostOdysseyRecomp/commit/d3888a0d879a23ff26197a3ad29fe64975b4b6b8",
+        "CHANGELOG.md"
+      ],
+      "source_lines": [],
+      "record_type": "backlog"
     }
   ]
 }
