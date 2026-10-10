@@ -4,7 +4,7 @@
 #include "lo_semantics/string_conversion_context61.h"
 #include <iostream>
 struct ConversionGuest final : manager_release_context61::GuestServices {
-  unsigned allocated = 0, error = 0, utf8 = 0;
+  unsigned allocated = 0, error = 0;
   bool fail = false;
   void Need(bool b) {
     if (!b)
@@ -31,13 +31,6 @@ struct ConversionGuest final : manager_release_context61::GuestServices {
       error = unsigned(s.r[3]);
       return;
     }
-    if (e == 0x827ca660) {
-      Need(s.r[3] == 0x90000 && s.r[4] == 3 && s.r[5] == 0xa0000 &&
-           s.r[6] == 3);
-      ++utf8;
-      s.r[3] = 2;
-      return;
-    }
     throw std::runtime_error("unexpected conversion direct");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -53,11 +46,20 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x8330b000, 0x1000});
+    regions.push_back({0x831e7000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
     ConversionGuest g;
     auto s = sort_engine61_oracle::Initial(0), initial = s;
+    m.WriteU32(0x831e7c94, 0xffff);
+    m.WriteU32(0x831e7c98, 0x10ffff);
+    m.WriteU32(0x831e7c90, 0xfffd);
+    m.WriteU32(0x831e7c9c, 10);
+    m.WriteU32(0x831e7ca0, 0x10000);
+    m.WriteU32(0x831e7ca4, 0x3ff);
+    m.WriteU32(0x831e7ca8, 0xd800);
+    m.WriteU32(0x831e7cac, 0xdc00);
     m.WriteU32(0x8330b608, 0x70000);
     m.WriteU32(0x70000, 0x71000);
     m.WriteU32(0x71004, 0x123400);
@@ -104,7 +106,22 @@ int main() {
     convert(0, 3, 3);
     g.Need(!s.r[3] && g.error == 87);
     convert(65001, 3, 3);
-    g.Need(s.r[3] == 2 && g.utf8 == 1);
+    g.Need(s.r[3] == 3 && m.ReadU16(0xa0000) == 'x');
+    m.WriteU8(0x831e7cc8 + 0xf0, 3);
+    m.WriteU32(0x831e7cb0 + 12, 0x3c82080);
+    m.WriteU8(0x90000, 0xf0);
+    m.WriteU8(0x90001, 0x9f);
+    m.WriteU8(0x90002, 0x98);
+    m.WriteU8(0x90003, 0x80);
+    convert(65001, 4, 2);
+    g.Need(s.r[3] == 2 && m.ReadU16(0xa0000) == 0xd83d &&
+           m.ReadU16(0xa0002) == 0xde00);
+    convert(65001, 4, 0);
+    g.Need(s.r[3] == 2);
+    convert(65001, 4, 1);
+    g.Need(s.r[3] == 0 && g.error == 122);
+    convert(65001, 2, 4);
+    g.Need(s.r[3] == 0);
     g.Need(!string_conversion_context61::Apply(0, m, {g, native}, s));
     std::cout << "string_conversion_context61 smoke passed\n";
     return 0;

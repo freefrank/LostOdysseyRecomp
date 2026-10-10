@@ -25,13 +25,22 @@
       "instruction_count": 54,
       "body_sha256": "32a4c4ed4fe0a7f98b9fefaafb2983f33cae7a735e3a0b296027c0507d19eec3",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "827CA660",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.75.cpp",
+      "source_line": 21997,
+      "instruction_count": 127,
+      "body_sha256": "1c686a4c4dde982fac8b892c634f8f96e79f8e3ecb85799b2f9b56fb7a996acd",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
     "entries": [
       "823227C8",
       "8229C538",
-      "8229C560"
+      "8229C560",
+      "827CA660"
     ],
     "header": "include/lo_semantics/string_conversion_context61.h",
     "source": "src/string_conversion_context61.cpp",
@@ -45,6 +54,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "One focused fixture checks byte length, null source, local and heap temporary buffers, exact 4-times-count heap request, size query, insufficient output, imported conversion failure and UTF-8 delegation. String storage composes the wrapper and its fixture passes with the actual temporary-buffer path. Imported character conversion and UTF-8 implementation remain boundaries; native locale behavior is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "One focused fixture checks byte length, null source, local and heap temporary buffers, exact 4-times-count heap request, size query, insufficient output, imported conversion failure and UTF-8 delegation. String storage composes the wrapper and its fixture passes with the actual temporary-buffer path. Imported character conversion and UTF-8 implementation remain boundaries; native locale behavior is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "utf8_decoder_update": "Recovered the table-driven UTF-8 decoder 827CA660 and composed it into codepage dispatch. The focused fixture now checks actual ASCII decoding, supplementary-plane surrogate output, size-only queries, partial-capacity error behavior and incomplete input using synthetic guest tables. Imported non-UTF8 conversion remains a platform boundary; native locale and full-image table validation remain unvalidated."
   }
 }
