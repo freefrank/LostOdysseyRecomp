@@ -7,10 +7,6 @@ struct CalculationGuest final : manager_release_context61::GuestServices {
   unsigned defense = 5, attack = 20;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82b096e8) {
-      s.r[3] = 0;
-      return;
-    }
     throw std::runtime_error("calculation direct");
   }
   void CallIndirect(GuestAddress, GuestMemory &,
@@ -315,6 +311,32 @@ int main() {
     check(run(0x82b1fdf8));
     m.WriteU32(0x80000 + 7 * 272 + 232, 1u << 23);
     check(!run(0x82b1fdf8));
+    clearProperties();
+    m.WriteU32(0x90000 + 272 + 232, 1u << 16);
+    for (unsigned value = 0; value < 4; ++value) {
+      m.WriteU32(0x90000 + 4 * (16 + 127), value);
+      s.r[3] = 0x76000;
+      s.r[4] = 1;
+      s.r[5] = 0x90000;
+      check(battle_effect_calculation61::Apply(0x82b096e8, m, {g, native}, s));
+      check(s.r[3] == (value < 3 ? value + 6 : 0));
+    }
+    m.WriteU32(0x90000 + 4 * (16 + 127), 2);
+    m.WriteU32(0x90000 + 272 + 232, (1u << 16) | (1u << 17));
+    m.WriteU32(0x90000 + 4 * (17 + 127), 0);
+    s.r[3] = 0x76000;
+    s.r[4] = 3;
+    s.r[5] = 0x90000;
+    check(battle_effect_calculation61::Apply(0x82b09470, m, {g, native}, s) &&
+          s.r[3] == 6);
+    m.WriteU32(0x90000 + 272 + 232, (1u << 16) | (1u << 20));
+    m.WriteU32(0x90000 + 4 * (20 + 127), 2);
+    m.WriteU32(0x90000 + 4 * (16 + 127), 0);
+    s.r[3] = 0x76000;
+    s.r[4] = 1;
+    s.r[5] = 0x90000;
+    check(battle_effect_calculation61::Apply(0x82b09470, m, {g, native}, s) &&
+          s.r[3] == 8);
     check(!battle_effect_calculation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_effect_calculation61 smoke passed\n";
     return 0;

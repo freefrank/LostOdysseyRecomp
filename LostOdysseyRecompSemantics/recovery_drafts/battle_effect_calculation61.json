@@ -145,6 +145,22 @@
       "instruction_count": 199,
       "body_sha256": "c9de01f67afb82db9863d11cb3337a41aa16d29a19f186352b42a3b749bd70ff",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B09470",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 17688,
+      "instruction_count": 148,
+      "body_sha256": "8805fd44b14a9c62d4f40adce3fbf82a192f49540fbd716c6dd158fc9d7c13df",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B096E8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 18062,
+      "instruction_count": 1,
+      "body_sha256": "6b0f7ac63e788c5492c3b89a803142afba2facf749b4d695a9b8b758336764a3",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -166,7 +182,9 @@
       "82B20D38",
       "82B207A0",
       "82B1FDF8",
-      "82B1FF20"
+      "82B1FF20",
+      "82B09470",
+      "82B096E8"
     ],
     "header": "include/lo_semantics/battle_effect_calculation61.h",
     "source": "src/battle_effect_calculation61.cpp",
@@ -185,6 +203,7 @@
     "amount_modifiers": "Recovered side-dependent amount attenuation and final amount aggregation, including exemption gates, result-record marking, status overrides, critical multiplier, count scaling, optional random modifier, rounding and cancellation. Focused fixture checks attenuation/bypass and the aggregation stages with synthetic guest constants and real property helpers. No bitwise floating-point or native gameplay equivalence is claimed.",
     "trait_critical_selection": "Recovered three-slot trait matching with wildcard filters, selected-trait state writes, effect-mode float interpolation and critical selection. Critical selection composes actual trait lookup, interpolation, target property scaling and deterministic random gates; skip paths preserve the existing output byte. Focused fixture checks wildcard/no-match state, interpolation modes and critical/skip paths. Synthetic constants only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
     "trait_bonuses": "Recovered category-two and category-eight trait bonus calculations using actual trait matching and interpolation. The focused fixture checks overlap gating, selected multiplier, target-specific extra bonus, result-record flag, skip behavior and FPR28-31 restoration. No trait service mock remains in these paths. Guest constants are synthetic in the fixture; full floating-point and native gameplay equivalence remain unvalidated.",
-    "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated."
+    "element_response": "Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.",
+    "response_classifier": "Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated."
   }
 }

@@ -341,3 +341,7 @@ Recovered category-two and category-eight trait bonus calculations using actual 
 ## Elemental and target responses
 
 Recovered elemental cancellation/weakness bonus, property-backed guard chance and ordered target response selection. Existing property, trait, interpolation and random helpers are composed. Focused fixture checks elemental permission/neutral gates, weakness multiplier, early-return state preservation, response modes0-5 and guard bypass. The external response-classifier and duel manager remain explicit service boundaries. Logical/ABI recovery only; native gameplay and bitwise floating-point equivalence remain unvalidated.
+
+## Element response classifier
+
+Recovered elemental response classification and its tail adapter. The classifier preserves source ordering across selected element bits and the shared property52 override, returning response codes6/7/8 for values0/1/2. Target response selection now uses actual classification instead of a service mock. Focused fixture checks codes, later-element overwrite and shared override. The duel manager remains a separate boundary; native gameplay remains unvalidated.

@@ -25,6 +25,8 @@ std::int32_t Trunc(double x) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82b096e8)
+    return battle_effect_calculation61::Apply(0x82b09470, m, d, s);
   if (e == 0x82aa0890) {
     auto owner = Address(s.r[3]), resource = Address(s.r[4]),
          category = Address(s.r[5]), kind = Address(s.r[6]),
@@ -82,6 +84,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned frame = 112, first = 31, literal = 0, saveFloat = 0;
   switch (e) {
+  case 0x82b09470:
+    frame = 160;
+    first = 25;
+    literal = 80;
+    break;
   case 0x82b1fdf8:
   case 0x82b1ff20:
     frame = 160;
@@ -201,7 +208,28 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     m.WriteU32(sp + offset, unsigned(n));
     return n;
   };
-  if (e == 0x82b1fdf8 || e == 0x82b1ff20) {
+  if (e == 0x82b09470) {
+    auto mask = Address(s.r[4]), target = Address(s.r[5]);
+    std::int32_t selected = -1, shared = -1;
+    auto payload = [&](unsigned id) {
+      auto bitMask = m.ReadU32(0x8321343c + 8 * (id % 32));
+      unsigned index = 0;
+      for (; index < 31; ++index)
+        if (bitMask & (1u << index))
+          break;
+      return std::int32_t(m.ReadU32(target + 4 * (index + 127)));
+    };
+    for (unsigned i = 0; i < 4; ++i)
+      if (mask & (1u << i)) {
+        if (property(target, 48 + i))
+          selected = payload(48 + i);
+        if (property(target, 52))
+          shared = payload(52);
+        if (shared > selected)
+          selected = shared;
+      }
+    s.r[3] = selected >= 0 && selected <= 2 ? unsigned(selected) + 6 : 0;
+  } else if (e == 0x82b1fdf8 || e == 0x82b1ff20) {
     auto target = m.ReadU32(owner + 8);
     auto chance = [&](unsigned resource, unsigned threshold, unsigned tag) {
       s.r[3] = m.ReadU32(0x83264558);
