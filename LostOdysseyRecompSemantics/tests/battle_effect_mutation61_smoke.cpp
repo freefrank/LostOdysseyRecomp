@@ -714,6 +714,42 @@ int main() {
     call(0x82b0bfd0);
     check(get(target + 2588) == 10001 && get(owner + 172) == 9999,
           "sentinel direct damage precedes mode suppression");
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(owner + 92, 0);
+    m.WriteU32(owner + 100, 16);
+    m.WriteU32(owner + 96, 3);
+    m.WriteU32(owner + 104, 8);
+    m.WriteU32(owner + 196, 0);
+    m.WriteU32(source + 188, 77);
+    m.WriteU32(source + 124, 0x40000000);
+    m.WriteU32(target + 4880, 1);
+    m.WriteU32(owner + 124, 2);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 112 + 3), 100);
+    put(owner + 80, 20);
+    put(target + 2588, 100);
+    call(0x82b0deb0);
+    check(get(target + 2588) == 80 && (m.ReadU32(source + 124) & 0x40000) &&
+              !m.ReadU32(source + 188) && m.ReadU32(owner + 196) == 16,
+          "damage bypasses category multiplier and exhausts source gauge");
+    m.WriteU32(owner + 120, 1);
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(owner + 40, record);
+    m.WriteU32(record + 20, 2);
+    put(source + 2588, 50);
+    put(source + 2616, 10);
+    put(target + 2588, 100);
+    put(target + 2616, 7);
+    call(0x82b0e300);
+    check(get(target + 2588) == 75 && get(source + 2616) == 17 &&
+              get(target + 2616) == 0 && get(owner + 172) == 25,
+          "distributed source HP damage with MP siphon");
+    m.WriteU32(owner + 184, 8);
+    put(target + 2588, 40);
+    put(target + 2616, 6);
+    call(0x82b0e300);
+    check(get(target + 2588) == 65 && get(source + 2616) == 23 &&
+              get(target + 2616) == 0 && get(owner + 172) == 0,
+          "mode eight heals before MP siphon");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 238,
-    "distinct_entries": 1156,
+    "distinct_entries": 1158,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2943,7 +2943,9 @@
           "82B0B178",
           "82B0B630",
           "82B0BA98",
-          "82B0BFD0"
+          "82B0BFD0",
+          "82B0DEB0",
+          "82B0E300"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
@@ -2967,7 +2969,8 @@
         "descriptor_level_damage": "Recovered B0D7F0 level-bounded random damage and B0D418 repeated level-scaled attack damage. Both use real effective-level lookup, side gating and shared damage-mode resolution. The repeated-attack variant preserves individual floating additions, creature coefficient, gauge/status reduction and its no-variance normalization. Focused checks cover bounded RNG damage, side rejection, repeated attack sum and creature coefficient. Descriptor callback coverage now 70 of 83 distinct targets; remaining 13 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_damage_followups": "Recovered B0B178 physical damage with optional capped MP siphon and B0B630 damage followed by chance-gated property effects. The siphon caps against current target MP and writes both source/target results; the property variant preserves primary bank0 flags, bank7 paired payloads, secondary masks and owner bookkeeping. Shared damage resolution retains each callback stack layout and saved floating registers. Focused integration covers siphon on/off, paired-property application and primary/secondary mask reporting. Descriptor callback coverage now 72 of 83 distinct targets; remaining 11 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_mp_hit": "Recovered B0BA98 physical damage with randomized extra MP loss and property followups. Draws the extra MP amount before eligibility, applies it separately after normal HP damage, and combines it with damage in MP-first mode before HP spillover. Retains source stack layout, property payload/mask bookkeeping and saved floating registers. Focused checks cover separate HP/MP damage and combined MP-hit spillover. Descriptor callback coverage now 73 of 83 distinct targets; remaining 10 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-        "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+        "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+        "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
       },
       {
         "unit": "battle_effect_scaling61",
@@ -3074,7 +3077,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 74,
-    "routed_distinct_entries": 641,
+    "routed_distinct_entries": 643,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3083,7 +3086,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 71,
-    "routed_battle_entries": 612,
+    "routed_battle_entries": 614,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3120,6 +3123,7 @@
     "descriptor_level_damage": "Recovered B0D7F0 level-bounded random damage and B0D418 repeated level-scaled attack damage. Both use real effective-level lookup, side gating and shared damage-mode resolution. The repeated-attack variant preserves individual floating additions, creature coefficient, gauge/status reduction and its no-variance normalization. Focused checks cover bounded RNG damage, side rejection, repeated attack sum and creature coefficient. Descriptor callback coverage now 70 of 83 distinct targets; remaining 13 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_damage_followups": "Recovered B0B178 physical damage with optional capped MP siphon and B0B630 damage followed by chance-gated property effects. The siphon caps against current target MP and writes both source/target results; the property variant preserves primary bank0 flags, bank7 paired payloads, secondary masks and owner bookkeeping. Shared damage resolution retains each callback stack layout and saved floating registers. Focused integration covers siphon on/off, paired-property application and primary/secondary mask reporting. Descriptor callback coverage now 72 of 83 distinct targets; remaining 11 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_mp_hit": "Recovered B0BA98 physical damage with randomized extra MP loss and property followups. Draws the extra MP amount before eligibility, applies it separately after normal HP damage, and combines it with damage in MP-first mode before HP spillover. Retains source stack layout, property payload/mask bookkeeping and saved floating registers. Focused checks cover separate HP/MP damage and combined MP-hit spillover. Descriptor callback coverage now 73 of 83 distinct targets; remaining 10 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
   }
 }

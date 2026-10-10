@@ -329,6 +329,22 @@
       "instruction_count": 257,
       "body_sha256": "df2d9bc0a8efb49915df9573e7dc90ece963815358310e4751de82b7ddb095b5",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0DEB0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 4015,
+      "instruction_count": 254,
+      "body_sha256": "7bb04ee4834d89d06315f7a2f9e23e27b83bdbe51034fb4a907cabc586a27e7e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0E300",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 4684,
+      "instruction_count": 281,
+      "body_sha256": "f2317714b26d11d7df703ae838ac96535eb601e02954445d0d431966727201ab",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -373,7 +389,9 @@
       "82B0B178",
       "82B0B630",
       "82B0BA98",
-      "82B0BFD0"
+      "82B0BFD0",
+      "82B0DEB0",
+      "82B0E300"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -408,6 +426,7 @@
     "descriptor_level_damage": "Recovered B0D7F0 level-bounded random damage and B0D418 repeated level-scaled attack damage. Both use real effective-level lookup, side gating and shared damage-mode resolution. The repeated-attack variant preserves individual floating additions, creature coefficient, gauge/status reduction and its no-variance normalization. Focused checks cover bounded RNG damage, side rejection, repeated attack sum and creature coefficient. Descriptor callback coverage now 70 of 83 distinct targets; remaining 13 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_damage_followups": "Recovered B0B178 physical damage with optional capped MP siphon and B0B630 damage followed by chance-gated property effects. The siphon caps against current target MP and writes both source/target results; the property variant preserves primary bank0 flags, bank7 paired payloads, secondary masks and owner bookkeeping. Shared damage resolution retains each callback stack layout and saved floating registers. Focused integration covers siphon on/off, paired-property application and primary/secondary mask reporting. Descriptor callback coverage now 72 of 83 distinct targets; remaining 11 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_mp_hit": "Recovered B0BA98 physical damage with randomized extra MP loss and property followups. Draws the extra MP amount before eligibility, applies it separately after normal HP damage, and combines it with damage in MP-first mode before HP spillover. Retains source stack layout, property payload/mask bookkeeping and saved floating registers. Focused checks cover separate HP/MP damage and combined MP-hit spillover. Descriptor callback coverage now 73 of 83 distinct targets; remaining 10 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "descriptor_bounded_properties": "Recovered B0BFD0 bounded random damage with dual property values. Preserves side/bank and chance gating, direct sentinel damage before normal mode suppression, property-only mode, common damage-mode resolution and both property payload applications. Focused integration covers bounded damage, primary/secondary payloads, property-only suppression and sentinel priority. Descriptor callback coverage now 74 of 83 distinct targets; remaining 9 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "descriptor_exhaustion_distribution": "Recovered B0DEB0 exhaustion damage and B0E300 distributed-source-HP damage. Exhaustion skips category amplification, consumes the source gauge, sets its action flag and applies chance-gated properties. Distributed damage divides source HP by target count, applies gauge reduction, and preserves the special mode8 healing-plus-MP-siphon behavior. Focused checks cover damage, source gauge/flag changes, property bookkeeping, HP distribution and mode8 siphoning. Descriptor callback coverage now 76 of 83 distinct targets; remaining 7 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
   }
 }

@@ -71,12 +71,14 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 26;
     literal = 84;
     break;
+  case 0x82b0deb0:
   case 0x82b0bfd0:
   case 0x82b0b630:
     frame = 176;
     first = 27;
     literal = 84;
     break;
+  case 0x82b0e300:
   case 0x82b0b178:
   case 0x82b0d418:
   case 0x82b0c9e0:
@@ -182,7 +184,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  unsigned savedFp = e == 0x82b0bfd0   ? 56
+  unsigned savedFp = e == 0x82b0e300   ? 56
+                     : e == 0x82b0deb0 ? 56
+                     : e == 0x82b0bfd0 ? 56
                      : e == 0x82b0ba98 ? 64
                      : e == 0x82b0b630 ? 56
                      : e == 0x82b0b178 ? 56
@@ -194,7 +198,9 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
                          : 0;
   if (savedFp)
     recovery_abi::WriteU64(m, old - savedFp, s.fpr_bits[31]);
-  unsigned savedFp30 = e == 0x82b0bfd0   ? 64
+  unsigned savedFp30 = e == 0x82b0e300   ? 64
+                       : e == 0x82b0deb0 ? 64
+                       : e == 0x82b0bfd0 ? 64
                        : e == 0x82b0ba98 ? 72
                        : e == 0x82b0b630 ? 64
                        : e == 0x82b0b178 ? 64
@@ -250,9 +256,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   };
   if (e == 0x82b0c4e8 || e == 0x82b0c9e0 || e == 0x82b0d7f0 ||
       e == 0x82b0d418 || e == 0x82b0b178 || e == 0x82b0b630 ||
-      e == 0x82b0ba98 || e == 0x82b0bfd0) {
+      e == 0x82b0ba98 || e == 0x82b0bfd0 || e == 0x82b0deb0 ||
+      e == 0x82b0e300) {
     bool bounded = e == 0x82b0bfd0;
-    bool propertyDamage = e == 0x82b0b630 || e == 0x82b0ba98;
+    bool propertyDamage = e == 0x82b0b630 || e == 0x82b0ba98 || e == 0x82b0deb0;
     std::int32_t extraMp = 0;
     if (e == 0x82b0ba98) {
       auto base = std::int32_t(m.ReadU32(owner + 120));
@@ -298,6 +305,23 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
             Call(0x82b0a3b0, m, d, s);
           }
         }
+      }
+      if (e == 0x82b0e300) {
+        missing = true;
+        auto count = std::int32_t(m.ReadU32(m.ReadU32(owner + 40) + 20));
+        recovery_abi::WriteU64(m, sp + integerScratch,
+                               std::uint64_t(std::int64_t(count)));
+        fp();
+        auto hp = std::bit_cast<float>(m.ReadU32(m.ReadU32(owner + 4) + 2588));
+        m.WriteU32(owner + 28,
+                   std::bit_cast<unsigned>(float(hp / float(count))));
+        s.r[3] = owner;
+        Call(0x82b0a0d0, m, d, s);
+        fp();
+        m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
+                                   std::bit_cast<double>(s.fpr_bits[1]))));
+        s.r[3] = owner;
+        Call(0x82b0a3b0, m, d, s);
       }
       if (e == 0x82b0d7f0) {
         missing = true;
@@ -360,6 +384,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       if (!missing) {
         for (unsigned method :
              {0x82b09a48u, 0x82b09ca0u, 0x82b0a0d0u, 0x82b0a260u}) {
+          if (e == 0x82b0deb0 && method == 0x82b09ca0)
+            continue;
           if (e == 0x82b0d418 && (method == 0x82b09a48 || method == 0x82b09ca0))
             continue;
           if (e == 0x82b0c9e0 && method == 0x82b0a0d0)
@@ -431,6 +457,27 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       };
       fp();
       auto zero = std::bit_cast<float>(m.ReadU32(0x82000e50));
+      auto siphonMp = [&]() {
+        auto target = m.ReadU32(owner + 8);
+        fp();
+        auto current = std::bit_cast<float>(m.ReadU32(target + 2616));
+        auto amount =
+            trunc(float(std::bit_cast<float>(m.ReadU32(target + 2620)) *
+                        std::bit_cast<float>(m.ReadU32(0x82000da4))));
+        m.WriteU32(sp + 80, unsigned(amount));
+        recovery_abi::WriteU64(m, sp + integerScratch,
+                               std::uint64_t(std::int64_t(amount)));
+        if (current < float(amount)) {
+          amount = trunc(current);
+          m.WriteU32(sp + 80, unsigned(amount));
+        }
+        recovery_abi::WriteU64(m, sp + integerScratch,
+                               std::uint64_t(std::int64_t(amount)));
+        apply(3, 26, float(amount), 4);
+        apply(2, 3734, float(amount));
+        if (e == 0x82b0b178)
+          putAmount(zero);
+      };
       if (sentinelDamage)
         apply(0, 3726, getAmount());
       else if (!skipResolution) {
@@ -497,30 +544,14 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
                                    std::uint64_t(std::int64_t(extraMp)));
             apply(2, 3734, float(extraMp));
           }
-          if (e == 0x82b0b178 && m.ReadU32(owner + 120)) {
-            auto target = m.ReadU32(owner + 8);
-            fp();
-            auto current = std::bit_cast<float>(m.ReadU32(target + 2616));
-            auto amount =
-                trunc(float(std::bit_cast<float>(m.ReadU32(target + 2620)) *
-                            std::bit_cast<float>(m.ReadU32(0x82000da4))));
-            m.WriteU32(sp + 80, unsigned(amount));
-            recovery_abi::WriteU64(m, sp + integerScratch,
-                                   std::uint64_t(std::int64_t(amount)));
-            if (current < float(amount)) {
-              amount = trunc(current);
-              m.WriteU32(sp + 80, unsigned(amount));
-            }
-            recovery_abi::WriteU64(m, sp + integerScratch,
-                                   std::uint64_t(std::int64_t(amount)));
-            apply(3, 26, float(amount), 4);
-            apply(2, 3734, float(amount));
-            putAmount(zero);
-          }
+          if ((e == 0x82b0b178 || e == 0x82b0e300) && m.ReadU32(owner + 120))
+            siphonMp();
         }
       }
+      if (e == 0x82b0e300 && mode == 8 && m.ReadU32(owner + 120))
+        siphonMp();
       if (e == 0x82b0c9e0 || e == 0x82b0d7f0 || e == 0x82b0d418 ||
-          e == 0x82b0b178 || propertyDamage || bounded)
+          e == 0x82b0b178 || e == 0x82b0e300 || propertyDamage || bounded)
         m.WriteU32(owner + 172, m.ReadU32(owner + 32));
       else {
         auto target = m.ReadU32(owner + 8);
@@ -539,7 +570,28 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
           Call(0x82ac8968, m, d, s);
         }
       }
-      if (propertyDamage && chance(0x82b08ea8)) {
+      if (e == 0x82b0deb0) {
+        auto source = m.ReadU32(owner + 4);
+        m.WriteU32(source + 124, m.ReadU32(source + 124) | 0x40000);
+        m.WriteU32(m.ReadU32(owner + 4) + 188, 0);
+        if (chance(0x82b08ea8)) {
+          if (m.ReadU32(owner + 100)) {
+            property(0x82aca6f0, 92, 100);
+            s.r[3] = m.ReadU32(owner + 100);
+            Call(0x82ac84b8, m, d, s);
+            if (!m.ReadU32(owner + 92)) {
+              m.WriteU32(owner + 168, Address(s.r[3]));
+              m.WriteU32(owner + 196, m.ReadU32(owner + 100));
+            }
+          }
+          if (m.ReadU32(owner + 104)) {
+            property(0x82aca6f0, 96, 104);
+            if (!m.ReadU32(owner + 96))
+              m.WriteU32(owner + 196,
+                         m.ReadU32(owner + 196) | m.ReadU32(owner + 104));
+          }
+        }
+      } else if (propertyDamage && chance(0x82b08ea8)) {
         if (!m.ReadU32(owner + 92)) {
           property(0x82aca6f0, 92, 100);
           m.WriteU32(owner + 196, m.ReadU32(owner + 100));
