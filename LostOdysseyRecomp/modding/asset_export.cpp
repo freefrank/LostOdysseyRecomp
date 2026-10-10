@@ -4,6 +4,7 @@
 #include "text_format.h"
 #include "xenos_texture.h"
 #include <gpu/shader/cpx_decode.h>
+#include <settings/language_selection.h>
 #include <settings/quit_text_hook.h>
 #include <gpu/texture_layout.h>
 #include <lzokay.hpp>
@@ -598,8 +599,9 @@ void AppendJsonString(std::string &out, std::string_view value)
 }
 
 // text/<member path>.json: {"key": "text", ...} in the file's own order. A
-// language pack carries the same files with translated values.
-void ExportText(const Job &job, const fs::path &textRoot, Stats &stats)
+// language pack carries the same files with translated values. referenceRoot,
+// when set, gets a second copy to compare a translated pack with.
+void ExportText(const Job &job, const fs::path &textRoot, const fs::path &referenceRoot, Stats &stats)
 {
     std::vector<uint8_t> bytes;
     try
@@ -628,12 +630,10 @@ void ExportText(const Job &job, const fs::path &textRoot, Stats &stats)
     // (settings/quit_text_hook.h); export those, so a translation fits the row.
     if (job.textFormat == text::Format::MenuDat)
     {
-        constexpr const char *codes[] = {"", "int", "jpn", "deu", "fra", "spa", "ita", "kor", "chi", "sch"};
-        const auto code = text::Language(job.path);
-        const auto language = uint32_t(std::find(std::begin(codes), std::end(codes), code) - std::begin(codes));
+        const auto language = settings::language::IdFromCode(text::Language(job.path));
         for (auto &entry : entries)
             for (const auto id : settings::quit_text::TextIds)
-                if (language > 0 && language < std::size(codes) && entry.key == "id." + std::to_string(id))
+                if (language && entry.key == "id." + std::to_string(id))
                     entry.text = text::EncodeUnits(settings::quit_text::Text(id, language));
     }
     std::string json = "{";
@@ -645,9 +645,13 @@ void ExportText(const Job &job, const fs::path &textRoot, Stats &stats)
         AppendJsonString(json, entries[i].text);
     }
     json += entries.empty() ? "}\n" : "\n}\n";
-    const auto file = textRoot / FromUtf8(job.path + ".json");
-    CreateDirectories(file.parent_path());
-    WriteFile(file, json.data(), json.size());
+    for (const auto &root : {textRoot, referenceRoot})
+    {
+        if (root.empty()) continue;
+        const auto file = root / FromUtf8(job.path + ".json");
+        CreateDirectories(file.parent_path());
+        WriteFile(file, json.data(), json.size());
+    }
     stats.texts.push_back({job.path, text::Language(job.path), job.source, job.textFormat, entries.size(), roundTrip});
 }
 
@@ -802,6 +806,12 @@ std::string Csv(std::string_view value)
 }
 }
 
+// The DLC replaces some text files: on the discs the DLC dungeon lines are
+// placeholders, and lines only the DLC has are missing.
+constexpr const char *kNoDlcWarning =
+    "no DLC found, so the DLC dungeon text is the discs' unfinished version; "
+    "export from a game with the DLC installed if you have it";
+
 std::optional<Request> ParseArguments(int argc, char **argv)
 {
     bool option = false;
@@ -811,7 +821,8 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         const std::string_view argument = argv[i];
         if (!argument.starts_with("--export-")) continue;
         option = true;
-        const bool known = argument == "--export-assets" || argument == "--export-kinds" || argument == "--export-filter";
+        const bool known = argument == "--export-assets" || argument == "--export-kinds" || argument == "--export-filter" ||
+                           argument == "--export-language" || argument == "--export-language-pack";
         if (!known) { parsed.error = "unknown option " + std::string(argument); continue; }
         if (i + 1 >= argc || std::string_view(argv[i + 1]).starts_with("--"))
         {
@@ -825,6 +836,23 @@ std::optional<Request> ParseArguments(int argc, char **argv)
             parsed.output = FromUtf8(value);
         }
         else if (argument == "--export-filter") parsed.filter = Lower(value);
+        else if (argument == "--export-language")
+        {
+            parsed.language = Lower(value);
+            if (!settings::language::IdFromCode(parsed.language))
+                parsed.error = "unknown language '" + value + "' (expected int, jpn, deu, fra, spa, ita, kor, chi or sch)";
+        }
+        else if (argument == "--export-language-pack")
+        {
+            // The id rules of language.ini (modding/mod_api.h).
+            parsed.languagePack = Lower(value);
+            const auto &id = parsed.languagePack;
+            if (id.empty() || id.size() > 128 || id == "." || id == ".." ||
+                !std::all_of(id.begin(), id.end(), [](char c) {
+                    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+                }))
+                parsed.error = "--export-language-pack needs an id of letters, digits, '-', '_' or '.', such as pt-br";
+        }
         else
         {
             parsed.textures = parsed.movies = parsed.pngs = parsed.text = false;
@@ -844,6 +872,12 @@ std::optional<Request> ParseArguments(int argc, char **argv)
     }
     if (!option) return std::nullopt;
     if (parsed.output.empty() && parsed.error.empty()) parsed.error = "--export-assets <output folder> is required";
+    if (!parsed.languagePack.empty())
+    {
+        parsed.textures = parsed.movies = parsed.pngs = false;
+        parsed.text = true;
+        if (parsed.language.empty()) parsed.language = "int";
+    }
     return parsed;
 }
 
@@ -913,7 +947,11 @@ int Run(const Request &request, const fs::path &gameRoot)
         if (fs::directory_iterator(output, error) != fs::directory_iterator() || error)
             return Fail("output folder " + Utf8(output) + " is not empty");
     }
-    const auto textures = output / "textures", movies = output / "movies", texts = output / "text";
+    const auto textures = output / "textures", movies = output / "movies";
+    const auto pack = request.languagePack.empty() ? fs::path{} : output / FromUtf8(request.languagePack);
+    const auto texts = pack.empty() ? output / "text" : pack / "text";
+    // The untranslated copy that language-clean compares the pack with.
+    const auto reference = pack.empty() ? fs::path{} : output / "original" / "text";
     try
     {
         CreateDirectories(output);
@@ -958,6 +996,7 @@ int Run(const Request &request, const fs::path &gameRoot)
             if (!request.filter.empty() && entry.path.find(request.filter) == std::string::npos) continue;
             if (textFile)
             {
+                if (!request.language.empty() && text::Language(entry.path) != request.language) continue;
                 // One copy per path, as for packages below.
                 if (const auto it = seen.find(entry.path); it != seen.end())
                 {
@@ -1005,7 +1044,8 @@ int Run(const Request &request, const fs::path &gameRoot)
         }
     // Text files only a DLC has.
     for (const auto &[path, source] : overrides)
-        if ((request.filter.empty() || path.find(request.filter) != std::string::npos) && seen.emplace(path, 0).second)
+        if ((request.filter.empty() || path.find(request.filter) != std::string::npos) &&
+            (request.language.empty() || text::Language(path) == request.language) && seen.emplace(path, 0).second)
             addText(dlcs[source.first], *source.second, dlcNames[source.first]);
     // Largest first keeps the four workers busy until the end.
     std::stable_sort(jobs.begin(), jobs.end(), [](const Job &a, const Job &b) { return a.size > b.size; });
@@ -1027,7 +1067,7 @@ int Run(const Request &request, const fs::path &gameRoot)
             try
             {
                 if (jobs[index].kind == Job::Kind::Package) ExportPackage(jobs[index], textures, local, request.pngs);
-                else if (jobs[index].kind == Job::Kind::Text) ExportText(jobs[index], texts, local);
+                else if (jobs[index].kind == Job::Kind::Text) ExportText(jobs[index], texts, reference, local);
                 else ExportMovie(jobs[index], movies, local);
             }
             catch (const std::exception &failure)
@@ -1087,6 +1127,14 @@ int Run(const Request &request, const fs::path &gameRoot)
             }
             WriteFile(texts / "index.csv", csv.data(), csv.size());
         }
+        if (!pack.empty())
+        {
+            const std::string ini =
+                "; A language pack made by --export-assets. Set name to what Settings shows for the\n"
+                "; language, translate the values in text/, then copy this folder into the game's mods folder.\n"
+                "id=" + request.languagePack + "\nname=" + request.languagePack + "\nbase=" + request.language + "\n";
+            WriteFile(pack / "language.ini", ini.data(), ini.size());
+        }
         const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         std::string summary = "Lost Odyssey asset export\n";
         summary += "game: " + Utf8(boot) + "\ndiscs:";
@@ -1099,6 +1147,9 @@ int Run(const Request &request, const fs::path &gameRoot)
         summary += std::string("\nkinds:") + (request.textures ? " textures" : "") + (request.movies ? " movies" : "") +
                    (request.text ? " text" : "");
         summary += "\nfilter: " + (request.filter.empty() ? std::string("(none)") : request.filter);
+        summary += "\ntext language: " + (request.language.empty() ? std::string("(all)") : request.language);
+        if (!pack.empty()) summary += "\nlanguage pack: " + request.languagePack;
+        if (!pack.empty() && dlcNames.empty()) summary += std::string("\nwarning: ") + kNoDlcWarning;
         char line[256];
         std::snprintf(line, sizeof(line), "\nelapsed_seconds: %.1f\nthreads: %u\n", elapsed, threads);
         summary += line;
@@ -1126,6 +1177,8 @@ int Run(const Request &request, const fs::path &gameRoot)
     std::printf("exported %zu textures, %llu movies, %zu text files, skipped %llu\n", total.rows.size(),
                 static_cast<unsigned long long>(total.movies), total.texts.size(),
                 static_cast<unsigned long long>(total.SkippedTotal()));
+    if (!pack.empty() && dlcNames.empty()) std::printf("warning: %s\n", kNoDlcWarning);
+    if (!pack.empty()) std::printf("language pack ready to translate: %s\n", Utf8(pack).c_str());
     std::fflush(stdout);
     return 0;
 }

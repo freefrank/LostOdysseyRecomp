@@ -25,7 +25,7 @@ The game can export its own textures, movies and text from your game data as a s
 LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
 ```
 
-The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, `text`, or `fingerprints` for the texture index without PNG files; default: textures, movies and text) and `--export-filter` (only names containing the text) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
+The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, `text`, or `fingerprints` for the texture index without PNG files; default: textures, movies and text), `--export-filter` (only names containing the text), `--export-language` (text of one language: `int`, `jpn`, `deu`, `fra`, `spa`, `ita`, `kor`, `chi` or `sch`) and `--export-language-pack <id>` (only text, written as a language pack to translate, see [1e](#1e-translate-the-games-text-experimental)) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
 
 ```text
 my-export/textures/<package path>/<object>.<export index>.png
@@ -102,30 +102,22 @@ A translation is either a new language that players pick in Settings (a language
 
 ### Make a language pack (a new language)
 
-1. Export the text of your discs: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text` (or tick Text in the [MO2 tool](Mod-Organizer-2.md#export-the-original-assets)). Translate from the English files (`int` in the paths): they are the same in the Asia and USA/Europe editions, and their fonts have every Latin-1 letter.
-2. Make a folder for the pack, for example `pt-br`, and put a text file named `language.ini` in it, saved as UTF-8:
+1. Export a pack to translate: `LostOdysseyRecomp.exe --export-assets my-export --export-language-pack pt-br` (or type `pt-br` in **Language pack** in the [MO2 tool](Mod-Organizer-2.md#make-a-language-pack)). Use a short id of letters, digits, `-`, `_` or `.`; no two packs may use the same one. You get the folder `my-export/pt-br/` with the English text of your discs (581 files) in `text/` and a `language.ini`, plus `my-export/original/`, an untouched copy for step 6; keep it next to the pack. English (`int`) is the same in the Asia and USA/Europe editions, and its fonts have every Latin-1 letter; add `--export-language jpn` (or another code) to start from another language. Export from a game with the DLC installed if you have it: without it, the DLC dungeon text is the discs' unfinished version (the exporter warns about this).
+2. Open `my-export/pt-br/language.ini` in a text editor and change `name=pt-br` to the name Settings should show, for example `name=Português (Brasil)`. Save it as UTF-8. Leave `id` and `base` as they are.
+3. Translate the values in the files in `my-export/pt-br/text/` and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Lines you do not change stay English.
+4. Try it: copy the `pt-br` folder into the game's `mods` folder, so the file is `mods/pt-br/language.ini`.
+5. Start the game, open **Settings > System > Game language**, pick your language, choose **Save settings** and restart.
+6. Before you share the pack, clean it: `python tools/modding/lo_mod.py language-clean my-export/pt-br` (or **Clean language pack...** in the [MO2 tool](Mod-Organizer-2.md#make-a-language-pack)). It copies only the lines you changed to `my-export/share/pt-br`. Share that folder as a ZIP of the folder itself; players install it like step 4, or with Mod Organizer 2 like any other mod. The lines you did not change are the game's own text, which must not be shared, and from a game without the DLC they would put the discs' old lines over the DLC's for players who have it.
 
-   ```ini
-   id=pt-br
-   name=Português (Brasil)
-   base=int
-   ```
-
-   `id`: a short name of letters, digits, `-`, `_` or `.`; no two packs may use the same one. `name`: what Settings shows. `base`: the language you translate from (`int` for English).
-3. Copy the files you translate from `my-export/text/` into a `text` folder in the pack, keeping their paths. `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` becomes `pt-br/text/bin/xenon/loc/int/menu/menu_int.dat.json`.
-4. Translate the values and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Leave out entries you do not translate: they stay English.
-5. Install the pack: put the folder in the game's `mods` folder, so the file is `mods/pt-br/language.ini`. With Mod Organizer 2, zip the `pt-br` folder and install the ZIP like any other mod.
-6. Start the game, open **Settings > System > Game language**, pick your language, choose **Save settings** and restart.
-
-The log shows `mods: language pack pt-br (Português (Brasil), base int)` at startup and `[mods] text: 574 translation files (574 from language pack pt-br)` when the game loads its text. If `language.ini` has a mistake, the log has a `mods:` warning that names the file.
+The log shows `mods: language pack pt-br (Português (Brasil), base int)` at startup, then `[mods] text: 581 translation files (581 from language pack pt-br)` and `[mods] text: N translated files in ...`, where N counts the game files your changes went into. If `language.ini` has a mistake, the log has a `mods:` warning that names the file.
 
 The game runs as the base language underneath: voices, artwork with words in it and everything you have not translated stay English. While the pack is selected, its files replace the same files from other text mods. Players who pick another language do not see the pack.
 
 ### Change a language the game already has
 
-1. Export the text as in step 1 above.
+1. Export the text: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text --export-language int` (or tick Text in the MO2 tool). Without `--export-language` you get every language on your discs.
 2. Copy the files you change into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. With Mod Organizer 2, make a mod whose folder holds `overlay/text/...`. A standalone mod lists each file in its `mod.ini` instead: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
-3. Change the values as in step 4 above.
+3. Change the values as in step 4 above. Entries you leave out keep the original text.
 4. Start the game with the language of the files you changed (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
 
 ### For both
