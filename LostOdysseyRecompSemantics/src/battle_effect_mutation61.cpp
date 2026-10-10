@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_manager_access61.h"
 #include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_resource_growth61.h"
 #include "lo_semantics/battle_script_runtime61.h"
@@ -23,6 +24,7 @@ using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_effect_mutation61::Apply(e, m, d, s) &&
       !battle_script_runtime61::Apply(e, m, d, s) &&
+      !battle_manager_access61::Apply(e, m, d, s) &&
       !battle_resource_growth61::Apply(e, m, d, s) &&
       !battle_resource_stats61::Apply(e, m, d, s) &&
       !battle_script_actions61::Apply(e, m, d, s) &&
@@ -73,6 +75,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 24;
     literal = 80;
     break;
+  case 0x82b13220:
   case 0x82b0a568:
   case 0x82b0a698:
     break;
@@ -325,17 +328,19 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
       }
     }
   } else if (e == 0x82b0a568 || e == 0x82b0a698 || e == 0x82b0a928 ||
-             e == 0x82b0a7a0) {
+             e == 0x82b0a7a0 || e == 0x82b13220) {
+    bool priced = e == 0x82b13220;
     bool mp = e == 0x82b0a698, combined = e == 0x82b0a7a0;
-    if (!mp)
+    if (!mp && !priced)
       m.WriteU8(owner + 203, 0);
-    bool allowed =
-        mp ? (m.ReadU32(owner + 116) != 0 || eligible(2)) : eligible(2);
+    bool allowed = priced ? eligible(1)
+                   : mp   ? (m.ReadU32(owner + 116) != 0 || eligible(2))
+                          : eligible(2);
     if (e == 0x82b0a568 && !allowed)
       allowed = m.ReadU32(owner + 116) != 0;
     if (!allowed)
       m.WriteU8(owner + 208, 0);
-    else {
+    else if (!priced || chance(0x82b08e28)) {
       mark();
       fp();
       auto input = std::bit_cast<float>(m.ReadU32(owner + 80));
@@ -391,7 +396,22 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
                          float(std::bit_cast<double>(s.fpr_bits[1]))));
         };
         calculate(input, mp, true);
-        apply(mp ? 3 : 1, mp ? 3738 : 3730);
+        apply(mp ? 3 : 1, priced ? 18 : mp ? 3738 : 3730);
+        if (priced) {
+          s.r[3] = m.ReadU32(0x83315fb4);
+          s.ctr = m.ReadU32(m.ReadU32(Address(s.r[3])) + 352);
+          d.guest.CallIndirect(Address(s.ctr), m, s);
+          Call(0x8229dfd8, m, d, s);
+          auto play = Address(s.r[3]), cost = m.ReadU32(owner + 120),
+               balance = m.ReadU32(play + 76);
+          auto remaining = balance - cost;
+          if (std::int32_t(remaining) < 0) {
+            remaining = 0;
+            cost = balance;
+          }
+          m.WriteU32(play + 76, remaining);
+          m.WriteU32(play + 185200, m.ReadU32(play + 185200) + cost);
+        }
         if (combined) {
           auto value = std::int32_t(m.ReadU32(owner + 120));
           recovery_abi::WriteU64(m, sp + 80,

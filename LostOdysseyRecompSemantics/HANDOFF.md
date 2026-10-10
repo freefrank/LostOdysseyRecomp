@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor cost effect (2026-10-10 UTC)
+
+Recovered descriptor B13220 with eligibility and chance gates, the real scaling/critical/variance/normalization pipeline, HP result application and profile balance consumption. The spent total increases by the amount actually available when requested cost exceeds balance. Focused integration covers regular and balance-capped costs and the source-specific result-record offset. Descriptor callback coverage now 56 of 83 distinct targets; remaining 27 unclaimed. Logical ABI checks only, not gameplay acceptance.
+
 ## Root direct continuation: descriptor growth effect (2026-10-10 UTC)
 
 Recovered descriptor growth-refresh callback B10368: script actor level override, source growth counter, creature stats refresh, equipment and derived stats rebuild, full HP restoration, target property attempt and primary mask index. Focused integration exercises the real lower-level growth/stat implementations with a synthetic template and an immune target. Descriptor callback coverage now 55 of 83 distinct targets; remaining 28 unclaimed. Logical ABI checks only, not gameplay acceptance.

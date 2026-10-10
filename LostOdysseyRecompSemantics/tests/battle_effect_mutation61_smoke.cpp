@@ -5,6 +5,7 @@
 #include "lo_semantics/battle_semantic_runtime61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "battle_resource_growth_fixture.h"
+#include "battle_profile_fixture.h"
 struct MutationGuest final : manager_release_context61::GuestServices {
   unsigned dispatches = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
@@ -17,6 +18,8 @@ struct MutationGuest final : manager_release_context61::GuestServices {
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
                     manager_release_context61::Registers &s) override {
+    if (profile_fixture::Indirect(e, s))
+      return;
     if (e == 0x123450) {
       ++dispatches;
       m.WriteU8(unsigned(s.r[3]) + 208, 4);
@@ -42,6 +45,8 @@ int main() {
     growth_fixture::Regions(regions);
     regions.push_back({0x832c9000, 0x1000});
     regions.push_back({0x83291000, 0x1000});
+    regions.push_back({0x83315000, 0x1000});
+    regions.push_back({0x832c1000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -320,6 +325,24 @@ int main() {
               get(source + 2592) == 100 && m.ReadU32(owner + 168) == 3 &&
               !(m.ReadU32(target + 232) & 1),
           "growth effect refresh, heal and immune target");
+    profile_fixture::Setup(m, 0x300000);
+    m.WriteU32(0x93000 + 76, 30);
+    m.WriteU32(0x93000 + 185200, 100);
+    m.WriteU32(owner + 120, 20);
+    m.WriteU8(owner + 77, 1);
+    m.WriteU8(owner + 203, 0);
+    put(owner + 80, 10);
+    put(target + 2588, 40);
+    put(target + 2592, 100);
+    call(0x82b13220);
+    check(get(target + 2588) == 50 && get(0x200000 + 72) == 10 &&
+              m.ReadU32(0x93000 + 76) == 10 &&
+              m.ReadU32(0x93000 + 185200) == 120,
+          "priced healing and profile cost");
+    call(0x82b13220);
+    check(get(target + 2588) == 60 && m.ReadU32(0x93000 + 76) == 0 &&
+              m.ReadU32(0x93000 + 185200) == 130,
+          "priced healing cost capped by balance");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
