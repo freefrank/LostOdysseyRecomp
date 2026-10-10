@@ -1,0 +1,41 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Indexed workspace cleanup, original face/material mapping and nonmanifold shared-edge separation.",
+  "entries": [
+    {
+      "address": "82BB4540",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.180.cpp",
+      "source_line": 352,
+      "instruction_count": 492,
+      "body_sha256": "43c7bc222daca27471c634fb83182199a9e81cb980199a6596050fb973af314c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82BD9188",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.181.cpp",
+      "source_line": 22845,
+      "instruction_count": 21,
+      "body_sha256": "f674d8e5a4a2f82c9f6587781586c12a780192e60d8d3a09121c40490d973c18",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "82BB4540",
+      "82BD9188"
+    ],
+    "header": "include/lo_semantics/mesh_triangle_clean61.h",
+    "source": "src/mesh_triangle_clean61.cpp",
+    "smoke": "tests/mesh_triangle_clean61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "Seven input vertices (one duplicate) and four triangles sharing an edge pass actual indexed cleanup. Six welded vertices become eight after paired shared-edge separation. Triangle indices are in range, undirected edge incidence is at most two, material IDs follow the original-face map, and all tracked allocations are released. Required reader-buffer growth constant 2 at821BAA74 is seeded in the fixture. Logical/ABI only; no full-RAM, bitwise floating-point, failure matrix or gameplay acceptance."
+  }
+}

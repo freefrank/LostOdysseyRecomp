@@ -1,3 +1,7 @@
+## Root direct continuation: triangle cleanup and edge separation (2026-10-10 UTC)
+
+BB4540 now composes existing indexed workspace cleanup, replaces position/triangle arrays, preserves changed original-face/material mapping, builds edge incidence and separates extra triangle pairs on nonmanifold edges with the original small bit-pattern position perturbation. BD9188 replaces the first matching triangle index. A four-face shared-edge fixture welds seven vertices to six, separates to eight, verifies every undirected edge has at most two incident faces and releases all tracked storage. A missing fixture growth constant initially collapsed buffers; seeding the original ordinary value 2 resolved it without implementation changes. Logical/ABI scope only; broader triangle orchestration remains.
+
 ## Root direct continuation: triangle tree and remapping (2026-10-10 UTC)
 
 BB4160 builds the triangle spatial tree with a live BB4138 callback into existing mesh_attribute_reorder61 (BB3CF8, no duplicate implementation or credit). BC5DE8 binds geometry and replaces/loads the tree. A nine-separated-triangle path exercises actual reordering, keeps material/face mappings aligned, writes OPC/HBM through the linked writer, reloads through concrete memory input and releases all tracked allocations. The descriptor callback at82BB4138 is executable code, not a vtable. Nondefault limits remain source-reviewed. Logical/ABI scope only; higher triangle cooking still pending.
