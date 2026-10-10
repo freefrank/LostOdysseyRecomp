@@ -1,3 +1,7 @@
+## Root direct continuation: battle restart orchestration (2026-10-10 UTC)
+
+Recovered AD40D0 battle restart orchestration: retain or remove roster entries, select replacement actions, reset formation/resources, clear both gauges, rebuild stats/action timing, restart script events and force phase zero. Focused service-spy checks validate roster mutation, release flag, replacement action, service arguments/counts and final manager state. Nested services route through the composed runtime; the restart check is isolated orchestration validation, not full nested runtime or gameplay acceptance.
+
 ## Root direct continuation: battle phase machine (2026-10-10 UTC)
 
 Recovered AAA7C8 battle phase machine: forced transitions, numbered phase progression, turn counter, actor refresh, encounter-specific randomized categories, side countdown, profile restore and terminal-state routing. Focused checks cover force/range gates, progression, phase reset callback, periodic-effect call ABI and terminal handling. Existing semantic helpers are composed directly; periodic effect sweep ACB120 and victory finalization AC6D88 remain explicit guest boundaries. No claim that all phase branches or the complete battle restart are runtime accepted.

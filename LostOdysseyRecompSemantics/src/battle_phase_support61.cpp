@@ -55,6 +55,10 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   }
   unsigned first, frame;
   switch (e) {
+  case 0x82ad40d0:
+    first = 23;
+    frame = 160;
+    break;
   case 0x82aaa7c8:
     first = 24;
     frame = 160;
@@ -86,7 +90,87 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[1] -= frame;
     m.WriteU32(Address(s.r[1]), old);
   }
-  if (e == 0x82aaa7c8) {
+  if (e == 0x82ad40d0) {
+    // The composed runtime routes these services to their recovered units.
+    auto call = [&](unsigned entry, unsigned receiver) {
+      s.r[3] = receiver;
+      d.guest.CallDirect(entry, m, s);
+    };
+    auto header = [&]() { return m.ReadU32(owner + 20); };
+    for (unsigned i = 0;
+         std::int32_t(i) < std::int32_t(m.ReadU32(header() + 4));) {
+      auto resource = m.ReadU32(m.ReadU32(header()) + 4 * i);
+      if (m.ReadU32(resource + 124) & 0x08000000u) {
+        auto kind = m.ReadU32(resource + 72);
+        if ((kind == 0 || kind == 11) && m.ReadU32(0x832cc0cc)) {
+          call(0x82b2c410, m.ReadU32(0x832cc0cc));
+          auto replacement = Address(s.r[3]);
+          if (std::int32_t(replacement) >= 0 &&
+              m.ReadU32(resource + 72) != replacement)
+            m.WriteU32(resource + 72, replacement);
+        }
+        call(0x82ab31e0, resource);
+        m.WriteU32(resource + 60, 0);
+        ++i;
+      } else {
+        call(0x82400a18, resource);
+        m.WriteU32(m.ReadU32(header()) + 4 * i, 0);
+        s.r[4] = i;
+        s.r[5] = 1;
+        s.r[6] = 4;
+        s.r[7] = 8;
+        call(0x82298af8, header());
+      }
+    }
+    d.guest.CallDirect(0x82380a18, m, s);
+    d.guest.CallDirect(0x82389aa0, m, s);
+    s.r[4] = 1;
+    s.r[5] = m.ReadU8(Address(s.r[3]) + 56);
+    call(0x82af5ba8, owner);
+    m.WriteU32(owner + 4, 20);
+    s.r[4] = 0;
+    call(0x82af52f0, owner);
+    call(0x82af6448, owner);
+    call(0x82a9f160, 0x832c9c54);
+    for (unsigned side : {1u, 0u}) {
+      auto gauge = m.ReadU32(0x832aeb00);
+      m.WriteU8(gauge + (side ? 48 : 24), 0);
+      s.r[4] = side;
+      s.r[5] = 1;
+      call(0x82ac7b08, gauge);
+      for (auto entry : {0x82ac7fc8u, 0x82ac6e60u, 0x82ac6f08u}) {
+        s.r[4] = side;
+        call(entry, gauge);
+      }
+    }
+    m.WriteU16(owner + 148, 0);
+    m.WriteU32(owner + 156, 0);
+    m.WriteU32(owner + 148, m.ReadU32(owner + 148) & 0xffff0007u);
+    call(0x82ac1b90, m.ReadU32(0x83291dc0));
+    call(0x82ac3118, m.ReadU32(0x83291dc0));
+    auto rows = header();
+    for (unsigned i = 0;
+         std::int32_t(i) < std::int32_t(m.ReadU32(header() + 4)); ++i) {
+      auto resource = m.ReadU32(m.ReadU32(rows) + 4 * i);
+      call(0x82ab31e0, resource);
+      if (m.ReadU32(resource + 124) & 0x10000000u) {
+        s.r[4] = resource;
+        call(0x82ac3058, m.ReadU32(0x83291dc0));
+      }
+      s.r[4] = resource;
+      call(0x82acd3c0, m.ReadU32(0x8324570c));
+    }
+    call(0x82a9f0a0, 0x832c9c54);
+    call(0x82a9f028, 0x832c9c54);
+    for (unsigned i = 0; i < 14; ++i)
+      m.WriteU8(owner + 60 + i, 0);
+    m.WriteU8(owner + 61, 1);
+    m.WriteU8(owner + 65, 1);
+    m.WriteU32(owner + 52, 0);
+    s.r[4] = 0;
+    s.r[5] = 1;
+    call(0x82aaa7c8, owner);
+  } else if (e == 0x82aaa7c8) {
     auto request = Address(s.r[4]), forced = Address(s.r[5]) & 255;
     auto phase = m.ReadU32(owner + 56);
     auto setPhase = [&](unsigned value) {

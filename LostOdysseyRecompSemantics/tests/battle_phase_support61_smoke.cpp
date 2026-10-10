@@ -26,13 +26,76 @@ struct PhaseGuest final : manager_release_context61::GuestServices {
     s.r[3] = 0x93000;
   }
 };
+struct RestartGuest final : manager_release_context61::GuestServices {
+  unsigned resets = 0, refreshes = 0, gaugeCalls = 0, timingClears = 0;
+  void CallIndirect(GuestAddress, GuestMemory &,
+                    manager_release_context61::Registers &) override {
+    throw std::runtime_error("restart indirect boundary");
+  }
+  void CallDirect(GuestAddress e, GuestMemory &m,
+                  manager_release_context61::Registers &s) override {
+    if (e == 0x82400a18 || e == 0x82b2c410 || e == 0x82aaa7c8) {
+      (void)battle_phase_support61::Apply(e, m,
+                                          {*this, cook_main_smoke::native}, s);
+      return;
+    }
+    switch (e) {
+    case 0x82380a18:
+      s.r[3] = 0x70000;
+      return;
+    case 0x82389aa0:
+      s.r[3] = 0x91000;
+      return;
+    case 0x82298af8: {
+      auto h = unsigned(s.r[3]), i = unsigned(s.r[4]), n = m.ReadU32(h + 4),
+           p = m.ReadU32(h);
+      if (s.r[5] != 1 || s.r[6] != 4 || s.r[7] != 8)
+        throw std::runtime_error("restart erase ABI");
+      for (unsigned j = i; j + 1 < n; ++j)
+        m.WriteU32(p + 4 * j, m.ReadU32(p + 4 * j + 4));
+      m.WriteU32(h + 4, n - 1);
+      return;
+    }
+    case 0x82af5ba8:
+      if (s.r[4] != 1 || s.r[5] != 3)
+        throw std::runtime_error("restart formation ABI");
+      return;
+    case 0x82ab31e0:
+      ++resets;
+      return;
+    case 0x82ac3058:
+      ++refreshes;
+      return;
+    case 0x82acd3c0:
+      ++timingClears;
+      return;
+    case 0x82ac7b08:
+    case 0x82ac7fc8:
+    case 0x82ac6e60:
+    case 0x82ac6f08:
+      ++gaugeCalls;
+      return;
+    case 0x82af52f0:
+    case 0x82af6448:
+    case 0x82a9f160:
+    case 0x82ac1b90:
+    case 0x82ac3118:
+    case 0x82a9f0a0:
+    case 0x82a9f028:
+      return;
+    default:
+      throw std::runtime_error("unexpected restart service");
+    }
+  }
+};
 int main() {
   try {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     for (auto p :
-         {0x832ca000u, 0x832cb000u, 0x83315000u, 0x832c1000u, 0x83263000u})
+         {0x832ca000u, 0x832cb000u, 0x83315000u, 0x832c1000u, 0x83263000u,
+          0x832cc000u, 0x832ae000u, 0x83291000u, 0x83245000u})
       regions.push_back({p, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -141,6 +204,39 @@ int main() {
     check(m.ReadU32(0x80000 + 56) == 13);
     phase(13, 0, 0);
     check(m.ReadU32(0x80000 + 56) == 13 && s.r[3] == 0x93000);
+    RestartGuest restart;
+    m.WriteU32(0x80000 + 20, 0x83000);
+    m.WriteU32(0x83000, 0x84000);
+    m.WriteU32(0x83004, 2);
+    m.WriteU32(0x84000, 0xa0000);
+    m.WriteU32(0x84004, 0xa1000);
+    m.WriteU32(0xa0000 + 124, 0x18000000);
+    m.WriteU32(0xa0000 + 72, 0);
+    m.WriteU32(0xa0000 + 60, 9);
+    m.WriteU32(0xa1000 + 124, 0);
+    recovery_abi::WriteU64(m, 0xa1008, 0x4000);
+    m.WriteU32(0x832cc0cc, 0x85000);
+    m.WriteU32(0x85000 + 28, 0x86000);
+    m.WriteU32(0x85000 + 32, 1);
+    m.WriteU32(0x86000, 11);
+    m.WriteU32(0x86004, 19);
+    m.WriteU8(0x91000 + 56, 3);
+    m.WriteU32(0x832aeb00, 0x87000);
+    m.WriteU8(0x87000 + 48, 1);
+    m.WriteU8(0x87000 + 24, 1);
+    m.WriteU32(0x80000 + 148, 0xffffffff);
+    m.WriteU32(0x80000 + 156, 9);
+    s.r[3] = 0x80000;
+    check(battle_phase_support61::Apply(0x82ad40d0, m, {restart, native}, s));
+    check(m.ReadU32(0x83004) == 1 && m.ReadU32(0xa0000 + 72) == 19 &&
+          !m.ReadU32(0xa0000 + 60) && !recovery_abi::ReadU64(m, 0xa1008));
+    check(restart.resets == 2 && restart.refreshes == 1 &&
+          restart.timingClears == 1 && restart.gaugeCalls == 8);
+    check(m.ReadU32(0x80000 + 4) == 20 && !m.ReadU32(0x80000 + 52) &&
+          !m.ReadU32(0x80000 + 56) && m.ReadU32(0x80000 + 148) == 7 &&
+          !m.ReadU32(0x80000 + 156));
+    check(m.ReadU8(0x80000 + 61) == 1 && m.ReadU8(0x80000 + 65) == 1 &&
+          s.r[1] == initial.r[1] && s.r[23] == initial.r[23]);
     std::puts("phase support smoke passed");
     return 0;
   } catch (const std::exception &e) {
