@@ -1,3 +1,7 @@
+## Root direct continuation: battle effect calculations (2026-10-10 UTC)
+
+Recovered six effect calculation stages and the status-result record setter. Targeted checks pass actual numeric property, random and result state paths, with attack/defense base services still explicit dependencies. The main effect application sequence is pending; no full floating-point or native gameplay acceptance is claimed.
+
 ## Root direct continuation: upper effect descriptors (2026-10-10 UTC)
 
 Recovered four upper effect descriptors: chance-gated property insertion/removal, target status marking and two deactivation/report paths. Composed real source/target eligibility, chance gates, upper effect descriptors, property mutations and result-record flags. Focused effect and eligibility fixtures pass target flags, report codes250/15, scene-dependent chance and manager counter wrapping. Main effect application and final target notification remain explicit boundaries. Logical/ABI recovery only; full floating-point and native gameplay acceptance remain unvalidated.

@@ -6,6 +6,12 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[3] = m.ReadU32(0x832cb790);
     return battle_action_results61::Apply(0x82b2b248, m, d, s);
   }
+  if (e == 0x82b2b3d8) {
+    auto owner = recovery_abi::Address(s.r[3]);
+    m.WriteU32(m.ReadU32(owner + 20) + 464 * m.ReadU32(owner + 12) + 15100,
+               recovery_abi::Address(s.r[4]));
+    return true;
+  }
   unsigned offset, value = 1;
   switch (e) {
   case 0x82b2b248:
