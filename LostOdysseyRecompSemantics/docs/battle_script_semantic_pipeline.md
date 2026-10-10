@@ -269,3 +269,7 @@ Composed real action eligibility, category configuration, parameter initializati
 ## Descriptor eligibility gates
 
 Recovered eleven descriptor eligibility callbacks and composed them into the evaluator dispatch. Focused checks cover constant leaves, virtual status, identity/property gates and paired query ordering. Lower property predicates and target virtual callbacks remain explicit dependencies. The eligibility fixture still passes; logical recovery only, with no full equivalence or native gameplay claim.
+
+## Property bank operations
+
+Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.

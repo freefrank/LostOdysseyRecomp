@@ -76,7 +76,7 @@ int main() {
     m.WriteU32(0x8321343c + 8 * 18, 4);
     m.WriteU32(0x80000 + 3 * 272 + 232, 4);
     check(!run(0x82b0b0f0));
-    for (auto e : {0x82b0eb68u, 0x82b0c430u, 0x82b0e9d0u, 0x82b0ed68u}) {
+    for (auto e : {0x82b0c430u, 0x82b0e9d0u, 0x82b0ed68u}) {
       g.first = 0;
       g.second = 0;
       g.calls = 0;
@@ -93,6 +93,13 @@ int main() {
       check(!run(e) && g.calls == 1);
       m.WriteU32(0x73000 + 104, 21);
     }
+    m.WriteU32(0x90000 + 272 * 10 + 232, 0);
+    m.WriteU32(0x90000 + 272 * 11 + 232, 1);
+    check(run(0x82b0eb68));
+    m.WriteU32(0x90000 + 272 * 11 + 232, 0);
+    check(!run(0x82b0eb68));
+    m.WriteU32(0x90000 + 272 * 10 + 232, 4);
+    check(run(0x82b0eb68));
     g.virtualResult = 1;
     g.calls = 0;
     check(!run(0x82b0ed68) && !g.calls);

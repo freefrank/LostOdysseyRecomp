@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_evaluation_gates61.h"
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/recovery_abi.h"
@@ -67,7 +68,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
           s.r[6] = 0;
           call = 0x82aca700;
         }
-        d.guest.CallDirect(call, m, s);
+        if (!battle_property_mutation61::Apply(call, m, d, s))
+          d.guest.CallDirect(call, m, s);
         return (Address(s.r[3]) & 255) == 1;
       };
       result = query(0);

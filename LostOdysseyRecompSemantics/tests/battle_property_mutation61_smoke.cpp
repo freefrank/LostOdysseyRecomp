@@ -52,6 +52,39 @@ int main() {
           !m.ReadU32(first) && !m.ReadU32(second));
     check(run(0x82ac9000, 244, 0) == 0);
     check(run(0x82ac8ee8, 263, 1) == 0);
+    auto bankRun = [&](unsigned e, unsigned mask, unsigned mode,
+                       unsigned value = 0) {
+      s.r[3] = resource;
+      s.r[4] = 2;
+      s.r[5] = mask;
+      s.r[6] = mode;
+      s.r[7] = value;
+      check(battle_property_mutation61::Apply(e, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[26] == initial.r[26] &&
+            s.r[27] == initial.r[27]);
+      return unsigned(s.r[3]);
+    };
+    auto bankFlags = resource + 2 * 272 + 232;
+    m.WriteU32(bankFlags, 0x80000007);
+    check(bankRun(0x82ac85a0, 1, 0) ==
+          3); // gated whole-bank count, low 31 bits
+    check(bankRun(0x82ac85a0, 8, 0) == 0);
+    check(bankRun(0x82ac90e8, 3, 1) == 1 && m.ReadU32(bankFlags) == 0x80000007);
+    m.WriteU32(resource + 4 * (136 + 59), 99);
+    m.WriteU32(resource + 4 * (136 + 91), 88);
+    check(bankRun(0x82ac90f8, 3, 1) == 1 && m.ReadU32(bankFlags) == 0x80000004);
+    check(!m.ReadU32(resource + 4 * (136 + 59)) &&
+          !m.ReadU32(resource + 4 * (136 + 91)));
+    check(bankRun(0x82ac90f8, 0x80000000, 1) == 0);
+    m.WriteU32(0x83213538 + 4 * (64 + 2), 1);
+    check(bankRun(0x82ac8af8, 4, 17) == 0);
+    check(bankRun(0x82ac89f0, 8, 0, 17) == 1 &&
+          m.ReadU32(bankFlags) == 0x80000004);
+    check(bankRun(0x82ac89f0, 24, 1, 17) == 1 &&
+          m.ReadU32(bankFlags) == 0x8000001c);
+    check(m.ReadU32(resource + 4 * (136 + 3 + 59)) ==
+          17); // first bit of the original mask
+    check(bankRun(0x82ac89f0, 0x80000000, 1) == 0);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

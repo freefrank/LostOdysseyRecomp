@@ -2,13 +2,82 @@
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  using recovery_abi::Address;
+  if (e == 0x82ac85a0) {
+    auto flags = m.ReadU32(Address(s.r[3]) + 272 * Address(s.r[4]) + 232);
+    unsigned result = 0;
+    if (flags & Address(s.r[5]))
+      for (unsigned i = 0; i < 31; ++i)
+        result += (flags >> i) & 1;
+    s.r[3] = result;
+    return true;
+  }
+  if (e == 0x82ac90e8) {
+    s.r[6] = 0;
+    return battle_property_mutation61::Apply(0x82ac90f8, m, d, s);
+  }
+  if (e == 0x82ac8af8) {
+    s.r[7] = s.r[6];
+    s.r[6] = 0;
+    return battle_property_mutation61::Apply(0x82ac89f0, m, d, s);
+  }
+  if (e == 0x82ac90f8 || e == 0x82ac89f0) {
+    auto old = Address(s.r[1]), resource = Address(s.r[3]),
+         bank = Address(s.r[4]), mask = Address(s.r[5]);
+    bool adding = e == 0x82ac89f0;
+    unsigned first = adding ? 26 : 27, frame = adding ? 144 : 0;
+    auto mode = Address(s.r[6]) & 255, payload = Address(s.r[7]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = first; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    if (frame) {
+      s.r[1] -= frame;
+      m.WriteU32(Address(s.r[1]), old);
+    }
+    auto flagsAddress = resource + 272 * bank + 232,
+         flags = m.ReadU32(flagsAddress);
+    unsigned result = 0;
+    for (unsigned bit = 0; bit < 31; ++bit) {
+      auto flag = 1u << bit;
+      if (!(mask & flag))
+        continue;
+      if (adding) {
+        bool special = m.ReadU32(0x83213538 + 4 * (32 * bank + bit)) == 1;
+        if (special && (flags & flag))
+          continue;
+        result = 1;
+        if (mode == 1) {
+          m.WriteU32(flagsAddress, m.ReadU32(flagsAddress) | flag);
+          if (payload) {
+            unsigned index = 0;
+            for (; index < 31; ++index)
+              if (mask & (1u << index))
+                break;
+            m.WriteU32(resource + 4 * (68 * bank + index + 59), payload);
+          }
+        }
+      } else if (flags & flag) {
+        result = 1;
+        if (mode == 1) {
+          m.WriteU32(flagsAddress, m.ReadU32(flagsAddress) & ~flag);
+          m.WriteU32(resource + 4 * (68 * bank + bit + 59), 0);
+          m.WriteU32(resource + 4 * (68 * bank + bit + 91), 0);
+        }
+      }
+    }
+    s.r[3] = result;
+    s.r[1] += frame;
+    for (unsigned i = first; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac9000) {
     s.r[5] = 1;
     return battle_property_mutation61::Apply(0x82ac8ee8, m, d, s);
   }
   if (e != 0x82ac8ee8)
     return false;
-  using recovery_abi::Address;
   auto old = Address(s.r[1]), resource = Address(s.r[3]), id = Address(s.r[4]),
        mode = Address(s.r[5]) & 255;
   m.WriteU32(old - 8, Address(s.lr));
