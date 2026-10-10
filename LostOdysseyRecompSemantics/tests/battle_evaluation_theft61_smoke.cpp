@@ -6,7 +6,7 @@
 #include <iostream>
 struct TheftGuest final : manager_release_context61::GuestServices {
   unsigned equipment = 0, inventoryNotices = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
       s.r[3] = 0x76000;
@@ -24,7 +24,11 @@ struct TheftGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x150000;
       return;
     }
-    if (e == 0x82ac3058) {
+    if (e == 0x82ac0888) {
+      m.WriteU32(unsigned(s.r[4]) + 2472, 0x42c80000);
+      return;
+    }
+    if (e == 0x82ac2468) {
       if (s.r[4] != 0x90000)
         throw std::runtime_error("equipment target");
       ++equipment;
@@ -52,8 +56,8 @@ int main() {
     using namespace cook_main_smoke;
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
-    for (auto p : {0x821a8000u, 0x83213000u, 0x83264000u, 0x83245000u,
-                   0x83291000u, 0x83315000u, 0x8204b000u})
+    for (auto p : {0x821a8000u, 0x82218000u, 0x83213000u, 0x83264000u,
+                   0x83245000u, 0x83291000u, 0x83315000u, 0x8204b000u})
       regions.push_back({p, 0x1000});
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x831f3000, 0x21000});
@@ -92,6 +96,13 @@ int main() {
     m.WriteU32(0x150000, 0x150100);
     m.WriteU32(0x150104, 0x150200);
     m.WriteU32(0x8204bc58, 0x4479c000);
+    m.WriteU32(0x83291dc0, 0x7c000);
+    m.WriteU32(0x83264978 + 72, 0x220000);
+    m.WriteU32(0x82007784, 0x3f800000);
+    m.WriteU32(0x822184dc, 0x447a0000);
+    m.WriteU32(0x822181e4, 0x447a0000);
+    m.WriteU32(0x822182a0, 0x42c60000);
+    m.WriteU32(0x90000 + 2588, 0x42c80000);
     m.WriteU32(0x83264978, 0x200000);
     m.WriteU32(0x83264978 + 116, 0x160000);
     auto run = [&]() {

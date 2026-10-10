@@ -1,3 +1,7 @@
+## Root direct continuation: resource stat refresh (2026-10-10 UTC)
+
+Recovered gear-derived property clearing, aggregate HP/MP and battle-stat calculation, and equipment refresh orchestration. Theft now runs this refresh after removing equipment. Focused fixtures cover caps/refill, low-HP state, stat sums, two-bank removal and refresh order. Skill recomputation AC0888 and equipment aggregation AC2468 remain external dependencies; no gameplay, Full72 or bitwise FP acceptance is claimed.
+
 ## Root direct continuation: battle progression (2026-10-10 UTC)
 
 Recovered damage/defeat progression counters and achievement-service forwarding, including threshold crossing and defeat-record insertion/deduplication. Result application and actor death transition now compose real progression rather than mocking counters. Library build and focused progression/property/result/evaluator/execution checks pass. Platform achievement delivery and gameplay remain unvalidated; no Full72 or full ABI proof is claimed.

@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_evaluation_theft61.h"
+#include "lo_semantics/battle_resource_stats61.h"
 #include "lo_semantics/battle_action_eligibility61.h"
 #include "lo_semantics/battle_evaluation_chance61.h"
 #include "lo_semantics/battle_effect_followups61.h"
@@ -19,6 +20,7 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_evaluation_chance61::Apply(e, m, d, s) &&
       !battle_effect_followups61::Apply(e, m, d, s) &&
       !string_storage_context61::Apply(e, m, d, s) &&
+      !battle_resource_stats61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_action_results61::Apply(e, m, d, s) &&
       !battle_script_party61::Apply(e, m, d, s) &&
