@@ -1,10 +1,8 @@
 #pragma once
 #include "lo_semantics/manager_release_context61.h"
-namespace lo::semantic::gpu::battle_script_dispatch61 {
+namespace lo::semantic::gpu::battle_script_extensions61 {
 using Registers = manager_release_context61::Registers;
 using Dependencies = manager_release_context61::Dependencies;
-// Execute one opcode target, retaining the caller LR for tail dispatch.
-void DispatchOpcode(GuestAddress, GuestMemory &, Dependencies, Registers &);
 [[nodiscard]] bool Apply(GuestAddress, GuestMemory &, Dependencies,
                          Registers &);
-} // namespace lo::semantic::gpu::battle_script_dispatch61
+} // namespace lo::semantic::gpu::battle_script_extensions61

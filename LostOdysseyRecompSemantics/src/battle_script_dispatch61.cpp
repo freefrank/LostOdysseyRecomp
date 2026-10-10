@@ -8,6 +8,7 @@
 #include "lo_semantics/battle_script_party61.h"
 #include "lo_semantics/battle_script_text61.h"
 #include "lo_semantics/battle_script_services61.h"
+#include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_script_dispatch61 {
 namespace {
@@ -74,17 +75,7 @@ struct Engine {
       s.r[3] = owner;
       s.ctr = target;
       s.lr = 0x8238bb44;
-      if ((target & ~3u) == 0x82a9bf40)
-        (void)battle_script61::Apply(0x82a9bf40, m, d, s);
-      else if (!battle_script_core61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_calls61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_angles61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_events61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_control61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_party61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_text61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_services61::Apply(target & ~3u, m, d, s))
-        d.guest.CallIndirect(target & ~3u, m, s);
+      DispatchOpcode(target, m, d, s);
       if (W(State() + 28) & 0x80000000) {
         s.r[3] = 1;
         return;
@@ -117,6 +108,21 @@ struct Engine {
   }
 };
 } // namespace
+void DispatchOpcode(GuestAddress target, GuestMemory &m, Dependencies d,
+                    Registers &s) {
+  if ((target & ~3u) == 0x82a9bf40)
+    (void)battle_script61::Apply(0x82a9bf40, m, d, s);
+  else if (!battle_script_core61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_calls61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_angles61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_events61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_control61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_party61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_text61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_services61::Apply(target & ~3u, m, d, s) &&
+           !battle_script_extensions61::Apply(target & ~3u, m, d, s))
+    d.guest.CallIndirect(target & ~3u, m, s);
+}
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   if (e == 0x82a9bdf8) {
     Engine engine{m, d, s, Address(s.r[3])};

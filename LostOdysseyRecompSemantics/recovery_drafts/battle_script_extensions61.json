@@ -1,0 +1,77 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Operand tail aliases, signed immediate, extended-opcode tail dispatch and fixed-length skip handlers.",
+  "entries": [
+    {
+      "address": "8238C198",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24511,
+      "instruction_count": 2,
+      "body_sha256": "add3914d1efd7aa5c9cd8e998b5a688201aff61f1b0031fd5615297df3c1b737",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C208",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24585,
+      "instruction_count": 2,
+      "body_sha256": "b9356559b8761f01bfd6899964fdd382e5924643d8e958229e4cb870906d40fc",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "8238C590",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 25130,
+      "instruction_count": 11,
+      "body_sha256": "3655f6f5378b5d5896e6bc3cf471585bea6981b9322595793b507878c3f472a4",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9DA28",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.157.cpp",
+      "source_line": 370,
+      "instruction_count": 14,
+      "body_sha256": "5d668a63f88c12d248a36eafedcab515ba78c6819a5d2c16243220b51b80d57d",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7FB8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9319,
+      "instruction_count": 5,
+      "body_sha256": "c26c387aef2a221ead9a1d6d129cc87f95a10ff4c94b0841fd6731d5c5f06a4a",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF7FD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 9334,
+      "instruction_count": 5,
+      "body_sha256": "c412da43f0536dc927cac16e0e847a9d1acb7eed8eb62245539fd6a2f1e945f1",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238C198",
+      "8238C208",
+      "8238C590",
+      "82A9DA28",
+      "82AF7FB8",
+      "82AF7FD0"
+    ],
+    "header": "include/lo_semantics/battle_script_extensions61.h",
+    "source": "src/battle_script_extensions61.cpp",
+    "smoke": "tests/battle_script_extensions61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A compact fixture checks zero-offset getter/setter aliases, negative signed immediate, original prefix bit and LR retention, registered extended skip followed by event end, flag reset on the next opcode and nine-byte skip. Prefix dispatch reuses the existing local handler routing, preserving guest fallback for unrecovered targets. No invalid-bytecode guard or arbitrary opcode completion claim is added. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}
