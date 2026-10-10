@@ -7,6 +7,7 @@
 #include <debug/auto_continue.h>
 #include <hid/hid.h>
 #include <kernel/io/file_system.h>
+#include <patches/save_menu_holds.h>
 #include "config.h"
 #include "menu.h"
 #include "menu_assets.h"
@@ -15,7 +16,6 @@
 #include "title_entry.h"
 #include "translations.h"
 
-extern "C" PPC_FUNC(__imp__sub_8234B9B8);
 extern "C" PPC_FUNC(__imp__sub_8288AC10);
 extern "C" PPC_FUNC(__imp__sub_824C0658);
 extern "C" PPC_FUNC(__imp__sub_82B617B8);
@@ -203,5 +203,5 @@ PPC_FUNC(sub_8234B9B8)
     if (settings::ConsumeTitleShortcut(MenuIdle(base, title)))
         OpenSettings(ctx, base, title);
     ReportHint(MenuIdle(base, title));
-    __imp__sub_8234B9B8(ctx, base);
+    save_menu_holds::TitleTick(ctx, base);
 }
