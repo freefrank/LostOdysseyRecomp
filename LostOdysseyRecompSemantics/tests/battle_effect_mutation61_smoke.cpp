@@ -672,6 +672,22 @@ int main() {
               m.ReadU32(owner + 196) == 24 && (m.ReadU32(target + 232) & 16) &&
               (m.ReadU32(target + 3 * 272 + 232) & 8),
           "damage property mask bookkeeping");
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 104, 0);
+    m.WriteU32(owner + 120, 6);
+    put(target + 2588, 100);
+    put(target + 2616, 30);
+    call(0x82b0ba98);
+    check(get(target + 2588) == 80 && get(target + 2616) == 24 &&
+              get(owner + 172) == 20,
+          "physical and randomized MP damage");
+    m.WriteU32(owner + 184, 3);
+    put(target + 2588, 100);
+    put(target + 2616, 5);
+    call(0x82b0ba98);
+    check(get(target + 2588) == 79 && get(target + 2616) == 0 &&
+              get(owner + 172) == 21,
+          "combined MP hit spills into HP");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

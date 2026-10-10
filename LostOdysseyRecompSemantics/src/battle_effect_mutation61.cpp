@@ -66,6 +66,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     frame = 160;
     first = 28;
     break;
+  case 0x82b0ba98:
+    frame = 176;
+    first = 26;
+    literal = 84;
+    break;
   case 0x82b0b630:
     frame = 176;
     first = 27;
@@ -176,7 +181,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
-  unsigned savedFp = e == 0x82b0b630   ? 56
+  unsigned savedFp = e == 0x82b0ba98   ? 64
+                     : e == 0x82b0b630 ? 56
                      : e == 0x82b0b178 ? 56
                      : e == 0x82b0d7f0 ? 48
                      : e == 0x82b0a7a0 ? 40
@@ -186,7 +192,8 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
                          : 0;
   if (savedFp)
     recovery_abi::WriteU64(m, old - savedFp, s.fpr_bits[31]);
-  unsigned savedFp30 = e == 0x82b0b630   ? 64
+  unsigned savedFp30 = e == 0x82b0ba98   ? 72
+                       : e == 0x82b0b630 ? 64
                        : e == 0x82b0b178 ? 64
                        : e == 0x82b0d7f0 ? 56
                        : (e == 0x82b10aa8 || e == 0x82b0c4e8 ||
@@ -239,12 +246,25 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Call(method, m, d, s);
   };
   if (e == 0x82b0c4e8 || e == 0x82b0c9e0 || e == 0x82b0d7f0 ||
-      e == 0x82b0d418 || e == 0x82b0b178 || e == 0x82b0b630) {
-    if ((e == 0x82b0d7f0 || e == 0x82b0d418 || e == 0x82b0b630) && !eligible(1))
+      e == 0x82b0d418 || e == 0x82b0b178 || e == 0x82b0b630 ||
+      e == 0x82b0ba98) {
+    bool propertyDamage = e == 0x82b0b630 || e == 0x82b0ba98;
+    std::int32_t extraMp = 0;
+    if (e == 0x82b0ba98) {
+      auto base = std::int32_t(m.ReadU32(owner + 120));
+      s.r[3] = m.ReadU32(0x83264558);
+      s.r[4] = unsigned(base);
+      s.r[5] = unsigned(base) + unsigned(base / 2);
+      s.r[6] = 107;
+      s.r[7] = m.ReadU32(m.ReadU32(owner + 8) + 64);
+      Call(0x82aa0740, m, d, s);
+      extraMp = std::int32_t(Address(s.r[3]));
+    }
+    if ((e == 0x82b0d7f0 || e == 0x82b0d418 || propertyDamage) && !eligible(1))
       m.WriteU8(owner + 208, 0);
     else {
-      auto integerScratch = e == 0x82b0b630 ? 96u : 88u;
-      auto absorbedScratch = e == 0x82b0b630 ? 88u : 84u;
+      auto integerScratch = propertyDamage ? 96u : 88u;
+      auto absorbedScratch = propertyDamage ? 88u : 84u;
       mark();
       bool missing = false;
       if (e == 0x82b0d7f0) {
@@ -318,7 +338,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
           m.WriteU32(owner + 28, std::bit_cast<unsigned>(float(
                                      std::bit_cast<double>(s.fpr_bits[1]))));
         }
-        if (e == 0x82b0c9e0 || e == 0x82b0b630) {
+        if (e == 0x82b0c9e0 || propertyDamage) {
           s.r[3] = owner;
           Call(0x82b098b0, m, d, s);
         } else {
@@ -386,6 +406,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         apply(1, 3730, getAmount());
         putAmount(zero);
       } else if (mode == 3) {
+        if (e == 0x82b0ba98) {
+          recovery_abi::WriteU64(m, sp + 88,
+                                 std::uint64_t(std::int64_t(extraMp)));
+          putAmount(float(float(extraMp) + getAmount()));
+        }
         auto mp =
             trunc(std::bit_cast<float>(m.ReadU32(m.ReadU32(owner + 8) + 2616)));
         m.WriteU32(sp + integerScratch, unsigned(mp));
@@ -431,6 +456,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         }
         m.WriteU32(sp + integerScratch, 0x8204a1d8);
         apply(0, 3726, getAmount());
+        if (e == 0x82b0ba98) {
+          recovery_abi::WriteU64(m, sp + 96,
+                                 std::uint64_t(std::int64_t(extraMp)));
+          apply(2, 3734, float(extraMp));
+        }
         if (e == 0x82b0b178 && m.ReadU32(owner + 120)) {
           auto target = m.ReadU32(owner + 8);
           fp();
@@ -453,13 +483,13 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         }
       }
       if (e == 0x82b0c9e0 || e == 0x82b0d7f0 || e == 0x82b0d418 ||
-          e == 0x82b0b178 || e == 0x82b0b630)
+          e == 0x82b0b178 || propertyDamage)
         m.WriteU32(owner + 172, m.ReadU32(owner + 32));
       else {
         auto target = m.ReadU32(owner + 8);
         m.WriteU32(target + 124, m.ReadU32(target + 124) | 0x40000000);
       }
-      if (e == 0x82b0b630 && chance(0x82b08ea8)) {
+      if (propertyDamage && chance(0x82b08ea8)) {
         if (!m.ReadU32(owner + 92)) {
           property(0x82aca6f0, 92, 100);
           m.WriteU32(owner + 196, m.ReadU32(owner + 100));
