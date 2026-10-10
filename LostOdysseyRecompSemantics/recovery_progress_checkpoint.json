@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 218,
-    "distinct_entries": 877,
+    "distinct_entries": 881,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2454,11 +2454,16 @@
           "82B0D088",
           "82B0D210",
           "82B0D2C8",
-          "82B21878"
+          "82B21878",
+          "82B0CD88",
+          "82B11248",
+          "82B11350",
+          "82B114B8"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks all ten adapters, source mode-write timing before or after preparation, mutable manager reloading, operand ABI and optional property or numeric side effects. Entries are composed into the real descriptor dispatcher; preparation/application and secondary services remain explicit guest boundaries. Native gameplay is unvalidated. Logical/ABI only",
-        "effect_preparation": "Recovered and composed effect preparation: source/target and argument bindings, byte/word resets, secondary manager snapshots, target HP capture and source actor flag extraction. All ten effect adapters now initialize actual state before the remaining application callback. Focused fixture checks setup output, descriptor16 classification, low-byte input truncation and preservation of adjacent bytes. No full floating-point equivalence or native gameplay claim."
+        "effect_preparation": "Recovered and composed effect preparation: source/target and argument bindings, byte/word resets, secondary manager snapshots, target HP capture and source actor flag extraction. All ten effect adapters now initialize actual state before the remaining application callback. Focused fixture checks setup output, descriptor16 classification, low-byte input truncation and preservation of adjacent bytes. No full floating-point equivalence or native gameplay claim.",
+        "upper_descriptors": "Recovered four upper effect descriptors: chance-gated property insertion/removal, target status marking and two deactivation/report paths. Composed real source/target eligibility, chance gates, upper effect descriptors, property mutations and result-record flags. Focused effect and eligibility fixtures pass target flags, report codes250/15, scene-dependent chance and manager counter wrapping. Main effect application and final target notification remain explicit boundaries. Logical/ABI recovery only; full floating-point and native gameplay acceptance remain unvalidated."
       },
       {
         "unit": "battle_action_results61",

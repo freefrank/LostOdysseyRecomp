@@ -313,3 +313,7 @@ Recovered numeric property lookup, target penalty and two chance gates using act
 ## Target relation eligibility
 
 Recovered source/target relation eligibility: unrestricted, same-side and opposing-side modes, optional property-zero exclusion, source property242 and explicit low-byte override. The focused fixture checks all side combinations and modes, rejection, bypass and property override with real property helpers. This helper supports subsequent effect descriptor composition; native gameplay remains unvalidated.
+
+## Upper effect descriptors
+
+Recovered four upper effect descriptors: chance-gated property insertion/removal, target status marking and two deactivation/report paths. Composed real source/target eligibility, chance gates, upper effect descriptors, property mutations and result-record flags. Focused effect and eligibility fixtures pass target flags, report codes250/15, scene-dependent chance and manager counter wrapping. Main effect application and final target notification remain explicit boundaries. Logical/ABI recovery only; full floating-point and native gameplay acceptance remain unvalidated.

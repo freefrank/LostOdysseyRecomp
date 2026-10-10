@@ -12,6 +12,15 @@ struct EffectGuest final : manager_release_context61::GuestServices {
       if (!b)
         throw std::runtime_error("effect callback ABI");
     };
+    if (e == 0x82380a18 || e == 0x82389b78) {
+      s.r[3] = 0x76000;
+      return;
+    }
+    if (e == 0x82ac9be0) {
+      check(s.r[3] == 0x90000 && s.r[4] == 0 && s.r[5] == 1 && s.r[6] == 1);
+      ++side;
+      return;
+    }
     if (e == 0x82b22948) {
       check(step++ == 0 && s.r[3] == 0x70000 &&
             m.ReadU32(0x73000 + 64) == mode);
@@ -43,6 +52,9 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x832ae000, 0x1000});
+    regions.push_back({0x83245000, 0x1000});
+    regions.push_back({0x83264000, 0x1000});
+    regions.push_back({0x831f3000, 0x21000});
     regions.push_back({0x83213000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
@@ -105,6 +117,84 @@ int main() {
     check(battle_evaluation_effects61::Apply(0x82b21878, m, {g, native}, s));
     check(m.ReadU8(0x70000 + 108) == 1 && m.ReadU8(0x70000 + 45) == 2 &&
           m.ReadU32(0x70000 + 40) == 7 && m.ReadU32(0x70000 + 64) == 0xffff);
+    m.WriteU32(0x83264558, 0x78000);
+    m.WriteU32(0x73000 + 88, 0x42c80000);
+    m.WriteU32(0x73000 + 92, 5);
+    m.WriteU32(0x73000 + 100, 1);
+    m.WriteU32(0x73000 + 96, 6);
+    m.WriteU32(0x73000 + 104, 2);
+    m.WriteU32(0x90000 + 6 * 272 + 232, 2);
+    m.WriteU32(0x70000 + 24, 0x41400000);
+    g.mode = 0;
+    g.step = 0;
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b0cd88, m, {g, native}, s));
+    check((m.ReadU32(0x90000 + 5 * 272 + 232) & 1) &&
+          !m.ReadU32(0x90000 + 6 * 272 + 232) &&
+          m.ReadU32(0x73000 + 172) == 0x41400000);
+    m.WriteU32(0x73000 + 184, 1);
+    m.WriteU32(0x73000 + 172, 99);
+    g.step = 0;
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b0cd88, m, {g, native}, s) &&
+          m.ReadU32(0x73000 + 172) == 99);
+    m.WriteU32(0x73000 + 184, 0);
+    m.WriteU32(0x73000 + 36, 1);
+    m.WriteU32(0x73000 + 40, 0x100000);
+    m.WriteU32(0x100000 + 14888, 1);
+    m.WriteU32(0x74000 + 12, 0);
+    m.WriteU32(0x74000 + 24, 0);
+    m.WriteU32(0x74000 + 20, 0x110000);
+    m.WriteU32(0x6300c, 2);
+    m.WriteU32(0x62000 + 472 + 8, 25);
+    m.WriteU32(0x90000 + 64, 25);
+    m.WriteU32(0x80000 + 124, 0x10000000);
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x90000 + 232, 0);
+    m.WriteU32(0x80000 + 232, 0);
+    g.side = 0;
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b11248, m, {g, native}, s) &&
+          g.side == 1 && (m.ReadU32(0x90000 + 124) & 0x04000000));
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x90000 + 132, 1);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b11350, m, {g, native}, s) &&
+          !m.ReadU32(0x90000 + 132) && m.ReadU32(0x90000 + 124) == 0x02200000);
+    m.WriteU32(0x80000 + 124, 0);
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x90000 + 132, 1);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b114b8, m, {g, native}, s) &&
+          !m.ReadU32(0x90000 + 132) && m.ReadU32(0x90000 + 124) == 0x00200000);
+    m.WriteU8(0x73000 + 208, 1);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b11350, m, {g, native}, s) &&
+          !m.ReadU8(0x73000 + 208));
+    m.WriteU32(0x832cb798, 0x75000);
+    m.WriteU32(0x75000 + 16, 0x120000);
+    m.WriteU32(0x73000 + 36, 0);
+    m.WriteU32(0x80000 + 124, 0x10000000);
+    m.WriteU32(0x90000 + 124, 0);
+    m.WriteU32(0x90000 + 132, 1);
+    m.WriteU32(0x90000 + 68, 52);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b11350, m, {g, native}, s) &&
+          m.ReadU32(0x75000 + 24) == 250 && m.ReadU32(0x90000 + 132) == 1);
+    m.WriteU32(0x90000 + 68, 0);
+    m.WriteU8(0x73000 + 77, 1);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b11350, m, {g, native}, s) &&
+          m.ReadU32(0x75000 + 24) == 15 && !m.ReadU32(0x90000 + 132));
+    m.WriteU32(0x90000 + 124, 0x10000000);
+    m.WriteU32(0x90000 + 132, 1);
+    m.WriteU32(0x73000 + 20, 5);
+    m.WriteU32(0x832ca0e0 + 5784, 62);
+    m.WriteU32(0x76000 + 148, 0x13002);
+    s.r[3] = 0x73000;
+    check(battle_evaluation_effects61::Apply(0x82b114b8, m, {g, native}, s) &&
+          !m.ReadU32(0x90000 + 132) && m.ReadU32(0x76000 + 148) == 0x10002);
+    check(s.r[1] == initial.r[1] && s.r[28] == initial.r[28]);
     check(!battle_evaluation_effects61::Apply(0, m, {g, native}, s));
     std::cout << "battle_evaluation_effects61 smoke passed\n";
     return 0;
