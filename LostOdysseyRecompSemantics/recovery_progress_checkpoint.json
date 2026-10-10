@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 215,
-    "distinct_entries": 845,
+    "unit_count": 216,
+    "distinct_entries": 855,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2428,6 +2428,23 @@
         "focused_smoke_paths": 1,
         "validation": "Focused fixture checks constant accept/reject leaves, target virtual status, distinct source/target IDs, source property 114, secondary predicate, paired-query early exits and exact low-byte-one matching. Recovered predicates and existing no-op are composed into actual descriptor dispatch. Lower property predicates and target virtual methods remain guest boundaries; native gameplay is unvalidated. Logical/ABI only",
         "extended_gates": "Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim."
+      },
+      {
+        "unit": "battle_evaluation_effects61",
+        "entries": [
+          "82B0CE98",
+          "82B0CF20",
+          "82B0CF78",
+          "82B0CFD0",
+          "82B0D028",
+          "82B0D148",
+          "82B0D1A0",
+          "82B0D088",
+          "82B0D210",
+          "82B0D2C8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "Focused fixture checks all ten adapters, source mode-write timing before or after preparation, mutable manager reloading, operand ABI and optional property or numeric side effects. Entries are composed into the real descriptor dispatcher; preparation/application and secondary services remain explicit guest boundaries. Native gameplay is unvalidated. Logical/ABI only"
       }
     ]
   },

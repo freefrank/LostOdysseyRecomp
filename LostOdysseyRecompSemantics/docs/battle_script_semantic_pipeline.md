@@ -285,3 +285,7 @@ Recovered status admission query and mutation with type-table gates, immunity ma
 ## Extended descriptor gates
 
 Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim.
+
+## Descriptor effect adapters
+
+Recovered ten descriptor effect adapters and composed them into evaluator dispatch. Focused checks preserve mode-write timing, mutable global manager reload and secondary property/numeric callback arguments. The eligibility fixture still passes. Lower preparation/application services remain to be recovered; logical/ABI coverage does not imply runtime gameplay acceptance.
