@@ -105,6 +105,22 @@
       "instruction_count": 23,
       "body_sha256": "5174c5cde5f32437e3ae434f581ce785eb2ff9a07fbae458025012b67ffdde4b",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF69D0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6070,
+      "instruction_count": 30,
+      "body_sha256": "34abb8cfc2b2b2152d404047453e1b78989d5a983e9811d06ee2df9124522d12",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF6A48",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 6140,
+      "instruction_count": 21,
+      "body_sha256": "bfd116481d5e1d58592bd2960938f84930b274e5537c0cfbb27a84ae2de2ae5a",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -121,7 +137,9 @@
       "82AFCC48",
       "82AFCCF8",
       "82A9BDB0",
-      "82AF80B0"
+      "82AF80B0",
+      "82AF69D0",
+      "82AF6A48"
     ],
     "header": "include/lo_semantics/battle_script_runtime61.h",
     "source": "src/battle_script_runtime61.cpp",
@@ -135,6 +153,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "A compact fixture checks actor/manager fields, resource-to-script-actor lookup and flagged count, direct/virtual command ABI, group-to-ID resolution, existing/missing target selection, mode switches, scene object bit predicate, signed branch and invalid-mode cursor preservation. Scene commands, concrete lookups and virtual services remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "A compact fixture checks actor/manager fields, resource-to-script-actor lookup and flagged count, direct/virtual command ABI, group-to-ID resolution, existing/missing target selection, mode switches, scene object bit predicate, signed branch and invalid-mode cursor preservation. Scene commands, concrete lookups and virtual services remain guest boundaries. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "actor_result_publication": "Recovered actor result publication and its guarded target adapter, including pending/blocked flags, result payload and result-kind bitfield. Main effect execution now applies actual actor flags rather than a notification stub. Library and focused runtime/execution checks pass; no runtime gameplay or full ABI acceptance is claimed."
   }
 }

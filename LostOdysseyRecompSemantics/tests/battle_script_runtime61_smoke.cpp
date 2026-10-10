@@ -163,6 +163,26 @@ int main() {
     op(0x82afccf8);
     if (m.ReadU32(actor + 52))
       throw std::runtime_error("invalid predicate mode preserves cursor");
+    auto complete = [&](unsigned kind, unsigned value) {
+      s.r[3] = owner;
+      s.r[4] = 0x80000;
+      s.r[5] = kind;
+      s.r[6] = value;
+      if (!battle_script_runtime61::Apply(0x82af69d0, m, {guest, native}, s))
+        throw std::runtime_error("result dispatch");
+    };
+    m.WriteU32(actor + 64, 0x38004);
+    complete(5, 123);
+    if (s.r[3] != 1 || m.ReadU32(actor + 64) != 0xa8004 ||
+        m.ReadU32(actor + 328) != 123)
+      throw std::runtime_error("actor result publication");
+    complete(1, 99);
+    if (s.r[3] || m.ReadU32(actor + 328) != 123)
+      throw std::runtime_error("pending result preserved");
+    m.WriteU32(actor + 64, 0x100000);
+    complete(2, 99);
+    if (s.r[3] || m.ReadU32(actor + 64) != 0x100000)
+      throw std::runtime_error("blocked result preserved");
     std::cout << "battle_script_runtime61 smoke passed\n";
     return 0;
   } catch (const std::exception &e) {

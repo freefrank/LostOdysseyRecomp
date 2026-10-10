@@ -1,6 +1,7 @@
 #include "lo_semantics/battle_script_runtime61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
+#include <bit>
 namespace lo::semantic::gpu::battle_script_runtime61 {
 namespace {
 using recovery_abi::Address;
@@ -176,6 +177,43 @@ struct Runtime {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x82af69d0 || e == 0x82af6a48) {
+    auto old = Address(s.r[1]), owner = Address(s.r[3]),
+         resource = Address(s.r[4]);
+    auto kind = Address(s.r[5]), result = Address(s.r[6]);
+    m.WriteU32(old - 8, Address(s.lr));
+    recovery_abi::WriteU64(m, old - 24, s.r[30]);
+    recovery_abi::WriteU64(m, old - 16, s.r[31]);
+    s.r[1] -= 112;
+    m.WriteU32(Address(s.r[1]), old);
+    (void)battle_script_runtime61::Apply(0x82a9bdb0, m, d, s);
+    auto actor = Address(s.r[3]);
+    if (e == 0x82af6a48) {
+      if (actor) {
+        s.r[3] = owner;
+        s.r[4] = resource;
+        s.r[5] = 1;
+        s.r[6] = 0;
+        (void)battle_script_runtime61::Apply(0x82af69d0, m, d, s);
+      }
+    } else {
+      s.r[3] = 0;
+      if (actor) {
+        auto flags = m.ReadU32(actor + 64);
+        if (!(flags & 0x180000)) {
+          m.WriteU32(actor + 328, result);
+          m.WriteU32(actor + 64, (flags & ~0x138000u) | 0x80000 |
+                                     (std::rotl(kind, 15) & 0x38000));
+          s.r[3] = 1;
+        }
+      }
+    }
+    s.r[1] += 112;
+    s.r[30] = recovery_abi::ReadU64(m, old - 24);
+    s.r[31] = recovery_abi::ReadU64(m, old - 16);
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82a9bdb0) {
     auto state = m.ReadU32(Address(s.r[3]) + 44);
     unsigned result = 0;

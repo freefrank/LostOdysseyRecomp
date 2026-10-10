@@ -8,6 +8,7 @@
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_script_runtime61.h"
 #include <bit>
 #include <limits>
 namespace lo::semantic::gpu::battle_effect_execution61 {
@@ -22,7 +23,8 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
       !battle_action_records61::Apply(e, m, d, s) &&
       !battle_action_readiness61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s) &&
-      !battle_script_actions61::Apply(e, m, d, s))
+      !battle_script_actions61::Apply(e, m, d, s) &&
+      !battle_script_runtime61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
 std::int32_t Trunc(double x) {

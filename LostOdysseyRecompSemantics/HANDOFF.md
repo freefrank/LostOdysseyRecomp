@@ -1,3 +1,7 @@
+## Root direct continuation: actor result publication (2026-10-10 UTC)
+
+Recovered actor result publication and its guarded target adapter, including pending/blocked flags, result payload and result-kind bitfield. Main effect execution now applies actual actor flags rather than a notification stub. Library and focused runtime/execution checks pass; no runtime gameplay or full ABI acceptance is claimed.
+
 ## Root direct continuation: skill recomputation (2026-10-10 UTC)
 
 Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.

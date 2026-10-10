@@ -5,7 +5,7 @@
 #include <iostream>
 #include "battle_progression_fixture.h"
 struct ExecutionGuest final : manager_release_context61::GuestServices {
-  unsigned guarded = 0, listQueries = 0;
+  unsigned listQueries = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (progression_fixture::Direct(e, s))
@@ -26,12 +26,6 @@ struct ExecutionGuest final : manager_release_context61::GuestServices {
       return;
     }
 
-    if (e == 0x82af6a48) {
-      if (s.r[3] != 0x832c9c54 || s.r[4] != 0x90000)
-        throw std::runtime_error("guard arguments");
-      ++guarded;
-      return;
-    }
     throw std::runtime_error("execution direct " + std::to_string(e));
   }
   void CallIndirect(GuestAddress e, GuestMemory &m,
@@ -73,6 +67,10 @@ int main() {
     m.WriteU32(0x832cb784, 0x77000);
     m.WriteU32(0x832ca0d8, 0x78000);
     m.WriteU32(0x832aeb00, 0x79000);
+    m.WriteU32(0x832c9c54 + 44, 0x7d000);
+    m.WriteU32(0x7d004, 0x7e000);
+    m.WriteU32(0x7d00c, 1);
+    m.WriteU32(0x7e008, 25);
     m.WriteU32(0x73004, 0x80000);
     m.WriteU32(0x73008, 0x90000);
     m.WriteU32(0x73000 + 32, 0x7a000);
@@ -89,7 +87,7 @@ int main() {
     m.WriteU32(0x8204fc20, 0x447a0000);
     m.WriteU32(0x82000e40, 0xbf800000);
     auto reset = [&]() {
-      g.guarded = 0;
+      m.WriteU32(0x7e000 + 64, 0);
       for (unsigned bank = 0; bank < 9; ++bank) {
         m.WriteU32(0x80000 + 272 * bank + 232, 0);
         m.WriteU32(0x90000 + 272 * bank + 232, 0);
@@ -140,7 +138,7 @@ int main() {
     reset();
     m.WriteU32(0x90000 + 4956, 4);
     run();
-    check(g.guarded == 1 && m.ReadU32(0x73000 + 52) == 2 &&
+    check(m.ReadU32(0x7e000 + 64) == 0x88000 && m.ReadU32(0x73000 + 52) == 2 &&
           m.ReadU32(0x100000 + 4 * 3758) == 1 && m.ReadU32(0x76000 + 192) == 0);
     reset();
     m.WriteU32(0x90000 + 7 * 272 + 232, 1u << 21);
