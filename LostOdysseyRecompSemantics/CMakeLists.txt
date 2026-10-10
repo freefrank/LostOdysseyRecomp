@@ -259,6 +259,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/mesh_triangle_tree61.cpp
     src/mesh_triangle_clean61.cpp
     src/mesh_triangle_flags61.cpp
+    src/mesh_triangle_views61.cpp
     src/mesh_triangle_cook61.cpp
     src/mesh_partition61.cpp
     src/mesh_partition_support61.cpp

@@ -3,6 +3,7 @@
 #undef main
 #include "lo_semantics/mesh_triangle_stream61.h"
 #include "lo_semantics/mesh_triangle_cook61.h"
+#include "lo_semantics/mesh_triangle_views61.h"
 #include "lo_semantics/mesh_triangle_flags61.h"
 #include "lo_semantics/mesh_triangle_storage61.h"
 int main() {
@@ -207,6 +208,28 @@ int main() {
       if (std::abs(std::bit_cast<float>(m.ReadU32(Owner + 208)) - 1.f / 6) >
           1e-5f)
         throw std::runtime_error("whole triangle mass");
+      for (unsigned channel = 0; channel < 3; ++channel) {
+        s.r[3] = Owner;
+        s.r[4] = 0;
+        s.r[5] = channel;
+        (void)mesh_triangle_views61::Apply(0x82b9e068, m, s);
+        if (s.r[3] != 4)
+          throw std::runtime_error("triangle channel count");
+        s.r[3] = Owner;
+        (void)mesh_triangle_views61::Apply(0x82b9e180, m, s);
+        if (s.r[3] != 12)
+          throw std::runtime_error("triangle channel stride");
+        s.r[3] = Owner;
+        (void)mesh_triangle_views61::Apply(0x82b9e0a0, m, s);
+        if (s.r[3] != (channel ? 1u : 4u))
+          throw std::runtime_error("triangle channel format");
+      }
+      s.r[3] = 0x68000;
+      s.r[4] = Owner;
+      (void)mesh_triangle_views61::Apply(0x82b9e270, m, s);
+      for (unsigned i = 0; i < 13; ++i)
+        if (m.ReadU32(0x68000 + 4 * i) != m.ReadU32(Owner + 208 + 4 * i))
+          throw std::runtime_error("borrowed mass export");
       storage(0x82b9e220, Owner);
       if (!env.guest.live.empty())
         throw std::runtime_error("triangle tree ownership");

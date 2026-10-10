@@ -369,3 +369,8 @@ Triangle partition support now initializes and releases label arrays, merges suf
 ### Complete triangle cooking
 
 The default triangle cook entry B9CC00 now composes BA65C0 descriptor handling and BA6238 strided import with the actual clean/weld, BC1F00 convex grouping, BB4CF0 owner export, tree, bounds, edge flags, mass and NXS/MESH serialization. A tetrahedron succeeds through word-indexed, half-indexed and nonindexed inputs, then reloads with exact cursor and zero tracked ownership. One convex group and four angular categories are verified. The focused sample uses synthetic version17, so native asset compatibility and gameplay remain unproven. Complex concave/degenerate grouping, optional user callback and axis-plane variants are source-reviewed only. This supersedes the earlier pending-default-triangle-entry note.
+
+
+### Triangle runtime views
+
+Triangle runtime views now expose channel count/format/stride metadata, optional auxiliary records and borrowed mass cache export. The three full-cook samples validate channel metadata and exported mass words after reload. Optional auxiliary data and absent-cache behavior remain source-reviewed; no defensive fallback or new runtime promise was introduced.
