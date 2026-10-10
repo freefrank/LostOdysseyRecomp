@@ -158,6 +158,7 @@ void CheckSavedLines(LogFile& log)
         settings::Config config;
         config.width = 2560;
         config.height = 1440;
+        config.internalResolution = 0;
         config.graphicsBackend = settings::GraphicsBackend::Vulkan;
         config.antialiasing = 0;
         config.frameRate = frameRate;

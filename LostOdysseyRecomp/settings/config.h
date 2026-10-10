@@ -90,12 +90,9 @@ struct Config
     // Shape of the game image; a fixed one is centred in the window with black
     // bars. Applied live. Android always uses Auto.
     gpu::aspect_ratio::Mode aspectRatio = gpu::aspect_ratio::Mode::Auto;
-#if LO_PLATFORM_ANDROID
-    int internalResolution = 1080; // Phone and tablet panels are far above 1080 lines; keep the GPU load in reach.
-#else
-    int internalResolution = 0; // 0 follows output (up to 4K); 720/1080/1440/2160 select scene height;
-                                // InternalResolutionNative renders at the drawable's pixel size.
-#endif
+    int internalResolution = 720; // Factory default is the Xbox 360's native 720p. 0 follows output (up to 4K);
+                                  // 720/1080/1440/2160 select scene height;
+                                  // InternalResolutionNative renders at the drawable's pixel size.
     WindowMode windowMode = WindowMode::Windowed;
 #ifdef _WIN32
     GraphicsBackend graphicsBackend = GraphicsBackend::D3D12; // Applied on the next process start.

@@ -15,8 +15,9 @@ int main()
     using namespace gpu::frame_plan;
     const settings::Config defaults;
     Require(defaults.upscaler == gpu::upscaling::Upscaler::Off && defaults.dlssQuality == gpu::upscaling::DlssQuality::Quality &&
-        defaults.antialiasing == 0 && defaults.internalResolution == 0 && defaults.scalingQuality == 1,
-        "P1 config defaults preserve legacy preferences");
+        defaults.antialiasing == 0 && defaults.internalResolution == 720 && defaults.scalingQuality == 1 &&
+        defaults.frameRate == 30,
+        "config defaults start at the original 720p30 with no upscaler or AA");
     Require(Choose(3, 7, 0, 2560, 1080).width == 2560 && Choose(3, 7, 0, 2560, 1080).output.drawable.width == 2560, "2560x1080 plan retains native raster and output");
     Require(Choose(4, 8, 0, 3440, 1440).height == 1440, "3440x1440 plan retains native raster");
     Require(Choose(5, 9, 1080, 3440, 1440).width == 2580, "manual height preserves wide aspect with integer rounding");

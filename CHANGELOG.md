@@ -11,14 +11,14 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - At 60 FPS, scenes that can't quite hold 60 no longer drop straight to 30, for example on Steam Deck.
 - New VSync setting in Settings → Graphics: Off, On or FreeSync / G-SYNC Compatible. It replaces the FreeSync / G-SYNC Compatible switch.
 - New Voice volume in Settings → Audio: cutscene dialogue has its own volume instead of following Sound effects. Voices in battle still follow Sound effects (#394).
-- On Android, Render resolution now starts at 1080p on a new install, for a higher frame rate.
+- A new install now starts at the original 720p and 30 FPS. Render resolution and Frame rate in Settings → Graphics raise them; saved settings keep their values.
 
 ### 简体中文
 
 - 60 FPS 下，跑不满 60 的场景不再直接掉到 30（例如 Steam Deck）。
 - 设置 → 图形新增“垂直同步”：关、开或 FreeSync / G-SYNC Compatible，取代原来的 FreeSync / G-SYNC Compatible 开关。
 - 设置 → 声音新增“语音音量”：过场动画的对白有了自己的音量，不再跟随音效音量。战斗中的语音仍跟随音效音量（#394）。
-- Android 新安装时，渲染分辨率默认为 1080p，帧率更高。
+- 新安装默认为原版的 720p、30 FPS，可在 设置 → 图形 的“渲染分辨率”和“帧率”调高；已保存的设置不变。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
