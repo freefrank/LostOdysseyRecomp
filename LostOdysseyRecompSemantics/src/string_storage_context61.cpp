@@ -67,6 +67,17 @@ struct Bridge final : ManagerFacadeServices, ArrayResizeServices {
 };
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
+  if (e == 0x822d03d8) {
+    while (true) {
+      auto a = m.ReadU16(Address(s.r[3])), b = m.ReadU16(Address(s.r[4]));
+      if (a != b || !b) {
+        s.r[3] = a < b ? std::uint64_t(-1) : a > b ? 1 : 0;
+        return true;
+      }
+      s.r[3] += 2;
+      s.r[4] += 2;
+    }
+  }
   if (e == 0x8230bac0) {
     auto dest = Address(s.r[3]);
     do {

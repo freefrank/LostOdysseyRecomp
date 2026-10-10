@@ -19,10 +19,6 @@ struct TargetsGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x72000;
       return;
     }
-    if (e == 0x82ac85e8) {
-      s.r[3] = randomMax ? 1 : 0;
-      return;
-    }
     throw std::runtime_error("target direct boundary");
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -155,6 +151,13 @@ int main() {
     if (m.ReadU32(0x75000 + 4 * (128 * 9 + 84 + 3)) != 1 ||
         m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 2)
       throw std::runtime_error("random target selection");
+    m.WriteU32(0x84000 + 504, 8);
+    m.WriteU32(0x88000 + 504, 128);
+    select(15, 0, 0, 0);
+    if (m.ReadU32(actor + 76) != 1 || m.ReadU8(0x66000) != 2)
+      throw std::runtime_error("low property mask filter");
+    m.WriteU32(0x84000 + 504, 0);
+    m.WriteU32(0x88000 + 504, 0);
     select(5, 0, 0, 0);
     if (m.ReadU32(actor + 76))
       throw std::runtime_error("unimplemented source filter clears result");

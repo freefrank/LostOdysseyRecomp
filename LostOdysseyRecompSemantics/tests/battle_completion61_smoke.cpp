@@ -5,7 +5,7 @@
 #include <iostream>
 #include "battle_profile_fixture.h"
 struct CompletionGuest final : manager_release_context61::GuestServices {
-  unsigned freed = 0, ready = 1;
+  unsigned freed = 0, ready = 1, destroyed = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18) {
@@ -18,6 +18,12 @@ struct CompletionGuest final : manager_release_context61::GuestServices {
                     manager_release_context61::Registers &s) override {
     if (profile_fixture::Indirect(e, s))
       return;
+    if (e == 0x123400) {
+      if (s.r[3] != 0x86000 || s.r[4] != 1)
+        throw std::runtime_error("destructor arguments");
+      ++destroyed;
+      return;
+    }
     if (e == 0x123408) {
       if (s.r[4] != 0x82000 || s.r[5] != 0 || s.r[6] != 8)
         throw std::runtime_error("array release arguments");
@@ -40,6 +46,7 @@ int main() {
     regions.push_back({0x83315000, 0x1000});
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x8330b000, 0x1000});
+    regions.push_back({0x821a8000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -111,6 +118,38 @@ int main() {
           g.freed == 1 && !m.ReadU32(0x832cc05c + 136));
     check(run(0x82b07e80, 0x832cb68c, 99) == 0 &&
           run(0x82b1a100, 0x832cc0fc, 99) == 0);
+    m.WriteU32(0x832cc0fc + 24, 0x87000);
+    m.WriteU32(0x832cc0fc + 28, 2);
+    m.WriteU32(0x832cc0fc + 32, 2);
+    m.WriteU32(0x87000, 0x86000);
+    m.WriteU32(0x87004, 0x86100);
+    m.WriteU32(0x86008, 31);
+    m.WriteU8(0x86004, 2);
+    m.WriteU32(0x86108, 32);
+    m.WriteU8(0x86104, 3);
+    m.WriteU32(0x86000, 0x88000);
+    m.WriteU32(0x88000, 0x123400);
+    check(run(0x82b19fd0, 0x832cc0fc, 31) == 1 &&
+          run(0x82b19fd0, 0x832cc0fc, 32) == 0);
+    run(0x82b1a518, 0x832cc0fc, 31);
+    check(g.destroyed == 1 && m.ReadU32(0x832cc0fc + 28) == 1 &&
+          m.ReadU32(0x87000) == 0x86100);
+    run(0x82b1a518, 0x832cc0fc, 99);
+    check(g.destroyed == 1);
+    m.WriteU32(0x89000 + 48, 1);
+    m.WriteU32(0x89000 + 40, 1);
+    m.WriteU32(0x89000 + 36, 0x89100);
+    m.WriteU16(0x89100, 'A');
+    m.WriteU16(0x89200, 'A');
+    check(run(0x82ab5768, 0x89000, 0x89200) == 1);
+    m.WriteU16(0x89200, 'B');
+    check(run(0x82ab5768, 0x89000, 0x89200) == 0);
+    m.WriteU8(0x89000 + 52, 1);
+    check(run(0x82ab5768, 0x89000, 0x89200) == 0);
+    m.WriteU8(0x89000 + 52, 0);
+    m.WriteU32(0x89000 + 40, 0);
+    m.WriteU16(0x89200, 0);
+    check(run(0x82ab5768, 0x89000, 0x89200) == 1);
     std::cout << "battle completion logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

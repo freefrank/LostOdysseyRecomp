@@ -49,6 +49,38 @@
       "instruction_count": 26,
       "body_sha256": "125ac5831caa3404f615884d1edaa3380c70b8d0bcd7d65098f11bad2102c7bd",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B19FD0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 33482,
+      "instruction_count": 30,
+      "body_sha256": "407771ef64473b7a9dea5893238f35f3759a52c62a5e53f8aca54c676c6afbb0",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B1A518",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 34269,
+      "instruction_count": 18,
+      "body_sha256": "389d5aa30230dbaeeb16b2f7ad7492dd211e0f694a6cc54d18d8036c1c48e2be",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82388B60",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 16222,
+      "instruction_count": 29,
+      "body_sha256": "d653be76d43db07b4e14cd1773490706f1176000a8a01d3496efc41da3c77c8c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AB5768",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.158.cpp",
+      "source_line": 19813,
+      "instruction_count": 34,
+      "body_sha256": "81c0e85dd11a7ac70208b0d0f8f57bdfc8dc035e9ed4d43276fb385c53365be6",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -58,7 +90,11 @@
       "82B07E80",
       "82B1A100",
       "82B02F08",
-      "82B1A168"
+      "82B1A168",
+      "82B19FD0",
+      "82B1A518",
+      "82388B60",
+      "82AB5768"
     ],
     "header": "include/lo_semantics/battle_completion61.h",
     "source": "src/battle_completion61.cpp",
@@ -72,6 +108,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Recovered battle completion predicates, tracked-ID lookup and subordinate state checks. Script conditional branches now compose actual completion logic. Focused fixtures cover rank bounds, optional task gates, pending/completed states, missing IDs and stale row removal routing; library and completion/runtime fixtures pass. Array erasure and platform profile lookup remain guest boundaries. Logical recovery only, not gameplay or full ABI acceptance."
+    "case_scope": "Recovered battle completion predicates, tracked-ID lookup and subordinate state checks. Script conditional branches now compose actual completion logic. Focused fixtures cover rank bounds, optional task gates, pending/completed states, missing IDs and stale row removal routing; library and completion/runtime fixtures pass. Array erasure and platform profile lookup remain guest boundaries. Logical recovery only, not gameplay or full ABI acceptance.",
+    "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed."
   }
 }

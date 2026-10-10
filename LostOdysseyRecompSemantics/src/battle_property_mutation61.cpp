@@ -10,6 +10,10 @@
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ac85e8) {
+    s.r[3] = (m.ReadU32(Address(s.r[4]) + 504) & 127) != 0;
+    return true;
+  }
   if (e == 0x82ad0ad0) {
     auto old = Address(s.r[1]), manager = Address(s.r[3]),
          resource = Address(s.r[4]), notify = Address(s.r[5]) & 255,

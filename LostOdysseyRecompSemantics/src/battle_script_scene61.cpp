@@ -1,6 +1,7 @@
 #include "lo_semantics/battle_script_scene61.h"
 #include "lo_semantics/battle_script_extensions61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_completion61.h"
 #include <bit>
 namespace lo::semantic::gpu::battle_script_scene61 {
 namespace {
@@ -45,7 +46,10 @@ struct Scene {
     (void)battle_script_extensions61::Apply(0x8238c590, m, d, s);
     m.WriteU32(Actor() + 52, Address(s.r[3]));
   }
-  void Call(unsigned e) { d.guest.CallDirect(e, m, s); }
+  void Call(unsigned e) {
+    if (!battle_completion61::Apply(e, m, d, s))
+      d.guest.CallDirect(e, m, s);
+  }
   float Number(unsigned value) {
     if (s.cached_fp_control & 0x8040) {
       s.cached_fp_control &= ~0x8040u;

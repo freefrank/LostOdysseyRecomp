@@ -6,6 +6,65 @@ namespace lo::semantic::gpu::battle_completion61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
   auto owner = Address(s.r[3]), id = Address(s.r[4]);
+  if (e == 0x82b19fd0 || e == 0x82b1a518) {
+    auto count = m.ReadU32(owner + 28), data = m.ReadU32(owner + 24);
+    if (e == 0x82b19fd0)
+      s.r[3] = 0;
+    for (unsigned i = 0; std::int32_t(i) < std::int32_t(count); ++i) {
+      auto object = m.ReadU32(data + 4 * i);
+      if (m.ReadU32(object + 8) != id)
+        continue;
+      if (e == 0x82b19fd0) {
+        auto state = m.ReadU8(object + 4);
+        s.r[3] = state == 1 || state == 2;
+      } else {
+        s.r[4] = i;
+        return battle_completion61::Apply(0x82388b60, m, d, s);
+      }
+      break;
+    }
+    return true;
+  }
+  if (e == 0x82388b60 || e == 0x82ab5768) {
+    auto old = Address(s.r[1]);
+    unsigned frame = e == 0x82388b60 ? 112 : 96;
+    m.WriteU32(old - 8, Address(s.lr));
+    if (e == 0x82388b60)
+      for (unsigned i = 29; i < 32; ++i)
+        recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= frame;
+    m.WriteU32(Address(s.r[1]), old);
+    if (e == 0x82ab5768) {
+      s.r[3] = 0;
+      if (m.ReadU32(owner + 48) && !m.ReadU8(owner + 52)) {
+        s.r[3] = m.ReadU32(owner + 40) ? m.ReadU32(owner + 36) : 0x821a83d0;
+        (void)string_storage_context61::Apply(0x822d03d8, m, d, s);
+        s.r[3] = Address(s.r[3]) == 0;
+      }
+    } else {
+      auto object = m.ReadU32(m.ReadU32(owner + 24) + 4 * id);
+      if (object) {
+        s.r[3] = object;
+        s.r[4] = 1;
+        auto method = m.ReadU32(m.ReadU32(object));
+        s.ctr = method;
+        d.guest.CallIndirect(method & ~3u, m, s);
+        m.WriteU32(m.ReadU32(owner + 24) + 4 * id, 0);
+      }
+      s.r[3] = owner + 24;
+      s.r[4] = id;
+      s.r[5] = 1;
+      s.r[6] = 4;
+      s.r[7] = 8;
+      (void)string_storage_context61::Apply(0x82298af8, m, d, s);
+    }
+    s.r[1] += frame;
+    if (e == 0x82388b60)
+      for (unsigned i = 29; i < 32; ++i)
+        s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82b02f08) {
     s.r[3] = std::uint64_t(-1);
     for (unsigned i = 0; std::int32_t(i) < std::int32_t(m.ReadU32(owner + 140));

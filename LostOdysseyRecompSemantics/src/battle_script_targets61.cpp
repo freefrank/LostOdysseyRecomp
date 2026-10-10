@@ -6,6 +6,7 @@
 #include "lo_semantics/battle_script_actions61.h"
 #include "lo_semantics/battle_script_events61.h"
 #include "lo_semantics/recovery_abi.h"
+#include "lo_semantics/battle_property_mutation61.h"
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -28,7 +29,8 @@ struct Targets {
   void Call(unsigned e) {
     if (!battle_random_range61::Apply(e, m, d, s) &&
         !battle_action_readiness61::Apply(e, m, d, s) &&
-        !battle_action_adjustments61::Apply(e, m, d, s))
+        !battle_action_adjustments61::Apply(e, m, d, s) &&
+        !battle_property_mutation61::Apply(e, m, d, s))
       d.guest.CallDirect(e, m, s);
   }
   unsigned List() {
