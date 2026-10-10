@@ -17,10 +17,13 @@ def _is_directory(entry: mobase.FileTreeEntry | None) -> bool:
 
 
 def _is_mod_root(tree: mobase.IFileTree) -> bool:
-    # overlay/ (manager-ordered files) or one folder per standalone mod.ini.
+    # overlay/ (manager-ordered files), or one folder per standalone mod.ini or
+    # language pack (language.ini).
     folders = [entry for entry in tree if _is_directory(entry)]
     return bool(folders) and all(
-        folder.name().casefold() == "overlay" or folder.exists("mod.ini")
+        folder.name().casefold() == "overlay"
+        or folder.exists("mod.ini")
+        or folder.exists("language.ini")
         for folder in folders
     )
 
@@ -48,7 +51,7 @@ class LostOdysseyRecompModDataChecker(mobase.ModDataChecker):
 class LostOdysseyRecompGame(BasicGame):
     Name = "Lost Odyssey Recomp Support Plugin"
     Author = "dotSlash"
-    Version = "1.0.0"
+    Version = "1.1.0"
     Description = "Adds support for LostOdysseyRecomp mods."
 
     GameName = "Lost Odyssey Recomp"

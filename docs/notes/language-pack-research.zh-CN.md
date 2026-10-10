@@ -99,9 +99,11 @@ mods/<id>/text/<成员路径>.json           {"<key>": "<译文>"}，只放翻�
 - 有 `language.ini`：新增一种可选语言，基于 `base`。
 - 没有 `language.ini`：覆盖同名语言的文本（例如修正英文错字）。
 - 缺的 key 回退到原文；多出来的 key 记一条警告。
-- 作者工具 `lo_mod.py language-check`：对照导出检查 key、控制码记号是否成对、每个字符是否在底本字体的 `CharRemap` 里。
+- 作者工具 `lo_mod.py language-check`：对照导出检查 key、控制码记号是否成对、每个字符是否在底本字体的 `CharRemap` 里（未做，放到以后）。
 
 设置：`settings.ini` 保留 `game_language=<base 的 ID>`，新增文本键 `game_language_pack=<id>`。语言列表改成运行时生成，在 `ConfigureGameLanguages` 里追加 base 存在于当前版本的语言包（mod 初始化早于这一步）。还要改 `restart::Required`、设置菜单、首次运行向导；`quit_text_hook` 对 9104/9114/9120 要让位给语言包的译文。
+
+P2 的实现（2026-10-09）：`mod_api` 扫描每个 mod 文件夹的 `language.ini`（所有 mod 模式都扫，因为只有玩家选中才生效，不存在加载顺序冲突）；`id` 统一转小写，重复的 `id` 保留按文件夹名排序的第一个。`main.cpp` 把语言包登记到 `settings::LanguagePacks`（`config.cpp` 不依赖 `modding/`，测试会直接编译它）；设置菜单和首次运行向导的列表是"本版本的语言 + base 在本版本里的语言包"。启动时 `GameLanguagePack()` 只在语言包存在且 base 等于 `GameLanguage()` 时返回 id，交给 `text_overlay::SelectLanguagePack`；选中语言包时，它的文件整份替换其他 Mod 对同一文件的翻译（按文件，不按 key 合并）。
 
 ## 6. 阶段
 
