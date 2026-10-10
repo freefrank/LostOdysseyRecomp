@@ -185,3 +185,7 @@ Added the full-register 82486C88 allocation adapter by reusing AllocateManagerBu
 ## Table-driven UTF-8 decoding
 
 Recovered the table-driven UTF-8 decoder 827CA660 and composed it into codepage dispatch. The focused fixture now checks actual ASCII decoding, supplementary-plane surrogate output, size-only queries, partial-capacity error behavior and incomplete input using synthetic guest tables. Imported non-UTF8 conversion remains a platform boundary; native locale and full-image table validation remain unvalidated.
+
+## Action snapshots
+
+Action snapshot preparation now has logical implementations for manager field updates, selective record copy and alternate-array backup. The focused fixture executes real storage and string lifetime and checks both preparation modes and flag preservation. Integration into execution callers is next; native gameplay and bitwise FP remain unvalidated.

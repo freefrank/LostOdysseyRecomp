@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 205,
-    "distinct_entries": 791,
+    "unit_count": 206,
+    "distinct_entries": 794,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2275,6 +2275,16 @@
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks byte length, null source, local and heap temporary buffers, exact 4-times-count heap request, size query, insufficient output, imported conversion failure and UTF-8 delegation. String storage composes the wrapper and its fixture passes with the actual temporary-buffer path. Imported character conversion and UTF-8 implementation remain boundaries; native locale behavior is unvalidated. Logical/ABI only",
         "utf8_decoder_update": "Recovered the table-driven UTF-8 decoder 827CA660 and composed it into codepage dispatch. The focused fixture now checks actual ASCII decoding, supplementary-plane surrogate output, size-only queries, partial-capacity error behavior and incomplete input using synthetic guest tables. Imported non-UTF8 conversion remains a platform boundary; native locale and full-image table validation remain unvalidated."
+      },
+      {
+        "unit": "battle_action_snapshot61",
+        "entries": [
+          "82ACD3B0",
+          "82ACD3E0",
+          "82ACEE70"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused fixture checks manager field updates, resource state backup, normal and alternate preparation modes, real alternate-array growth/reset, selected record and float fields, source bit31 versus destination flag payload, and ABI preservation. Snapshot preparation composes recovered storage/string lifetime. Execution-caller composition is pending; native gameplay and bitwise floating-point behavior are unvalidated. Logical/ABI only"
       }
     ]
   },
