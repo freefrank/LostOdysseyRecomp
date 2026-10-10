@@ -179,6 +179,41 @@ int main() {
     m.WriteU32(resource + 232, 0);
     check(admission(0, 1, 1, 0));
     check(g.notifications == 1 && m.ReadU32(0x62000 + 64) == 0xc00000);
+    auto stateRun = [&](unsigned e, unsigned bank, unsigned mask,
+                        unsigned value, unsigned aux, unsigned mode,
+                        unsigned option) {
+      s.r[3] = resource;
+      s.r[4] = bank;
+      s.r[5] = mask;
+      s.r[6] = value;
+      s.r[7] = aux;
+      s.r[8] = mode;
+      s.r[9] = option;
+      check(battle_property_mutation61::Apply(e, m, {g, native}, s));
+      check(s.r[1] == initial.r[1] && s.r[21] == initial.r[21]);
+      return unsigned(s.r[3]);
+    };
+    m.WriteU32(resource + 4876, 0);
+    m.WriteU32(resource + 5088, 0);
+    m.WriteU32(bankFlags, 4);
+    check(!stateRun(0x82ac8ed8, 2, 4, 20, 30, 0, 99));
+    check(stateRun(0x82ac8ed8, 2, 4, 20, 30, 1, 0));
+    m.WriteU32(payload, 7);
+    check(stateRun(0x82ac8ec8, 2, 4, 20, 30, 0, 0) && m.ReadU32(payload) == 7);
+    check(stateRun(0x82ac8ec8, 2, 4, 20, 30, 1, 0) &&
+          m.ReadU32(payload) == 20 && m.ReadU32(other) == 30);
+    m.WriteU32(resource + 7 * 272 + 232, 2);
+    m.WriteU32(0x83213538 + 4 * (7 * 32 + 1), 1);
+    auto specialPayload = resource + 4 * (7 * 68 + 1 + 59);
+    m.WriteU32(specialPayload, 5);
+    check(stateRun(0x82ac8ec8, 7, 2, 3, 4, 1, 0) &&
+          m.ReadU32(specialPayload) == 8);
+    m.WriteU32(resource + 4876, 8);
+    check(!stateRun(0x82ac8ed8, 7, 2, 3, 4, 1, 0));
+    m.WriteU32(resource + 4876, 0);
+    m.WriteU32(bankFlags, 0);
+    check(stateRun(0x82ac8ec8, 2, 4, 21, 31, 0, 0) &&
+          m.ReadU32(payload) == 21 && m.ReadU32(other) == 31);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

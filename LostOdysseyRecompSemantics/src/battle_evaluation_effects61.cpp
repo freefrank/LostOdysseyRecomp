@@ -1,3 +1,4 @@
+#include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/battle_script_runtime61.h"
 #include <bit>
 #include "lo_semantics/battle_evaluation_effects61.h"
@@ -145,7 +146,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = payload;
     s.r[7] = 0;
     s.r[8] = 1;
-    d.guest.CallDirect(0x82ac8ec8, m, s);
+    (void)battle_property_mutation61::Apply(0x82ac8ec8, m, d, s);
   } else if (e == 0x82b0d210 || e == 0x82b0d2c8) {
     auto entry = m.ReadU32(owner + 108) == 0 ? 0x82ac71e8u : 0x82ac80b8u;
     s.r[3] = m.ReadU32(0x832aeb00);

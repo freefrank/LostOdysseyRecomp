@@ -23,13 +23,6 @@ struct EffectGuest final : manager_release_context61::GuestServices {
             m.ReadU32(0x70000 + 96) == 0x42c80000);
       return;
     }
-    if (e == 0x82ac8ec8) {
-      check(step == 1 && s.r[3] == 0x80000 && s.r[4] == 3 && s.r[5] == 8 &&
-            s.r[6] == 120 && s.r[7] == 0 && s.r[8] == 1 &&
-            m.ReadU32(0x80000 + 188) == 0);
-      ++side;
-      return;
-    }
     if (e == 0x82ac71e8 || e == 0x82ac80b8) {
       check(step == 1 && s.r[3] == 0x72000 && s.r[4] == 0x90000 &&
             s.r[5] == 120);
@@ -96,7 +89,9 @@ int main() {
         if (i >= 8)
           check(g.side == choice + 1);
         if (i == 7)
-          check(g.side == 1);
+          check(m.ReadU32(0x80000 + 188) == 0 &&
+                (m.ReadU32(0x80000 + 3 * 272 + 232) & 8) &&
+                m.ReadU32(0x80000 + 4 * (3 * 68 + 3 + 59)) == 120);
       }
     m.WriteU32(0x75000, 16);
     m.WriteU32(0x70000 + 64, 0xffffffff);

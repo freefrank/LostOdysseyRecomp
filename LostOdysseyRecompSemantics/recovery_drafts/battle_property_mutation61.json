@@ -89,6 +89,54 @@
       "instruction_count": 162,
       "body_sha256": "532ec603f7895b0ea62850ae4ae63a8f88c8edfd81703d8171a8b119b1162efd",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8CE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6766,
+      "instruction_count": 122,
+      "body_sha256": "19d94b105cc3e1ec385686b9e955b4e27f919c4c4de5f05034e9e01fd2150b00",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8EC8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 7034,
+      "instruction_count": 3,
+      "body_sha256": "1414e115662f20b952799b9920741d6d05b437748e1b34981a3b0f4ca7afcf91",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8ED8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 7046,
+      "instruction_count": 3,
+      "body_sha256": "62079e3c2316dbba4198cdd8adcf6262cdd8cdae6a532bdd64057b0ebf942a94",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82ACA6F0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 10470,
+      "instruction_count": 3,
+      "body_sha256": "19a0744868821dce6644847ed0819d7b1df54545e16bbf4ad155d404376b5a05",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8AE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6479,
+      "instruction_count": 3,
+      "body_sha256": "a86fa089c1925952aa1c5452ceca8bb584c833d888a2d38e86f69e2b7eb05747",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC91D8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 7493,
+      "instruction_count": 2,
+      "body_sha256": "e59de8ebd6607ade11bfabfb2bbfad76317bc22906c01d3aea6982afa6fd1bab",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -103,7 +151,13 @@
       "82AC8978",
       "82AC87D8",
       "82ACA700",
-      "82ACA468"
+      "82ACA468",
+      "82AC8CE0",
+      "82AC8EC8",
+      "82AC8ED8",
+      "82ACA6F0",
+      "82AC8AE8",
+      "82AC91D8"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -120,6 +174,7 @@
     "case_scope": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
     "bank_operations": "Recovered bank-mask query/removal, type-table-gated availability/insertion and gated whole-bank population count. Source scans only bits 0 through 30; insertion payload uses the first bit of the original mask. Presence removal retains the source red-zone ABI. Actual paired-presence evaluator now composes the recovered query. Property and evaluator fixtures pass targeted mutation/query, high-bit and payload cases; native gameplay remains unvalidated.",
     "payload_operations": "Recovered typed property payload comparison, maximum update, additive update and insertion. Source semantics retain the first original-mask bit for payload addressing, signed comparisons, last processed eligibility result and low-31-bit scan. The read-only adapter clears both mutation flags. Paired payload evaluators now use actual bank state; focused property and evaluator fixtures pass. Logical recovery only, not native gameplay acceptance.",
-    "status_admission": "Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated."
+    "status_admission": "Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated.",
+    "property_state": "Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim."
   }
 }
