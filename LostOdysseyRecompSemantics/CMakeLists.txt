@@ -331,6 +331,7 @@ add_library(LostOdysseyRecompSemantics STATIC
     src/battle_scene_tasks61.cpp
     src/battle_group_gauge61.cpp
     src/battle_resource_growth61.cpp
+    src/battle_scene_requests61.cpp
     src/battle_progression61.cpp
     src/battle_result_application61.cpp
     src/battle_effect_followups61.cpp

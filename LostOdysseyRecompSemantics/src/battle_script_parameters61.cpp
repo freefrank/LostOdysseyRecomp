@@ -1,4 +1,5 @@
 #include "lo_semantics/battle_manager_access61.h"
+#include "lo_semantics/battle_scene_requests61.h"
 #include "lo_semantics/battle_script_parameters61.h"
 #include "lo_semantics/recovery_abi.h"
 #include <bit>
@@ -84,7 +85,7 @@ void Periodic(GuestMemory &m, Dependencies d, Registers &s, unsigned owner) {
   s.r[4] = 0x61000000;
   s.r[5] = m.ReadU32(m.ReadU32(state() + 16736) + 4 * index);
   s.r[6] = 0;
-  d.guest.CallDirect(0x82b1aca8, m, s);
+  (void)battle_scene_requests61::Apply(0x82b1aca8, m, d, s);
   m.WriteU32(state() + 16748, m.ReadU32(state() + 16748) + 1);
 }
 void Flags(GuestMemory &m, Dependencies d, Registers &s, unsigned owner,

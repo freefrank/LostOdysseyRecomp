@@ -2,21 +2,21 @@
 #include "mesh_cook_main61_smoke.cpp"
 #undef main
 #include "lo_semantics/battle_script_parameters61.h"
+#include "battle_scene_request_fixture.h"
 struct ParametersGuest final : manager_release_context61::GuestServices {
   unsigned events = 0;
-  void CallDirect(GuestAddress e, GuestMemory &,
+  void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82b1aca8) {
-      if (s.r[3] != 0x832cc0fc || s.r[4] != 0x61000000 || s.r[5] != 77 ||
-          s.r[6])
-        throw std::runtime_error("periodic action");
+    if (e == 0x82b5d1a0)
       ++events;
+    if (requests_fixture::Direct(e, m, s))
       return;
-    }
     throw std::runtime_error("parameter direct boundary");
   }
-  void CallIndirect(GuestAddress, GuestMemory &,
-                    manager_release_context61::Registers &) override {
+  void CallIndirect(GuestAddress e, GuestMemory &m,
+                    manager_release_context61::Registers &s) override {
+    if (requests_fixture::Indirect(e, m, s))
+      return;
     throw std::runtime_error("parameter indirect boundary");
   }
 };
@@ -26,9 +26,13 @@ int main() {
     std::vector<test::Region> regions(cook_main_smoke::Regions.begin(),
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832cb000, 0x1000});
+    for (auto p :
+         {0x832cc000u, 0x83213000u, 0x832d2000u, 0x8330b000u, 0x820c9000u})
+      regions.push_back({p, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
+    requests_fixture::Setup(m);
     ParametersGuest guest;
     auto s = sort_engine61_oracle::Initial(0);
     constexpr unsigned owner = 0x60000, actor = 0x61000, script = 0x62000,
