@@ -30,12 +30,6 @@ struct TheftGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x150000;
       return;
     }
-    if (e == 0x82af52b0) {
-      if (s.r[4] != 1)
-        throw std::runtime_error("inventory selector");
-      s.r[3] = 0x150200;
-      return;
-    }
     if (e == 0x82ac3058) {
       if (s.r[4] != 0x90000)
         throw std::runtime_error("equipment target");

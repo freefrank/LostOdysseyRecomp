@@ -377,3 +377,11 @@ Recovered trait probability scaling by battle mode and per-slot trait chance dis
 ## Theft and evaluator dispatch coverage
 
 Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services.
+
+## Death transition
+
+Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external.
+
+## Inventory table lookup
+
+Recovered inventory table lookup behind the existing manager selector. The theft fixture now resolves inventory through the actual accessor and retains grant/removal/depletion checks. Global manager access remains an external service.

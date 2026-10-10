@@ -11,8 +11,8 @@ struct MutationGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x70000;
       return;
     }
-    if (e == 0x82ad0ad0) {
-      if (s.r[3] != 0x70000 || s.r[4] != 0x80000 || s.r[5] != 1 || s.r[6] != 1)
+    if (e == 0x82ac6348) {
+      if (s.r[4] != 0x80000)
         throw std::runtime_error("status notification ABI");
       ++notifications;
       return;
@@ -31,6 +31,7 @@ int main() {
                                       cook_main_smoke::Regions.end());
     regions.push_back({0x832c9000, 0x4000});
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83291000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();
@@ -178,7 +179,7 @@ int main() {
     m.WriteU32(0x62000 + 64, 0x800000);
     m.WriteU32(resource + 232, 0);
     check(admission(0, 1, 1, 0));
-    check(g.notifications == 1 && m.ReadU32(0x62000 + 64) == 0xc00000);
+    check(g.notifications == 1 && m.ReadU32(0x62000 + 64) == 0xc0000c);
     auto stateRun = [&](unsigned e, unsigned bank, unsigned mask,
                         unsigned value, unsigned aux, unsigned mode,
                         unsigned option) {
@@ -242,7 +243,7 @@ int main() {
     check(!m.ReadU32(resource + 232));
     m.WriteU32(0x62000 + 64, 0x800000);
     insert(0x82ac9ee8, 0);
-    check(!m.ReadU32(resource + 232) && m.ReadU32(0x62000 + 64) == 0xc00000 &&
+    check(!m.ReadU32(resource + 232) && m.ReadU32(0x62000 + 64) == 0xc0000c &&
           g.notifications == 3);
     m.WriteU32(resource + 5088, 0);
     m.WriteU16(0x70000 + 148, 1);
@@ -274,6 +275,38 @@ int main() {
     m.WriteU32(0x62000 + 64, 0);
     insert(0x82ac9be0, 15);
     check(m.ReadU32(resource + 232) == 0x8009 && g.notifications == 4);
+    m.WriteU32(0x62000 + 16, 2);
+    m.WriteU32(0x62000 + 20, 0x65000);
+    m.WriteU32(0x65000 + 8, 777);
+    m.WriteU32(0x62000 + 40, 0x66000);
+    m.WriteU32(0x62000 + 64, 0);
+    for (unsigned i = 0; i < 16; ++i)
+      m.WriteU32(0x66000 + 24 * i, 255);
+    m.WriteU32(resource + 124, 0x800000);
+    m.WriteU32(resource + 2588, 0x425c0000);
+    m.WriteU32(resource + 188, 12);
+    m.WriteU32(resource + 5 * 272 + 232, 1u << 4);
+    m.WriteU32(resource + 7 * 272 + 232, 1u << 18);
+    s.r[3] = 0x70000;
+    s.r[4] = resource;
+    s.r[5] = 1;
+    s.r[6] = 0;
+    check(battle_property_mutation61::Apply(0x82ad0ad0, m, {g, native}, s));
+    check(m.ReadU32(0x62000 + 64) == 4 && m.ReadU32(0x66000 + 15 * 24) == 16 &&
+          m.ReadU32(0x66000 + 15 * 24 + 4) == 777 &&
+          m.ReadU32(0x66000 + 15 * 24 + 16) == 2 &&
+          !m.ReadU32(resource + 2588) && !m.ReadU32(resource + 188) &&
+          m.ReadU32(resource + 156) == 0xffffffff &&
+          !m.ReadU32(resource + 124) && !m.ReadU32(resource + 5 * 272 + 232) &&
+          !m.ReadU32(resource + 7 * 272 + 232));
+    m.WriteU32(0x62000 + 64, 0);
+    m.WriteU32(0x70000 + 208, 77);
+    s.r[3] = 0x70000;
+    s.r[4] = resource;
+    s.r[5] = s.r[6] = 1;
+    check(battle_property_mutation61::Apply(0x82ad0ad0, m, {g, native}, s) &&
+          m.ReadU32(0x62000 + 64) == 12 && m.ReadU32(0x62000 + 468) == 77 &&
+          s.r[1] == initial.r[1]);
     check(!battle_property_mutation61::Apply(0, m, {g, native}, s));
     std::cout << "battle_property_mutation61 smoke passed\n";
     return 0;

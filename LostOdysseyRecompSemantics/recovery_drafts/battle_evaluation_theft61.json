@@ -33,6 +33,14 @@
       "instruction_count": 14,
       "body_sha256": "567508b7abfd6ed43b32d14d272c2172e6b409a5eb5dc78770b65e72e9a3b3e1",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AF52B0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.164.cpp",
+      "source_line": 2584,
+      "instruction_count": 15,
+      "body_sha256": "76e4541bd41c8918cac7f63109c2c6bbc85bd0cafe3d4ad667a473ed8789e401",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -40,7 +48,8 @@
       "82B13380",
       "82AA11F0",
       "82AA1268",
-      "82A9B288"
+      "82A9B288",
+      "82AF52B0"
     ],
     "header": "include/lo_semantics/battle_evaluation_theft61.h",
     "source": "src/battle_evaluation_theft61.cpp",
@@ -54,6 +63,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "theft_pipeline": "Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services. No Full72 or bitwise floating-point proof is claimed."
+    "theft_pipeline": "Recovered the theft evaluator and descriptor dispatch, source/target report labels, theft chance and inventory quantity removal. Focused checks cover relation rejection, missing loot, failed chance, actual inventory grant, already-looted state, equipment theft, inventory depletion and empty inventory, alongside stack/register restoration. The 97 statically recovered descriptor slots now have implementations for all 33 distinct callback targets; this is a dispatch-coverage milestone, not whole-game or runtime acceptance. Platform lookup, UI string assignment and equipment refresh remain external services. No Full72 or bitwise floating-point proof is claimed.",
+    "death_inventory_continuation": "Recovered inventory table lookup behind the existing manager selector. The theft fixture now resolves inventory through the actual accessor and retains grant/removal/depletion checks. Global manager access remains an external service."
   }
 }

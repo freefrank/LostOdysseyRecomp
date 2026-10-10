@@ -1,11 +1,72 @@
 #include "lo_semantics/battle_action_readiness61.h"
 #include "lo_semantics/battle_script_runtime61.h"
+#include "lo_semantics/battle_script_dispatch61.h"
 #include "lo_semantics/battle_action_adjustments61.h"
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/recovery_abi.h"
+#include <bit>
+#include <initializer_list>
 namespace lo::semantic::gpu::battle_property_mutation61 {
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
   using recovery_abi::Address;
+  if (e == 0x82ad0ad0) {
+    auto old = Address(s.r[1]), manager = Address(s.r[3]),
+         resource = Address(s.r[4]), notify = Address(s.r[5]) & 255,
+         direct = Address(s.r[6]) & 255;
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 25; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    s.r[1] -= 160;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    s.r[3] = 0x832c9c54;
+    s.r[4] = resource;
+    (void)battle_script_runtime61::Apply(0x82a9bdb0, m, d, s);
+    auto actor = Address(s.r[3]);
+    if (notify) {
+      auto flags = m.ReadU32(actor + 64);
+      if (!(flags & 4)) {
+        if (direct) {
+          m.WriteU32(actor + 64, flags | 8);
+          m.WriteU32(actor + 64, flags | 12);
+          m.WriteU32(actor + 468, m.ReadU32(manager + 208));
+        } else {
+          s.r[3] = 0x832c9c54;
+          s.r[4] = actor;
+          s.r[5] = actor;
+          s.r[6] = 2;
+          s.r[7] = 16;
+          (void)battle_script_dispatch61::Apply(0x82a9bdf8, m, d, s);
+          m.WriteU32(actor + 64, m.ReadU32(actor + 64) | 4);
+        }
+      }
+    }
+    s.r[3] = m.ReadU32(0x83291dc0);
+    s.r[4] = resource;
+    d.guest.CallDirect(0x82ac6348, m, s);
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto zero = std::bit_cast<float>(m.ReadU32(0x82000e50));
+    s.fpr_bits[0] = std::bit_cast<std::uint64_t>(double(zero));
+    m.WriteU32(resource + 2588, std::bit_cast<unsigned>(zero));
+    m.WriteU32(resource + 156, 0xffffffff);
+    m.WriteU32(resource + 124, m.ReadU32(resource + 124) & ~0x800000u);
+    m.WriteU32(resource + 188, 0);
+    for (auto id : {164u, 242u}) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      (void)battle_property_mutation61::Apply(0x82ac9000, m, d, s);
+    }
+    m.WriteU32(sp + 80, 0x8204a1d8);
+    s.r[1] += 160;
+    for (unsigned i = 25; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac9be0 || e == 0x82ac9ee8) {
     auto old = Address(s.r[1]), resource = Address(s.r[3]),
          id = Address(s.r[4]);
@@ -101,7 +162,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         s.r[4] = resource;
         s.r[5] = argument5;
         s.r[6] = argument6;
-        d.guest.CallDirect(0x82ad0ad0, m, s);
+        (void)battle_property_mutation61::Apply(0x82ad0ad0, m, d, s);
       }
     };
     execute();
@@ -310,7 +371,7 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
         s.r[4] = resource;
         s.r[5] = 1;
         s.r[6] = 1;
-        d.guest.CallDirect(0x82ad0ad0, m, s);
+        (void)battle_property_mutation61::Apply(0x82ad0ad0, m, d, s);
       }
     }
     s.r[3] = result;

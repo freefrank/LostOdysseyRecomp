@@ -16,9 +16,8 @@ struct EffectGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x76000;
       return;
     }
-    if (e == 0x82ad0ad0) {
-      check(s.r[3] == 0x76000 && s.r[4] == 0x90000 && s.r[5] == 1 &&
-            s.r[6] == 1);
+    if (e == 0x82ac6348) {
+      check(s.r[4] == 0x90000);
       ++side;
       return;
     }
@@ -47,6 +46,7 @@ int main() {
     regions.push_back({0x83264000, 0x1000});
     regions.push_back({0x831f3000, 0x21000});
     regions.push_back({0x83213000, 0x1000});
+    regions.push_back({0x83291000, 0x1000});
     test::GuestWindow w(regions);
     w.Fill(0);
     auto m = w.Memory();

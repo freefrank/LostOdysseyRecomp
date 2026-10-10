@@ -26,15 +26,16 @@ void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
 }
 } // namespace
 bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
-  if (e != 0x82b13380 && e != 0x82aa11f0 && e != 0x82aa1268 && e != 0x82a9b288)
+  if (e != 0x82b13380 && e != 0x82aa11f0 && e != 0x82aa1268 &&
+      e != 0x82a9b288 && e != 0x82af52b0)
     return false;
   auto old = Address(s.r[1]), owner = Address(s.r[3]), id = Address(s.r[4]);
-  unsigned frame = e == 0x82b13380   ? 4288
-                   : e == 0x82a9b288 ? 96
-                                     : 112,
-           first = e == 0x82b13380   ? 22
-                   : e == 0x82a9b288 ? 31
-                                     : 30;
+  unsigned frame = e == 0x82b13380                        ? 4288
+                   : (e == 0x82a9b288 || e == 0x82af52b0) ? 96
+                                                          : 112,
+           first = e == 0x82b13380                        ? 22
+                   : (e == 0x82a9b288 || e == 0x82af52b0) ? 31
+                                                          : 30;
   m.WriteU32(old - 8, Address(s.lr));
   for (unsigned i = first; i < 32; ++i)
     recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
@@ -47,7 +48,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     Call(0x82380a18, m, d, s);
     Call(0x82389b78, m, d, s);
   };
-  if (e == 0x82a9b288) {
+  if (e == 0x82af52b0) {
+    Call(0x82380a18, m, d, s);
+    Call(0x82ab0110, m, d, s);
+    s.r[3] = m.ReadU32(m.ReadU32(Address(s.r[3])) + 4 * id);
+  } else if (e == 0x82a9b288) {
     manager();
     s.r[4] = id;
     Call(0x82af52b0, m, d, s);

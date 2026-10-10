@@ -7,8 +7,8 @@ struct ApplicationGuest final : manager_release_context61::GuestServices {
   unsigned low = 0, dead = 0, counter = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82ad0ad0) {
-      if (s.r[4] != 0x80000 || s.r[5] != 1 || s.r[6] != 1)
+    if (e == 0x82ac6348) {
+      if (s.r[4] != 0x80000)
         throw std::runtime_error("death notification args");
       ++dead;
       return;
