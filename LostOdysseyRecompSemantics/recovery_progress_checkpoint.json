@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 238,
-    "distinct_entries": 1148,
+    "distinct_entries": 1149,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2935,7 +2935,8 @@
           "82B0FBD0",
           "82B12A98",
           "82B0F3E0",
-          "82B10AA8"
+          "82B10AA8",
+          "82B0C4E8"
         ],
         "focused_smoke_paths": 1,
         "validation": "Recovered nine descriptor effect callbacks: indexed dispatch and nested eligibility, property insert/remove and numeric payload, chance-gated source flag, fixed/quarter HP caps with recorded deltas, and percentage gauge addition/reset. Composes actual eligibility/chance/property/result/gauge semantics. Focused fixture passes dispatch limits, side rejection, property changes/truncation, failed-chance flag order, both HP caps and gauge effects. Descriptor constructor now has 42 of83 distinct callback targets recovered; remaining41 are not claimed complete. No gameplay/full ABI acceptance.",
@@ -2953,7 +2954,8 @@
         "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.",
         "descriptor_profile_damage": "Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
         "descriptor_action_rebuild": "Recovered B0F3E0 paired-property effect with side-mode eligibility, single-use target flags, special immunity cancellation, queued-action rewriting and property-triggered stat reconstruction. Focused integration exercises action-record replacement, flag/counter resets, paired payload insertion, repeat suppression and the real growth/skills/equipment/derived-stats chain. Descriptor callback coverage now 65 of 83 distinct targets; remaining 18 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-        "descriptor_drain": "Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+        "descriptor_drain": "Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+        "descriptor_physical_damage": "Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
       },
       {
         "unit": "battle_effect_scaling61",
@@ -3060,7 +3062,7 @@
   "battle_semantic_runtime_composition": {
     "date": "2026-10-10",
     "routed_units": 74,
-    "routed_distinct_entries": 633,
+    "routed_distinct_entries": 634,
     "source": "src/battle_semantic_runtime61.cpp",
     "routes": "src/battle_semantic_routes.inc",
     "generator": "tools/generate_battle_semantic_routes.py",
@@ -3069,7 +3071,7 @@
     "runtime_gameplay_validated": false,
     "summary": "Added an opt-in battle semantic runtime entry that routes all 511 currently recovered battle entries across 64 units, including nested direct calls and known indirect targets. Unknown services still forward to the supplied guest implementation. The focused composition fixture crosses script completion into real manager/resource lookup, routes a known virtual target, and verifies unknown direct/indirect forwarding. This connects recovered logic without claiming game-runtime integration or gameplay acceptance; inventory entry counts are unchanged.",
     "routed_battle_units": 71,
-    "routed_battle_entries": 604,
+    "routed_battle_entries": 605,
     "shared_context_entries": 27,
     "accepted_copy_fill_entries": 2,
     "shared_support_summary": "Extended the composed battle runtime with existing manager-release, string-storage and string-conversion semantics, plus accepted full-context copy and fill support. The graph now routes 511 battle entries and 29 shared/support entries. Focused composition checks pass UTF-16 length and actual copy/fill memory effects without guest escapes. No new recovery credit is claimed and native game-runtime hooking remains pending.",
@@ -3100,6 +3102,7 @@
     "descriptor_profile_damage": "Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
     "descriptor_action_rebuild": "Recovered B0F3E0 paired-property effect with side-mode eligibility, single-use target flags, special immunity cancellation, queued-action rewriting and property-triggered stat reconstruction. Focused integration exercises action-record replacement, flag/counter resets, paired payload insertion, repeat suppression and the real growth/skills/equipment/derived-stats chain. Descriptor callback coverage now 65 of 83 distinct targets; remaining 18 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_drain": "Recovered B10AA8 HP/MP drain: source HP restoration precedes target shield absorption and damage; optional MP restoration/depletion reuses the critical decision, while the special mode only depletes target MP. Preserves property142 blocking, result slots and both saved floating registers. Focused integration checks source healing versus shielded target damage, paired MP changes and MP-only mode. Descriptor callback coverage now 66 of 83 distinct targets; remaining 17 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
-    "shared_damage_helpers": "Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "shared_damage_helpers": "Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "descriptor_physical_damage": "Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
   }
 }

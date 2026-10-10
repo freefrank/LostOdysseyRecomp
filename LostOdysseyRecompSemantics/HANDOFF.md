@@ -1,3 +1,7 @@
+## Root direct continuation: descriptor physical damage (2026-10-10 UTC)
+
+Recovered B0C4E8 physical damage through attack, defense, category, gauge, status, critical, variance and normalization helpers. Resolves blocked, healing, MP-first absorption, half/minimum and zero-damage modes, shield absorption, result slots and final target class marking. Focused integration covers normal damage, MP-to-HP spillover, half damage and damage-to-healing conversion; critical random fixtures preserve the original inclusive threshold behavior. Descriptor callback coverage now 67 of 83 distinct targets; remaining 16 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
 ## Root direct continuation: shared damage helpers (2026-10-10 UTC)
 
 Recovered seven shared damage helpers: attack magnitude and cap, target defense attenuation, category matchup amplification and result marking, secondary critical chance, additive bounded randomness, minimum status reduction and effective-level cap. Uses guest-provided coefficients, exact source-width arithmetic and staged single-precision calculations. Focused checks cover normal and special action coefficient paths, category variants, critical bypass, random range, damage reduction and level cap. Descriptor callback coverage remains66 of83; these helpers support remaining damage effects. Logical ABI checks only, not gameplay or bitwise FP acceptance.

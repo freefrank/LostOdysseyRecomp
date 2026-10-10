@@ -553,6 +553,40 @@ int main() {
               s.fpr_bits[30] == initial.fpr_bits[30] &&
               s.fpr_bits[31] == initial.fpr_bits[31],
           "MP-only damage mode and preserved floating registers");
+    m.WriteU8(owner + 77, 0);
+    m.WriteU32(owner + 184, 0);
+    m.WriteU32(source + 5096, 0);
+    m.WriteU32(0xb0000 + 4 * (128 * 15 + 112 + 3), 100);
+    for (unsigned i = 100; i < 108; ++i)
+      m.WriteU32(0x831f3300 + 4 * i, 1);
+    m.WriteU32(source + 232, 0);
+    m.WriteU32(source + 68, 0);
+    m.WriteU32(target + 232, 0);
+    m.WriteU32(target + 4880, 0);
+    m.WriteU32(target + 4956, 0);
+    m.WriteU32(target + 272 + 232, 0);
+    m.WriteU32(target + 2136, 0);
+    put(source + 2624, 100);
+    put(target + 2628, 0);
+    put(owner + 80, 20);
+    put(owner + 84, 0);
+    put(target + 2588, 100);
+    call(0x82b0c4e8);
+    check(get(target + 2588) == 80 && (m.ReadU32(target + 124) & 0x40000000),
+          "physical damage pipeline and class marking");
+    m.WriteU32(owner + 184, 3);
+    put(target + 2616, 5);
+    call(0x82b0c4e8);
+    check(get(target + 2616) == 0 && get(target + 2588) == 65 &&
+              get(owner + 32) == 15,
+          "MP shield spills remaining damage into HP");
+    m.WriteU32(owner + 184, 6);
+    call(0x82b0c4e8);
+    check(get(target + 2588) == 55, "half damage rounds down with minimum");
+    m.WriteU32(owner + 184, 2);
+    call(0x82b0c4e8);
+    check(get(target + 2588) == 75 && get(owner + 32) == 0,
+          "damage becomes healing");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
