@@ -8,10 +8,6 @@ struct GatesGuest final : manager_release_context61::GuestServices {
   unsigned virtualResult = 0, first = 0, second = 0, calls = 0, predicate = 0;
   void CallDirect(GuestAddress e, GuestMemory &,
                   manager_release_context61::Registers &s) override {
-    if (e == 0x82b09050) {
-      s.r[3] = predicate;
-      return;
-    }
     if (e != 0x82ac90e8 && e != 0x82ac8978 && e != 0x82aca700)
       throw std::runtime_error("gate direct");
     if (s.r[3] != 0x90000 || (s.r[4] != 10 && s.r[4] != 11))
@@ -65,9 +61,13 @@ int main() {
     check(!run(0x82b102d8) && !run(0x82b08ab8));
     m.WriteU32(0x90000 + 64, 1);
     check(run(0x82b08ab8));
-    check(!run(0x82b10618));
-    g.predicate = 2;
+    for (unsigned i = 6; i <= 9; ++i)
+      m.WriteU32(0x8321343c + 8 * i, 1u << i);
     check(run(0x82b10618));
+    m.WriteU32(0x83213538 + 4 * (32 * 10 + 6), 1);
+    m.WriteU32(0x90000 + 272 * 10 + 232, 1u << 6);
+    check(!run(0x82b10618));
+    m.WriteU32(0x90000 + 272 * 10 + 232, 0);
     g.virtualResult = 1;
     check(!run(0x82b10618));
     g.virtualResult = 0;
@@ -114,6 +114,35 @@ int main() {
     s.r[3] = 0x73000;
     check(battle_action_eligibility61::Apply(0x82b120e0, m, {g, native}, s));
     check(m.ReadU8(0x73000 + 208) == 1);
+    m.WriteU32(0x73000 + 132, 10);
+    m.WriteU32(0x73000 + 136, 1);
+    m.WriteU32(0x73000 + 140, 255);
+    m.WriteU32(0x73000 + 148, 255);
+    m.WriteU32(0x90000 + 272 * 10 + 232, 0);
+    check(!run(0x82b0fb08));
+    m.WriteU32(0x90000 + 272 * 10 + 232, 3);
+    check(run(0x82b0fb08));
+    g.virtualResult = 0;
+    check(run(0x82b0ac68));
+    g.virtualResult = 1;
+    check(!run(0x82b0ac68));
+    m.WriteU32(0x8321343c + 8 * 15, 8);
+    m.WriteU32(0x73000 + 92, 0);
+    m.WriteU32(0x73000 + 100, 8);
+    check(run(0x82b0ac68));
+    m.WriteU32(0x73000 + 92, 10);
+    m.WriteU32(0x73000 + 100, 4);
+    g.virtualResult = 0;
+    m.WriteU32(0x90000 + 272 * 10 + 232, 4);
+    m.WriteU32(0x73000 + 104, 0);
+    check(run(0x82b0f310));
+    m.WriteU32(0x73000 + 104, 1);
+    m.WriteU32(0x90000 + 272 * 11 + 232, 0);
+    check(!run(0x82b0f310));
+    m.WriteU32(0x90000 + 272 * 11 + 232, 1);
+    check(run(0x82b0f310));
+    g.virtualResult = 1;
+    check(!run(0x82b0f310));
     check(!battle_evaluation_gates61::Apply(0, m, {g, native}, s));
     std::cout << "battle_evaluation_gates61 smoke passed\n";
     return 0;

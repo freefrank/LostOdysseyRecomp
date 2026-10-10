@@ -1,3 +1,7 @@
+## Root direct continuation: extended descriptor gates (2026-10-10 UTC)
+
+Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim.
+
 ## Root direct continuation: status admission (2026-10-10 UTC)
 
 Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated.

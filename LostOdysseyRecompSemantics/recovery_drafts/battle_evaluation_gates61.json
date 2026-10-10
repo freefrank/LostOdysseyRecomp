@@ -89,6 +89,38 @@
       "instruction_count": 41,
       "body_sha256": "5925e9d3173eb9abc75b05c96b9250fb096585d351db120fa9b8dab791c1e330",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B09050",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 17052,
+      "instruction_count": 54,
+      "body_sha256": "19efa56e52318eaa58b9f6fffbe3bd5c37ce712ccf0f032d141b6e5d06a33a79",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0FB08",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 8217,
+      "instruction_count": 38,
+      "body_sha256": "93fc7cf503a72f46304b2723cf88a68f792bc8b41546a4de30ad27884985c88c",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0AC68",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.165.cpp",
+      "source_line": 21411,
+      "instruction_count": 41,
+      "body_sha256": "2868bfaa7d66cea16bc3df99d166f6b929c98c376c5a41be4b8e3cefc112af96",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0F310",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 7058,
+      "instruction_count": 40,
+      "body_sha256": "7552d04a1bb09f90e4e39b39b6e4de96cb2a5c438641ff00916f8c24aefdc38b",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -103,7 +135,11 @@
       "82B0EB68",
       "82B0C430",
       "82B0E9D0",
-      "82B0ED68"
+      "82B0ED68",
+      "82B09050",
+      "82B0FB08",
+      "82B0AC68",
+      "82B0F310"
     ],
     "header": "include/lo_semantics/battle_evaluation_gates61.h",
     "source": "src/battle_evaluation_gates61.cpp",
@@ -117,6 +153,7 @@
     "runtime_validated": false,
     "complete": false,
     "focused_smoke_paths": 1,
-    "case_scope": "Focused fixture checks constant accept/reject leaves, target virtual status, distinct source/target IDs, source property 114, secondary predicate, paired-query early exits and exact low-byte-one matching. Recovered predicates and existing no-op are composed into actual descriptor dispatch. Lower property predicates and target virtual methods remain guest boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+    "case_scope": "Focused fixture checks constant accept/reject leaves, target virtual status, distinct source/target IDs, source property 114, secondary predicate, paired-query early exits and exact low-byte-one matching. Recovered predicates and existing no-op are composed into actual descriptor dispatch. Lower property predicates and target virtual methods remain guest boundaries; native gameplay is unvalidated. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
+    "extended_gates": "Recovered four-property availability conjunction, three-bank population gate, virtual-target/property-15 exception and availability/presence fallback. These callbacks compose actual property helpers, including the source empty-secondary success behavior and skipped bank 255 rows. Focused gate and eligibility fixtures pass. All existing paired descriptor predicates now resolve to recovered property semantics; target virtual methods remain boundaries. No native gameplay or full-equivalence claim."
   }
 }
