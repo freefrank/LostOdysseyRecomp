@@ -5,7 +5,7 @@
 #include "lo_semantics/battle_action_eligibility61.h"
 #include <iostream>
 struct TheftGuest final : manager_release_context61::GuestServices {
-  unsigned equipment = 0, inventoryNotices = 0;
+  unsigned inventoryNotices = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78) {
@@ -24,11 +24,7 @@ struct TheftGuest final : manager_release_context61::GuestServices {
       s.r[3] = 0x150000;
       return;
     }
-    if (e == 0x82ac0888) {
-      ++equipment;
-      m.WriteU32(unsigned(s.r[4]) + 2472, 0x42c80000);
-      return;
-    }
+
     throw std::runtime_error("theft direct " + std::to_string(e));
   }
   void CallIndirect(GuestAddress e, GuestMemory &,
@@ -126,10 +122,11 @@ int main() {
     m.WriteU32(0x7d00c, 1);
     m.WriteU32(0x7e008, 24);
     m.WriteU32(0x7e000 + 320, 7);
+    m.WriteU32(0x90000 + 2472, 0x42c80000);
     m.WriteU32(0x90000 + 5116, 7);
     run();
-    check(g.equipment == 1 && !m.ReadU32(0x90000 + 5116) &&
-          m.ReadU32(0x75000 + 24) == 251 && m.ReadU32(0x7d000 + 4 * 57) == 1 &&
+    check(!m.ReadU32(0x90000 + 5116) && m.ReadU32(0x75000 + 24) == 251 &&
+          m.ReadU32(0x7d000 + 4 * 57) == 1 &&
           m.ReadU32(0x180000 + 4 * (45276 + 7)) == 1 &&
           m.ReadU32(0x90000 + 124) == 0x11000000);
     m.WriteU32(0x140000 + 76 + 4 * (39359 + 7), 0x3f800000);

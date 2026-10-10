@@ -57,6 +57,14 @@
       "instruction_count": 86,
       "body_sha256": "40d5e46a0c529b282cfaa91f98ed94dd5531b23ff33a0fe17dd4d766aacc32e2",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC0888",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.159.cpp",
+      "source_line": 23745,
+      "instruction_count": 1001,
+      "body_sha256": "41b27be77cb76fcba875a23419d1e69709545ed61ed63b79c9ab2bbf7979aca9",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -67,7 +75,8 @@
       "82AC0100",
       "82AC0170",
       "82AC0388",
-      "82AC2468"
+      "82AC2468",
+      "82AC0888"
     ],
     "header": "include/lo_semantics/battle_resource_stats61.h",
     "source": "src/battle_resource_stats61.cpp",
@@ -82,6 +91,7 @@
     "complete": false,
     "focused_smoke_paths": 1,
     "case_scope": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof.",
-    "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated."
+    "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated.",
+    "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance."
   }
 }

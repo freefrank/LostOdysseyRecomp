@@ -405,3 +405,7 @@ Recovered six-slot equipment contribution aggregation, item HP percentage adjust
 ## Inline utf-16 copy
 
 Recovered the leaf forward UTF-16 copy used for equipment names, including terminator copy and source-register advance. Equipment refresh exercises it with synthetic empty names; existing string assignment fixtures remain passing. No runtime acceptance is claimed.
+
+## Skill recomputation
+
+Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.

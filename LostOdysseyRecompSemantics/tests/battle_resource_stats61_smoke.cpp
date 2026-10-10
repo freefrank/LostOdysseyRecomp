@@ -4,25 +4,10 @@
 #include "lo_semantics/battle_resource_stats61.h"
 #include <iostream>
 struct StatsGuest final : manager_release_context61::GuestServices {
-  unsigned step = 0;
   void CallDirect(GuestAddress e, GuestMemory &m,
                   manager_release_context61::Registers &s) override {
     if (e == 0x82380a18 || e == 0x82389b78 || e == 0x82ab0110) {
       s.r[3] = 0x70000;
-      return;
-    }
-    if (e == 0x82ac0888 || e == 0x82ac2468) {
-      if (s.r[3] != 0x73000 || s.r[4] != 0x80000)
-        throw std::runtime_error("stats service arguments");
-      if (e == 0x82ac0888) {
-        if (step++ != 0 || m.ReadU32(0x80000 + 2532))
-          throw std::runtime_error("base refresh order");
-        m.WriteU32(0x80000 + 2472, 0x42c80000);
-      } else {
-        if (step++ != 1)
-          throw std::runtime_error("gear refresh order");
-        m.WriteU32(0x80000 + 2532, 0x42480000);
-      }
       return;
     }
     throw std::runtime_error("stats direct");
@@ -117,7 +102,7 @@ int main() {
     for (unsigned i = 0; i < 5; ++i)
       m.WriteU32(0x80000 + 5116 + 4 * i, i + 1);
     run(0x82ac3058);
-    check(g.step == 1 && get(2592) == 150 && get(2588) == 150 &&
+    check(get(2592) == 150 && get(2588) == 150 &&
           m.ReadU32(0x73000 + 4) == 17 && m.ReadU32(0x73000 + 28) == 5);
     auto effect = [&](unsigned kind, unsigned value, unsigned slot) {
       m.WriteU32(0x180000 + 124, kind);
@@ -156,6 +141,60 @@ int main() {
           m.ReadU32(0x80000 + 4828) == 4 && m.ReadU32(0x80000 + 2652) == 8 &&
           m.ReadU32(0x80000 + 76252) == 1 && m.ReadU32(0x80000 + 76272) == 8 &&
           m.ReadU32(0x80000 + 76284) == 13);
+    // Skills combine learned entries and deduplicated equipment grants.
+    for (unsigned i = 0; i < 14; ++i) {
+      auto row = 0x100000 + 104 * (i + 1);
+      m.WriteU32(row + 44, 1);
+      m.WriteU32(row + 48, 7);
+      m.WriteU32(0x80000 + 5160 + 4 * i, i + 1);
+    }
+    auto skill = [&](unsigned id, unsigned type, unsigned bank, unsigned prop,
+                     unsigned value) {
+      auto row = 0x100000 + 104 * id;
+      m.WriteU32(row + 44, type);
+      m.WriteU32(row + 48, bank);
+      m.WriteU32(row + 52, 1u << (prop % 32));
+      m.WriteU32(row + 64, value);
+    };
+    skill(1, 1, 1, 44, 2);
+    skill(2, 1, 1, 44, 3);
+    skill(3, 3, 1, 48, 1);
+    skill(4, 6, 0, 2, 0);
+    m.WriteU32(0x100000 + 104 * 4 + 60, 8);
+    skill(5, 2, 0, 0, 0);
+    m.WriteU32(0x100000 + 104 * 5 + 76, 16);
+    skill(6, 1, 7, 240, 2);
+    skill(7, 1, 7, 240, 4);
+    skill(8, 1, 7, 241, 2);
+    skill(9, 1, 7, 241, 5);
+    skill(10, 1, 7, 252, 90);
+    skill(11, 1, 7, 252, 80);
+    skill(12, 1, 7, 232, 30);
+    m.WriteU32(0x100000 + 104 * 12 + 72, 1);
+    skill(13, 1, 7, 232, 20);
+    skill(14, 1, 1, 39, 2);
+    for (unsigned i = 0; i < 5; ++i) {
+      m.WriteU32(0x80000 + 5116 + 4 * i, i + 1);
+      m.WriteU32(0x150000 + 196 * (i + 1) + 24, i < 3 ? i + 2 : 0);
+    }
+    m.WriteU32(0x80000 + 5156, 14);
+    m.WriteU32(0x80000 + 124, 0x10000000);
+    m.WriteU32(0x83264978 + 36, 0x190000);
+    m.WriteU32(0x190000 + 36, 20);
+    m.WriteU32(0x80000 + 4936, 5);
+    m.WriteU32(0x80000 + 504, 1u << 17);
+    put(2532, 0);
+    put(2536, 0);
+    put(2472, 100);
+    put(2476, 20);
+    run(0x82ac0888);
+    check(get(2532) == 50 && get(2536) == 2);
+    check(m.ReadU32(0x80000 + 504) == ((1u << 12) | (1u << 16) | (1u << 7)));
+    check(m.ReadU32(0x80000 + 4876) == 12 && m.ReadU32(0x80000 + 4956) == 16);
+    check(m.ReadU32(0x80000 + 5156) == 30 && m.ReadU32(0x80000 + 5152) == 3);
+    check(m.ReadU32(0x80000 + 4 * (68 * 7 + 28 + 59)) == 80);
+    check(m.ReadU32(0x80000 + 4 * (68 * 7 + 8 + 59)) == 30);
+    check(s.fpr_bits[31] == initial.fpr_bits[31] && s.r[14] == initial.r[14]);
     std::cout << "battle resource stats logic smoke passed\n";
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';

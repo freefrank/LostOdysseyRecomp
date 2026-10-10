@@ -2,6 +2,9 @@
 #include "lo_semantics/battle_property_mutation61.h"
 #include "lo_semantics/recovery_abi.h"
 #include "lo_semantics/string_storage_context61.h"
+#include "lo_semantics/battle_script_actions61.h"
+#include "lo_semantics/battle_action_readiness61.h"
+#include "lo_semantics/battle_evaluation_chance61.h"
 #include <limits>
 #include <utility>
 #include <bit>
@@ -11,6 +14,9 @@ using recovery_abi::Address;
 void Call(unsigned e, GuestMemory &m, Dependencies d, Registers &s) {
   if (!battle_resource_stats61::Apply(e, m, d, s) &&
       !string_storage_context61::Apply(e, m, d, s) &&
+      !battle_script_actions61::Apply(e, m, d, s) &&
+      !battle_action_readiness61::Apply(e, m, d, s) &&
+      !battle_evaluation_chance61::Apply(e, m, d, s) &&
       !battle_property_mutation61::Apply(e, m, d, s))
     d.guest.CallDirect(e, m, s);
 }
@@ -22,6 +28,238 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
            : !(x >= -2147483648.) ? std::numeric_limits<std::int32_t>::min()
                                   : std::int32_t(x);
   };
+  if (e == 0x82ac0888) {
+    auto old = Address(s.r[1]), resource = Address(s.r[4]);
+    m.WriteU32(old - 8, Address(s.lr));
+    for (unsigned i = 14; i < 32; ++i)
+      recovery_abi::WriteU64(m, old - 16 - 8 * (31 - i), s.r[i]);
+    recovery_abi::WriteU64(m, old - 160, s.fpr_bits[31]);
+    s.r[1] -= 816;
+    auto sp = Address(s.r[1]);
+    m.WriteU32(sp, old);
+    m.WriteU32(sp + 132, 0x8204a1d8);
+    m.WriteU32(sp + 136, 0x8204a1d8);
+    m.WriteU32(sp + 128, 0x83264978);
+    const unsigned elementOffsets[] = {112, 104, 116, 80, 108};
+    for (auto off : elementOffsets)
+      m.WriteU32(sp + off, 0xffffffff);
+    for (auto off : {124u, 120u, 88u, 96u, 100u})
+      m.WriteU32(sp + off, 0);
+    for (unsigned i = 0; i < 128; ++i)
+      m.WriteU32(sp + 144 + 4 * i, 0);
+    unsigned count = 0;
+    auto initialCount = std::int32_t(m.ReadU32(resource + 5156));
+    for (std::int32_t i = 0; i < initialCount; ++i) {
+      auto id = m.ReadU32(resource + 5160 + 4 * unsigned(i));
+      if (id)
+        m.WriteU32(sp + 144 + 4 * count++, id);
+    }
+    auto equipment = m.ReadU32(0x83264978);
+    for (unsigned i = 0; i < 5; ++i) {
+      auto id =
+          m.ReadU32(equipment + 196 * m.ReadU32(resource + 5116 + 4 * i) + 24);
+      if (!id)
+        continue;
+      bool found = false;
+      for (unsigned j = 0; j < count; ++j)
+        if (m.ReadU32(sp + 144 + 4 * j) == id) {
+          found = true;
+          break;
+        }
+      if (!found)
+        m.WriteU32(sp + 144 + 4 * count++, id);
+    }
+    auto mask = [&](unsigned id) {
+      s.r[3] = id;
+      Call(0x8238aab0, m, d, s);
+      return Address(s.r[3]);
+    };
+    auto present = [&](unsigned id) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      Call(0x8238e368, m, d, s);
+      return Address(s.r[3]) & 255;
+    };
+    auto simple = [&](unsigned bank, unsigned bits, unsigned value) {
+      s.r[3] = resource;
+      s.r[4] = bank;
+      s.r[5] = bits;
+      s.r[6] = value;
+      s.r[7] = 0;
+      Call(0x82ac8968, m, d, s);
+    };
+    auto paired = [&](unsigned bank, unsigned bits, unsigned value,
+                      unsigned aux) {
+      s.r[3] = resource;
+      s.r[4] = bank;
+      s.r[5] = bits;
+      s.r[6] = value;
+      s.r[7] = aux;
+      s.r[8] = 1;
+      Call(0x82ac8ec8, m, d, s);
+    };
+    for (unsigned id = 48; id <= 52; ++id) {
+      s.r[3] = resource;
+      s.r[4] = id;
+      Call(0x82ac9000, m, d, s);
+    }
+    unsigned cumulative[7]{}, maxima[8]{}, special[2]{};
+    maxima[4] = 100;
+    constexpr unsigned sumIds[] = {44, 45, 39, 40, 41, 42, 43};
+    constexpr unsigned maxIds[] = {230, 239, 236, 237, 252, 240, 241, 238};
+    constexpr unsigned maxOffsets[] = {124, 120, 88, 0, 0, 96, 100, 0};
+    for (unsigned i = 0; i < count; ++i) {
+      auto id = m.ReadU32(sp + 144 + 4 * i);
+      if (!id)
+        continue;
+      auto row = m.ReadU32(0x83264978 + 72) + 104 * id;
+      auto type = m.ReadU32(row + 44), bank = m.ReadU32(row + 48),
+           bits = m.ReadU32(row + 52), value = m.ReadU32(row + 64);
+      if (type == 2) {
+        m.WriteU32(resource + 4956,
+                   m.ReadU32(resource + 4956) | m.ReadU32(row + 76));
+      } else if (type == 6) {
+        m.WriteU32(resource + 4876,
+                   m.ReadU32(resource + 4876) | bits | m.ReadU32(row + 60));
+      } else if (type == 3 && bank == 1) {
+        for (unsigned j = 0; j < 5; ++j)
+          if (bits == mask(48 + j)) {
+            auto p = sp + elementOffsets[j];
+            if (std::int32_t(value) > std::int32_t(m.ReadU32(p)))
+              m.WriteU32(p, value);
+            break;
+          }
+      } else if (type == 1) {
+        if (bank == 1) {
+          unsigned total = value;
+          for (unsigned j = 0; j < 7; ++j)
+            if (bits == mask(sumIds[j])) {
+              cumulative[j] += value;
+              total = cumulative[j];
+              break;
+            }
+          simple(bank, bits, total);
+        } else if (bank == 7) {
+          bool handled = false;
+          for (unsigned j = 0; j < 8; ++j)
+            if (bits == mask(maxIds[j])) {
+              handled = true;
+              bool write =
+                  j == 6 ||
+                  (j == 4 ? std::int32_t(value) < std::int32_t(maxima[j])
+                          : std::int32_t(value) > std::int32_t(maxima[j]));
+              if (write) {
+                auto total = j == 6 ? maxima[j] + value : value;
+                if (j == 6)
+                  m.WriteU32(sp + 100, total);
+                paired(bank, bits, total, m.ReadU32(row + 68));
+                maxima[j] = j == 6 ? total : m.ReadU32(row + 64);
+                if (maxOffsets[j])
+                  m.WriteU32(sp + maxOffsets[j], maxima[j]);
+              }
+              break;
+            }
+          if (handled)
+            continue;
+          if (bits != mask(232) && bits != mask(233)) {
+            paired(bank, bits, value, m.ReadU32(row + 68));
+            continue;
+          }
+          bool insert = m.ReadU32(row + 72) == 0;
+          for (unsigned part = 0; part < 2; ++part) {
+            for (unsigned j = 0; j < 2; ++j) {
+              if (m.ReadU32(row + (part ? 60 : 52)) != mask(232 + j))
+                continue;
+              auto v = m.ReadU32(row + (part ? 68 : 64));
+              // The secondary value intentionally still uses the primary mask.
+              if (insert)
+                paired(bank, m.ReadU32(row + 52), v, m.ReadU32(row + 68));
+              v = m.ReadU32(row + (part ? 68 : 64));
+              if (std::int32_t(v) > std::int32_t(special[j]))
+                special[j] = v;
+            }
+          }
+        } else if (bank == 4 && (bits == mask(131) || bits == mask(132))) {
+          paired(4, bits, value, 0);
+        } else {
+          s.r[3] = resource;
+          s.r[4] = bank;
+          s.r[5] = bits;
+          s.r[6] = 0;
+          Call(0x82aca6f0, m, d, s);
+        }
+      }
+    }
+    if (count) {
+      for (unsigned j = 0; j < 2; ++j)
+        if (special[j] && present(232 + j))
+          paired(7, mask(232 + j), special[j], 0);
+      for (auto j : {4u, 0u, 1u, 2u, 3u}) {
+        auto value = m.ReadU32(sp + elementOffsets[j]);
+        if (value != 0xffffffff)
+          simple(1, mask(48 + j), value);
+      }
+    }
+    if (s.cached_fp_control & 0x8040) {
+      s.cached_fp_control &= ~0x8040u;
+      d.fp.SetHostFpControl(s.cached_fp_control);
+    }
+    auto load = [&](unsigned p) { return std::bit_cast<float>(m.ReadU32(p)); };
+    auto factor = load(0x82000d7c);
+    s.fpr_bits[31] = std::bit_cast<std::uint64_t>(double(factor));
+    struct Modifier {
+      unsigned id, base, bonus, scale;
+    };
+    for (auto mod : {Modifier{44, 2472, 2532, 10},
+                     {45, 2500, 2560, 10},
+                     {39, 2476, 2536, 5},
+                     {41, 2480, 2540, 5},
+                     {43, 0, 2548, 5},
+                     {40, 2504, 2564, 5},
+                     {42, 0, 2568, 5}}) {
+      if (present(mod.id) != 1)
+        continue;
+      auto base = mod.base ? trunc(load(resource + mod.base)) : 0;
+      if (mod.base)
+        m.WriteU32(sp + 80, unsigned(base));
+      s.r[3] = resource;
+      s.r[4] = mod.id;
+      Call(0x82ac9858, m, d, s);
+      auto coefficient = std::int32_t(Address(s.r[3]) * mod.scale);
+      auto delta =
+          mod.base
+              ? trunc(float(float(float(coefficient) * float(base)) * factor))
+              : coefficient;
+      if (mod.base)
+        m.WriteU32(sp + 80, unsigned(delta));
+      recovery_abi::WriteU64(m, sp + 88, std::uint64_t(std::int64_t(delta)));
+      auto result = float(float(delta) + load(resource + mod.bonus));
+      s.fpr_bits[13] = std::bit_cast<std::uint64_t>(double(float(delta)));
+      s.fpr_bits[0] = std::bit_cast<std::uint64_t>(double(result));
+      m.WriteU32(resource + mod.bonus, std::bit_cast<unsigned>(result));
+    }
+    if (m.ReadU32(resource + 124) & 0x10000000) {
+      auto row = m.ReadU32(0x83264978 + 36) + 204 * m.ReadU32(resource + 68);
+      m.WriteU32(resource + 5156, m.ReadU32(row + 36));
+      if (!m.ReadU32(resource + 152) && present(241) == 1)
+        m.WriteU32(resource + 5156,
+                   m.ReadU32(resource + 5156) + m.ReadU32(sp + 100));
+      auto capacity = m.ReadU32(resource + 5156) + m.ReadU32(resource + 4936);
+      m.WriteU32(resource + 5156, std::int32_t(capacity) > 30 ? 30 : capacity);
+      m.WriteU32(resource + 5152, 1);
+      if (present(240) == 1)
+        m.WriteU32(resource + 5152, m.ReadU32(sp + 96));
+      if (std::int32_t(m.ReadU32(resource + 5152)) > 3)
+        m.WriteU32(resource + 5152, 3);
+    }
+    m.WriteU32(sp + 136, m.ReadU32(sp + 132));
+    s.r[1] += 816;
+    s.fpr_bits[31] = recovery_abi::ReadU64(m, old - 160);
+    for (unsigned i = 14; i < 32; ++i)
+      s.r[i] = recovery_abi::ReadU64(m, old - 16 - 8 * (31 - i));
+    s.lr = m.ReadU32(old - 8);
+    return true;
+  }
   if (e == 0x82ac0100) {
     if (s.cached_fp_control & 0x8040) {
       s.cached_fp_control &= ~0x8040u;

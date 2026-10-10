@@ -159,7 +159,7 @@
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
     "unit_count": 225,
-    "distinct_entries": 944,
+    "distinct_entries": 946,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -2390,7 +2390,8 @@
           "82AC91D8",
           "82AC9BE0",
           "82AC9EE8",
-          "82AD0AD0"
+          "82AD0AD0",
+          "82AC8968"
         ],
         "focused_smoke_paths": 1,
         "validation": "One focused fixture checks presence-only modes, exact low-byte removal mode, tail alias, removal of the mask and two indexed payloads, absent/out-of-range cases and red-zone ABI preservation. Action adjustments compose removal, and their fixture now verifies both linked properties are actually cleared instead of counting callbacks. Linked peer virtual behavior remains a service boundary; native gameplay is unvalidated. Logical/ABI only",
@@ -2399,7 +2400,8 @@
         "status_admission": "Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated.",
         "property_state": "Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim.",
         "status_insertion": "Recovered strict and permissive property insertion, including manager-gated low-HP state, duplicate suppression, immunity differences, property2/16 transitions and actor-aware death/property15 notification. HP normalization and the evaluator death callback now use real status mutation rather than mocking insertion. Focused checks verify actual flags, actor bits, payload initialization and notification arguments. The manager notification remains an external service; gameplay, Full72 and full ABI acceptance remain unvalidated.",
-        "death_inventory_continuation": "Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external."
+        "death_inventory_continuation": "Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external.",
+        "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance."
       },
       {
         "unit": "battle_preferred_target61",
@@ -2614,11 +2616,13 @@
           "82AC0100",
           "82AC0170",
           "82AC0388",
-          "82AC2468"
+          "82AC2468",
+          "82AC0888"
         ],
         "focused_smoke_paths": 1,
         "validation": "Focused fixtures cover two-bank gear-property removal, resource stat sums and limits, current HP/MP capping and refill, low-HP status transitions, refresh call ordering and manager equipment IDs. Theft equipment removal now composes this refresh instead of mocking it. Skill recomputation AC0888 and equipment contribution AC2468 remain guest boundaries; no runtime gameplay acceptance is claimed. Logical/ABI only",
-        "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated."
+        "equipment_contributions": "Recovered six-slot equipment contribution aggregation, item HP percentage adjustment and integer rounding, accuracy and accessory effects, plus weapon trait reconstruction and category masks. Refresh now executes actual equipment aggregation; focused checks cover percentage reduction, special rounding, accessory slot state and three weapon trait categories. Skill recomputation AC0888 remains the main guest dependency, and runtime gameplay is still unvalidated.",
+        "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance."
       }
     ],
     "evaluator_descriptor_coverage": {

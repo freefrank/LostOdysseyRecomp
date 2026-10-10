@@ -382,6 +382,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.lr = m.ReadU32(old - 8);
     return true;
   }
+  if (e == 0x82ac8968) {
+    s.r[8] = s.r[7];
+    s.r[7] = 1;
+    return battle_property_mutation61::Apply(0x82ac87d8, m, d, s);
+  }
   if (e == 0x82aca6f0) {
     s.r[7] = s.r[6];
     s.r[6] = 1;

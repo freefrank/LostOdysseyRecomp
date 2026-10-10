@@ -161,6 +161,14 @@
       "instruction_count": 68,
       "body_sha256": "daa050cbbafd9cfea204810ed1bd4c783ce9933910d0817591e788138561cad5",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC8968",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 6254,
+      "instruction_count": 3,
+      "body_sha256": "bf9d98c2296ec441d4955fa3c76b0fd112fcad7e385106674b60c49215c00cb6",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -184,7 +192,8 @@
       "82AC91D8",
       "82AC9BE0",
       "82AC9EE8",
-      "82AD0AD0"
+      "82AD0AD0",
+      "82AC8968"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -204,6 +213,7 @@
     "status_admission": "Recovered status admission query and mutation with type-table gates, immunity masks, bank-zero special status interactions, bank-seven restrictions and actor/manager notification side effects. The read-only adapter preserves its bypass argument. Paired admission callbacks now compose actual property state; focused fixtures check restrictions, typed presence, special-status replacement, actor flags and notification ABI. Only the notification manager services remain external for this path. Logical/ABI recovery only; native gameplay remains unvalidated.",
     "property_state": "Recovered payload/auxiliary property state admission and update, including exact option matching, immunity restrictions and bank-seven additive payload semantics. Added insertion/removal adapters and composed the source-property side effect in descriptor adapter B0D088. Focused property and effect fixtures pass real mutations without the property service mock. Low-31-bit scan and original-mask payload addressing are retained; no native gameplay or full-equivalence claim.",
     "status_insertion": "Recovered strict and permissive property insertion, including manager-gated low-HP state, duplicate suppression, immunity differences, property2/16 transitions and actor-aware death/property15 notification. HP normalization and the evaluator death callback now use real status mutation rather than mocking insertion. Focused checks verify actual flags, actor bits, payload initialization and notification arguments. The manager notification remains an external service; gameplay, Full72 and full ABI acceptance remain unvalidated.",
-    "death_inventory_continuation": "Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external."
+    "death_inventory_continuation": "Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external.",
+    "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance."
   }
 }
