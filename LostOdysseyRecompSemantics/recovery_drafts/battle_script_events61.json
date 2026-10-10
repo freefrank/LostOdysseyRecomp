@@ -1,0 +1,77 @@
+{
+  "schema": "semantic-recovery-draft-v1",
+  "scope": "Cross-actor event lookup, start/completion waits and priority barriers.",
+  "entries": [
+    {
+      "address": "8238C118",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.10.cpp",
+      "source_line": 24439,
+      "instruction_count": 31,
+      "body_sha256": "041b5347028df570c4e4b225a6be015a0b2c1d3321952ad8077c9ac02b5a4f6e",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9BEE0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 10539,
+      "instruction_count": 24,
+      "body_sha256": "da28061abd1a31dadcf70eec4cdfa71cdeeb077c8827847afb7ccbac2f170a00",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9CB20",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12342,
+      "instruction_count": 49,
+      "body_sha256": "02ec35f0499f84bc1a1d9b0826ef2e55cf0c7e9554e6a5076d57013a956a8a73",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9CBE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12451,
+      "instruction_count": 111,
+      "body_sha256": "88ad5de735e7c178a073cf7108a94fe8089135f9f45b92e87292ce0bce7afcd3",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9CDA8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12689,
+      "instruction_count": 143,
+      "body_sha256": "04eb4d6eaf52ff069495dda1f5033adc41d6cf53c131693d20eac8393995db5f",
+      "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82A9CFE8",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.156.cpp",
+      "source_line": 12996,
+      "instruction_count": 58,
+      "body_sha256": "611b1db72c9f7019690290059a652d1c4fbfe24317e56d77c0a17e09083ec239",
+      "status": "logical_implementation_smoke_validated"
+    }
+  ],
+  "implementation": {
+    "entries": [
+      "8238C118",
+      "82A9BEE0",
+      "82A9CB20",
+      "82A9CBE8",
+      "82A9CDA8",
+      "82A9CFE8"
+    ],
+    "header": "include/lo_semantics/battle_script_events61.h",
+    "source": "src/battle_script_events61.cpp",
+    "smoke": "tests/battle_script_events61_smoke.cpp"
+  },
+  "validation": {
+    "status": "compiled_with_focused_logic_smoke",
+    "date": "2026-10-10",
+    "mapping_credit": 0,
+    "library_validated": true,
+    "runtime_validated": false,
+    "complete": false,
+    "focused_smoke_paths": 1,
+    "case_scope": "A focused two-actor fixture checks self/ID lookup, enqueue and wait-until-start, two-stage wait-until-complete, priority barrier release and full-queue retry. The existing registered subroutine fixture also passes after composition into opcode dispatch. This validates bounded synthetic event transitions, not game battle behavior. Logical/ABI recovery only, not Full72, bitwise FP or gameplay proof."
+  }
+}

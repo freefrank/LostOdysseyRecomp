@@ -3,6 +3,7 @@
 #include "lo_semantics/battle_script_core61.h"
 #include "lo_semantics/battle_script_calls61.h"
 #include "lo_semantics/battle_script_angles61.h"
+#include "lo_semantics/battle_script_events61.h"
 #include "lo_semantics/recovery_abi.h"
 namespace lo::semantic::gpu::battle_script_dispatch61 {
 namespace {
@@ -73,7 +74,8 @@ struct Engine {
         (void)battle_script61::Apply(0x82a9bf40, m, d, s);
       else if (!battle_script_core61::Apply(target & ~3u, m, d, s) &&
                !battle_script_calls61::Apply(target & ~3u, m, d, s) &&
-               !battle_script_angles61::Apply(target & ~3u, m, d, s))
+               !battle_script_angles61::Apply(target & ~3u, m, d, s) &&
+               !battle_script_events61::Apply(target & ~3u, m, d, s))
         d.guest.CallIndirect(target & ~3u, m, s);
       if (W(State() + 28) & 0x80000000) {
         s.r[3] = 1;

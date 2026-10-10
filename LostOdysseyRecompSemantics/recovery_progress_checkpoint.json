@@ -158,8 +158,8 @@
   ],
   "post_resume_implementation_inventory": {
     "scope": "Address-level implementation inventory for the new zero-credit units; not additional baseline mapping, not a whole-game census, and not proof all addresses were previously unmapped. Dependencies already mapped are excluded from each implementation.entries declaration.",
-    "unit_count": 172,
-    "distinct_entries": 560,
+    "unit_count": 173,
+    "distinct_entries": 566,
     "units": [
       {
         "unit": "object_sort_lifecycle61",
@@ -1807,6 +1807,19 @@
         ],
         "focused_smoke_paths": 1,
         "validation": "A focused fixture uses private guest math constants to check scaled sine/cosine, zero and axis direction angles, cursor/stack restoration and equality of the shared trig helper with its existing recovered entry. No private constant bytes are published. The existing guest polynomial and rational atan2 routines are reused rather than host sine/cosine/atan2; exceptional FP and gameplay equivalence remain outside this logical validation. Logical/ABI only"
+      },
+      {
+        "unit": "battle_script_events61",
+        "entries": [
+          "8238C118",
+          "82A9BEE0",
+          "82A9CB20",
+          "82A9CBE8",
+          "82A9CDA8",
+          "82A9CFE8"
+        ],
+        "focused_smoke_paths": 1,
+        "validation": "A focused two-actor fixture checks self/ID lookup, enqueue and wait-until-start, two-stage wait-until-complete, priority barrier release and full-queue retry. The existing registered subroutine fixture also passes after composition into opcode dispatch. This validates bounded synthetic event transitions, not game battle behavior. Logical/ABI only"
       }
     ]
   },
