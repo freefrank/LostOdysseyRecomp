@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Build v1 image mod ZIPs and LOTEX2 runtime texture packs without modifying imported game files (Python 3.10+)."""
+"""Build image mod ZIPs and LOTEX2 runtime texture packs as mod folders (mod format v2) or top-level
+overlay files, without modifying imported game files (Python 3.10+)."""
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -29,6 +31,10 @@ DEFAULT_TEXCONV = Path("C:/Users/freefrank/worktrees/LostOdysseyRecomp/_keep/too
 BC_FORMATS = {71: ("BC1_UNORM", 8), 77: ("BC3_UNORM", 16), 80: ("BC4_UNORM", 8), 98: ("BC7_UNORM", 16)}
 BC_FOURCC = {b"DXT1": 71, b"DXT5": 77, b"ATI1": 80, b"BC4U": 80}
 FOLDERS = {"image": "images", "font": "fonts", "model": "models", "movie": "movies"}
+# Folders under overlay/, top-level or in a mod folder.
+KIND_FOLDERS = ("images", "fonts", "models", "movies", "textures", "text")
+# api_version=2 display metadata: UTF-8 bytes per field, as the runtime checks them.
+META_LIMITS = {"name": 128, "version": 64, "author": 128, "description": 1024}
 
 
 def text(value: object) -> str:
@@ -359,7 +365,31 @@ def mod_id(value: object) -> str:
     return value
 
 
-def pack(spec_path: Path, output: Path, layout: str) -> int:
+def display(field: str, value: object) -> str:
+    """One api_version=2 metadata value: a single line of UTF-8 without control characters."""
+    if not isinstance(value, str) or not value.strip(" \t"):
+        raise ValueError(f"{field} must be nonempty text")
+    value = value.strip(" \t")
+    try:
+        size = len(value.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{field} is not valid UTF-8 text") from exc
+    if size > META_LIMITS[field] or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value):
+        raise ValueError(f"{field} must be one line of at most {META_LIMITS[field]} UTF-8 bytes without control characters")
+    return value
+
+
+def manifest(identity: str, priority: int = 0, meta: dict | None = None) -> str:
+    """api_version=2 mod.ini. The game finds the files under the mod's overlay/ folder by name."""
+    lines = ["api_version=2", f"id={mod_id(identity)}"]
+    for field in META_LIMITS:
+        if meta and meta.get(field) is not None:
+            lines.append(f"{field}={display(field, meta[field])}")
+    lines += [f"priority={integer(priority, -(1 << 31), (1 << 31) - 1)}", "enabled=true"]
+    return "\n".join(lines) + "\n"
+
+
+def pack(spec_path: Path, output: Path, layout: str, meta: dict | None = None) -> int:
     if layout not in ("standalone", "overlay"):
         raise ValueError("layout must be standalone or overlay")
     with spec_path.open("rb") as file:
@@ -367,11 +397,15 @@ def pack(spec_path: Path, output: Path, layout: str) -> int:
     if len(raw) > 1024 * 1024:
         raise ValueError("mod specification exceeds 1 MiB")
     spec = json.loads(raw.decode("utf-8-sig"))
-    if not isinstance(spec, dict) or set(spec) - {"api_version", "id", "priority", "images"}:
+    if not isinstance(spec, dict) or set(spec) - {"api_version", "id", "priority", "images", *META_LIMITS}:
         raise ValueError("unknown top-level mod specification fields")
     integer(spec.get("api_version"), 1, 1)
     identity = mod_id(spec.get("id"))
     priority = integer(spec.get("priority", 0), -(1 << 31), (1 << 31) - 1)
+    # Metadata from mod.json; command-line values replace it.
+    fields = {field: spec[field] for field in META_LIMITS if field in spec}
+    fields.update({field: value for field, value in (meta or {}).items() if value is not None})
+    ini = manifest(identity, priority, fields)
     images = spec.get("images")
     if not isinstance(images, list) or not 1 <= len(images) <= 4096:
         raise ValueError("images must contain between 1 and 4096 entries")
@@ -401,7 +435,6 @@ def pack(spec_path: Path, output: Path, layout: str) -> int:
     with output.open("xb") as file:
         try:
             with zipfile.ZipFile(file, "w") as archive:
-                lines = ["api_version=1", f"id={identity}", f"priority={priority}", "enabled=true"]
                 def add(name: str, data: bytes) -> None:
                     info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
                     info.compress_type = zipfile.ZIP_DEFLATED
@@ -416,18 +449,10 @@ def pack(spec_path: Path, output: Path, layout: str) -> int:
                         if image.size != (width, height):
                             raise ValueError(f"{source}: expected {width}x{height}, got {image.size}")
                         data = encode(key, width, height, image.convert("RGBA").tobytes())
-                    if layout == "overlay":
-                        destination = "mods/" + name
-                    else:
-                        local = "images/" + PurePosixPath(name).name
-                        destination = f"mods/{identity}/{local}"
-                        lines.append(f"image:{key}={local}")
-                    add(destination, data)
+                    # Mod folder: the same overlay/ names inside mods/<id>/, found by name.
+                    add(("mods/" if layout == "overlay" else f"mods/{identity}/") + name, data)
                 if layout == "standalone":
-                    manifest = ("\n".join(lines) + "\n").encode("utf-8")
-                    if len(manifest) > 1024 * 1024:
-                        raise ValueError("generated mod.ini exceeds 1 MiB")
-                    add(f"mods/{identity}/mod.ini", manifest)
+                    add(f"mods/{identity}/mod.ini", ini.encode("utf-8"))
         except BaseException:
             # Close before unlinking on Windows as well.
             file.close()
@@ -505,7 +530,8 @@ def convert_dds(texconv: Path, folder: Path, jobs: list[dict], batch: int = 128,
 def texture_pack(index: Path, images: Path, images_index: Path | None, output: Path, layout: str,
                  identity: str | None, priority: int = 0, name_filter: str | None = None,
                  fingerprints: Path | None = None, test: str | None = None, mips: bool = False,
-                 payload: str = "rgba8", texconv: Path | None = None, bc7_all: bool = False) -> dict:
+                 payload: str = "rgba8", texconv: Path | None = None, bc7_all: bool = False,
+                 meta: dict | None = None) -> dict:
     if payload not in ("rgba8", "dds"):
         raise ValueError("payload must be rgba8 or dds")
     if payload == "dds":
@@ -514,11 +540,18 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
         from PIL import Image
     except ImportError as exc:
         raise ValueError("PNG conversion requires Pillow: python -m pip install Pillow") from exc
+    ini_text = None
     if layout == "standalone":
+        # Mod folder (format v2): <output>/<id>/mod.ini plus <id>/overlay/textures/.
         identity = mod_id(identity)
-        priority = integer(priority, -(1 << 31), (1 << 31) - 1)
-        base = output / identity
-        folder = base / "textures"
+        ini = output / identity / "mod.ini"
+        folder = output / identity / "overlay" / "textures"
+        if ini.exists():
+            # Adding to an existing mod folder keeps its mod.ini; v1 mods do not load overlay/ files.
+            if not re.search(r"^\s*api_version\s*=\s*2\s*$", ini.read_text(encoding="utf-8-sig"), re.M):
+                raise ValueError(f"{ini} is not api_version=2; the game does not load overlay/ files of v1 mods")
+        else:
+            ini_text = manifest(identity, priority, meta)
     elif layout == "overlay":
         folder = output / "overlay" / "textures"
     else:
@@ -536,7 +569,6 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
         stats[reason] = stats.get(reason, 0) + 1
 
     done: set[int] = set()
-    manifest = []
     jobs: list[dict] = []
     scratch = tempfile.TemporaryDirectory(prefix="lo_mod_") if payload == "dds" else None
     for row in read_rows(index, {"key", "width", "height", "format", "fingerprint"}):
@@ -605,7 +637,6 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
             file.write(data)
         stats["written"] += 1
         stats["bytes"] += len(data)
-        manifest.append(f"texture:{fingerprint:016x}=textures/{name}")
     if payload == "dds":
         try:
             convert_dds(texconv, Path(scratch.name), jobs)
@@ -624,19 +655,11 @@ def texture_pack(index: Path, images: Path, images_index: Path | None, output: P
                     skip("exists"); continue
                 stats["written"] += 1
                 stats["bytes"] += len(data)
-                manifest.append(f"texture:{job['fingerprint']:016x}=textures/{job['name']}")
         finally:
             scratch.cleanup()
-    if layout == "standalone" and manifest:
-        ini = base / "mod.ini"
-        if ini.exists():
-            have = ini.read_text(encoding="utf-8").splitlines()
-            with ini.open("a", encoding="utf-8", newline="\n") as file:
-                file.write("".join(line + "\n" for line in manifest if line not in have))
-        else:
-            with ini.open("x", encoding="utf-8", newline="\n") as file:
-                file.write("\n".join(["api_version=1", f"id={identity}", f"priority={priority}",
-                                      "enabled=true"] + manifest) + "\n")
+    if ini_text is not None and stats["written"]:
+        with ini.open("x", encoding="utf-8", newline="\n") as file:
+            file.write(ini_text)
     return stats
 
 
@@ -687,6 +710,50 @@ def language_clean(pack: Path, original: Path | None, output: Path | None) -> di
     return stats
 
 
+def overlay_to_mod(mods: Path, identity: str, priority: int = 0, meta: dict | None = None,
+                   dry_run: bool = False) -> tuple[list[tuple[Path, Path]], str]:
+    """Move the kind folders of <mods>/overlay into <mods>/<id>/overlay and write an api_version=2 mod.ini.
+    Folders are renamed, never copied, so a large pack moves at once; on failure, moved folders go back."""
+    identity = mod_id(identity)
+    if identity.lower() == "overlay":
+        raise ValueError("the mod id 'overlay' is reserved")
+    source, target = mods / "overlay", mods / identity
+    if not source.is_dir():
+        raise ValueError(f"{source} is not a folder")
+    if target.exists():
+        raise FileExistsError(f"{target} already exists")
+    ini_text = manifest(identity, priority, meta)
+    moves = [(child, target / "overlay" / child.name) for child in sorted(source.iterdir())
+             if child.name.lower() in KIND_FOLDERS and child.is_dir()]
+    if not moves:
+        raise ValueError(f"{source} has none of the folders {', '.join(KIND_FOLDERS)}")
+    if dry_run:
+        return moves, ini_text
+    (target / "overlay").mkdir(parents=True)
+    done: list[tuple[Path, Path]] = []
+    try:
+        for old, new in moves:
+            os.rename(old, new)  # Fails across volumes instead of copying.
+            done.append((old, new))
+        with (target / "mod.ini").open("x", encoding="utf-8", newline="\n") as file:
+            file.write(ini_text)
+    except BaseException:
+        for old, new in reversed(done):
+            os.rename(new, old)
+        (target / "mod.ini").unlink(missing_ok=True)
+        for folder in (target / "overlay", target):
+            try:
+                folder.rmdir()
+            except OSError:
+                pass
+        raise
+    try:
+        source.rmdir()  # Only when nothing else was left in it.
+    except OSError:
+        pass
+    return moves, ini_text
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -712,18 +779,25 @@ def main(argv: list[str] | None = None) -> int:
             command_parser.add_argument("--id", required=True)
             command_parser.add_argument("--priority", type=int, default=100)
             command_parser.add_argument("--output", type=Path, required=True)
+    def add_metadata(command_parser) -> None:
+        for field in META_LIMITS:
+            command_parser.add_argument(f"--{field}", help=f"mod folder {field} for mod.ini (at most {META_LIMITS[field]} UTF-8 bytes)")
     pack_parser = sub.add_parser("pack", help="compile PNG artwork and create an installable ZIP")
     pack_parser.add_argument("spec", type=Path)
     pack_parser.add_argument("--output", type=Path, required=True)
-    pack_parser.add_argument("--layout", choices=("standalone", "overlay"), default="standalone")
+    pack_parser.add_argument("--layout", choices=("standalone", "overlay"), default="standalone",
+                             help="standalone: mods/<id>/ mod folder (default); overlay: top-level mods/overlay/ files")
+    add_metadata(pack_parser)
     tex_parser = sub.add_parser("texture-pack", help="write LOTEX2 runtime texture replacements (experimental)")
     tex_parser.add_argument("--index", type=Path, required=True, help="export textures/index.csv with a fingerprint column")
     tex_parser.add_argument("--images", type=Path, required=True, help="PNG root mirroring the export layout")
     tex_parser.add_argument("--images-index", type=Path, help="index.csv with key,file columns (default: <images>/index.csv)")
     tex_parser.add_argument("--output", type=Path, required=True, help="mods root; existing files are never overwritten")
-    tex_parser.add_argument("--layout", choices=("overlay", "standalone"), default="overlay")
+    tex_parser.add_argument("--layout", choices=("overlay", "standalone"), default="overlay",
+                            help="overlay: <output>/overlay/textures (default); standalone: mod folder <output>/<id>/")
     tex_parser.add_argument("--id", help="standalone mod id")
     tex_parser.add_argument("--priority", type=int, default=0)
+    add_metadata(tex_parser)
     tex_parser.add_argument("--filter", help="case-insensitive substring of the texture key")
     tex_parser.add_argument("--fingerprints", type=Path, help="runtime fingerprint log csv; keep only fingerprints seen in game")
     tex_parser.add_argument("--test", choices=("tint", "nearest4"), help="transform the original PNGs for runtime verification")
@@ -732,6 +806,13 @@ def main(argv: list[str] | None = None) -> int:
                             help="rgba8 (default, large) or dds: BC1/BC4/BC7 compressed via Microsoft texconv")
     tex_parser.add_argument("--texconv", type=Path, help="path to texconv.exe (default: the known local copy, else PATH)")
     tex_parser.add_argument("--bc7-all", action="store_true", help="dds: use BC7 for DXT1 originals too (default BC1)")
+    convert_parser = sub.add_parser("overlay-to-mod", help="move a mods folder's top-level overlay/ into a mod folder "
+                                    "<mods>/<id>/ with an api_version=2 mod.ini (renames folders, no copies)")
+    convert_parser.add_argument("mods", type=Path, help="the folder that holds overlay/")
+    convert_parser.add_argument("--id", required=True)
+    convert_parser.add_argument("--priority", type=int, default=0)
+    add_metadata(convert_parser)
+    convert_parser.add_argument("--dry-run", action="store_true", help="print the moves and mod.ini without changing anything")
     inspect_parser = sub.add_parser("inspect", help="validate a LOTEX1/LOTEX2 file and print its identity")
     inspect_parser.add_argument("file", type=Path)
     clean_parser = sub.add_parser("language-clean",
@@ -741,6 +822,7 @@ def main(argv: list[str] | None = None) -> int:
                               help="untranslated export (default: original/ beside the pack, from --export-language-pack)")
     clean_parser.add_argument("--output", type=Path, help="new folder (default: share/<pack folder name> beside the pack)")
     args = parser.parse_args(argv)
+    meta = {field: getattr(args, field, None) for field in META_LIMITS}
     try:
         if args.command == "key":
             key = make_key(args.package, args.export_index, args.object)
@@ -794,16 +876,23 @@ def main(argv: list[str] | None = None) -> int:
                     file.write(json.dumps(spec, ensure_ascii=False, indent=2) + "\n")
                 print(f"Created {args.output}")
         elif args.command == "pack":
-            count = pack(args.spec, args.output, args.layout)
+            count = pack(args.spec, args.output, args.layout, meta)
             print(f"Packed {count} image(s): {args.output} ({args.layout})")
         elif args.command == "texture-pack":
+            if args.layout == "overlay" and (args.id or any(meta.values())):
+                raise ValueError("--id and mod metadata need --layout standalone")
             stats = texture_pack(args.index, args.images, args.images_index, args.output, args.layout, args.id,
                                  args.priority, args.filter, args.fingerprints, args.test, args.mips,
-                                 args.payload, args.texconv, args.bc7_all)
+                                 args.payload, args.texconv, args.bc7_all, meta)
             written, total = stats.pop("written"), stats.pop("bytes")
             skipped = ", ".join(f"{k}={v}" for k, v in sorted(stats.items())) or "none"
             print(f"Wrote {written} texture(s), {total} bytes ({total / 1048576:.1f} MiB) to {args.output} ({args.layout})")
             print(f"Skipped: {skipped}")
+        elif args.command == "overlay-to-mod":
+            moves, ini_text = overlay_to_mod(args.mods, args.id, args.priority, meta, args.dry_run)
+            for old, new in moves:
+                print(f"{'Would move' if args.dry_run else 'Moved'} {old} -> {new}")
+            print(f"{'Would write' if args.dry_run else 'Wrote'} {args.mods / args.id / 'mod.ini'}:\n{ini_text}", end="")
         elif args.command == "inspect":
             with args.file.open("rb") as file:
                 data = file.read(MAX_FILE + 1)
