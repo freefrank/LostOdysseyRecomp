@@ -249,6 +249,14 @@
       "instruction_count": 143,
       "body_sha256": "18136d29424b35e3c77630744ff722b61c72c0bc65c1b32a5f28f01bdb2f22bb",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82B0F3E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.166.cpp",
+      "source_line": 7183,
+      "instruction_count": 166,
+      "body_sha256": "790fdd435afe54c100695e51b5d779978a15a111a76ea8f0cc4ef9d49a1de034",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -283,7 +291,8 @@
       "82B0AD38",
       "82B0E798",
       "82B0FBD0",
-      "82B12A98"
+      "82B12A98",
+      "82B0F3E0"
     ],
     "header": "include/lo_semantics/battle_effect_mutation61.h",
     "source": "src/battle_effect_mutation61.cpp",
@@ -310,6 +319,7 @@
     "descriptor_transfer": "Recovered B0AD38 HP/MP transfer from source to target. Preserves same-ID and zero-available skips, truncated integer ratio with whole-available fallback, target restoration before source depletion, paired result slots and final effect mark. Focused integration covers both HP and MP transfers through the real result pipeline and same-ID suppression. Descriptor callback coverage now 61 of 83 distinct targets; remaining 22 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_random_add": "Recovered B0E798 random single-bit primary property insertion plus optional secondary mask, eligibility/chance gating and the source single-use target flag. Preserves original-mask bookkeeping in owner196 and primary selected-bit index. Focused integration checks random primary choice, secondary application and repeated-use suppression. Descriptor callback coverage now 62 of 83 distinct targets; remaining 21 unclaimed. Logical ABI checks only, not gameplay acceptance.",
     "descriptor_toggle": "Recovered B0FBD0 dual property toggling and AC9548 masked flag toggles. Existing flags are removed, while additions respect passive and temporary immunity masks. The effect preserves its asymmetric kind3/chance gate, passive-property7 exception, primary bit reporting and optional secondary bank. Focused checks cover toggling both banks, immune additions and passive gate suppression. Descriptor callback coverage now 63 of 83 distinct targets; remaining 20 unclaimed. Logical ABI checks only, not gameplay acceptance.",
-    "descriptor_profile_damage": "Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance."
+    "descriptor_profile_damage": "Recovered B12A98 profile-aggregate damage: selects the actor statistics page, applies the encounter183-185 override, sums1024 counters with source-width arithmetic, and computes either direct or ratio-reduced damage before real gauge/status/shield/result processing. Focused integration covers encounter page selection, direct aggregate damage, ratio reduction and preserved FPR31. Descriptor callback coverage now 64 of 83 distinct targets; remaining 19 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.",
+    "descriptor_action_rebuild": "Recovered B0F3E0 paired-property effect with side-mode eligibility, single-use target flags, special immunity cancellation, queued-action rewriting and property-triggered stat reconstruction. Focused integration exercises action-record replacement, flag/counter resets, paired payload insertion, repeat suppression and the real growth/skills/equipment/derived-stats chain. Descriptor callback coverage now 65 of 83 distinct targets; remaining 18 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

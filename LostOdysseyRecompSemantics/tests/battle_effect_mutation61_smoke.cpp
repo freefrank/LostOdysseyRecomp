@@ -497,6 +497,38 @@ int main() {
     check(get(target + 2588) == 81 && get(owner + 172) == 9 &&
               s.fpr_bits[31] == initial.fpr_bits[31],
           "profile ratio damage and FPR preservation");
+    m.WriteU32(owner + 20, 10);
+    m.WriteU32(owner + 24, 166);
+    m.WriteU32(owner + 92, 3);
+    m.WriteU32(owner + 100, 2);
+    m.WriteU32(owner + 108, 4);
+    m.WriteU32(owner + 112, 5);
+    m.WriteU32(owner + 120, 0);
+    m.WriteU32(target + 60, 2);
+    m.WriteU32(target + 14656, 0x400000);
+    m.WriteU32(target + 14660, 2);
+    m.WriteU32(target + 124, m.ReadU32(target + 124) | 512);
+    m.WriteU32(target + 76368, 123);
+    call(0x82b0f3e0);
+    check(m.ReadU32(0x400000) == 13 && m.ReadU32(0x400000 + 124208) == 13 &&
+              !m.ReadU32(target + 76368) && !(m.ReadU32(target + 124) & 512) &&
+              m.ReadU32(target + 4 * (68 * 3 + 1 + 59)) == 4,
+          "property effect rewrites pending action records");
+    m.WriteU32(owner + 20, 3);
+    m.WriteU32(owner + 24, 19);
+    call(0x82b0f3e0);
+    m.WriteU32(target + 3 * 272 + 232, 0);
+    call(0x82b0f3e0);
+    check((m.ReadU32(target + 124) & 2048) &&
+              !m.ReadU32(target + 3 * 272 + 232),
+          "property action single-use gate");
+    m.WriteU32(owner + 20, 0);
+    m.WriteU32(owner + 100, 0x2000000);
+    m.WriteU32(target + 68, 0);
+    m.WriteU32(target + 140, 7);
+    call(0x82b0f3e0);
+    check(m.ReadU32(target + 4952) == 2 && get(target + 2592) > 0,
+          "property-triggered full stats rebuild");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;
