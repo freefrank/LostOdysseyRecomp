@@ -60,6 +60,11 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     first = 28;
     literal = 80;
     break;
+  case 0x82b0f920:
+    frame = 192;
+    first = 24;
+    literal = 80;
+    break;
   case 0x82b0db98:
     frame = 144;
     first = 28;
@@ -180,7 +185,54 @@ bool Apply(GuestAddress e, GuestMemory &m, Dependencies d, Registers &s) {
     s.r[6] = 0;
     Call(method, m, d, s);
   };
-  if (e == 0x82b0db98) {
+  if (e == 0x82b0f920) {
+    bool allowed = eligible(2) || m.ReadU32(owner + 92) != 2;
+    if (allowed)
+      allowed = eligible(1) || m.ReadU32(owner + 92) != 1;
+    if (!allowed)
+      m.WriteU8(owner + 208, 0);
+    else if (m.ReadU32(owner + 92) != 2 || chance(0x82b08ea8)) {
+      mark();
+      unsigned total = 0;
+      for (unsigned i = 0; i < 4; ++i) {
+        m.WriteU32(sp + 96 + 4 * i, 0);
+        auto bank = m.ReadU32(owner + 132 + 8 * i);
+        if (bank != 255) {
+          s.r[3] = m.ReadU32(owner + 8);
+          s.r[4] = bank;
+          s.r[5] = m.ReadU32(owner + 136 + 8 * i);
+          Call(0x82ac85a0, m, d, s);
+          m.WriteU32(sp + 96 + 4 * i, Address(s.r[3]));
+        }
+        total += m.ReadU32(sp + 96 + 4 * i);
+      }
+      if (!total) {
+        s.r[3] = m.ReadU32(0x832cb790);
+        Call(0x82b2b298, m, d, s);
+      } else {
+        unsigned choice;
+        do {
+          s.r[3] = m.ReadU32(0x83264558);
+          s.r[4] = 0;
+          s.r[5] = 3;
+          s.r[6] = 12;
+          s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+          Call(0x82aa0740, m, d, s);
+          choice = Address(s.r[3]);
+        } while (!m.ReadU32(sp + 96 + 4 * choice));
+        s.r[3] = m.ReadU32(0x83264558);
+        s.r[4] = 0;
+        s.r[5] = m.ReadU32(sp + 96 + 4 * choice) - 1;
+        s.r[6] = 13;
+        s.r[7] = m.ReadU32(m.ReadU32(owner + 4) + 64);
+        Call(0x82aa0740, m, d, s);
+        s.r[5] = s.r[3];
+        s.r[3] = m.ReadU32(owner + 8);
+        s.r[4] = m.ReadU32(owner + 132 + 8 * choice);
+        Call(0x82ac91e0, m, d, s);
+      }
+    }
+  } else if (e == 0x82b0db98) {
     if (!eligible(1))
       m.WriteU8(owner + 208, 0);
     else {

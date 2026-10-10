@@ -377,6 +377,23 @@ int main() {
     check(get(target + 2588) == 70 && get(target + 2616) == 17 &&
               s.fpr_bits[31] == initial.fpr_bits[31],
           "optional MP restoration and FPR save");
+    m.WriteU32(owner + 92, 0);
+    m.WriteU32(owner + 132, 3);
+    m.WriteU32(owner + 136, 2);
+    for (unsigned i = 1; i < 4; ++i)
+      m.WriteU32(owner + 132 + 8 * i, 255);
+    m.WriteU32(target + 3 * 272 + 232, 6);
+    m.WriteU32(target + 4 * (68 * 3 + 1 + 59), 123);
+    m.WriteU32(target + 4 * (68 * 3 + 1 + 91), 456);
+    call(0x82b0f920);
+    check(m.ReadU32(target + 3 * 272 + 232) == 4 &&
+              !m.ReadU32(target + 4 * (68 * 3 + 1 + 59)) &&
+              !m.ReadU32(target + 4 * (68 * 3 + 1 + 91)),
+          "random ordinal property clearing");
+    call(0x82b0f920);
+    check(m.ReadU32(target + 3 * 272 + 232) == 4 &&
+              !m.ReadU32(0x200000 + 14888),
+          "empty eligible property selection cancels mark");
     std::puts("PASS effect dispatch, eligibility, property payloads, HP cap "
               "results and gauge changes");
     return 0;

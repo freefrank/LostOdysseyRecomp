@@ -185,6 +185,14 @@
       "instruction_count": 172,
       "body_sha256": "3354d407d60843c541841f5818fe70991a1002d0439476d79027d8afaff06572",
       "status": "logical_implementation_smoke_validated"
+    },
+    {
+      "address": "82AC91E0",
+      "source": "LostOdysseyRecompLib/ppc/ppc_recomp.160.cpp",
+      "source_line": 7503,
+      "instruction_count": 51,
+      "body_sha256": "e10f41de37255fc47babc686df8940d79b9c31cddf96d06d2920f90b34841f5f",
+      "status": "logical_implementation_smoke_validated"
     }
   ],
   "implementation": {
@@ -211,7 +219,8 @@
       "82AD0AD0",
       "82AC8968",
       "82AC85E8",
-      "82ACA1B8"
+      "82ACA1B8",
+      "82AC91E0"
     ],
     "header": "include/lo_semantics/battle_property_mutation61.h",
     "source": "src/battle_property_mutation61.cpp",
@@ -234,6 +243,7 @@
     "death_inventory_continuation": "Recovered actual death transition: actor event queue or pending completion flag, HP clearing, resource state reset and removal of properties164/242. Status insertion and HP normalization now compose this function instead of mocking manager notification. Targeted checks verify queued event, direct pending ID, actor flags and resource cleanup; the lower resource cleanup service remains external.",
     "skill_recomputation": "Recovered AC0888 learned/equipment skill aggregation with equipment deduplication, cumulative bonuses, maxima/minimum and deferred property handling, immunity/category masks, rounded stat modifiers, and player skill capacity caps. Added AC8968 mutation adapter. Equipment refresh and theft now compose real skill recomputation instead of fixture callbacks. Focused resource-stat, theft and evaluator eligibility checks pass; library builds. This is logical ABI coverage, not runtime gameplay or bitwise floating-point acceptance.",
     "scene_state": "Recovered active scene-object state lookup and removal, current-scene name matching, UTF-16 comparison and low-property-mask target selection. Scene removal composes destructor dispatch plus actual pointer-array compaction; script scene/target handlers compose the recovered checks. Library and focused completion/scene/target fixtures pass. Destructors remain explicit virtual services; no gameplay or full ABI acceptance is claimed.",
-    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance."
+    "script_action_boundaries": "Recovered script-specific property insertion ACA1B8, roster defaults AC3118, pending-action reset ACD530 and AB0B10, manager mode B48, and composition with the existing cyclic resource state B1F1D0. Script actions now compose these implementations and real property removal instead of guest fixtures. Four focused property, resource-stat, script-action and manager-access checks pass; library builds. Coverage remains logical ABI coverage, not gameplay, Full72 or complete floating-point/volatile-register acceptance.",
+    "descriptor_random_clear": "Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance."
   }
 }

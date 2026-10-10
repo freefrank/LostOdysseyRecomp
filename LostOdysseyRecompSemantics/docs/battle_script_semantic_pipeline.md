@@ -611,3 +611,7 @@ Recovered B0DB98 manager-scaled damage with B0A0D0 side-gauge attenuation, statu
 ## Descriptor cleansing effect
 
 Recovered B0AA70 cleansing restoration: HP healing through real scaling and result application, optional MP restoration reusing the critical decision, followed by primary and optional secondary property-bank clearing. Focused integration checks HP/MP changes, both cleared masks, the zero-MP branch and preserved FPR31. Descriptor callback coverage now 58 of 83 distinct targets; remaining 25 unclaimed. Logical ABI checks only, not gameplay or bitwise FP acceptance.
+
+## Descriptor random clearing
+
+Recovered B0F920 random property removal and AC91E0 ordinal clearing. The effect counts four candidate banks using source mask-presence behavior, cancels its result marker if none qualify, selects a nonempty candidate and clears one set bit with both payload words. Preserves source exclusion of bit31 and source random retry semantics. Focused checks cover actual random selection, payload clearing and no-eligible-bank cancellation. Descriptor callback coverage now 59 of 83 distinct targets; remaining 24 unclaimed. Logical ABI checks only, not gameplay acceptance.
