@@ -1,3 +1,7 @@
+## Root direct continuation: multi-kind action parameters (2026-10-10 UTC)
+
+Added 82B11DF0 parameter setup for skill, item and special action branches, composing shared random selection and manager state writes. The focused fixture covers table fields, 25-unit normalization, value-99 cases, alternate override, resource-group override and mutable adjustment callbacks. Three adjustment helpers remain explicit guest boundaries; top-level effect-dispatch composition and native gameplay are unvalidated.
+
 ## Root direct continuation: battle action parameters (2026-10-10 UTC)
 
 Two concrete action parameter handlers now compose recovered resource properties, random-range selection and manager field updates. A compact fixture covers their normal/alternate and property-dependent branches. The field meanings remain neutral rather than inferred gameplay labels; effect-dispatcher integration is next.
