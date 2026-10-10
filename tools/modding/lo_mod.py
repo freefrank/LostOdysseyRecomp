@@ -879,8 +879,8 @@ def main(argv: list[str] | None = None) -> int:
             count = pack(args.spec, args.output, args.layout, meta)
             print(f"Packed {count} image(s): {args.output} ({args.layout})")
         elif args.command == "texture-pack":
-            if args.layout == "overlay" and (args.id or any(meta.values())):
-                raise ValueError("--id and mod metadata need --layout standalone")
+            if args.layout == "overlay" and any(meta.values()):
+                raise ValueError("mod metadata needs --layout standalone")
             stats = texture_pack(args.index, args.images, args.images_index, args.output, args.layout, args.id,
                                  args.priority, args.filter, args.fingerprints, args.test, args.mips,
                                  args.payload, args.texconv, args.bc7_all, meta)

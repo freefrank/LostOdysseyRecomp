@@ -31,10 +31,15 @@ struct Diagnostic { std::filesystem::path manifest; size_t line = 0; std::string
 // applies only while the player has it selected in Settings, in every mode.
 // id is lower case; base is a three-letter game language code (int, jpn...).
 struct LanguagePack { std::string id, name, base; std::filesystem::path folder; };
-// One folder under the mods root that holds a mod.ini, valid or not.
+// Mod: a folder with a mod.ini. LanguagePack: a folder with a language.ini
+// (never a mod, even beside a mod.ini); listed read-only, chosen in Settings.
+enum class ModKind : uint32_t { Mod, LanguagePack };
+// One folder under the mods root that holds a mod.ini or language.ini, valid or not.
 struct ModInfo {
-    std::string id;                                 // manifest id, else the folder name
-    std::string name, version, author, description; // api_version=2 metadata; empty when unset
+    ModKind kind = ModKind::Mod;
+    std::string id;                                 // manifest or pack id, else the folder name
+    std::string name, version, author, description; // api_version=2 metadata (pack: name); empty when unset
+    std::string base;                               // language packs: base language code (int, jpn...)
     std::filesystem::path folder;
     int32_t priority = 0;
     uint32_t apiVersion = 0;                        // 0: mod.ini rejected (see problems)
@@ -56,9 +61,10 @@ public:
 // LO_MODS_MODE=overlay isolates external managers from mod folders AND providers.
 // The default combined mode keeps top-level overlay > provider > mod folders.
 // Mod folders follow modList (mod-list.ini, the in-game manager's order), then
-// priority. Each api_version=2 folder's overlay/ is listed once here, so
-// Resolve is a hash lookup. Containment is lexical: files may resolve through
-// a VFS (MO2) or symlinks. An empty modList means no list file.
+// priority. Each api_version=2 folder's overlay/ is listed once, on a thread
+// Initialize starts (MO2's VFS lists slowly); Resolve, ListTexts and ListMods
+// wait for it and then are hash lookups. Containment is lexical: files may
+// resolve through a VFS (MO2) or symlinks. An empty modList means no list file.
 void Initialize(const std::filesystem::path& root, const std::filesystem::path& modList = {});
 void Reload();
 void Shutdown();
@@ -67,9 +73,10 @@ std::filesystem::path Root();
 ResolutionMode Mode();
 bool Enabled();
 std::vector<Diagnostic> Diagnostics();
-std::vector<std::string> ModIds(); // Active mod folders, sorted.
-// Every mod folder found, active or not, highest precedence first. Empty when
-// mods are disabled (LO_MODS=0, invalid LO_MODS_MODE).
+std::vector<std::string> ModIds(); // Active mod folders, highest first; does not wait.
+// Every mod folder found, active or not, highest precedence first, then the
+// language packs by folder name (never active; mod-list.ini does not order
+// them). Empty when mods are disabled (LO_MODS=0, invalid LO_MODS_MODE).
 std::vector<ModInfo> ListMods();
 // The mod-list.ini path given to Initialize (empty if none).
 std::filesystem::path ModListPath();
@@ -78,8 +85,9 @@ std::filesystem::path ModListPath();
 // installed right now, comments) stay right after the id that preceded them.
 // Takes effect at the next Initialize/Reload. False and *error on failure.
 bool SaveModList(const std::vector<std::pair<std::string, bool>>& order, std::string* error = nullptr);
-// Cheap pre-check before fingerprinting uploads: a mod texture file or entry,
-// a texture provider or an overlay/textures folder existed at Initialize.
+// Cheap pre-check before fingerprinting uploads, never waits for the listing:
+// an active mod's texture line or overlay/textures folder, a texture provider
+// or a top-level overlay/textures folder existed at Initialize.
 bool HasTextureReplacements();
 // Every text replacement Resolve would return, one per member path (top-level
 // overlay files first, then mod folders in order). Providers are not asked.

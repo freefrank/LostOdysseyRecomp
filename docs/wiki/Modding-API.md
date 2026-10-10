@@ -32,7 +32,7 @@ if (auto image = modding::ReadImageReplacement(request, width, height)) {
 | `standalone` | Trusted provider, mod folders in order; top-level overlay ignored. |
 | `overlay` | Top-level overlay only; mod folders and providers are not consulted. |
 
-The top-level overlay (`mods/overlay/`) holds the files of overlay packages, which a manager such as Mod Organizer 2 merges in its own order. Its files are checked on each request, for the kind folders (`textures`, `images`, `text`, …) that existed at `Initialize`. Files of mod folders are listed once at `Initialize`, so a request for them is a table lookup, not a file-system probe.
+The top-level overlay (`mods/overlay/`) holds the files of overlay packages, which a manager such as Mod Organizer 2 merges in its own order. Its files are checked on each request, for the kind folders (`textures`, `images`, `text`, …) that existed at `Initialize`. Files of mod folders are listed once, on a background thread that `Initialize` starts, because listing through Mod Organizer 2's virtual file system costs about 150 µs per file (about 2.5 s for 15,000 textures). A request that comes before the listing is done waits for it; later requests are table lookups, not file-system probes. Text is listed separately, so the game's text never waits for a large texture folder.
 
 `overlay` mode prevents a mod disabled in an external manager from reappearing through a second installation or provider. Normal overlay absence returns no replacement. After a file is selected, invalid contents fall back to the original; the decoder does not search lower-priority mods for a different payload. The same holds for a mod-folder file deleted after `Initialize`.
 
@@ -40,7 +40,7 @@ The top-level overlay (`mods/overlay/`) holds the files of overlay packages, whi
 
 ## Mod folders
 
-Mod folders are the direct, non-hidden directories under the root that hold a `mod.ini`. The `overlay` directory is reserved. A manifest is UTF-8 `key=value` text, at most 1 MiB, with optional BOM. Whole-line `#` and `;` comments are accepted. There are no INI sections, quoting or inline comments.
+Mod folders are the direct, non-hidden directories under the root that hold a `mod.ini`. A folder with a `language.ini` is a [language pack](#text-language-packs) instead, never a mod; a `mod.ini` next to it is ignored with a diagnostic. Both kinds sit side by side in the mods root. The `overlay` directory is reserved. A manifest is UTF-8 `key=value` text, at most 1 MiB, with optional BOM. Whole-line `#` and `;` comments are accepted. There are no INI sections, quoting or inline comments.
 
 ### Format v2 (`api_version=2`)
 
@@ -99,6 +99,7 @@ my-menu=off
 - A mod takes part when its `mod.ini` does not say `enabled=false` and the list does not say `off`.
 - Listed mods come first, in list order. Mods not in the list follow, by `priority` (higher first) and then folder name (lexically later first), and count as `on`. Without a list this is the v1 order.
 - Ids without an installed mod are ignored and stay in the file, so a mod disabled in MO2 (its folder disappears) returns to its place.
+- The list orders mod folders only. Language packs have no line in it; players choose one in Settings → System → Game language.
 
 For each resource, the first mod in this order that has it wins, with its resource line or else its overlay file. Examples, all for the texture `fp-…ab` in combined mode:
 
@@ -120,7 +121,9 @@ std::filesystem::path modding::ModListPath();        // the mod-list.ini given t
 bool modding::SaveModList(const std::vector<std::pair<std::string, bool>>& order, std::string* error = nullptr);
 ```
 
-`ModInfo` holds the id (the folder name when the manifest has none or is rejected), the v2 display fields, the folder, priority, `apiVersion` (0 when the manifest is rejected), `manifestEnabled`, `listEnabled`, `active` (contributes files now), `overlayFiles` and `manifestEntries` (counted for active mods), and `problems` (that mod's diagnostics). In `overlay` mode every mod is listed and none is active; with mods disabled the list is empty.
+`ModInfo` holds the id (the folder name when the manifest has none or is rejected), the v2 display fields, the folder, priority, `apiVersion` (0 when the manifest is rejected), `manifestEnabled`, `listEnabled`, `active` (contributes files now), `overlayFiles` and `manifestEntries` (counted for active mods), and `problems` (that mod's diagnostics). In `overlay` mode every mod is listed and none is active; with mods disabled the list is empty. `ListMods` waits for the background listing.
+
+Language packs follow the mods, by folder name, as read-only entries: `kind` is `ModKind::LanguagePack` (`ModKind::Mod` for mods), with the pack's `id`, `name` and `base` (the folder name and empty fields when its `language.ini` is rejected) and its `problems`. They are never `active` here and take no part in `SaveModList`; a manager shows them and points to Settings → System → Game language.
 
 `SaveModList` takes the order highest first, `true` for on. It checks the ids, writes a temporary file next to `mod-list.ini` and renames it over the old one. Lines of the old file whose id is not in `order`, and comments, stay right after the id that preceded them. The current snapshot does not change; the new order applies after `Reload()` or a restart. All functions are thread-safe; snapshots are immutable.
 

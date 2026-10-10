@@ -213,7 +213,7 @@ class ModToolsTest(unittest.TestCase):
         (out4 / "v1" / "mod.ini").write_text("api_version=1\nid=v1\n")
         self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--layout", "standalone", "--id", "v1"]), 2)
         self.assertFalse((out4 / "v1" / "overlay").exists())
-        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--id", "x"]), 2)  # overlay layout
+        self.assertEqual(mod.main(["texture-pack", *images, "--output", str(out4), "--name", "x"]), 2)  # overlay layout
         with self.assertRaises(ValueError):
             mod.inspect(data + b"\0")
 

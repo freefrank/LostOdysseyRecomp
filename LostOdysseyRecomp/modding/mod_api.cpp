@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <future>
 #include <map>
 #include <mutex>
 #include <set>
@@ -21,16 +22,31 @@ struct Entry {
     std::filesystem::path file;
     uint32_t mod = 0; // index into Snapshot::mods
 };
+// The files of the active mod folders, winners in mod order.
+struct Index {
+    std::unordered_map<std::string, Entry> entries;
+    std::vector<size_t> overlayFiles;                   // per Snapshot::mods index
+    std::vector<std::pair<uint32_t, Diagnostic>> problems; // folder listings that failed
+};
+// One active mod's share of the index: resolved mod.ini lines, kind folders to list.
+struct ModFiles {
+    uint32_t mod = 0;
+    std::vector<std::pair<std::string, Entry>> declared;
+    std::vector<std::pair<AssetKind, std::filesystem::path>> folders;
+};
 struct Snapshot {
     std::filesystem::path root, defaultRoot, modList;
-    std::unordered_map<std::string, Entry> entries; // winners in mod order
+    // Listing thousands of files costs about 150 us each through MO2's VFS, so
+    // the index is built in the background from Initialize; lookups wait for it.
+    // [1] holds text, which the game reads at boot, [0] every other kind.
+    std::shared_future<Index> index[2];
     std::vector<ModInfo> mods;                      // every mod folder, effective order
     std::vector<std::string> modIds;
     std::vector<LanguagePack> languagePacks;
     std::vector<Diagnostic> diagnostics;
     ResolutionMode mode = ResolutionMode::Combined;
     bool enabled = false;
-    bool textureEntries = false;
+    bool textureEntries = false; // a texture line or overlay/textures folder of an active mod
     uint32_t overlayKinds = 0; // bit per AssetKind: top-level overlay/<folder> existed
 };
 // mod.ini as read, before the effective order decides whether its files count.
@@ -290,57 +306,64 @@ std::optional<Loaded> LoadManifest(Snapshot& snapshot, const std::filesystem::pa
     l.info.apiVersion = version;
     return l;
 }
-void Add(Snapshot& snapshot, const std::string& key, Entry&& entry) {
-    snapshot.textureEntries |= entry.id.kind == AssetKind::Texture;
-    snapshot.entries.try_emplace(key, std::move(entry));
-}
-// Lists a mod's overlay/ kind folders once. Names match the top-level overlay
+// Lists one kind folder of a mod's overlay/. Names match the top-level overlay
 // (ASCII case-insensitive); paths stay as written, so a VFS or symlinks work.
-size_t IndexOverlay(Snapshot& snapshot, Loaded& l, uint32_t mod) {
+size_t ListKindFolder(Index& index, AssetKind kind, const std::filesystem::path& folder, uint32_t mod) {
     size_t count = 0;
-    std::error_code ec;
-    for (std::filesystem::directory_iterator top(l.info.folder / "overlay", ec), end; !ec && top != end; top.increment(ec)) {
-        std::error_code entryError;
-        const auto folder = Lower(Utf8(top->path().filename()));
-        const auto kind = FolderKind(folder);
-        if (!kind || !top->is_directory(entryError)) continue;
-        std::error_code listError;
-        if (*kind == AssetKind::Text) {
-            const auto base = top->path();
-            for (std::filesystem::recursive_directory_iterator it(base, listError), last; !listError && it != last; it.increment(listError)) {
-                std::error_code fileError;
-                if (!it->is_regular_file(fileError)) continue;
-                const auto relative = Utf8(it->path().lexically_relative(base));
-                if (relative.size() <= 5 || Lower(relative.substr(relative.size() - 5)) != ".json") continue;
-                auto key = CanonicalTextKey(std::string_view(relative).substr(0, relative.size() - 5));
-                if (key.empty()) continue;
-                const auto name = OverlayKey(AssetKind::Text, key);
-                Add(snapshot, name, Entry{{AssetKind::Text, std::move(key)}, it->path(), mod});
-                ++count;
-            }
-        } else {
-            const std::string_view prefix = *kind == AssetKind::Texture ? "fp-" : "key-fnv1a64-";
-            const std::string_view suffix = *kind == AssetKind::Texture ? ".lotex2" : *kind == AssetKind::Image ? ".lotex" : ".loasset";
-            for (std::filesystem::directory_iterator it(top->path(), listError), last; !listError && it != last; it.increment(listError)) {
-                std::error_code fileError;
-                const auto name = Lower(Utf8(it->path().filename()));
-                if (name.size() != prefix.size() + 16 + suffix.size() || name.compare(0, prefix.size(), prefix) != 0 ||
-                    name.compare(prefix.size() + 16, suffix.size(), suffix) != 0 || !Hex16(std::string_view(name).substr(prefix.size(), 16)) ||
-                    !it->is_regular_file(fileError)) continue;
-                AssetId id{*kind, *kind == AssetKind::Texture ? name.substr(prefix.size(), 16) : std::string{}};
-                Add(snapshot, "overlay/" + folder + "/" + name, Entry{std::move(id), it->path(), mod});
-                ++count;
-            }
+    std::error_code listError;
+    if (kind == AssetKind::Text) {
+        for (std::filesystem::recursive_directory_iterator it(folder, listError), last; !listError && it != last; it.increment(listError)) {
+            std::error_code fileError;
+            if (!it->is_regular_file(fileError)) continue;
+            const auto relative = Utf8(it->path().lexically_relative(folder));
+            if (relative.size() <= 5 || Lower(relative.substr(relative.size() - 5)) != ".json") continue;
+            auto key = CanonicalTextKey(std::string_view(relative).substr(0, relative.size() - 5));
+            if (key.empty()) continue;
+            auto name = OverlayKey(AssetKind::Text, key);
+            index.entries.try_emplace(std::move(name), Entry{{AssetKind::Text, std::move(key)}, it->path(), mod});
+            ++count;
         }
-        if (listError && listError != std::errc::no_such_file_or_directory)
-            Problem(snapshot, l.info, top->path(), 0, "overlay folder listing incomplete: " + listError.message());
+    } else {
+        const std::string_view prefix = kind == AssetKind::Texture ? "fp-" : "key-fnv1a64-";
+        const std::string_view suffix = kind == AssetKind::Texture ? ".lotex2" : kind == AssetKind::Image ? ".lotex" : ".loasset";
+        const auto base = std::string("overlay/") + kKindFolders[static_cast<uint32_t>(kind)] + "/";
+        for (std::filesystem::directory_iterator it(folder, listError), last; !listError && it != last; it.increment(listError)) {
+            std::error_code fileError;
+            const auto name = Lower(Utf8(it->path().filename()));
+            if (name.size() != prefix.size() + 16 + suffix.size() || name.compare(0, prefix.size(), prefix) != 0 ||
+                name.compare(prefix.size() + 16, suffix.size(), suffix) != 0 || !Hex16(std::string_view(name).substr(prefix.size(), 16)) ||
+                !it->is_regular_file(fileError)) continue;
+            AssetId id{kind, kind == AssetKind::Texture ? name.substr(prefix.size(), 16) : std::string{}};
+            index.entries.try_emplace(base + name, Entry{std::move(id), it->path(), mod});
+            ++count;
+        }
     }
+    if (listError && listError != std::errc::no_such_file_or_directory)
+        index.problems.emplace_back(mod, Diagnostic{folder, 0, "overlay folder listing incomplete: " + listError.message()});
     return count;
 }
-// Explicit mod.ini lines first (the last line of an identity wins), then the
-// overlay/ files: within a mod an explicit line beats the discovered file, and
-// mods added earlier (higher in the order) keep what they claimed.
-void AddModFiles(Snapshot& snapshot, Loaded& l, uint32_t mod) {
+// Mods in order, each with its mod.ini lines first and then its overlay/ files:
+// within a mod a line beats the file of the same resource, and mods earlier in
+// the order keep what they claimed. Text or every other kind; names of the two
+// never collide. Runs in the background.
+Index BuildIndex(std::vector<ModFiles> work, size_t mods, bool text) noexcept {
+    Index index;
+    try {
+        index.overlayFiles.assign(mods, 0);
+        for (auto& m : work) {
+            for (auto& [name, entry] : m.declared)
+                if ((entry.id.kind == AssetKind::Text) == text) index.entries.try_emplace(std::move(name), std::move(entry));
+            for (const auto& [kind, folder] : m.folders)
+                if ((kind == AssetKind::Text) == text) index.overlayFiles[m.mod] += ListKindFolder(index, kind, folder, m.mod);
+        }
+    } catch (...) { /* A partial index: files not listed keep the originals. */ }
+    return index;
+}
+// The part of an active mod read at Initialize: its mod.ini lines (the last line
+// of an identity wins; one stat each) and, for api_version=2, the kind folders
+// under its overlay/ (one short listing).
+ModFiles PrepareModFiles(Snapshot& snapshot, Loaded& l, uint32_t mod) {
+    ModFiles files{mod, {}, {}};
     const auto manifest = l.info.folder / "mod.ini";
     std::unordered_map<std::string, Entry> declared;
     for (const auto& [n, text] : l.resources) {
@@ -362,8 +385,20 @@ void AddModFiles(Snapshot& snapshot, Loaded& l, uint32_t mod) {
         auto name = OverlayKey(*kind, key);
         declared.insert_or_assign(std::move(name), Entry{{*kind, std::move(key)}, std::move(file), mod});
     }
-    for (auto& [name, entry] : declared) Add(snapshot, name, std::move(entry));
-    if (l.info.apiVersion >= 2) l.info.overlayFiles = IndexOverlay(snapshot, l, mod);
+    for (auto& [name, entry] : declared) {
+        snapshot.textureEntries |= entry.id.kind == AssetKind::Texture;
+        files.declared.emplace_back(name, std::move(entry));
+    }
+    if (l.info.apiVersion < 2) return files;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator top(l.info.folder / "overlay", ec), end; !ec && top != end; top.increment(ec)) {
+        std::error_code entryError;
+        const auto kind = FolderKind(Lower(Utf8(top->path().filename())));
+        if (!kind || !top->is_directory(entryError)) continue;
+        snapshot.textureEntries |= *kind == AssetKind::Texture;
+        files.folders.emplace_back(*kind, top->path());
+    }
+    return files;
 }
 std::optional<bool> Switch(std::string_view value) {
     if (value == "on" || value == "true" || value == "1") return true;
@@ -455,14 +490,33 @@ void Scan(Snapshot& snapshot) {
     if (ec) Diagnose(snapshot, snapshot.root, 0, "directory scan incomplete: " + ec.message());
     std::sort(dirs.begin(), dirs.end(), [](const auto& a, const auto& b) { return Utf8(a.filename()) < Utf8(b.filename()); });
     std::vector<Loaded> mods;
+    std::vector<ModInfo> packs;
     std::set<std::string> languages;
     for (const auto& dir : dirs) {
+        // A folder with language.ini is a language pack and never a mod. A pack
+        // applies only when the player selects it, so no load order is involved
+        // and every mode lists it.
+        std::error_code fileError;
+        if (std::filesystem::is_regular_file(dir / "language.ini", fileError)) {
+            ModInfo pack;
+            pack.kind = ModKind::LanguagePack;
+            pack.folder = dir;
+            pack.id = Utf8(dir.filename());
+            const auto diagnostics = snapshot.diagnostics.size(), loaded = snapshot.languagePacks.size();
+            try { LoadLanguagePack(snapshot, dir / "language.ini", languages); }
+            catch (const std::exception& e) { Diagnose(snapshot, dir / "language.ini", 0, e.what()); }
+            if (snapshot.languagePacks.size() > loaded) {
+                const auto& added = snapshot.languagePacks.back();
+                pack.id = added.id; pack.name = added.name; pack.base = added.base;
+            }
+            pack.problems.assign(snapshot.diagnostics.begin() + diagnostics, snapshot.diagnostics.end());
+            if (std::filesystem::is_regular_file(dir / "mod.ini", fileError))
+                Problem(snapshot, pack, dir / "mod.ini", 0, "mod.ini ignored: a folder with language.ini is a language pack");
+            packs.push_back(std::move(pack));
+            continue;
+        }
         try { if (auto loaded = LoadManifest(snapshot, dir)) mods.push_back(std::move(*loaded)); }
         catch (const std::exception& e) { Diagnose(snapshot, dir / "mod.ini", 0, e.what()); }
-        // A pack applies only when the player selects it, so no load
-        // order is involved and every mode lists it.
-        try { LoadLanguagePack(snapshot, dir / "language.ini", languages); }
-        catch (const std::exception& e) { Diagnose(snapshot, dir / "language.ini", 0, e.what()); }
     }
     // Enabled duplicate ids: the lexically later folder is rejected.
     std::set<std::string> ids;
@@ -485,21 +539,40 @@ void Scan(Snapshot& snapshot) {
         if (a.info.priority != b.info.priority) return a.info.priority > b.info.priority;
         return a.dirName > b.dirName;
     });
-    snapshot.mods.reserve(mods.size());
+    snapshot.mods.reserve(mods.size() + packs.size());
+    std::vector<ModFiles> work;
     for (auto& l : mods) {
         auto& info = l.info;
         info.active = snapshot.mode != ResolutionMode::Overlay && info.apiVersion && info.manifestEnabled &&
             info.listEnabled && !l.duplicate;
         if (info.active) {
-            try { AddModFiles(snapshot, l, static_cast<uint32_t>(snapshot.mods.size())); }
+            try { work.push_back(PrepareModFiles(snapshot, l, static_cast<uint32_t>(snapshot.mods.size()))); }
             catch (const std::exception& e) { Problem(snapshot, info, info.folder, 0, e.what()); }
             snapshot.modIds.push_back(info.id);
         }
         snapshot.mods.push_back(std::move(info));
     }
-    std::sort(snapshot.modIds.begin(), snapshot.modIds.end());
+    for (auto& pack : packs) snapshot.mods.push_back(std::move(pack));
+    for (const bool text : {true, false}) {
+        const bool listing = std::any_of(work.begin(), work.end(), [&](const ModFiles& m) {
+            return std::any_of(m.folders.begin(), m.folders.end(), [&](const auto& f) { return (f.first == AssetKind::Text) == text; });
+        });
+        auto files = text ? work : std::move(work);
+        if (listing) {
+            snapshot.index[text] = std::async(std::launch::async, BuildIndex, std::move(files), snapshot.mods.size(), text).share();
+        } else {
+            std::promise<Index> ready;
+            ready.set_value(BuildIndex(std::move(files), snapshot.mods.size(), text));
+            snapshot.index[text] = ready.get_future().share();
+        }
+    }
 }
 std::shared_ptr<const Snapshot> Current() { std::lock_guard lock(gMutex); return gSnapshot; }
+// Waits for the background listing when a lookup comes before it is done.
+const Index& Files(const Snapshot& snapshot, bool text) {
+    static const Index empty;
+    return snapshot.index[text].valid() ? snapshot.index[text].get() : empty;
+}
 }
 
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object) {
@@ -543,8 +616,10 @@ void Initialize(const std::filesystem::path& requestedRoot, const std::filesyste
             snapshot->enabled = false;
         if (snapshot->enabled) Scan(*snapshot);
     } catch (const std::exception& e) { snapshot->enabled = false; Diagnose(*snapshot, requestedRoot, 0, e.what()); }
+    // The replaced snapshot is released after the mutex: it waits for its listing.
+    std::shared_ptr<const Snapshot> retired;
     std::lock_guard lock(gMutex);
-    gSnapshot = std::move(snapshot);
+    retired = std::exchange(gSnapshot, std::move(snapshot));
     ++gGeneration;
 }
 void Reload() {
@@ -555,9 +630,10 @@ void Reload() {
 void Shutdown() {
     // Release providers outside the mutex: their destructors may call this API.
     std::map<AssetKind, std::shared_ptr<AssetProvider>> retired;
+    std::shared_ptr<const Snapshot> snapshot;
     {
         std::lock_guard lock(gMutex);
-        gSnapshot = std::make_shared<Snapshot>();
+        snapshot = std::exchange(gSnapshot, std::make_shared<Snapshot>());
         retired.swap(gProviders);
         ++gGeneration;
     }
@@ -567,7 +643,16 @@ std::filesystem::path Root() { return Current()->root; }
 ResolutionMode Mode() { return Current()->mode; }
 std::vector<Diagnostic> Diagnostics() { return Current()->diagnostics; }
 std::vector<std::string> ModIds() { return Current()->modIds; }
-std::vector<ModInfo> ListMods() { return Current()->mods; }
+std::vector<ModInfo> ListMods() {
+    const auto snapshot = Current();
+    auto mods = snapshot->mods;
+    for (const bool text : {true, false}) {
+        const auto& files = Files(*snapshot, text);
+        for (size_t i = 0; i != std::min(mods.size(), files.overlayFiles.size()); ++i) mods[i].overlayFiles += files.overlayFiles[i];
+        for (const auto& [mod, problem] : files.problems) mods[mod].problems.push_back(problem);
+    }
+    return mods;
+}
 std::filesystem::path ModListPath() { return Current()->modList; }
 bool Enabled() { return Current()->enabled; }
 bool SaveModList(const std::vector<std::pair<std::string, bool>>& order, std::string* error) {
@@ -634,7 +719,7 @@ std::vector<ResolvedAsset> ListTexts() {
     if (!snapshot->enabled) return {};
     if (snapshot->mode != ResolutionMode::Standalone && (snapshot->overlayKinds & KindBit(AssetKind::Text)))
         ListTextFolder(snapshot->root / "overlay" / "text", "@overlay", found);
-    for (const auto& [name, e] : snapshot->entries)
+    for (const auto& [name, e] : Files(*snapshot, true).entries)
         if (e.id.kind == AssetKind::Text) {
             const auto& mod = snapshot->mods[e.mod];
             found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority});
@@ -692,7 +777,8 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     }
     // Mod folder files were found at Initialize; a file removed since then
     // fails in the reader, which keeps the original.
-    if (const auto it = snapshot->entries.find(name); it != snapshot->entries.end()) {
+    const auto& files = Files(*snapshot, normalized.id.kind == AssetKind::Text).entries;
+    if (const auto it = files.find(name); it != files.end()) {
         const auto& mod = snapshot->mods[it->second.mod];
         return ResolvedAsset{normalized.id, it->second.file, mod.id, mod.priority};
     }

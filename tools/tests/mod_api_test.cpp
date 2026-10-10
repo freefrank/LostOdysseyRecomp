@@ -96,7 +96,7 @@ void Resolution(const fs::path& root) {
     Mod(root, "c", "disabled", 200, false);
     Initialize(root);
     assert(Mode() == ResolutionMode::Combined);
-    assert((ModIds() == std::vector<std::string>{"first", "second"}));
+    assert((ModIds() == std::vector<std::string>{"second", "first"})); // equal priority: later folder first
     assert(Resolve(request)->modId == "second");
     auto decoded = ReadImageReplacement(request, 2, 1);
     assert(decoded && decoded->pixels == std::vector<uint32_t>({0x78123456, 0x78123456}));
@@ -357,7 +357,8 @@ void FormatV2(const fs::path& root, const fs::path& list) {
     Write(root / "hd" / OverlayRelativePath(request.id), Lotex(key));     // hashed image name
     Write(root / "hd/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json", "{}");
     Initialize(root, list);
-    assert(ModListPath() == list);
+    // Known before the background listing finishes: the renderer asks per upload.
+    assert(HasTextureReplacements() && ModListPath() == list);
     {
         const auto mods = ListMods();
         const auto* hd = Find(mods, "hd");
@@ -419,11 +420,33 @@ void FormatV2(const fs::path& root, const fs::path& list) {
         assert(mods[0].id == "zz" && !mods[0].listEnabled && !mods[0].active);
         assert(mods[1].id == "disabled" && !mods[1].manifestEnabled && mods[1].listEnabled && !mods[1].active);
     }
-    assert(Resolve(texture)->modId == "hd" && (ModIds() == std::vector<std::string>{"first", "hd", "second"}));
+    assert(Resolve(texture)->modId == "hd" && (ModIds() == std::vector<std::string>{"hd", "first", "second"}));
     // Bad lines are reported and skipped; the first line of an id counts.
     Write(list, "zz=maybe\nbad id=on\nzz\nzz=on\nzz=off\n");
     Reload();
     assert(Diagnostics().size() == 4 && Resolve(texture)->modId == "zz");
+
+    // Language packs are listed read-only after the mods, whatever mod-list.ini
+    // says; a mod.ini beside language.ini is ignored, and so are its files.
+    Write(root / "pt/language.ini", "id=pt-br\nname=Portugu\xc3\xaas\nbase=int\n");
+    Write(root / "pt/mod.ini", "api_version=2\nid=pt-mod\n");
+    Write(root / "pt/overlay/textures/fp-00000000000000fe.lotex2", tex);
+    Write(root / "badlang/language.ini", "id=x\n");
+    Write(list, "pt-br=on\nbadlang=off\n");
+    Reload();
+    {
+        const auto mods = ListMods();
+        const auto* pt = Find(mods, "pt-br");
+        assert(pt && pt->kind == ModKind::LanguagePack && pt->name == "Portugu\xc3\xaas" && pt->base == "int" &&
+               !pt->active && pt->listEnabled && pt->problems.size() == 1);
+        const auto* bad = Find(mods, "badlang");
+        assert(bad && bad->kind == ModKind::LanguagePack && bad->base.empty() && !bad->problems.empty());
+        assert(!Find(mods, "pt-mod") && mods.front().kind == ModKind::Mod && mods.front().id == "disabled"); // priority 200
+        assert(mods[mods.size() - 2].id == "badlang" && mods.back().id == "pt-br");
+    }
+    assert(LanguagePacks().size() == 1 && !Resolve({{AssetKind::Texture, "00000000000000fe"}, {}}));
+    fs::remove_all(root / "pt"); fs::remove_all(root / "badlang");
+    Write(list, "zz=on\n");
 
     // The top-level overlay beats mod folders; modes.
     const auto overlay = root / texName;
@@ -478,7 +501,10 @@ void IndexBench(const fs::path& root) {
         const auto start = clock::now();
         Reload();
         const auto ms = std::chrono::duration<double, std::milli>(clock::now() - start).count();
-        std::cout << "index: " << Find(ListMods(), "bench")->overlayFiles << " files, Initialize " << ms << " ms\n";
+        assert(Resolve({{AssetKind::Texture, "0000000000000000"}, {}}));
+        const auto ready = std::chrono::duration<double, std::milli>(clock::now() - start).count();
+        std::cout << "index: " << Find(ListMods(), "bench")->overlayFiles << " files, Initialize " << ms
+                  << " ms, first lookup after " << ready << " ms\n";
     }
     const auto start = clock::now();
     size_t hits = 0;

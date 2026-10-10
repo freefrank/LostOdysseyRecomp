@@ -376,8 +376,7 @@ int main(int argc, char* argv[])
         if (modding::Enabled())
         {
             std::string ids;
-            for (const auto& mod : modding::ListMods())
-                if (mod.active) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", mod.id);
+            for (const auto& id : modding::ModIds()) ids += fmt::format("{}{}", ids.empty() ? "" : ", ", id);
             const auto mode = modding::Mode();
             LOG_NOTICE("mods: {} (mode {}), mod folders (highest first): {}, overlay folder: {}",
                 FileSystem::PathUtf8(modding::Root()),

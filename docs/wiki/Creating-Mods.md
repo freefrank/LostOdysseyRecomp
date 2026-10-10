@@ -22,7 +22,7 @@ author=Your name
 description=One line about the mod.
 ```
 
-The game finds the files under `overlay/` by name, so `mod.ini` needs no file list. `name`, `version`, `author` and `description` are optional. `texture-pack --layout standalone` and `pack` (its default layout) write this layout.
+The game finds the files under `overlay/` by name, so `mod.ini` needs no file list. `name`, `version`, `author` and `description` are optional. `texture-pack --layout standalone` and `pack` (its default layout) write this layout. A translation that adds a new language is a language pack instead, a folder with a `language.ini` ([1e](#1e-translate-the-games-text-experimental)); both kinds of folder sit side by side in `mods/`.
 
 Zip it with `mods/` at the top of the archive: `mods/<id>/mod.ini`, `mods/<id>/overlay/...`. Players extract the archive into the game folder; Mod Organizer 2 installs it as it is. Mod folders never conflict with each other. When two of them replace the same file, the in-game mod order decides, then `priority` in `mod.ini` (see [Modding API](Modding-API.md#order-and-mod-listini)). Changes take effect after a restart.
 
