@@ -142,6 +142,12 @@ namespace gpu::occlusion
             const uint32_t slot = SlotOf(address);
             active_ = Query{slot, ++generations_[slot], counter_};
             active_->owner = owner ? owner : slot;
+            // Reuse a finished query's part storage: one allocation per query
+            // and draw showed up on the render thread.
+            if (!spareParts_.empty()) {
+                active_->parts = std::move(spareParts_.back());
+                spareParts_.pop_back();
+            }
             return {address, Counts(counter_)};
         }
 
@@ -281,6 +287,10 @@ namespace gpu::occlusion
                     if (!it->written && it->begin + samples - counter_ < 0x80000000u) counter_ = it->begin + samples;
                 }
                 if (!it->written) --unwritten_;
+                if (it->parts.capacity() && spareParts_.size() < kSparePartLists) {
+                    it->parts.clear();
+                    spareParts_.push_back(std::move(it->parts));
+                }
                 it = pending_.erase(it);
             }
             return writes;
@@ -291,6 +301,8 @@ namespace gpu::occlusion
         size_t unwritten_ = 0; // pending queries whose END record waits for host results
         std::optional<Query> active_;
         std::deque<Query> pending_;
+        static constexpr size_t kSparePartLists = 256;
+        std::vector<std::vector<Part>> spareParts_; // cleared part lists of finished queries
         std::unordered_map<uint32_t, uint32_t> generations_;
         std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner
     };

@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -57,6 +59,19 @@ namespace gpu
         // MMIO
         void WriteRegister(uint32_t index, uint32_t value);
         uint32_t ReadRegister(uint32_t index);
+        // ReadRegister inlined for the renderer's per-draw reads (same values):
+        // the register, or the big-endian MMIO word where the register is zero.
+        uint32_t ReadRegisterInline(uint32_t index)
+        {
+            if (index >= REGISTER_COUNT || !m_mmioWindow) [[unlikely]]
+                return ReadRegister(index);
+            if (const uint32_t value = m_registers[index]) [[likely]]
+                return value;
+            uint32_t word;
+            std::memcpy(&word, m_mmioWindow + size_t(index) * 4, sizeof(word));
+            // Big-endian MMIO word (std::byteswap needs C++23; fixtures build C++20).
+            return (word >> 24) | ((word >> 8) & 0xFF00u) | ((word << 8) & 0xFF0000u) | (word << 24);
+        }
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
         // Bring a renderer copy of a constant bank up to date: blocks command writes
@@ -74,7 +89,21 @@ namespace gpu
         // A guest write to memory the GPU already read is only ordered against
         // later draws across such a point.
         uint64_t SyncEpoch() const { return m_syncEpoch.load(std::memory_order_relaxed); }
-        void AdvanceSyncEpoch() { m_syncEpoch.fetch_add(1, std::memory_order_relaxed); }
+        // What ended each sync period; counted only with LO_RENDER_TIMING.
+        enum class SyncSource : uint32_t {
+            Batch, Scratch, Interrupt, Swap, WaitRegMem, RegToMem, MemWrite, CondWrite,
+            EventShd, EventExt, EventZpd, Occlusion, Resolve, Count
+        };
+        void AdvanceSyncEpoch(SyncSource source)
+        {
+            m_syncEpoch.fetch_add(1, std::memory_order_relaxed);
+            if (m_countSyncSources) [[unlikely]]
+                m_syncSources[uint32_t(source)].fetch_add(1, std::memory_order_relaxed);
+        }
+        uint64_t SyncSourceCount(SyncSource source) const
+        {
+            return m_syncSources[uint32_t(source)].load(std::memory_order_relaxed);
+        }
         // Microcode of the last IM_LOAD for the vertex (false) / pixel (true) stage.
         const uint32_t* GetActiveShader(bool pixel, uint32_t& dwordCount, uint64_t& commandHash) const;
         // Byte identity of the owned IM_LOAD snapshot; resolved once per change.
@@ -137,6 +166,8 @@ namespace gpu
         uint8_t* TranslatePhysical(uint32_t physicalAddress);
 
         std::vector<uint32_t> m_registers;
+        // Host view of the guest MMIO register window (MMIO_BASE), set by Init.
+        const uint8_t* m_mmioWindow = nullptr;
         struct MovieClearStage
         {
             bool active = false;
@@ -154,10 +185,16 @@ namespace gpu
         std::condition_variable m_writePtrChanged;
         std::atomic<bool> m_wake{ false }; // Wake(): end the current idle or WAIT_REG_MEM wait early
         std::atomic<uint32_t> m_counter{ 0 };
-        std::atomic<uint64_t> m_constantGeneration[2]{};
+        // The command thread updates these on every constant run and sync point.
+        // They get a cache line of their own, apart from the write pointer, its
+        // mutex and condition variable, m_wake and the vsync counter, which guest
+        // threads write.
+        alignas(64) std::atomic<uint64_t> m_constantGeneration[2]{};
         std::atomic<uint64_t> m_constantDirty[2]{}; // 16-word blocks changed since the last snapshot update
         std::atomic<uint64_t> m_syncEpoch{1};
-        std::atomic<bool> m_running{ false };
+        alignas(64) std::atomic<bool> m_running{ false };
+        bool m_countSyncSources = false;
+        std::atomic<uint64_t> m_syncSources[uint32_t(SyncSource::Count)]{};
 
         IndirectBufferGuard m_indirectGuard;
         InterruptRegistration m_interruptRegistration;

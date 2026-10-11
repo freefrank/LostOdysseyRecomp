@@ -8,6 +8,7 @@
 #include "frame_pacer.h"
 #include "deadline_wait.h"
 #include "register_snapshot.h"
+#include "render_timing.h"
 #include "shader_identity.h"
 #include <debug/frame_timing.h>
 #include <cpu/guest_thread.h>
@@ -259,6 +260,8 @@ namespace gpu
     bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
+        m_mmioWindow = static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE));
+        m_countSyncSources = render_timing::Enabled();
         for (uint32_t bank = 0; bank < 2; ++bank) MarkConstantsChanged(bank, ~0ull);
 
         // Registers the guest reads back through plain loads: keep the MMIO
@@ -496,7 +499,7 @@ namespace gpu
             if ((1u << scratchReg) & umsk)
             {
                 *reinterpret_cast<be<uint32_t>*>(TranslatePhysical(scratchAddr + scratchReg * 4)) = value;
-                AdvanceSyncEpoch();
+                AdvanceSyncEpoch(SyncSource::Scratch);
                 static uint32_t logged = 0;
                 if (logged++ < 4 || (g_swapCount >= 110 && scratchReg <= 1))
                     LOG_VERBOSE("scratch writeback reg{} = {:#x} -> physical {:#x} (umsk {:#x}) swap #{}", scratchReg, value, scratchAddr + scratchReg * 4, umsk, g_swapCount.load());
@@ -706,7 +709,7 @@ namespace gpu
 
             if (m_readPtrWritebackPhysical)
                 *reinterpret_cast<be<uint32_t>*>(TranslatePhysical(m_readPtrWritebackPhysical)) = m_readPtrIndex;
-            AdvanceSyncEpoch();
+            AdvanceSyncEpoch(SyncSource::Batch);
         }
     }
 
@@ -980,10 +983,15 @@ namespace gpu
 
         switch (opcode)
         {
-        case PM4_INTERRUPT: case PM4_XE_SWAP: case PM4_WAIT_REG_MEM: case PM4_REG_TO_MEM: case PM4_MEM_WRITE:
-        case PM4_COND_WRITE: case PM4_EVENT_WRITE_SHD: case PM4_EVENT_WRITE_EXT: case PM4_EVENT_WRITE_ZPD:
-            AdvanceSyncEpoch();
-            break;
+        case PM4_INTERRUPT: AdvanceSyncEpoch(SyncSource::Interrupt); break;
+        case PM4_XE_SWAP: AdvanceSyncEpoch(SyncSource::Swap); break;
+        case PM4_WAIT_REG_MEM: AdvanceSyncEpoch(SyncSource::WaitRegMem); break;
+        case PM4_REG_TO_MEM: AdvanceSyncEpoch(SyncSource::RegToMem); break;
+        case PM4_MEM_WRITE: AdvanceSyncEpoch(SyncSource::MemWrite); break;
+        case PM4_COND_WRITE: AdvanceSyncEpoch(SyncSource::CondWrite); break;
+        case PM4_EVENT_WRITE_SHD: AdvanceSyncEpoch(SyncSource::EventShd); break;
+        case PM4_EVENT_WRITE_EXT: AdvanceSyncEpoch(SyncSource::EventExt); break;
+        case PM4_EVENT_WRITE_ZPD: AdvanceSyncEpoch(SyncSource::EventZpd); break;
         default:
             break;
         }
@@ -1292,7 +1300,7 @@ namespace gpu
                     std::this_thread::yield();
             }
             // Guest writes made before the waited-for value are visible from here.
-            AdvanceSyncEpoch();
+            AdvanceSyncEpoch(SyncSource::WaitRegMem);
             return true;
         }
 

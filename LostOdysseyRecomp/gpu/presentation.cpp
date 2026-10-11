@@ -30,6 +30,14 @@ struct Presentation::Impl
     std::unique_ptr<RenderPipeline> presentPipeline;
     std::unique_ptr<RenderShader> gainPs;
     std::unique_ptr<RenderPipeline> gainPipeline;
+    // The final pass as a compute pass into a storage swap chain image (see
+    // PresentationOptions::storageTarget). Vulkan with an RGBA8 swap chain
+    // only; null elsewhere or when creation failed.
+    static constexpr uint32_t kComputeGroupX = 16, kComputeGroupY = 16;
+    std::unique_ptr<RenderPipelineLayout> computeLayout;
+    std::unique_ptr<RenderShader> computeCs;
+    std::unique_ptr<RenderPipeline> computePipeline;
+    std::unique_ptr<RenderDescriptorSet> computeDescriptors;
     std::unique_ptr<RenderPipelineLayout> uiLayout;
     std::unique_ptr<RenderShader> uiVs, uiPs;
     std::unique_ptr<RenderPipeline> uiPipeline, uiPresentPipeline;
@@ -75,6 +83,7 @@ struct Presentation::Impl
     bool rampActive = false, curveActive = false;
     // Null keeps the current curve.
     RenderBuffer *UpdateGammaRamp(const PresentationOptions *curve);
+    bool InitCompute(const char *pixelSource);
     bool EnsureUiPipelines();
     bool EnsureOverlayPipeline();
 };
@@ -148,7 +157,7 @@ bool Presentation::Init(RenderDevice *device)
 {
     return Init(device, RenderFormat::R8G8B8A8_UNORM);
 }
-bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat)
+bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool storageSwapchain)
 {
     auto &p = *impl;
     p.initialized = false;
@@ -162,6 +171,10 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat)
     p.uiLayout.reset();
     p.overlayPipeline.reset();
     p.overlayFailed = false;
+    p.computeDescriptors.reset();
+    p.computePipeline.reset();
+    p.computeCs.reset();
+    p.computeLayout.reset();
     const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
     const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
     const char *source = R"(
@@ -473,7 +486,71 @@ float4 gainPixel(float4 position : SV_Position) : SV_Target {
     p.initialized = bool(p.pipeline) && bool(p.presentPipeline) && bool(p.hdrPipeline) && bool(p.gainPipeline) &&
         p.smaa[0].Init(device, p.vs.get(), p.sampler.get(), p.vulkan) &&
         p.smaa[1].Init(device, p.vs.get(), p.sampler.get(), p.vulkan);
+    // Optional: without it the fragment pass serves every target.
+    if (p.initialized && storageSwapchain && device->getCapabilities().shaderFormat == RenderShaderFormat::SPIRV &&
+        swapchainFormat == RenderFormat::R8G8B8A8_UNORM)
+        p.InitCompute(source);
     return p.initialized;
+}
+// The final pass as a compute pass into a storage swap chain image: each
+// thread runs pixel()'s path for this case, finishFrame(resample(p)) (no AA,
+// no calibration view; Draw checks), for one output pixel, or writes black
+// outside the viewport like the clear. The taps and the arithmetic are the
+// fragment pass's own, so the image is bit-identical, and the Adreno 750
+// (Turnip) spends less time on it than on the render pass. Reading each source
+// texel once through shared memory was tried there and took twice as long:
+// the sixteen texture taps cost little next to the output write, shared-memory
+// reads cost more than texture-cache hits, and their arithmetic differed in
+// the last bits.
+bool Presentation::Impl::InitCompute(const char *pixelSource)
+{
+    const char *computeSource = R"(
+#ifdef __spirv__
+[[vk::binding(4,0)]] [[vk::image_format("rgba8")]]
+#endif
+RWTexture2D<float4> presentTarget : register(u0);
+[numthreads(PRESENT_GROUP_X,PRESENT_GROUP_Y,1)]
+void presentCompute(uint3 id : SV_DispatchThreadID) {
+    uint width,height;
+    presentTarget.GetDimensions(width,height);
+    if(id.x>=width || id.y>=height) return;
+    float2 position=float2(id.xy)+0.5;
+    if(any(position<origin) || any(position>=origin+extent)) presentTarget[id.xy]=float4(0,0,0,1);
+    else presentTarget[id.xy]=finishFrame(resample((position-origin)/extent*imageSize));
+})";
+    const std::string groupDefines = "\n#define PRESENT_GROUP_X " + std::to_string(kComputeGroupX) +
+        "\n#define PRESENT_GROUP_Y " + std::to_string(kComputeGroupY) + "\n";
+    const auto failed = [](const char *step) {
+        LOG_WARNING("presentation: compute upscale unavailable ({}); using the fragment pass", step);
+        return false;
+    };
+    auto shader = xenos::CompileCachedHlsl(std::string(pixelSource) + groupDefines + computeSource, "presentCompute", "cs_6_0",
+        xenos::ShaderBinaryFormat::Spirv);
+    if (!shader.ok) {
+        LOG_WARNING("presentation compute shader: {}", shader.errors);
+        return failed("compile");
+    }
+    computeCs = device->createShader(shader.bytecode.data(), shader.bytecode.size(), "presentCompute", RenderShaderFormat::SPIRV);
+    RenderDescriptorSetBuilder set;
+    set.begin();
+    set.addTexture(0);
+    set.addSampler(1);
+    set.addTexture(2);
+    set.addConstantBuffer(3);
+    set.addReadWriteTexture(4);
+    set.end();
+    RenderPipelineLayoutBuilder layout;
+    layout.begin(false, false);
+    layout.addPushConstant(0, 0, 64, RenderShaderStageFlag::COMPUTE);
+    layout.addDescriptorSet(set);
+    layout.end();
+    computeLayout = layout.create(device);
+    computeDescriptors = set.create(device);
+    if (!computeCs || !computeLayout || !computeDescriptors) return failed("layout");
+    computeDescriptors->setSampler(1, sampler.get());
+    computePipeline = device->createComputePipeline(RenderComputePipelineDesc(computeLayout.get(), computeCs.get(), kComputeGroupX, kComputeGroupY, 1));
+    if (!computePipeline) return failed("pipeline");
+    return true;
 }
 bool Presentation::Impl::EnsureUiPipelines()
 {
@@ -813,6 +890,26 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
     auto &passes=p.passes[hdrScene ? 1 : 0];
     RenderBuffer *ramp=p.UpdateGammaRamp(options.displayAdjust || options.brightnessPreview || options.hdrCalibration
         ? &options : nullptr);
+    struct Parameters { float x,y,w,h,sw,sh;uint32_t aa,filter,expandRange,outputFlags;float outputScale,peakRatio;float calibrationRect[4]; };
+    auto parameters=[&](float ox,float oy,float ew,float eh,uint32_t iw,uint32_t ih,uint32_t aa,uint32_t filter,
+                        uint32_t expandRange,bool finalPass,bool linearOutput) {
+        return Parameters{ox,oy,ew,eh,float(iw),float(ih),aa,filter,expandRange,
+                (linearOutput ? 1u : 0u) | (linearOutput && hdrScene ? 2u : 0u) |
+                (linearOutput && p.output.active && options.hdrCalibration ? 4u : 0u) |
+                (linearOutput && p.output.pq ? 8u : 0u) |
+                (linearOutput && p.output.active && options.hdrCalibration && options.calibrationScene ? 16u : 0u) |
+                (options.calibrationExpandRgbRange ? 32u : 0u) |
+                (finalPass && options.displayGammaRamp && p.rampActive ? 64u : 0u) |
+                (options.calibrationDisplayGammaRamp && p.rampActive ? 128u : 0u) |
+                (finalPass && options.displayAdjust && p.curveActive ? 256u : 0u) |
+                (finalPass && options.brightnessPreview ? 512u : 0u) |
+                (finalPass && options.brightnessPreview && options.calibrationScene ? 1024u : 0u) |
+                (options.calibrationSceneExtended ? 2048u : 0u) |
+                (((options.brightnessPreview && !options.calibrationSplitScene) || options.hdrCalibration) && p.curveActive ? 4096u : 0u) |
+                (options.calibrationSplitScene ? 8192u : 0u),
+                p.output.scale,p.output.peakRatio,
+                {options.calibrationRect[0],options.calibrationRect[1],options.calibrationRect[2],options.calibrationRect[3]}};
+    };
     auto render=[&](RenderTexture *input,RenderTexture *output,uint32_t iw,uint32_t ih,
                     uint32_t tw,uint32_t th,float ox,float oy,float ew,float eh,uint32_t aa,uint32_t filter,
                     uint32_t expandRange,bool finalPass,
@@ -862,23 +959,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         RenderViewport viewport(ox,oy,ew,eh);RenderRect scissor(0,0,tw,th);
         commands->setViewports(&viewport,1);commands->setScissors(&scissor,1);
         const bool linearOutput = toSwapchain && output == target && p.output.linear;
-        struct { float x,y,w,h,sw,sh;uint32_t aa,filter,expandRange,outputFlags;float outputScale,peakRatio;float calibrationRect[4]; }
-            constants{ox,oy,ew,eh,float(iw),float(ih),aa,filter,expandRange,
-                (linearOutput ? 1u : 0u) | (linearOutput && hdrScene ? 2u : 0u) |
-                (linearOutput && p.output.active && options.hdrCalibration ? 4u : 0u) |
-                (linearOutput && p.output.pq ? 8u : 0u) |
-                (linearOutput && p.output.active && options.hdrCalibration && options.calibrationScene ? 16u : 0u) |
-                (options.calibrationExpandRgbRange ? 32u : 0u) |
-                (finalPass && options.displayGammaRamp && p.rampActive ? 64u : 0u) |
-                (options.calibrationDisplayGammaRamp && p.rampActive ? 128u : 0u) |
-                (finalPass && options.displayAdjust && p.curveActive ? 256u : 0u) |
-                (finalPass && options.brightnessPreview ? 512u : 0u) |
-                (finalPass && options.brightnessPreview && options.calibrationScene ? 1024u : 0u) |
-                (options.calibrationSceneExtended ? 2048u : 0u) |
-                (((options.brightnessPreview && !options.calibrationSplitScene) || options.hdrCalibration) && p.curveActive ? 4096u : 0u) |
-                (options.calibrationSplitScene ? 8192u : 0u),
-                p.output.scale,p.output.peakRatio,
-                {options.calibrationRect[0],options.calibrationRect[1],options.calibrationRect[2],options.calibrationRect[3]}};
+        const auto constants=parameters(ox,oy,ew,eh,iw,ih,aa,filter,expandRange,finalPass,linearOutput);
         commands->setGraphicsPipelineLayout(p.layout.get());commands->setPipeline(pipe);
         commands->setGraphicsPushConstants(0,&constants);commands->setGraphicsDescriptorSet(pass.descriptors.get(),0);
         commands->drawInstanced(3,1,0,0);
@@ -912,6 +993,30 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         source=render(source,nullptr,sw,sh,nw,nh,0,0,float(nw),float(nh),0,0,0,false,intermediatePipeline);
         sw=nw;sh=nh;
     }
+    // The compute upscale writes the viewport like the triangle and black
+    // outside it like the clear, so its bars must start on whole pixels.
+    const bool covers=x<=0.0f && y<=0.0f && x+width>=float(ow) && y+height>=float(oh);
+    const bool wholeBars=std::floor(x)==x && std::floor(y)==y && std::floor(x+width)==x+width && std::floor(y+height)==y+height;
+    if(p.computePipeline && toSwapchain && options.storageTarget && !hdrScene &&
+       options.scalingFilter==ScalingFilter::Bicubic && scale>=1.001f &&
+       !options.hdrCalibration && !options.brightnessPreview && (covers || wholeBars)) {
+        auto &set=*p.computeDescriptors;
+        set.setBuffer(3,ramp,Impl::kRampBytes);
+        set.setTexture(0,source,RenderTextureLayout::SHADER_READ);
+        set.setTexture(2,source,RenderTextureLayout::SHADER_READ);
+        set.setTexture(4,target,RenderTextureLayout::GENERAL);
+        commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(source,RenderTextureLayout::SHADER_READ));
+        commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(target,RenderTextureLayout::GENERAL));
+        const auto constants=parameters(x,y,width,height,sw,sh,0,uint32_t(options.scalingFilter),
+            options.expandRgbRange ? 1u : 0u,true,p.output.linear);
+        commands->setComputePipelineLayout(p.computeLayout.get());
+        commands->setPipeline(p.computePipeline.get());
+        commands->setComputePushConstants(0,&constants);
+        commands->setComputeDescriptorSet(&set,0);
+        commands->dispatch((ow+Impl::kComputeGroupX-1)/Impl::kComputeGroupX,(oh+Impl::kComputeGroupY-1)/Impl::kComputeGroupY,1);
+        commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
+        return;
+    }
     render(source,target,sw,sh,ow,oh,x,y,width,height,0,uint32_t(options.scalingFilter),
            options.expandRgbRange ? 1u : 0u,true,
            toSwapchain ? p.presentPipeline.get() : intermediatePipeline);
@@ -933,7 +1038,7 @@ bool Presentation::Init(plume::RenderDevice *)
 {
     return false;
 }
-bool Presentation::Init(plume::RenderDevice *, plume::RenderFormat)
+bool Presentation::Init(plume::RenderDevice *, plume::RenderFormat, bool)
 {
     return false;
 }
