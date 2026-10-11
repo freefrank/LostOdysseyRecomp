@@ -8436,6 +8436,41 @@ void main()
                 return SelectControllerAtlas(result, bindingInfo);
             }
 
+            // A depth clear drawn through one pitch reaches the other pitches' views of
+            // its EDRAM tiles as physical rectangles: MapDepthClear, the coalescing
+            // sorts (Vulkan) and the scaling to the target's resolution. The result
+            // depends only on these inputs, and the title repeats the same clears
+            // every frame, so recent mappings are kept.
+            struct DepthClearMapKey {
+                uint32_t srcPitch, srcMsaa, dstPitch, dstHeight, dstMsaa, scaleWidth, scaleHeight;
+                bool coalesce;
+                DepthClearRect area;
+                bool operator==(const DepthClearMapKey& o) const {
+                    return srcPitch == o.srcPitch && srcMsaa == o.srcMsaa && dstPitch == o.dstPitch && dstHeight == o.dstHeight &&
+                        dstMsaa == o.dstMsaa && scaleWidth == o.scaleWidth && scaleHeight == o.scaleHeight && coalesce == o.coalesce &&
+                        area.left == o.area.left && area.top == o.area.top && area.right == o.area.right && area.bottom == o.area.bottom;
+                }
+            };
+            struct DepthClearMap { DepthClearMapKey key{}; std::vector<pending_clear::Rect> rects; bool valid = false; };
+            std::array<DepthClearMap, 16> depthClearMaps{};
+            size_t depthClearMapNext = 0;
+            std::vector<pending_clear::Rect> MappedDepthClear(const DepthClearMapKey& key, const HostTexture& target)
+            {
+                for (const auto& map : depthClearMaps)
+                    if (map.valid && map.key == key) return map.rects;
+                auto mapped = MapDepthClear(key.srcPitch, key.srcMsaa, key.area, key.dstPitch, key.dstHeight, key.dstMsaa);
+                if (key.coalesce) CoalesceDepthClearRects(mapped);
+                auto& map = depthClearMaps[depthClearMapNext];
+                depthClearMapNext = (depthClearMapNext + 1) % depthClearMaps.size();
+                map.key = key;
+                map.rects.clear();
+                map.rects.reserve(mapped.size());
+                for (const auto& r : mapped) map.rects.push_back({int32_t(target.ScaleX(uint32_t(r.left))), int32_t(target.ScaleY(uint32_t(r.top))),
+                    int32_t(target.ScaleX(uint32_t(r.right))), int32_t(target.ScaleY(uint32_t(r.bottom)))});
+                map.valid = true;
+                return map.rects;
+            }
+
             // InvalidateRange's compact copy of every cached texture's key: a resolve
             // scans this array instead of walking the map's nodes. Rebuilt when
             // another path changed `textures`; its own erasures keep it in step.
@@ -12796,13 +12831,9 @@ void main()
                         {
                             const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
                                 int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
-                            auto mapped = MapDepthClear(pitch, (surfaceInfo >> 16) & 3, sourceRect,
-                                k.pitch, target->guestHeight, target->depthMsaa);
-                            if (vulkan) CoalesceDepthClearRects(mapped);
-                            std::vector<pending_clear::Rect> clearRects;
-                            clearRects.reserve(mapped.size());
-                            for (const auto& r : mapped) clearRects.push_back({int32_t(target->ScaleX(uint32_t(r.left))), int32_t(target->ScaleY(uint32_t(r.top))),
-                                int32_t(target->ScaleX(uint32_t(r.right))), int32_t(target->ScaleY(uint32_t(r.bottom)))});
+                            std::vector<pending_clear::Rect> clearRects = MappedDepthClear({pitch, (surfaceInfo >> 16) & 3,
+                                k.pitch, target->guestHeight, target->depthMsaa, target->resolutionSize.width,
+                                target->resolutionSize.height, vulkan, sourceRect}, *target);
                             const size_t regions = clearRects.size();
                             // An empty rectangle list would mean the whole texture,
                             // so an empty mapping is skipped.
