@@ -16,6 +16,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Saving and loading no longer hold each message on screen for 3 seconds, and Continue on the title screen no longer waits an extra second.
 - Android: slightly higher frame rate; the final upscale to the screen is cheaper.
 - Android (Turnip driver): slightly higher frame rate; visibility checks no longer pause the GPU.
+- Slightly higher frame rate, mostly with Vulkan.
 
 ### 简体中文
 
@@ -27,6 +28,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 存档和读档时，提示信息不再固定停留 3 秒；标题画面选 Continue 后也不再多等 1 秒。
 - Android：放大到屏幕这一步更省，帧率略有提升。
 - Android（Turnip 驱动）：可见性检测不再让 GPU 停顿，帧率略有提升。
+- 帧率略有提升，Vulkan 下更明显。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
