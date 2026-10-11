@@ -7809,15 +7809,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // An original whose mod replacement was read since: re-create it.
                     const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
                     // Guest bytes get another look only when they can have changed
-                    // since the last one: a kernel file read into the texture's range
-                    // (titles stream data in after the first draw that uses it), or a
-                    // frame without this texture, during which its memory may have been
-                    // given other contents. Resolves into the range already dropped the
-                    // entry (InvalidateRange).
+                    // since the last one: in every frame for an untiled texture (its
+                    // layout is the CPU's; the movie decoder rewrites its linear planes
+                    // in place while they stay bound), after a kernel file read into the
+                    // texture's range (titles stream data in after the first draw that
+                    // uses it), or after a frame without this texture, during which its
+                    // memory may have been given other contents. Resolves into the range
+                    // already dropped the entry (InvalidateRange).
                     bool examine = false;
                     if (!replacementArrived && cached->guestBytes != 0 && cached->checkedFrame != frame) {
                         const uint32_t written = GuestWriteGeneration(*cached);
-                        examine = cached->checkedFrame + 1 < frame || written != cached->writeGeneration;
+                        examine = !tiled || cached->checkedFrame + 1 < frame || written != cached->writeGeneration;
                         cached->checkedFrame = frame;
                         cached->writeGeneration = written;
                     }
