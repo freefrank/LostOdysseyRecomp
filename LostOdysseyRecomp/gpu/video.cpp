@@ -945,6 +945,12 @@ namespace gpu::video
 #else
             plume::RenderSwapChainDesc desc(g_window, kSwapChainFormat, kSwapChainBuffers);
 #endif
+#ifdef __ANDROID__
+            // The final bicubic upscale may write the images from a compute
+            // pass (PresentationOptions::storageTarget), which costs the
+            // Adreno 750 less GPU time than the fragment pass.
+            desc.storageTextures = true;
+#endif
             if (g_hdrSwapchain) {
                 desc.format = plume::RenderFormat::R16G16B16A16_FLOAT;
                 desc.outputMode = plume::RenderOutputMode::HDR_LINEAR;
@@ -1044,7 +1050,8 @@ namespace gpu::video
                 GetDpiForWindow(g_nativeWindow), raw.right - raw.left, raw.bottom - raw.top,
                 physicalWidth, physicalHeight, g_swapChain->getWidth(), g_swapChain->getHeight(), g_displayMode.load());
 #else
-            LOG_INFO("video output: {} swapchain={}x{} mode={}", reason, g_swapChain->getWidth(), g_swapChain->getHeight(), g_displayMode.load());
+            LOG_INFO("video output: {} swapchain={}x{} storage={} mode={}", reason, g_swapChain->getWidth(), g_swapChain->getHeight(),
+                g_swapChain->hasStorageTextures(), g_displayMode.load());
 #endif
         }
 
@@ -2585,7 +2592,8 @@ namespace gpu::video
             g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
             if (!g_uploadBuffer) return "presentation upload allocation failed";
             g_presentation = std::make_unique<Presentation>();
-            if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat())) return "presentation shader/pipeline initialization failed";
+            if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat(), g_swapChain->hasStorageTextures()))
+                return "presentation shader/pipeline initialization failed";
             g_presentation->PrewarmOverlay();
             g_presentationFormat = g_swapChain->getFormat();
             startupWatch.Step("renderer initialization");
@@ -3946,7 +3954,7 @@ namespace gpu::video
             g_snapshotWidth = g_snapshotHeight = 0;
             if (g_presentationFormat != g_swapChain->getFormat()) {
                 auto replacement = std::make_unique<Presentation>();
-                if (!replacement->Init(g_device.get(), g_swapChain->getFormat())) {
+                if (!replacement->Init(g_device.get(), g_swapChain->getFormat(), g_swapChain->hasStorageTextures())) {
                     LOG_ERROR("HDR: presentation pipeline rebuild failed after swapchain format change");
                     g_displayFailed = true;
                     return false;
@@ -4681,6 +4689,7 @@ namespace gpu::video
                     sourceOptions.displayAdjust = presentationOptions.displayAdjust;
                     sourceOptions.displayBrightness = presentationOptions.displayBrightness;
                     sourceOptions.displayGamma = presentationOptions.displayGamma;
+                    sourceOptions.storageTarget = g_swapChain->hasStorageTextures();
                     // With scene AA already applied this is DrawComposited's pass.
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
