@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 // Guest occlusion queries (PM4 EVENT_WRITE_ZPD) measured with host GPU queries.
@@ -29,6 +30,13 @@
 // after every primitive query of the frame. Fast answers therefore follow the
 // owner the allocation hook reports for a record (its call site and per-frame
 // ordinal at that site), not the record itself.
+//
+// Policy::History uses the game's own deferred path instead (the UE3 flag
+// 0x833180B4): the game reads each query at the start of the next frame, keyed
+// by the object, and the guest hooks answer that read from the newest measured
+// count of the same object (gpu/occlusion_history.h), so no read waits for the
+// host GPU. Its queries leave their END records to the host results
+// (Mode::History) and hand every measured count back with its owner.
 //
 // This file holds the bookkeeping only; the renderer owns the host queries and
 // writes the records this class returns.
@@ -65,20 +73,28 @@ namespace gpu::occlusion
         // guest waits for exact results and culls with them, at the cost of a
         // GPU sync in the middle of every frame that issues queries.
         Strict,
+        // Queries with a history owner (HistoryOwner) leave their END record
+        // to the host results, like Strict, and report each measured count
+        // with its owner (TakeCompleted); the guest hooks answer the game's
+        // reads from those counts and do not wait. Other queries (the sun
+        // flare, which the game still reads in the same frame) are answered
+        // as in Fast.
+        History,
     };
 
     // Which Mode answers the queries: one of them throughout, or AdaptiveMode's
     // choice frame by frame.
-    enum class Policy { Adaptive, Fast, Strict };
+    enum class Policy { Adaptive, Fast, Strict, History };
 
-    // LO_ZPD_MODE: unset or "host" selects Policy::Adaptive, "fast" and
-    // "strict" pin one mode. The command processor's fake modes (grow, xenia,
-    // begin0, none) turn host queries off.
+    // LO_ZPD_MODE: unset or "host" selects Policy::Adaptive, "fast", "strict"
+    // and "history" pin one mode. The command processor's fake modes (grow,
+    // xenia, begin0, none) turn host queries off.
     inline std::optional<Policy> HostPolicy(const char* mode)
     {
         if (!mode || !*mode || std::strcmp(mode, "host") == 0) return Policy::Adaptive;
         if (std::strcmp(mode, "fast") == 0) return Policy::Fast;
         if (std::strcmp(mode, "strict") == 0) return Policy::Strict;
+        if (std::strcmp(mode, "history") == 0) return Policy::History;
         return std::nullopt;
     }
 
@@ -87,6 +103,13 @@ namespace gpu::occlusion
     // allocations from that call site since the pool was reset. Without an
     // owner a query is identified by its record slot.
     inline constexpr uint64_t OwnerKey(uint32_t caller, uint32_t ordinal) { return (uint64_t(caller) << 32) | ordinal; }
+
+    // Policy::History: one owner per issued query, so a measured count can be
+    // traced back to the objects that read it. The serial wraps long after
+    // any count it names has been collected.
+    inline constexpr uint32_t kHistoryOwnerBit = 0x80000000u;
+    inline constexpr uint64_t HistoryOwner(uint32_t caller, uint32_t serial) { return OwnerKey(caller, serial | kHistoryOwnerBit); }
+    inline constexpr bool IsHistoryOwner(uint64_t owner) { return (owner >> 32) && (uint32_t(owner) & kHistoryOwnerBit); }
 
     // One host query around one guest draw. `scale` converts host samples to
     // guest samples (resolution scale and guest MSAA).
@@ -173,7 +196,8 @@ namespace gpu::occlusion
                 return Unmeasured(address, query.begin);
             query.end = address;
             std::optional<Write> write;
-            if (mode_ == Mode::Fast) {
+            query.history = mode_ == Mode::History && IsHistoryOwner(query.owner);
+            if (mode_ == Mode::Fast || (mode_ == Mode::History && !query.history)) {
                 const auto known = last_.find(query.owner);
                 const uint32_t samples = known != last_.end() && known->second ? known->second : 1;
                 write = Write{address, Counts(query.begin + samples), samples, false};
@@ -214,6 +238,25 @@ namespace gpu::occlusion
         // A guest may be waiting on an END record that is not written yet.
         bool HasAwaited() const { return unwritten_ != 0; }
 
+        // The END record of the query in `slot` waits for host results.
+        bool Unwritten(uint32_t slot) const
+        {
+            const auto generation = generations_.find(SlotOf(slot));
+            if (generation == generations_.end()) return false;
+            for (const auto& query : pending_)
+                if (query.slot == SlotOf(slot) && !query.written && query.generation == generation->second) return true;
+            return false;
+        }
+
+        // Mode::History: (owner, guest samples) of every query measured since
+        // the last call, in issue order, including those whose slot the guest
+        // has reissued since.
+        void TakeCompleted(std::vector<std::pair<uint64_t, uint32_t>>& out)
+        {
+            out.insert(out.end(), completed_.begin(), completed_.end());
+            completed_.clear();
+        }
+
         // An unwritten END record waits on host queries in `batch`.
         bool Waiting(uint64_t batch) const
         {
@@ -249,6 +292,7 @@ namespace gpu::occlusion
             double samples = 0.0; // guest samples measured so far
             bool failed = false;
             bool written = false; // END record written at its event (Mode::Fast)
+            bool history = false; // Mode::History query: count reported, not kept in last_
             uint64_t owner = 0;   // key of the Fast answers (OwnerKey or slot)
         };
 
@@ -280,7 +324,10 @@ namespace gpu::occlusion
                 }
                 if (!done) { ++it; continue; }
                 const uint32_t samples = it->failed ? kUnmeasuredSamples : GuestSamples(it->samples);
-                if (!it->failed) last_[it->owner] = samples;
+                if (!it->failed) {
+                    if (!it->history) last_[it->owner] = samples;
+                    else if (completed_.size() < kMaxCompleted) completed_.emplace_back(it->owner, samples);
+                }
                 const bool current = generations_[it->slot] == it->generation;
                 if (it->written || current) {
                     writes.push_back({it->end, Counts(it->begin + samples), samples, !it->failed, !it->written});
@@ -305,6 +352,8 @@ namespace gpu::occlusion
         std::vector<std::vector<Part>> spareParts_; // cleared part lists of finished queries
         std::unordered_map<uint32_t, uint32_t> generations_;
         std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner
+        static constexpr size_t kMaxCompleted = size_t(1) << 18; // nobody draining: stop growing
+        std::vector<std::pair<uint64_t, uint32_t>> completed_;   // Mode::History counts for TakeCompleted
     };
 
     // Policy::Adaptive: the Mode for the next frame, from the zero share of the

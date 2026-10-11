@@ -43,8 +43,8 @@ allocate:
 
 | Return address | Caller | Queries |
 |---|---|---|
-| `0x823CC2D0` | `sub_823CBF68` (primitive occlusion pass) | single primitives |
-| `0x823CD744` | `sub_823CD718` (batched boxes, 8 vertices each) | groups of primitives |
+| `0x823CC2D0` | `sub_823CBF68` (occlusion pass) | one box per projected shadow frustum |
+| `0x823CD744` | `sub_823CD718` (`FOcclusionQueryBatcher::BatchPrimitive`) | primitives: one per query, or up to 8 boxes per query for objects not seen recently |
 | `0x823D5688` | `sub_823D5430` (sun flare) | one per frame, after all others |
 
 The sun flare draws a 4-vertex quad around the sun inside its query and reads
@@ -117,6 +117,7 @@ never culls. A record without a reported owner keys on its slot as before.
 | unset / `host` (default) | Fast, Strict while most queried objects read zero (below) | Only in Strict stretches | as `fast` in Uhra (it stays Fast) |
 | `fast` (the default before adaptive) | Written at the event with the last measured count of the same record; 1 when that was zero or unknown | Never: no query reads zero | 128.8 FPS vs 130.3 fake (about 1%) |
 | `strict` | Written once the host GPU has counted it; the guest waits | With exact counts | 111.2 FPS vs 131.7 fake (about 15%) |
+| `history` | The game reads each query at the start of the next frame; the guest hooks answer from the newest count of the same object (below) | With counts about three frames old | not measured on D3D12 |
 | `grow`, `xenia`, `begin0`, `none` | Old fake counts, no host queries | Never | baseline |
 
 Fast follows Xenia's default `fast` mode: counts used as magnitudes, such as
@@ -166,6 +167,60 @@ and queries (1.6 ms per frame in Uhra). Submitting the work before the first
 query earlier did not shorten that wait and lowered the rate further (about
 104 FPS), so it was removed. Any failure (device loss, failed submit or wait,
 shutdown) writes the waiting records as visible, so a guest never waits forever.
+
+### History (`LO_ZPD_MODE=history`)
+
+Even Fast makes the guest wait in the middle of every frame: its same-frame
+read polls `GetData` until the command processor has reached the query. On
+psvita at 720p that wait was 8–13 ms a frame at 45 W and 22–31 ms at 12 W;
+Strict adds the GPU to it. History removes the read from the frame:
+
+- The game has a second, UE3-standard path behind the global `0x833180B4`
+  (only ever set to 0, at `827C94EC`). With it set, `sub_823CBF68` keeps the
+  queries in the view state's maps (`ViewState+136` -> `+40` keyed by the
+  primitive component, `+20` by the projected shadow's light, primitive and a
+  flag bit) instead of the per-frame `View+700`/`+712` arrays, and
+  `sub_823C0910` reads them through `sub_823CE960` at the start of the next
+  frame, before the depth prepass and before it issues the frame's own queries.
+  Its reads at `823CEC44` (primitives, `r31` = component) and `823CEACC`
+  (shadows) still loop in `sub_823CF390` until the count is there.
+- The host has not counted those queries by then (the command processor is
+  about a frame behind the guest, the GPU another one), so
+  `patches/occlusion_history.cpp` answers each of these reads itself
+  (`gpu/occlusion_history.h`): the exact count when `GetData` already has it,
+  otherwise the newest count measured for the same object, which on psvita is
+  the one issued three frames earlier. It answers visible for an object with no
+  count yet, a count older than three frames, a count from before a camera cut
+  (the view matrix turned about 15 degrees or moved 300 units in a frame), an
+  object not read in the previous frame, and reads in scene captures, which
+  share the game's query pool.
+- The game's own cut flag (`View+1620`) never fires in play: it is computed
+  only when a post-process effect asks for the previous view transforms
+  (`View+1616`), which none did in any test.
+- Each allocation gets its own owner (`HistoryOwner`), the command processor
+  takes owners per record slot in order (`NoteOcclusionQueryOwner`), and the
+  tracker hands every measured count back with its owner, also for a slot the
+  guest has reissued since. The command processor completes batches whose fence
+  has signalled without waiting (`PollOcclusionSlots`).
+- The sun flare still allocates and reads its query in the same frame and
+  keeps its Fast answer. A guest waiting in `GetData` now names the record it
+  waits for, and the command processor only waits for the GPU when that record
+  is unwritten.
+
+psvita, native Vulkan, 1280x720, FSR native AA, one run each (frame ms / draws):
+
+| View | Adaptive 45 W | History 45 W | Adaptive 12 W | History 12 W |
+|---|---|---|---|---|
+| Uhra boot view | 17.7 / 2143 | 17.2 / 1941 | 49.8 / 2143 | 30.2 / 1941 |
+| Queen's Room spawn | 11.1 / 1206 | 15.3 / 1007 | 30.9 / 1205 | 20.6 / 1007 |
+| Queen's Room, inside | 15.1 / 2110 | 15.4 / 2029 | 41.9 / 2110 | 24.8 / 2029 |
+| Queen's Room stairs | 15.7 / 2986 | 13.7 / 1827 | 38.4 / 2986 | 20.8 / 1827 |
+| Guest Area conversation | 15.1 / 1847 | 15.1 / 1498 | 40.0 / 1847 | 27.4 / 1499 |
+
+At 45 W the Queen's Room spawn is slower with History (ABBA 11.2/11.3 vs
+13.2/13.7 ms): without the mid-frame sync the GPU stays busy (97% vs 73%) and
+the APU runs both GPU and CPU at lower clocks. Objects that come out from behind
+an occluder appear up to three frames late.
 
 ## Validation so far
 

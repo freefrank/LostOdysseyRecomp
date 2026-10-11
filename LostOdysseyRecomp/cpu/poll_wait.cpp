@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "poll_wait.h"
+#include <patches/occlusion_history.h>
 
 extern "C" PPC_FUNC(__imp__sub_823CF390);
 extern "C" PPC_FUNC(__imp__sub_82322478);
@@ -8,6 +9,8 @@ extern "C" PPC_FUNC(__imp__sub_82322478);
 // query ordering. Only its repeated not-ready probes can pause on the host.
 PPC_FUNC(sub_823CF390)
 {
+    // Policy::History answers the game's deferred reads without the loop.
+    if (occlusion_history::Read(ctx, base)) return;
     poll_wait::RunScoped(poll_wait::Kind::Query, [&] { __imp__sub_823CF390(ctx, base); });
 }
 

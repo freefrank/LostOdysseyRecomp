@@ -3,6 +3,7 @@ namespace gpu::frame_generation { struct ResolvedHandoff; struct CompositeHandof
 
 #include <cstdint>
 #include <filesystem>
+#include <utility>
 #include <vector>
 #include <string>
 #include "present_capture.h"
@@ -67,14 +68,24 @@ namespace gpu::renderer
     // physicalAddress. False when host queries are off; the command processor
     // then writes its fake counts.
     bool OcclusionQueryEvent(uint32_t physicalAddress);
-    // A guest waits in GetData for a query result. Any thread.
-    void NoteOcclusionWait();
+    // A guest waits in GetData for the result of the query whose records sit
+    // in the slot at physicalSlot (0: unknown). Any thread.
+    void NoteOcclusionWait(uint32_t physicalSlot);
     // The game's query pool handed the query whose records sit in the slot at
     // physicalSlot to `owner` (gpu::occlusion::OwnerKey). Guest thread.
     void NoteOcclusionQueryOwner(uint32_t physicalSlot, uint64_t owner);
     // Command processor thread, when it has nothing to execute or is about to
     // block: completes the queries a waiting guest needs.
     void ServiceOcclusionQueries();
+    // Policy::History (gpu/occlusion_history.h) is on: the guest hooks set the
+    // game's deferred-occlusion flag and answer its reads.
+    bool OcclusionHistoryEnabled();
+    // Policy::History: the (owner, guest samples) measured since the last call.
+    // Guest thread.
+    void TakeOcclusionCompletions(std::vector<std::pair<uint64_t, uint32_t>>& out);
+    // Policy::History: ask the command processor to complete the batches the
+    // GPU has finished, without waiting for the others. Any thread.
+    void RequestOcclusionPoll();
 
     // Called on XE_SWAP before the frontbuffer is presented: finishes all work.
     void Flush();

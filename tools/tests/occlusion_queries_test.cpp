@@ -1,4 +1,5 @@
 #include "gpu/occlusion_queries.h"
+#include "gpu/occlusion_history.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -44,6 +45,9 @@ int main()
     Check(HostPolicy(nullptr) == Policy::Adaptive && HostPolicy("") == Policy::Adaptive && HostPolicy("host") == Policy::Adaptive,
         "adaptive host queries by default");
     Check(HostPolicy("fast") == Policy::Fast && HostPolicy("strict") == Policy::Strict, "fast and strict pin one mode");
+    Check(HostPolicy("history") == Policy::History, "history answers on request");
+    Check(IsHistoryOwner(HistoryOwner(0x823CD744, 7)) && !IsHistoryOwner(OwnerKey(0x823D5688, 0)) && !IsHistoryOwner(0x11b000),
+        "history owners are told apart from Fast owners and record slots");
     Check(!HostPolicy("grow") && !HostPolicy("none") && !HostPolicy("xenia"), "fake modes turn host queries off");
 
     {
@@ -246,6 +250,141 @@ int main()
         Check(writes.size() == 1 && writes[0].apply && Result(begin.record, writes[0].record) == kUnmeasuredSamples,
             "abandoned on shutdown");
         Check(!tracker.HasPending() && !tracker.Active(), "nothing left after shutdown");
+    }
+    {
+        // History: a history owner's END waits for host results and its count
+        // comes back with the owner, even after the guest reissued the slot.
+        Tracker tracker(Mode::History);
+        const uint64_t box = HistoryOwner(0x823CD744, 1), again = HistoryOwner(0x823CD744, 2);
+        Write begin = tracker.Begin(0xb020, box);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({20, 0, 0.5});
+        Check(!tracker.End(0xb000), "history END left to the host results");
+        Check(tracker.HasAwaited() && tracker.Unwritten(0xb000) && tracker.Unwritten(0xb020), "the record is unwritten");
+        begin = tracker.Begin(0xb020, again);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({21, 0, 1.0});
+        Check(!tracker.End(0xb000), "the reissued query waits too");
+        Check(tracker.Complete(20, Results({30})).empty(), "the superseded count is not written");
+        std::vector<std::pair<uint64_t, uint32_t>> completed;
+        tracker.TakeCompleted(completed);
+        Check(completed.size() == 1 && completed[0].first == box && completed[0].second == 15, "but reported to its owner");
+        const auto writes = tracker.Complete(21, Results({0}));
+        Check(writes.size() == 1 && writes[0].apply && Result(begin.record, writes[0].record) == 0, "the current one is written");
+        completed.clear();
+        tracker.TakeCompleted(completed);
+        Check(completed.size() == 1 && completed[0].first == again && completed[0].second == 0, "zero counts are reported");
+        Check(!tracker.HasAwaited() && !tracker.Unwritten(0xb000), "nothing left unwritten");
+        // The sun flare keeps its Fast answer: the game reads it in the same frame.
+        const uint64_t sun = OwnerKey(0x823D5688, 0);
+        begin = tracker.Begin(0xc020, sun);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({22, 0, 1.0});
+        auto end = tracker.End(0xc000);
+        Check(end && end->apply && Result(begin.record, end->record) == 1, "flare answered at once");
+        Check(!tracker.Unwritten(0xc000), "a written record is not waited for");
+        tracker.Complete(22, Results({40}));
+        completed.clear();
+        tracker.TakeCompleted(completed);
+        Check(completed.empty(), "Fast counts stay with Fast");
+        begin = tracker.Begin(0xc020, sun);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({23, 0, 1.0});
+        end = tracker.End(0xc000);
+        Check(end && Result(begin.record, end->record) == 40, "flare reads its last count");
+    }
+    {
+        // Camera cuts: an axis turning about 15 degrees or the view moving 300 units.
+        const float still[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 100, 50, 10, 1};
+        float turned[16] = {0.9397f, 0, -0.3420f, 0, 0, 1, 0, 0, 0.3420f, 0, 0.9397f, 0, 100, 50, 10, 1}; // 20 degrees
+        float panned[16] = {0.9986f, 0, -0.0523f, 0, 0, 1, 0, 0, 0.0523f, 0, 0.9986f, 0, 100, 50, 10, 1}; // 3 degrees
+        float walked[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 160, 50, 10, 1};
+        float jumped[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 100, 50, 2400, 1};
+        Check(!ViewCut(still, still) && !ViewCut(still, panned) && !ViewCut(still, walked), "camera motion is not a cut");
+        Check(ViewCut(still, turned) && ViewCut(still, jumped), "turns and jumps are cuts");
+    }
+    {
+        // HistoryAnswers: each frame the game reads last frame's query, before
+        // it issues its own; the host count of a query arrives at the start of
+        // the third frame after its issue, as measured on psvita.
+        using Kind = HistoryAnswers::Kind;
+        HistoryAnswers answers;
+        const uint64_t wall = 0x40001000;
+        const uint32_t query = 0x70000000;
+        std::vector<std::pair<uint64_t, uint32_t>> issued; // owner, true count at its issue
+        auto frame = [&](uint32_t visible, bool read = true, bool cut = false, bool main = true) {
+            answers.BeginFrame();
+            if (cut) answers.Cut();
+            if (issued.size() >= 3) answers.Completed(issued[issued.size() - 3].first, issued[issued.size() - 3].second);
+            uint32_t answer = ~0u;
+            if (read && !issued.empty())
+                answer = answers.Read(Kind::Primitive, wall, query + uint32_t(issued.size()) - 1, true, false, 0);
+            issued.emplace_back(answers.Issue(query + uint32_t(issued.size()), 0x823CD744, main), visible);
+            return answer;
+        };
+        frame(0);
+        Check(frame(0) == HistoryAnswers::kVisible, "nothing measured yet: visible");
+        frame(0);
+        Check(frame(0) == 0, "a measured zero culls");
+        Check(frame(0) == 0, "and keeps culling");
+        // The object comes out: its first three frames use older zeros.
+        uint32_t missing = 0;
+        while (frame(500) == 0) ++missing;
+        Check(missing == 3, "missing for the three frames of the host pipeline");
+        Check(frame(500) == 500, "then answered with its count");
+        // A frame without a read: the count predates the gap.
+        frame(0, false);
+        Check(frame(0) == HistoryAnswers::kVisible, "not read in the previous frame: visible");
+        frame(0);
+        Check(frame(0) == 0, "continuous reads cull again");
+        // A cut: counts issued before it stand for the old view.
+        Check(frame(0, true, true) == HistoryAnswers::kVisible, "cut frame: visible");
+        Check(frame(0) == HistoryAnswers::kVisible && frame(0) == HistoryAnswers::kVisible, "until a count after the cut arrives");
+        Check(frame(0) == 0, "post-cut zero culls");
+        // A scene capture reissued the query: its count is not this object's.
+        frame(0, true, false, false);
+        Check(frame(0) == HistoryAnswers::kVisible, "query last issued by a scene capture: visible");
+        // A ready count is used as it is.
+        answers.BeginFrame();
+        const uint64_t owner = answers.Issue(0x7100, 0x823CD744, true);
+        (void)owner;
+        answers.BeginFrame();
+        Check(answers.Read(Kind::Shadow, 77, 0x7100, true, true, 9) == 9, "ready count taken directly");
+        answers.BeginFrame();
+        Check(answers.Read(Kind::Shadow, 77, 0x7100, true, true, 0) == 0, "ready zero culls");
+        Check(answers.Read(Kind::Shadow, 77, 0x7100, false, true, 0) == HistoryAnswers::kVisible, "reads in a scene capture: visible");
+        // Stale counts: nothing newer than kMaxAge frames.
+        HistoryAnswers late;
+        late.BeginFrame();
+        const uint64_t first = late.Issue(0x7200, 0x823CD744, true);
+        late.BeginFrame();
+        Check(late.Read(Kind::Primitive, 5, 0x7200, true, false, 0) == HistoryAnswers::kVisible, "first read: unknown");
+        late.Issue(0x7200, 0x823CD744, true);
+        late.Completed(first, 0);
+        uint32_t culled = 0, frames = 0;
+        for (; frames < 8; ++frames) {
+            late.BeginFrame();
+            culled += late.Read(Kind::Primitive, 5, 0x7200, true, false, 0) == 0;
+            late.Issue(0x7200, 0x823CD744, true);
+        }
+        Check(culled == HistoryAnswers::kMaxAge, "a count is used for kMaxAge frames, then reads visible");
+        const auto& stats = late.GetStats();
+        Check(stats.stale == frames - culled && stats.unknown == 1, "stale and unknown reads counted");
+        // Hysteresis keeps a recently visible object drawn through short zeros.
+        HistoryAnswers sticky(4);
+        std::vector<std::pair<uint64_t, uint32_t>> owners;
+        auto step = [&](uint32_t visible) {
+            sticky.BeginFrame();
+            if (owners.size() >= 3) sticky.Completed(owners[owners.size() - 3].first, owners[owners.size() - 3].second);
+            const uint32_t answer = owners.empty() ? ~0u : sticky.Read(Kind::Primitive, 9, 0x7300, true, false, 0);
+            owners.emplace_back(sticky.Issue(0x7300, 0x823CD744, true), visible);
+            return answer;
+        };
+        for (int i = 0; i < 6; ++i) step(100);
+        uint32_t drawn = 0;
+        for (int i = 0; i < 6; ++i) drawn += step(0) != 0;
+        Check(drawn == 6 && sticky.GetStats().hysteresis == 3, "zeros within 4 issues of a visible count stay drawn");
+        Check(step(0) == 0, "then the object is culled");
     }
     std::cout << "PASS: occlusion query bookkeeping\n";
     return 0;
