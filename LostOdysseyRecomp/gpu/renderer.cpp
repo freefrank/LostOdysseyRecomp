@@ -4300,7 +4300,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // Writes guest query records. The guest's GetData treats a record as
             // ready once either ZPass half leaves its sentinel, so both halves are
             // stored together, after every other count.
-            void WriteOcclusionRecords(const std::vector<gpu::occlusion::Write>& writes)
+            void WriteOcclusionRecords(std::span<const gpu::occlusion::Write> writes)
             {
                 for (const auto& write : writes) {
                     if (!write.apply) continue;
@@ -4325,9 +4325,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const auto known = g_occlusionOwners.find(gpu::occlusion::SlotOf(address));
                         if (known != g_occlusionOwners.end()) owner = known->second;
                     }
-                    WriteOcclusionRecords({occlusion.Begin(address, owner)});
+                    const auto begin = occlusion.Begin(address, owner);
+                    WriteOcclusionRecords({&begin, 1});
                 }
-                else if (auto end = occlusion.End(address)) WriteOcclusionRecords({*end});
+                else if (const auto end = occlusion.End(address)) WriteOcclusionRecords({&*end, 1});
                 PublishOcclusionAwaited();
                 return true;
             }
@@ -9780,7 +9781,9 @@ void main()
                     RenderTexture* actualColor = nullptr;
                     const char* substitution = "none";
                 };
-                std::array<std::optional<AlphaPostInput>, 4> alphaPostInputs{};
+                // Default-initialized: four disengaged optionals without zeroing
+                // their payloads on every draw.
+                std::array<std::optional<AlphaPostInput>, 4> alphaPostInputs;
                 struct AlphaPostDepthInput {
                     RenderTexture* texture = nullptr;
                     RenderFormat format = RenderFormat::UNKNOWN;
@@ -14245,10 +14248,13 @@ void main()
                     c1.mmioBlockChecks = c1.mmioBlockDiffs = c1.mmioWordChanges = 0;
                 }
                 if (r.nativeVulkan) {
-                    // Graphics pipeline rebinds plume skipped inside a render pass (all lists).
+                    // Graphics pipeline rebinds plume skipped inside a render pass (renderer lists).
                     static uint64_t skippedBefore = 0;
-                    const uint64_t skipped = plume::VulkanCommandList::skippedPipelineBinds.load(std::memory_order_relaxed);
-                    LOG_INFO("render binds frame={} pipeline_binds_skipped={}", r.frame, skipped - skippedBefore);
+                    uint64_t skipped = 0;
+                    for (const auto& slot : r.gpuSlots)
+                        for (const auto* list : {slot.list.get(), slot.srIsolated.get(), slot.srContinuation.get()})
+                            if (list) skipped += static_cast<const plume::VulkanCommandList*>(list)->skippedPipelineBinds;
+                    LOG_INFO("render binds frame={} pipeline_binds_skipped={}", r.frame, skipped >= skippedBefore ? skipped - skippedBefore : skipped);
                     skippedBefore = skipped;
                 }
                 const render_timing::CpuSegments cpu{r.drawsThisFrame, r.nShader, r.nPipeline, r.nTexture, r.nResolve,

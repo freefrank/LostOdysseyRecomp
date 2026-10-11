@@ -304,7 +304,9 @@ namespace gpu::record_timing
         ~Probe() { if (recorder) recorder->End(); }
         Probe(const Probe&) = delete;
         Probe& operator=(const Probe&) = delete;
-        void Enter(Phase phase) { if (recorder) recorder->Enter(phase); }
-        DrawSample* Sample() { return recorder ? &recorder->Current() : nullptr; }
+        // Forced inline: called about ten times per draw from DrawImpl, where
+        // the compiler otherwise keeps it out of line even when timing is off.
+        [[gnu::always_inline]] void Enter(Phase phase) { if (recorder) recorder->Enter(phase); }
+        [[gnu::always_inline]] DrawSample* Sample() { return recorder ? &recorder->Current() : nullptr; }
     };
 }
