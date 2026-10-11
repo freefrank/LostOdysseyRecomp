@@ -1,9 +1,9 @@
 # Pull request checks and releases on Gitea
 
-Since 2026-09-30 the four short Windows/Linux pull request checks below run on
+Since 2026-09-30 the short Windows/Linux pull request checks below run on
 Gitea Actions at `git.zkx.ca`; GitHub queues were too slow for these short
 jobs. Windows and Linux release packaging followed on 2026-10-01 (see
-[Releases](#releases)). These four checks exist only on Gitea; their GitHub
+[Releases](#releases)). These checks exist only on Gitea; their GitHub
 copies were removed on 2026-10-02. The macOS arm64
 workflow is an explicit exception: on `macos-26`, pushes to `main` and pull
 requests targeting `main` build libraries and tests without game data; it does
@@ -13,9 +13,8 @@ and issue triage stay on GitHub.
 
 | Workflow (`.gitea/workflows/`) | Jobs | Runner |
 |---|---|---|
-| `fg-cpu-contracts.yml` | GPU-free FG contracts | Linux and Windows |
+| `fg-cpu-contracts.yml` | GPU-free FG contracts and the reusable FG core (`tools/tests/frame_generation`) | Linux and Windows |
 | `fg-game-integration.yml` | clang-cl compile of the production renderer/video units, FG bridge link and input contract | Windows |
-| `reusable-fg.yml` | Shared FG core; DLSS, FSR and combined native adapters | Linux and Windows |
 | `review-regressions.yml` (from the 2026-09-30 project review) | Sanitizer regression suite; updater AppImage restart test; AppImage and Flatpak packaging script tests | Linux |
 | `android-apk.yml` (pushes to `packaging/android`, `tools/android`, `thirdparty/libadrenotools`, or dispatch) | arm64 debug APK through `tools/android/ci_build.sh` (PPC code generation, Android DXC, NDK build, Gradle assemble + lint, runtime JVM tests); artifact `LostOdysseyRecomp-android-arm64-debug`. SDK/NDK, DXC, Gradle home and ccache persist on `LO_CI_CACHE`; signed with the project's debug keystore from build-inputs | Linux (privileged) |
 
@@ -486,7 +485,7 @@ First green run, 2026-09-30, measured from job start to end:
 | Job | Time |
 |---|---|
 | FG CPU contracts, Linux / Windows | 26 s / 80 s |
-| Reusable FG core, Linux / Windows; native DLSS, FSR, both | 24 s / 26 s; 36–43 s |
+| Reusable FG core, Linux / Windows (folded into FG CPU contracts on 2026-10-10; the native DLSS/FSR adapter job was dropped) | 24 s / 26 s |
 | Review regressions (Linux) | 69 s |
 | FG game integration compile (Windows) | 366 s; 167 s with the submodule mirror |
 

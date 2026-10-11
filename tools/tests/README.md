@@ -100,4 +100,4 @@ Same approach for instruction semantics (carry, masks, shifts, Rc forms, memory 
 
 ## CI
 
-Pull request checks run on Gitea Actions (`fg-cpu-contracts.yml`, `reusable-fg.yml`, `fg-game-integration.yml`, `review-regressions.yml`; see [ci-gitea.md](../../docs/notes/ci-gitea.md)). The macOS arm64 workflow on GitHub builds and runs the targets that need no game data. A passing check is not gameplay or visual acceptance.
+Pull request checks run on Gitea Actions: `fg-cpu-contracts.yml` (FG contracts and the reusable FG core), `fg-game-integration.yml` and `review-regressions.yml` (see [ci-gitea.md](../../docs/notes/ci-gitea.md)). The macOS arm64 workflow on GitHub builds and runs the targets that need no game data. A passing check is not gameplay or visual acceptance.
