@@ -1,3 +1,5 @@
+#include <os/platform.h>
+#if LO_PLATFORM_SWITCH
 #include <os/switch_cpu_profiler.h>
 
 #include <switch.h>
@@ -604,3 +606,4 @@ void os::switch_cpu_profiler::WriteLog(const char* text, size_t size)
     }
     funlockfile(stderr);
 }
+#endif
