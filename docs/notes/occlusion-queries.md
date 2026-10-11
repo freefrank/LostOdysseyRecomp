@@ -231,6 +231,19 @@ psvita, native Vulkan, 1280x720, FSR native AA, capped at 12 W, average frame ms
 | Queen's Room spawn | 21.7 (1206) | 20.8 (1007) | 20.3 → 19.5 ms (−4%) |
 | Guest Area conversation | 29.4 (1848–2459) | 27.4 (1505) | 28.4 → 25.8 ms (−9%) |
 
+TB321FU (Adreno 750, Turnip), 720p, frame rate 60, vsync off, FPS per 20 s view,
+one session after the fence poll was removed (two runs per arm in Uhra, one in
+the other views):
+
+| View | Adaptive | History |
+|---|---|---|
+| Uhra boot view | 49.5 / 50.5 (2172 draws) | 52.3 / 55.0 (1984) |
+| Queen's Room spawn | 27.0 / 26.9 (1298) | 60.0, at the frame rate limit (1093) |
+| Jansen dialogue | 16.5 / 16.8 (1873) | 53.2 (1510) |
+
+Adaptive is in Strict in the last two views and waits for the GPU once a frame
+(20 and 32–38 ms a frame); History does not wait.
+
 At 12 W this box's GPU stays at its lowest clock in both modes; the mid-frame
 wait that History removes costs the Adreno tablet far more (its CPU waits
 27–44 ms there and its GPU clock drops). At 45 W the box sits at its 95 °C limit
