@@ -9028,8 +9028,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 SharedConstants shared{};
                 if (vulkan) shared.vertexArenaAddress = vertexArena->getDeviceAddress();
-                for (uint32_t i = 0; i < 8; i++) shared.bools[i] = Reg(REG_BOOL_CONSTANTS + i);
-                for (uint32_t i = 0; i < 32; i++) shared.loops[i] = Reg(REG_LOOP_CONSTANTS + i);
+                // One call per run of registers instead of one per word (same values).
+                g_commandProcessor.ReadRegisters(REG_BOOL_CONSTANTS, 8, shared.bools);
+                g_commandProcessor.ReadRegisters(REG_LOOP_CONSTANTS, 32, shared.loops);
                 shared.transfer[0] = Reg(REG_PA_SU_POINT_SIZE);
                 shared.transfer[1] = Reg(REG_PA_SU_POINT_MINMAX);
                 shared.transfer[2] = std::bit_cast<uint32_t>(pointSizeLimit);
@@ -9311,8 +9312,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
                         continue;
-                    uint32_t d0 = Reg(REG_FETCH_CONSTANTS + slot * 2);
-                    uint32_t d1 = Reg(REG_FETCH_CONSTANTS + slot * 2 + 1);
+                    uint32_t vfetch[2];
+                    g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS + slot * 2, 2, vfetch);
+                    const uint32_t d0 = vfetch[0], d1 = vfetch[1];
                     // A slot the shader reads but we cannot bind is a silent failure: the
                     // shader then fetches from arena offset 0, i.e. some other draw's data.
                     const char* skip = nullptr;
@@ -9488,7 +9490,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (!((s->info.textureSlotMask >> slot) & 1))
                             continue;
                         uint32_t fetch[6];
-                        for (int i = 0; i < 6; i++) fetch[i] = Reg(REG_FETCH_CONSTANTS + slot * 6 + i);
+                        g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS + slot * 6, 6, fetch);
                         const uint32_t declared = s->info.textureDimension[slot];
                         const uint32_t bank = declared == 2 ? 1 : declared == 3 ? 2 : 0;
                         activeTextureSlots[bank] |= uint32_t(1) << slot;
