@@ -36,7 +36,7 @@ The game finds the files under `overlay/` by name, so `mod.ini` needs no file li
 
 Zip it with `mods/` at the top of the archive: `mods/<id>/mod.ini`, `mods/<id>/overlay/...`. Players extract the archive into the game folder; Mod Organizer 2 installs it as it is. Mod folders never conflict with each other. When two of them replace the same file, the in-game mod order decides, then `priority` in `mod.ini` (see [Modding API](Modding-API.md#order-and-mod-listini)). Changes take effect after a restart.
 
-Players manage installed mods in Settings → System → Mods. The page lists each mod with its `name`, `version` and `author`. A switches the selected mod On or Off, LB / RB move it up or down, and **Save mod list** (or Start) saves the order and offers a restart. The selected mod's `description` and folder appear in the help line. A mod with a broken `mod.ini` shows an error there with its first problem. Language packs are listed below the mods; choose one in Settings → System → Game language.
+Players manage installed mods in Settings → System → Mods. The page lists each mod with its `name`, `version` and `author`. The confirm button (A, or B if the game's confirm and cancel buttons are swapped) switches the selected mod On or Off, LB / RB move it up or down, and **Save mod list** (or Start) saves the order and offers a restart. The selected mod's `description` and folder appear in the help line. A mod with a broken `mod.ini` shows an error there with its first problem. Language packs are listed below the mods; choose one in Settings → System → Game language.
 
 To turn a top-level `overlay/` folder (an overlay pack) into a mod folder without packing it again:
 

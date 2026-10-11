@@ -2,7 +2,7 @@
 
 ## Automated checks without private game data
 
-Run these from a complete repository checkout (CMake 3.28+). They need no game data. No GitHub Actions job runs them: the `Mod API and Wiki` workflow only publishes the Wiki, so run the checks yourself before you rely on a change.
+Run these from a complete repository checkout (CMake 3.28+). They need no game data. The `macOS arm64` workflow builds and runs `LoModApiTest` together with the other tests that need no game data, but nothing in CI runs the Python checks, and the `Mod API and Wiki` workflow only publishes the Wiki. Run the checks yourself before you rely on a change.
 
 ```sh
 cmake -S . -B build-mod-tests -DLO_BUILD_RUNTIME=OFF -DLO_BUILD_RECOMP_LIB=OFF -DLO_BUILD_TOOLS=OFF -DLO_BUILD_GPU=OFF -DLO_BUILD_MOD_TESTS=ON
