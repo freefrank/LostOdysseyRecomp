@@ -13,6 +13,7 @@ on:
       - 'LostOdysseyRecomp/gpu/optiscaler_*'
       - 'tools/tests/optiscaler/**'
       - 'shared/frame_generation/**'
+      - 'tools/tests/frame_generation/**'
       - 'tools/patches/plume-lostodyssey.patch'
       - 'LostOdysseyRecomp/gpu/dlss_fg_*.h'
       - 'LostOdysseyRecomp/gpu/dlss_ngx.*'
@@ -48,6 +49,7 @@ on:
       - 'LostOdysseyRecomp/gpu/optiscaler_*'
       - 'tools/tests/optiscaler/**'
       - 'shared/frame_generation/**'
+      - 'tools/tests/frame_generation/**'
       - 'tools/patches/plume-lostodyssey.patch'
       - 'LostOdysseyRecomp/gpu/dlss_fg_*.h'
       - 'LostOdysseyRecomp/gpu/dlss_ngx.*'
@@ -96,8 +98,14 @@ jobs:
           SUDO=$(command -v sudo || true)
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends cmake g++ python3
+      - name: Configure reusable frame generation core
+        run: cmake -S tools/tests/frame_generation -B build/fg-core
+      - name: Build reusable frame generation core
+        run: cmake --build build/fg-core --config Release --parallel 4
+      - name: Test reusable frame generation core
+        run: ctest --test-dir build/fg-core -C Release --output-on-failure
       - name: Configure GPU-free contracts
-        run: cmake -S tools/tests/streamline_fg -B build/fg-contracts -DLO_STREAMLINE_FG_CPU_ONLY=ON
+        run: cmake -S tools/tests/streamline_fg -B build/fg-contracts
       - name: Build
         run: cmake --build build/fg-contracts --config Release --parallel 4
       - name: Test

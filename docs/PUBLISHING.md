@@ -22,7 +22,7 @@ Both readback hashes must equal `$publishRevision`. Stop if a push fails; resolv
 connection, authentication or divergent-history errors without force-pushing.
 Review the unpublished diff for private/generated content before publication.
 
-Since 2026-09-30 the FG contract, FG game integration compile, reusable FG and
+Since 2026-09-30 the FG contract (including the reusable FG core), FG game integration compile and
 review-regression pull request checks run as Gitea Actions on the `zkx` remote. A branch push to `zkx`
 starts them (subject to each workflow's path filter), and each result is reported back
 to the GitHub commit as `gitea/<workflow>`. Since 2026-10-01 release packaging runs

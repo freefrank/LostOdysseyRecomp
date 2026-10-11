@@ -98,9 +98,10 @@ void PollHostControls() {
     if (gameWindow && !SDL_GetWindowFromID(gameWindow)) gameWindow = 0;
     if (!gameWindow && focus) gameWindow = SDL_GetWindowID(focus);
     const auto edit = session.Get();
+    static const bool backgroundRun = std::getenv("LO_BACKGROUND") != nullptr;
     const bool allowed = focus && SDL_GetWindowID(focus) == gameWindow &&
         !(SDL_GetWindowFlags(focus) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) &&
-        !std::getenv("LO_BACKGROUND") && !host_ui::IsStopping() &&
+        !backgroundRun && !host_ui::IsStopping() &&
         !host_ui::IsGamePaused() && !IsOverlayVisible() && !settings::IsOpen() &&
         !edit.editorRequested && !edit.editorApplied;
     uint8_t lt = 0, rt = 0;

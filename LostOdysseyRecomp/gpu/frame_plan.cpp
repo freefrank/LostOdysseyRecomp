@@ -110,7 +110,8 @@ namespace gpu::frame_plan
     {
         const uint64_t extent = drawable.load(std::memory_order_acquire);
         auto config = settings::GetConfig();
-        const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
+        static const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
+        static const bool dlssInputProbe = [] { const char* value = getenv("LO_DLSS_INPUT_PROBE"); return value && std::string_view(value) == "1"; }();
         const resolution::Size drawableSize{uint32_t(extent >> 32), uint32_t(extent)};
         // The resolve-readback path renders the native raster and never supersamples.
         const auto output = readback ? upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio) :
@@ -124,7 +125,7 @@ namespace gpu::frame_plan
                 config.upscaler, output.x, output.y});
         cpuPlan = planner.Begin({uint32_t(config.internalResolution), config.antialiasing, config.scalingQuality,
             config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
-            readback, getenv("LO_DLSS_INPUT_PROBE") && std::string_view(getenv("LO_DLSS_INPUT_PROBE")) == "1",
+            readback, dlssInputProbe,
             config.fsrQuality});
         const auto identity = StatusIdentityOf(cpuPlan);
         const bool planChanged = identity != loggedStatusPlan;

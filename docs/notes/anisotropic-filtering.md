@@ -60,12 +60,9 @@ and mip-only (`base_address == 0`) fetches still upload a single level.
 
 ## Regression coverage
 
-Standalone CPU tests build on Windows and Linux without game assets:
+The standalone AF fixtures (`tools/tests/anisotropic_filtering`, including the Vulkan lane) were removed from the tree in the 2026-10 test pruning; recover them from git history if needed. The settings-menu suite remains:
 
 ```sh
-cmake -S tools/tests/anisotropic_filtering -B out/af -DCMAKE_BUILD_TYPE=Debug
-cmake --build out/af --config Debug --parallel 2
-ctest --test-dir out/af -C Debug --output-on-failure
 cmake -S tools/tests/settings_menu -B out/settings-menu -DCMAKE_BUILD_TYPE=Release
 cmake --build out/settings-menu --config Release --parallel 2
 ctest --test-dir out/settings-menu -C Release --output-on-failure

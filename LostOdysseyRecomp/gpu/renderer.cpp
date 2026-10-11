@@ -8917,8 +8917,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     PollTaaDiagnostic();
                     PollTaaLive();
-                    const char* dlssProbeValue = std::getenv("LO_DLSS_INPUT_PROBE");
-                    const auto route=temporal::RouteConsumer(activePlan,dlssProbeValue&&std::string_view(dlssProbeValue)=="1");
+                    static const bool dlssInputProbe = [] { const char* value = std::getenv("LO_DLSS_INPUT_PROBE"); return value && std::string_view(value) == "1"; }();
+                    const auto route=temporal::RouteConsumer(activePlan,dlssInputProbe);
                     const auto mode=route.effectiveAA;
                     if(sceneAAMode!=mode) {if(temporalHistory)temporalHistory->Reset();temporalSupportedFrame=~0ull;++temporalEpoch;}
                     sceneAAMode=mode;
