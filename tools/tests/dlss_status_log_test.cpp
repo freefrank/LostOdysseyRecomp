@@ -173,12 +173,12 @@ void CheckSavedLines(LogFile& log)
     saved(Upscaler::Dlss, DlssQuality::Dlaa, 60);
     const auto text = log.Text();
     Require(Count(text, "settings saved:") == 5, "five successful save lines");
-    Require(Has(text, "settings saved: 2560x1440 internal_resolution=0 mode=0 backend=Vulkan(1) AA=0 frame_rate=60 vrr_requested=false upscaler=Dlss(1) dlss_quality=Quality(0) language=1"),
+    Require(Has(text, "settings saved: 2560x1440 internal_resolution=0 mode=0 backend=Vulkan(1) AA=0 frame_rate=60 vsync=true vrr_requested=false upscaler=Dlss(1) dlss_quality=Quality(0) language=1"),
         "quality save keeps size, backend, AA and names the new fields");
-    Require(Has(text, "frame_rate=30 vrr_requested=false upscaler=Dlss(1) dlss_quality=Balanced(1)"), "balanced save");
-    Require(Has(text, "frame_rate=120 vrr_requested=false upscaler=Dlss(1) dlss_quality=Performance(2)"), "performance save");
-    Require(Has(text, "frame_rate=60 vrr_requested=false upscaler=Off(0) dlss_quality=Quality(0)"), "off save");
-    Require(Has(text, "frame_rate=60 vrr_requested=false upscaler=Dlss(1) dlss_quality=Dlaa(3)"), "DLAA save is not Off");
+    Require(Has(text, "frame_rate=30 vsync=true vrr_requested=false upscaler=Dlss(1) dlss_quality=Balanced(1)"), "balanced save");
+    Require(Has(text, "frame_rate=120 vsync=true vrr_requested=false upscaler=Dlss(1) dlss_quality=Performance(2)"), "performance save");
+    Require(Has(text, "frame_rate=60 vsync=true vrr_requested=false upscaler=Off(0) dlss_quality=Quality(0)"), "off save");
+    Require(Has(text, "frame_rate=60 vsync=true vrr_requested=false upscaler=Dlss(1) dlss_quality=Dlaa(3)"), "DLAA save is not Off");
 }
 
 void CheckRuntime(LogFile& log, std::vector<std::string>& examples)
