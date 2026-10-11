@@ -9479,8 +9479,12 @@ void main()
                     std::copy_n(vsConstants, 16, suspectWorld.begin());
                     std::copy_n(vsConstants + temporalSlot * 4, 16, suspectVP.begin());
                 }
-                const auto drawJitter = temporal::ApplyDrawJitter(key.vs, key.ps, frame,
-                    temporalActive && temporalJitter && !diagnosticMaterialBypass, temporalViewport, jitterAnchor,
+                // Without jitter the result is only the draw's slot, already in
+                // temporalSlot (same shader pair and screen-sample flag).
+                const bool jitterEnabled = temporalActive && temporalJitter && !diagnosticMaterialBypass;
+                const auto drawJitter = !jitterEnabled ? temporal::DrawJitter{temporalSlot} :
+                    temporal::ApplyDrawJitter(key.vs, key.ps, frame,
+                    jitterEnabled, temporalViewport, jitterAnchor,
                     depth ? depth->allocationSerial : 0,
                     {rasterViewport.x, rasterViewport.y, rasterViewport.width, rasterViewport.height},
                     vsConstants, psConstants, &temporalScene.DepthFor(jitterSampledDepth ? &*jitterSampledDepth : nullptr),
