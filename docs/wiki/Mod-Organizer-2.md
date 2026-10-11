@@ -58,8 +58,8 @@ lost-odyssey-export/
 
 Next steps:
 
-- Repaint or upscale textures: [Creating mods](Creating-Mods.md), sections 1b to 1d.
-- Translate text: [Creating mods](Creating-Mods.md#1e-translate-the-games-text-experimental), section 1e.
+- Repaint or upscale textures: [Make a texture pack](Creating-Mods.md#make-a-texture-pack-experimental).
+- Translate text: [Translate the game's text](Creating-Mods.md#translate-the-games-text-experimental).
 
 The tool reads the game folder directly, not through MO2, so it exports the original game files, not your installed mods. With the DLC installed, files the DLC changes come from the DLC.
 
@@ -73,14 +73,14 @@ To translate the game into a new language:
 2. In **Language pack**, type a short id for the language, for example `pt-br`. Letters, digits, `-`, `_` and `.` only.
 3. Leave **Text language** on **All languages** to translate from English, or pick the language to start from.
 4. Press **Start**. Only text is exported (a few seconds), whatever **Export** says.
-5. The output folder now holds a `pt-br` folder (`language.ini` and the text in `text/`) and an `original` folder. Follow [Creating mods](Creating-Mods.md#make-a-language-pack-a-new-language) from step 2 to name, translate and try it.
+5. The output folder now holds a `pt-br` folder (`language.ini` and the text in `text/`) and an `original` folder. Follow [Make a language pack](Creating-Mods.md#make-a-language-pack-a-new-language) from step 2 to name, translate and try it.
 6. To share it, open the tool again, press **Clean language pack...** and choose the `pt-br` folder. The lines you translated are copied to `share/pt-br` in the output folder; zip that folder and share the ZIP. **Clean** needs the `original` folder beside `pt-br`.
 
 ## Which mod wins
 
 - **Mod folders** (the default layout of `lo_mod.py`): each mod has its own folder and `mod.ini`, so MO2 shows no conflict between them. The game's own mod order decides which one wins for the same file (Settings → System → Mods, saved in `mod-list.ini` next to `settings.ini`, outside MO2's virtual folder), then the `priority` in `mod.ini`. Disabling a mod in MO2 removes its folder, so it stops loading and leaves the game's Mods page; it keeps its place in the game's order for when you enable it again.
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins. An overlay file beats every mod folder.
-- **Language packs**: MO2's order does not matter. Only the pack picked in **Settings > System > Game language** is used.
+- **Language packs**: MO2's order does not matter. Only the pack picked in **Settings → System → Game language** is used.
 
 To let MO2's order decide everything, use overlay packages, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Mod folders are then ignored; language packs still show in Settings.
 

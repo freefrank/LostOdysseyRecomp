@@ -1,37 +1,20 @@
-# General runtime texture replacement: remaining work
+# Runtime texture replacement
 
-> Update 2026-10-09: textures drawn by the game are now replaced at upload by fingerprint from LOTEX2 files, including larger ones (see [Modding API](Modding-API.md) and `docs/notes/texture-import-research.zh-CN.md`). Payloads can be uncompressed RGBA8 or block-compressed DDS (BC1/BC3/BC4/BC7). Across 86 disc-1 field maps and 19 battles, 98.1% of eligible uploads matched an exported texture. Still open: a video memory budget, textures on devices without BC support (they keep the originals), and shimmer where the game samples only the top level. The rest of this page is the earlier plan.
+Mods can replace the textures the game draws. This page says what is in the game today and what is still open. To make a texture pack, follow [Creating mods](Creating-Mods.md#make-a-texture-pack-experimental); the file format is in the [Modding API](Modding-API.md#runtime-textures-lotex2). The feature is experimental and supported on Windows only.
 
-## Implemented versus pending
+## What the game does
 
-PR #68 connects LOTEX1 image replacements to the native settings-menu asset decoder. This path already knows the UE3 package, export index and object name. It can resolve canonical keys before decoding the original menu/font-page image.
+- **Replacement by fingerprint.** When the renderer uploads a texture, it computes a fingerprint (XXH3-64 of the base level's blocks). If a mod has a `.lotex2` file for that fingerprint, the replacement is uploaded instead. The export (`--export-assets`) writes the fingerprint of every texture to `textures/index.csv`, so no catalog is needed.
+- **Which textures.** Tiled 2D base levels in the formats G8, A8R8G8B8, DXT1, DXT3 and DXT5, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced.
+- **Sizes and formats.** The original size or 2x, 4x or 8x larger, at most 8192 pixels per side, as uncompressed RGBA8 or as block-compressed DDS (BC1, BC3, BC4 or BC7). Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
+- **Loading.** Files are read on a background thread. A texture shows the original until its file has been read, usually a few frames later. `LO_MODS_TEXTURE_SYNC=1` reads each file during the upload instead.
+- **Fallbacks.** A file that fails validation, or a texture the game uploads in a form the renderer cannot match safely, keeps the original texture. Failures are logged.
 
-The general guest renderer is not connected to this identity resolver. In particular, a successfully packed `DefaultTexture`, world texture or controller-icon atlas does not prove that the corresponding game draw can use the replacement. The native menu path and original guest rendering are different consumers.
+In a test over 86 disc-1 field maps and 19 battles, 98.1% of the eligible uploads matched an exported texture. Almost all of the ones that did not match were on two maps of the Experimental Staff Remains.
 
-## Why the next boundary is texture upload
+## Still open
 
-The game reads packages from FPD archive extents described by `LO.fpi`. A package name is not necessarily an independently opened host file. Replacing an embedded image by redirecting an arbitrary archive read would require preserving package/archive structure and lengths.
-
-The renderer's `GetTexture()` path instead reads Xenos fetch state, locates guest texture memory, performs tiling/endian conversion and uploads a host texture. An ordinary 2D upload is the candidate interception point. Render targets and resolved surfaces must remain outside that replacement path.
-
-## Identity bridge that still needs implementation
-
-A Xenos fetch does not carry the extractor's package/export/object key. General replacement therefore requires a verified bridge between the canonical identity and runtime content. Do not infer identity from a guest physical address, filename hash, texture dimensions alone or a PNG file checksum.
-
-The extractor and renderer should share a versioned fingerprint definition over the same linear block bytes plus source format and logical dimensions. BC textures should not require CPU pixel decompression solely for identification. Mip selection, pitch padding, tiling/endian rules and collision/ambiguity handling must have common test vectors before enabling the bridge.
-
-If identical source bytes represent multiple canonical objects with different requested replacements, the runtime must reject/diagnose the ambiguity or obtain additional identity information. Picking an arbitrary object would violate the package-key contract.
-
-## Acceptance gates
-
-1. Emit verified runtime fingerprints alongside extractor identities and reject unsupported layouts.
-2. Resolve those fingerprints to canonical requests without per-draw filesystem scans.
-3. Validate LOTEX1 payloads and integrate ordinary 2D uploads without altering guest archives.
-4. Exclude render targets, resolved surfaces, unsupported cube/3D layouts and ambiguous matches.
-5. Invalidate host uploads safely on mod generation changes, keeping guest fetch cache identity intact.
-6. Verify descriptor dimensions, texel-offset/GetDimensions behavior and mip handling before permitting larger physical textures.
-7. Observe a replacement upload, a draw sampling it, and the intended on-screen change as separate checks.
-
-LOTEX1 remains the existing image format. Earlier draft documentation proposing `LOTX` headers, a `textures/<fingerprint>.lotex` directory or a shared overlay manifest is superseded; none of those alternative formats is a supported v1 ABI.
-
-No general high-resolution texture replacement or whole-game font/model/movie replacement is claimed by this document.
+- **Video memory.** There is no video memory budget yet, so a large pack can use a lot of video memory, especially as RGBA8. Prefer DDS payloads, which are about 4 to 8 times smaller.
+- **GPUs without BC support.** DDS replacements are skipped there and the originals stay (some Mali GPUs). RGBA8 replacements still load but need much more memory.
+- **Shimmer.** Where the game samples only the top level of a texture, a larger replacement can shimmer when it is shown smaller.
+- **Other resources.** Models, font files and metrics, and movies have no runtime consumers; adding a file for them does nothing. Fonts of the native menu are limited to their texture pages (see [Modding](Modding.md)).

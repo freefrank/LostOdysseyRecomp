@@ -1,34 +1,39 @@
 # Modding LostOdysseyRecomp
 
-These pages document the mod API (mod format v1 from PR #68 and v2, mod folders with their own overlay files). A published Wiki page does not mean the feature is included in an existing release.
+These pages describe the mod system on the main branch: mod format v1 and v2 (mod folders with their own overlay files). The newest release may not include the latest changes.
 
 ## What works today
 
 | Resource or feature | Status |
 | --- | --- |
-| Native settings-menu `UI_MAIN_00` atlas | Replacement is wired into `settings/menu_assets.cpp`; preserve the original 512x1024 dimensions and layout. |
+| Native settings-menu `UI_MAIN_00` atlas | Replacement is wired into `settings/menu_assets.cpp`; preserve the original 512x1024 dimensions and layout. See [Creating mods](Creating-Mods.md#settings-menu-artwork). |
 | Texture pages used by native menu fonts | Image replacement is wired at the same decoder; preserve each page's dimensions and glyph positions. Font metrics are unchanged. |
-| Textures drawn by the game | Replaced at upload by fingerprint from `.lotex2` files, at the original size or 2x/4x/8x larger (experimental; uncompressed RGBA8 or BC1/BC4/BC7 DDS). See [Creating mods](Creating-Mods.md) and [Modding API](Modding-API.md). |
-| Game text | Translations replace the game's text by key from the JSON files the export writes, including longer text (experimental). A language pack adds a new choice to Settings > System > Game language. See [Creating mods](Creating-Mods.md#1e-translate-the-games-text-experimental). |
+| Textures drawn by the game | Replaced at upload by fingerprint from `.lotex2` files, at the original size or 2x/4x/8x larger (experimental; uncompressed RGBA8 or BC1, BC3, BC4 or BC7 DDS). See [Creating mods](Creating-Mods.md#make-a-texture-pack-experimental) and [Modding API](Modding-API.md#runtime-textures-lotex2). |
+| Game text | Translations replace the game's text by key from the JSON files the export writes, including longer text (experimental). A language pack adds a new choice to Settings → System → Game language. See [Creating mods](Creating-Mods.md#translate-the-games-text-experimental). |
 | Font files/metrics, models and movies | Resource kinds and provider extension points reserved; no runtime consumers yet. |
-| Mod folders | One folder per mod: `mods/<id>/mod.ini` with a name, version and author, plus its own `overlay/` files found by name. The order in `mod-list.ini` (next to `settings.ini`), then `priority`, decides between mods. See [Creating mods](Creating-Mods.md#mod-folders-recommended). |
+| Mod folders | One folder per mod: `mods/<id>/mod.ini` with a name, version and author, plus its own `overlay/` files found by name. The order in `mod-list.ini` (next to `settings.ini`), then `priority`, decides between mods. Settings → System → Mods turns mods on or off and changes their order. See [Creating mods](Creating-Mods.md#mod-folders-recommended). |
 | External manager overlay | Deterministic top-level `overlay/` paths that a manager orders, and an isolated resolution mode. |
-| Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys), movies and text (JSON per game text file, the starting point for translations), also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md). |
+| Exporting original artwork | `LostOdysseyRecomp.exe --export-assets <folder>` writes your game's textures (PNG plus `index.csv` with mod keys and fingerprints), movies and text (JSON per game text file, the starting point for translations), also from an MO2 tool. Reference only; see [Creating mods](Creating-Mods.md#export-the-original-assets). |
 | Mod Organizer 2 | Game plugin in `tools/modding/mo2`; MO2 maps mods onto `mods/`. See [Mod Organizer 2](Mod-Organizer-2.md). |
 
 Mods do not modify `LO.fpi`, FPD archives or other imported game files. Mod packages contain data, not automatically loaded native libraries.
 
 ## Supported platforms
 
-Mods are supported on the Windows build only. The Linux, macOS and Android builds read the same `mods/` folder, but mods are untested and unsupported there. GPUs without BC texture support, which includes most Android devices, skip BC-compressed texture replacements.
+Mods are supported on the Windows build only. The Linux, macOS and Android builds read the same `mods/` folder, but mods are untested and unsupported there. A GPU that cannot sample BC-compressed textures skips BC texture replacements and keeps the original texture.
 
 ## Start here
 
-[Create and install a mod](Creating-Mods.md) explains the manifest-to-PNG-to-ZIP workflow. [API reference](Modding-API.md) defines identities, resolution, the binary image format and extension points. [Asset inventory](Asset-Inventory.md) explains the read-only four-disc resource catalog and its counting limits. [Mod Organizer 2](Mod-Organizer-2.md) covers MO2 setup and which mod wins. [Validation](Modding-Validation.md) separates automated checks from game/MO2 acceptance. [Runtime texture replacement](Runtime-Texture-Replacement.md) records the remaining general GPU work.
+- [Creating mods](Creating-Mods.md): texture packs, translations and language packs, settings-menu artwork, and how to install them.
+- [Mod Organizer 2](Mod-Organizer-2.md): MO2 setup, the export tool, and which mod wins.
+- [Modding API](Modding-API.md): identities, resolution, the file formats and extension points.
+- [Asset inventory](Asset-Inventory.md): the read-only four-disc resource catalog and its counting limits.
+- [Runtime texture replacement](Runtime-Texture-Replacement.md): what texture replacement covers and what is still open.
+- [Validation](Modding-Validation.md): the automated checks and the game and MO2 acceptance steps.
 
 ## Installation essentials
 
-The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. ZIPs produced by the packer contain a top-level `mods/` folder (`mods/<id>/...` for a mod folder); deploy the contents of that folder into the selected root, without adding another `mods/` level.
+The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. In the game, Settings → System → Mods → **Open mods folder** (Windows) opens it. ZIPs produced by the packer contain a top-level `mods/` folder (`mods/<id>/...` for a mod folder); deploy the contents of that folder into the selected root, without adding another `mods/` level.
 
 With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after changing installed mods or `mod-list.ini`. Settings → System → Mods turns mods on or off and changes their order; it saves `mod-list.ini`, which applies at the next start. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
 

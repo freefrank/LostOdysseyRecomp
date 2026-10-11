@@ -1,6 +1,16 @@
-# Creating and installing image mods
+# Creating and installing mods
 
-Read [current support](Modding.md) first. Start with the native settings-menu atlas `UI_MAIN_00`; an arbitrary exported Texture2D is not necessarily consumed by the native menu. The catalog lists native font-page candidates, but they are not confirmed `init` consumers and do not change character mapping or font metrics.
+Read [current support](Modding.md) first. This page covers three kinds of mod:
+
+| I want to... | Go to |
+| --- | --- |
+| Repaint or upscale the textures the game draws | [Make a texture pack](#make-a-texture-pack-experimental) |
+| Translate the game's text, or add a language to Settings | [Translate the game's text](#translate-the-games-text-experimental) |
+| Change the artwork of the settings menu | [Settings-menu artwork](#settings-menu-artwork) |
+
+Install mods as [mod folders](#mod-folders-recommended) in the game's `mods` folder. Textures and text start from [the export of your own game data](#export-the-original-assets).
+
+The tools are Python scripts in `tools/modding` of the [LostOdysseyRecomp repository](https://github.com/freefrank/LostOdysseyRecomp); get them by cloning or downloading the repository, and run the commands below from its root. Python 3.10 or newer is required; Pillow (`python -m pip install Pillow`) is needed for PNG files. Mods work on Windows only (see [Modding](Modding.md)).
 
 ## Mod folders (recommended)
 
@@ -22,11 +32,11 @@ author=Your name
 description=One line about the mod.
 ```
 
-The game finds the files under `overlay/` by name, so `mod.ini` needs no file list. `name`, `version`, `author` and `description` are optional. `texture-pack --layout standalone` and `pack` (its default layout) write this layout. A translation that adds a new language is a language pack instead, a folder with a `language.ini` ([1e](#1e-translate-the-games-text-experimental)); both kinds of folder sit side by side in `mods/`.
+The game finds the files under `overlay/` by name, so `mod.ini` needs no file list. `name`, `version`, `author` and `description` are optional. `texture-pack --layout standalone` and `pack` (its default layout) write this layout. A translation that adds a new language is a language pack instead, a folder with a `language.ini` ([make a language pack](#make-a-language-pack-a-new-language)); both kinds of folder sit side by side in `mods/`.
 
 Zip it with `mods/` at the top of the archive: `mods/<id>/mod.ini`, `mods/<id>/overlay/...`. Players extract the archive into the game folder; Mod Organizer 2 installs it as it is. Mod folders never conflict with each other. When two of them replace the same file, the in-game mod order decides, then `priority` in `mod.ini` (see [Modding API](Modding-API.md#order-and-mod-listini)). Changes take effect after a restart.
 
-Players manage installed mods in Settings → System → Mods: it shows each mod's `name`, `version` and `author`, turns it on or off and moves it up or down (LB / RB); the selected mod's `description` and folder appear in the help line. A broken `mod.ini` shows there with its first problem.
+Players manage installed mods in Settings → System → Mods. The page lists each mod with its `name`, `version` and `author`. A switches the selected mod On or Off, LB / RB move it up or down, and **Save mod list** (or Start) saves the order and offers a restart. The selected mod's `description` and folder appear in the help line. A mod with a broken `mod.ini` shows an error there with its first problem. Language packs are listed below the mods; choose one in Settings → System → Game language.
 
 To turn a top-level `overlay/` folder (an overlay pack) into a mod folder without packing it again:
 
@@ -37,22 +47,7 @@ python tools/modding/lo_mod.py overlay-to-mod mods --id my-textures --name "My T
 
 This moves `mods/overlay/textures` (and `images`, `text` and the other kind folders) into `mods/my-textures/overlay/` and writes `mod.ini`. Folders are renamed, not copied, so even a large pack moves at once; across drives the command fails instead of copying. It refuses when `mods/my-textures` exists, and `--dry-run` only prints what it would do. For a mod already installed in Mod Organizer 2, pass that mod's folder (the one that holds `overlay/`).
 
-## 1. Select an actual resource
-
-Run these commands from a source checkout containing the Mod API. Python 3.10+ is required; Pillow is needed only for PNG conversion. The preferred source is the completed asset-inventory SQLite catalog. The older CSV manifest remains supported for compatibility. The verified `UI_MAIN_00` native atlas is 512x1024 in each of the five language packages.
-
-```sh
-python -m pip install Pillow
-python tools/modding/lo_mod.py catalog --database catalog.sqlite --runtime-only --limit 100
-```
-
-`--database` and the legacy `--manifest` input are mutually exclusive. A database must be schema 1 with `complete=true`; it is opened read-only. By default catalog output is limited to 100 rows and includes the canonical key, dimensions, content SHA-256, consumer label, overlay path and source packages. `--runtime-only` includes the native menu and font-page candidate labels, but `init` accepts only a confirmed consumer by default. Use `--object`, `--package` and `--content-sha256` to narrow a result. The last filter selects a package content variant used to derive the authoring identity and dimensions; the key and LOTEX1 payload do not bind a mod to that SHA at runtime. Do not guess an export index or use a CSV row number as one.
-
-The catalog labels the native settings atlas `UI_MAIN_00` and a native font-page candidate consumer for the `Maru23`, `LocTit1` and `Abc` font owners. Native font references are not indexed as complete runtime support: `init` rejects the font-page candidates by default, and catalog output must not be read as proof that 63 font resources are already replaceable. Other catalog entries are marked `no_runtime_consumer`; `--allow-unwired` is an explicit experimental escape hatch.
-
-Select the package for the language used by the game. `int`, `chi`, `jpn`, `kor` and `sch` are separate localized package namespaces.
-
-## 1b. Export the original artwork (optional)
+## Export the original assets
 
 The game can export its own textures, movies and text from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
 
@@ -60,7 +55,14 @@ The game can export its own textures, movies and text from your game data as a s
 LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
 ```
 
-The output folder must not exist or must be empty. `--export-kinds` (`textures`, `movies`, `text`, or `fingerprints` for the texture index without PNG files; default: textures, movies and text), `--export-filter` (only names containing the text), `--export-language` (text of one language: `int`, `jpn`, `deu`, `fra`, `spa`, `ita`, `kor`, `chi` or `sch`) and `--export-language-pack <id>` (only text, written as a language pack to translate, see [1e](#1e-translate-the-games-text-experimental)) are optional. No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
+The output folder must not exist or must be empty, and it must be outside the game data. Optional arguments:
+
+- `--export-kinds`: `textures`, `movies`, `text`, or `fingerprints` (the texture index without PNG files). The default is textures, movies and text.
+- `--export-filter`: only names containing this text.
+- `--export-language`: the text of one language only: `int`, `jpn`, `deu`, `fra`, `spa`, `ita`, `kor`, `chi` or `sch`.
+- `--export-language-pack <id>`: only text, written as a language pack to translate (see [make a language pack](#make-a-language-pack-a-new-language)).
+
+No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
 
 ```text
 my-export/textures/<package path>/<object>.<export index>.png
@@ -71,19 +73,22 @@ my-export/text/index.csv            path,language,format,source,entries,round_tr
 my-export/export-summary.txt
 ```
 
-Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. See [1e](#1e-translate-the-games-text-experimental) for putting translations back into the game. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
+`textures/index.csv` holds the mod key and the fingerprint of every texture, so no catalog is needed.
 
-`index.csv` holds the mod key of every texture, so no catalog is needed. Select one texture and copy its PNG into a new mod:
+Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `text/index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
 
-```sh
-python tools/modding/lo_mod.py init --export-index my-export/textures/index.csv --object UI_MAIN_00 --package bin/xenon/loc/int/menu/rpmenurescommon_int.xxx --id my-menu --output my-menu/mod.json
-```
+## Make a texture pack (experimental)
 
-This writes `mod.json` and copies the PNG to `my-menu/art/<object>.png` (use `--image` to pick another path inside the mod folder). It never overwrites an existing file, and it follows the same consumer rule as `--database`: only confirmed consumers such as `UI_MAIN_00` unless you pass `--allow-unwired`. Edit the copied PNG, then continue with step 3. Today only the native settings-menu atlas and font pages are replaceable in-game; other exported textures are reference material until the general texture path exists.
+A texture pack replaces the textures the game draws, at the original size or 2x, 4x or 8x larger. The steps are: export the textures, repaint or upscale the PNG files, pack them, and put the pack in `mods/`. This works on Windows only.
 
-## 1c. Upscale exported textures (optional, preparation)
+1. [Export the textures](#export-the-original-assets) (`--export-kinds textures`; add `--export-filter` for a sample first).
+2. Repaint the PNG files yourself, or upscale them in bulk ([next section](#upscale-exported-textures-optional)).
+3. [Pack them](#pack-textures-for-the-game). Point `--output` at the game's `mods` folder to try the pack right away, or at a work folder and zip it as `mods/<id>/...` to share (see [mod folders](#mod-folders-recommended)).
+4. Start the game. A texture shows the original for a few frames until its replacement has been read. With Settings → System → Debug log on (or `LO_DEBUG_LOG=1`), the run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced; failures are always logged.
 
-`tools/modding/texture_prep.py` upscales an export in bulk with AI upscaling models. Run it with a Python that has PyTorch, spandrel and Pillow (ComfyUI's Python works). Download the models it names into one folder:
+### Upscale exported textures (optional)
+
+`tools/modding/texture_prep.py` upscales an export in bulk with AI upscaling models. Run it with a Python that has PyTorch, spandrel and Pillow (ComfyUI's Python works); it runs on a CUDA (NVIDIA) GPU by default, and `--device` selects another device. Download the models it names into one folder:
 
 - `1x_DEDXT.pth` (removes DXT block artifacts)
 - `4x-PBRify_RPLKSRd_V3.pth` (material textures)
@@ -107,22 +112,19 @@ Each texture is sorted into a class: color, normal, data, ui, vfx, or skipped (l
 
 Results go to `my-upscale/textures/` with the same file names, plus `index.csv` (new and original sizes) and `review/<class>.png`, which shows before and after crops. Runs resume where they stopped. Use `--classes`, `--filter` and `--limit` for a sample first. `--write-config` writes the defaults (models per class, scale, maximum size) for editing; pass the edited file back with `--config`.
 
-Pack the results with `texture-pack` (next section) to use them in game.
+### Pack textures for the game
 
-## 1d. Pack textures for the game (experimental)
-
-`lo_mod.py texture-pack` turns PNGs into `.lotex2` files for runtime texture replacement. Textures are matched by fingerprint (the `fingerprint` column of the export's `index.csv`), not by key, so one file covers every package that cooks the same image. Replacements can be the original size or 2x, 4x or 8x larger (see [Modding API](Modding-API#runtime-textures-lotex2)).
+`lo_mod.py texture-pack` turns PNGs into `.lotex2` files for runtime texture replacement. Textures are matched by fingerprint (the `fingerprint` column of the export's `index.csv`), not by key, so one file covers every package that cooks the same image. Replacements can be the original size or 2x, 4x or 8x larger (see [Modding API](Modding-API.md#runtime-textures-lotex2)).
 
 ```sh
-# Overlay layout: files go to <output>/overlay/textures/fp-<fingerprint>.lotex2
-python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods
-
-# Mod folder: <output>/<id>/mod.ini (api_version=2) plus <id>/overlay/textures/
+# Mod folder (recommended): <output>/<id>/mod.ini (api_version=2) plus <id>/overlay/textures/
 python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods --layout standalone --id my-textures --name "My Texture Pack" --version 1.0
+
+# Overlay layout (the default), for a manager: files go to <output>/overlay/textures/fp-<fingerprint>.lotex2
+python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv --images my-upscale/textures --images-index my-upscale/index.csv --output mods
 ```
 
 - `--name`, `--version`, `--author` and `--description` go into the mod folder's new `mod.ini`. Packing into an existing mod folder keeps its `mod.ini`, which must say `api_version=2`.
-
 - `--images-index` maps keys to PNG files (default: `index.csv` in the `--images` folder).
 - `--filter <text>` keeps keys that contain the text. `--fingerprints <log.csv>` keeps only fingerprints a game run logged.
 - `--payload dds` (recommended) compresses the textures to BC1, BC4 or BC7 and always writes the full mip chain. It needs Microsoft's `texconv` (Windows; download it from the [DirectXTex releases](https://github.com/microsoft/DirectXTex/releases)). Pass `--texconv <path>` or put it on `PATH`. DXT1 originals become BC1, DXT3 and DXT5 originals BC7, A8R8G8B8 originals BC7 (red and blue are swapped first, as the game stores B, G, R, A) and G8 originals BC4. `--bc7-all` uses BC7 for DXT1 originals too, which looks better but is twice the size. Textures whose size is not a multiple of 4 are skipped.
@@ -131,51 +133,78 @@ python tools/modding/lo_mod.py texture-pack --index my-export/textures/index.csv
 - `--test tint` (red up, green and blue down) and `--test nearest4` (plain 4x enlargement, which must look unchanged in game) transform the original exported PNGs, to check in game that replacement works.
 - `lo_mod.py inspect <file>` prints and validates a `.lotex2` header.
 
-The default `--payload rgba8` stores uncompressed pixels, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. DDS payloads are about 4 to 8 times smaller on disk and in video memory than RGBA8 (and a full mip chain adds only a third), so a 4x upscale of the textures used in one play session shrinks from about 1.9 GB to about 340 MB. Levels larger than about 72 MiB (above 4096x4096) are skipped for RGBA8. With Settings > System > Debug log on (or `LO_DEBUG_LOG=1`), the run log has one `[mods] texture <fingerprint> replaced` line for each texture it replaced; failures are always logged.
+The default `--payload rgba8` stores uncompressed pixels, so 4x packs are large (a 2048x2048 texture is 16 MiB) and use as much video memory. DDS payloads are about 4 to 8 times smaller on disk and in video memory than RGBA8 (and a full mip chain adds only a third), so a 4x upscale of the textures used in one play session shrinks from about 1.9 GB to about 340 MB. Levels larger than about 72 MiB (above 4096x4096) are skipped for RGBA8.
 
-## 1e. Translate the game's text (experimental)
+## Translate the game's text (experimental)
 
-A translation is either a new language that players pick in Settings (a language pack) or a change to a language the game already has.
+A translation is either a new language that players pick in Settings (a language pack) or a change to a language the game already has. This works on Windows only.
 
 ### Make a language pack (a new language)
 
-1. Export a pack to translate: `LostOdysseyRecomp.exe --export-assets my-export --export-language-pack pt-br` (or type `pt-br` in **Language pack** in the [MO2 tool](Mod-Organizer-2.md#make-a-language-pack)). Use a short id of letters, digits, `-`, `_` or `.`; no two packs may use the same one. You get the folder `my-export/pt-br/` with the English text of your discs (581 files) in `text/` and a `language.ini`, plus `my-export/original/`, an untouched copy for step 6; keep it next to the pack. English (`int`) is the same in the Asia and USA/Europe editions, and its fonts have every Latin-1 letter; add `--export-language jpn` (or another code) to start from another language. Export from a game with the DLC installed if you have it: without it, the DLC dungeon text is the discs' unfinished version (the exporter warns about this).
+1. Export a pack to translate: `LostOdysseyRecomp.exe --export-assets my-export --export-language-pack pt-br` (or type `pt-br` in **Language pack** in the [MO2 tool](Mod-Organizer-2.md#make-a-language-pack)). Use a short id of letters, digits, `-`, `_` or `.`; no two packs may use the same one. You get the folder `my-export/pt-br/` with the English text of your discs in `text/` (581 files in our export) and a `language.ini`, plus `my-export/original/`, an untouched copy for step 6; keep it next to the pack. English (`int`) is the same in the Asia and USA/Europe editions, and its fonts have every Latin-1 letter; add `--export-language jpn` (or another code) to start from another language. Export from a game with the DLC installed if you have it: without it, the DLC dungeon text is the discs' unfinished version (the exporter warns about this).
 2. Open `my-export/pt-br/language.ini` in a text editor and change `name=pt-br` to the name Settings should show, for example `name=Português (Brasil)`. Save it as UTF-8. Leave `id` and `base` as they are.
 3. Translate the values in the files in `my-export/pt-br/text/` and keep the keys. Keep tokens such as `{E001}` (a line break in dialogue), `{E10E}`…`{E10F}` (a speaker name) and `{E10D:0500}` (a code with its value), as well as `%s`, `%d` and `$500$` (icons), where they are. Lines you do not change stay English.
 4. Try it: copy the `pt-br` folder into the game's `mods` folder, so the file is `mods/pt-br/language.ini`.
-5. Start the game, open **Settings > System > Game language**, pick your language, choose **Save settings** and restart.
+5. Start the game, open **Settings → System → Game language**, pick your language, choose **Save settings** and restart.
 6. Before you share the pack, clean it: `python tools/modding/lo_mod.py language-clean my-export/pt-br` (or **Clean language pack...** in the [MO2 tool](Mod-Organizer-2.md#make-a-language-pack)). It copies only the lines you changed to `my-export/share/pt-br`. Share that folder as a ZIP of the folder itself; players install it like step 4, or with Mod Organizer 2 like any other mod. The lines you did not change are the game's own text, which must not be shared, and from a game without the DLC they would put the discs' old lines over the DLC's for players who have it.
 
-The log shows `mods: language pack pt-br (Português (Brasil), base int)` at startup, then `[mods] text: 581 translation files (581 from language pack pt-br)` and `[mods] text: N translated files in ...`, where N counts the game files your changes went into. If `language.ini` has a mistake, the log has a `mods:` warning that names the file.
+The log shows `mods: language pack pt-br (Português (Brasil), base int)` at startup, then `[mods] text: N translation files (M from language pack pt-br)` and `[mods] text: K translated files in ...`, where K counts the game files your changes went into. If `language.ini` has a mistake, the log has a `mods:` warning that names the file.
 
-The game runs as the base language underneath: voices, artwork with words in it and everything you have not translated stay English. While the pack is selected, its files replace the same files from other text mods. Players who pick another language do not see the pack.
+The game runs as the base language underneath: voices, artwork with words in it and everything you have not translated stay in that language (English for `int`). While the pack is selected, its files replace the same files from other text mods. Players who pick another language do not see the pack.
 
 ### Change a language the game already has
 
 1. Export the text: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds text --export-language int` (or tick Text in the MO2 tool). Without `--export-language` you get every language on your discs.
 2. Copy the files you change into the mods folder at the same path under `overlay/`, for example `my-export/text/bin/xenon/loc/int/menu/menu_int.dat.json` to `mods/overlay/text/bin/xenon/loc/int/menu/menu_int.dat.json`. To share the change, put the files in a [mod folder](#mod-folders-recommended) instead, under `mods/<id>/overlay/text/...` next to its `mod.ini`. A v1 mod lists each file in its `mod.ini`: `text:bin/xenon/loc/int/menu/menu_int.dat=text/bin/xenon/loc/int/menu/menu_int.dat.json`.
-3. Change the values as in step 4 above. Entries you leave out keep the original text.
-4. Start the game with the language of the files you changed (English for `int`). The log names the translated files: `[mods] text: 574 translated files in ...`. Restart after changing text.
+3. Change the values as in step 3 above. Entries you leave out keep the original text.
+4. Start the game with the language of the files you changed (English for `int`). The log names the translated files: `[mods] text: K translated files in ...`. Restart after changing text.
 
 ### For both
 
-Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. Use only characters the game's font has (see [Modding API](Modding-API#text-language-packs)); languages that need other letters, such as Polish or Russian, are not possible yet. The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet.
+Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. Use only characters the game's font has (see [Modding API](Modding-API.md#text-language-packs)); languages that need other letters, such as Polish or Russian, are not possible yet. The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet.
 
-## 2. Prepare artwork and a specification
+## Settings-menu artwork
+
+The native settings menu draws its own artwork (the atlas `UI_MAIN_00`, 512x1024 in each of the five language packages) and the texture pages of its fonts. These are not game textures, so a texture pack does not change them; they have their own mod format (LOTEX1). The menu atlas is the confirmed case. The font pages are wired in the runtime but not confirmed as `init` consumers, and neither changes character mapping or font metrics.
+
+Select the package for the language used by the game. `int`, `chi`, `jpn`, `kor` and `sch` are separate localized package namespaces.
+
+### 1. Select the resource
+
+The simplest start is the export: `LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures --export-filter UI_MAIN`. Select one texture and copy its PNG into a new mod:
+
+```sh
+python tools/modding/lo_mod.py init --export-index my-export/textures/index.csv --object UI_MAIN_00 --package bin/xenon/loc/int/menu/rpmenurescommon_int.xxx --id my-menu --output my-menu/mod.json
+```
+
+This writes `mod.json` and copies the PNG to `my-menu/art/<object>.png` (use `--image` to pick another path inside the mod folder). It never overwrites an existing file. `init` accepts only confirmed consumers, such as `UI_MAIN_00`, unless you pass `--allow-unwired` (experimental). Edit the copied PNG, keep its dimensions, alpha channel and atlas layout, and continue with step 3. Other exported textures are not settings-menu artwork: replace them with a [texture pack](#make-a-texture-pack-experimental).
+
+Instead of the export, `catalog` and `init` can read the completed [asset inventory](Asset-Inventory.md) SQLite catalog, or the older CSV manifest:
+
+```sh
+python -m pip install Pillow
+python tools/modding/lo_mod.py catalog --database catalog.sqlite --runtime-only --limit 100
+```
+
+`--database`, `--manifest` and `--export-index` are mutually exclusive. A database must be schema 1 with `complete=true`; it is opened read-only. By default catalog output is limited to 100 rows and includes the canonical key, dimensions, content SHA-256, consumer label, overlay path and source packages. `--runtime-only` includes the native menu and font-page candidate labels, but `init` accepts only a confirmed consumer by default. Use `--object`, `--package` and `--content-sha256` to narrow a result. The last filter selects a package content variant used to derive the authoring identity and dimensions; the key and LOTEX1 payload do not bind a mod to that SHA at runtime. Do not guess an export index or use a CSV row number as one.
+
+The catalog labels the native settings atlas `UI_MAIN_00` and a native font-page candidate consumer for the `Maru23`, `LocTit1` and `Abc` font owners. Native font references are not indexed as complete runtime support: `init` rejects the font-page candidates by default, and catalog output must not be read as proof that 63 font resources are already replaceable. Other catalog entries are marked `no_runtime_consumer`; `--allow-unwired` is an explicit experimental escape hatch.
+
+### 2. Prepare artwork and a specification
 
 Copy your own edited PNG into an authoring directory, for example `my-menu/art/UI_MAIN_00.png`. The inventory contains metadata and dimensions only; it does not export artwork. Keep the original image dimensions, alpha channel and atlas layout. The native menu's verified `UI_MAIN_00` layout is 512x1024; larger atlases are rejected by this consumer.
 
-Generate the identity from your own catalog rather than copying an example index:
+If you did not start from the export, generate the specification from your own catalog rather than copying an example index:
 
 ```sh
 python tools/modding/lo_mod.py init --database catalog.sqlite --object UI_MAIN_00 --package bin/xenon/loc/int/menu/rpmenurescommon_int.xxx --image art/UI_MAIN_00.png --id my-menu --output my-menu/mod.json
 ```
 
-`--image` is relative to the new specification, not the shell's working directory. `init` requires exactly one identity and one content variant, and refuses to overwrite an existing specification. A zero-match result requires checking the object/package/key filters; multiple content variants require `--content-sha256` to select one. The same `--database`/`--manifest`, filter, and `--allow-unwired` rules apply to `init`.
+`--image` is relative to the new specification, not the shell's working directory. `init` requires exactly one identity and one content variant, and refuses to overwrite an existing specification. A zero-match result requires checking the object/package/key filters; multiple content variants require `--content-sha256` to select one. The same `--database`/`--manifest`/`--export-index`, filter, and `--allow-unwired` rules apply to every form of `init`.
 
 The generated `mod.json` contains `api_version`, `id`, `priority` and an `images` array; you may add `name`, `version`, `author` and `description`. Each image has `key`, `source`, `width` and `height`. Add more image records using keys and original dimensions from the catalog. Sources must stay inside the specification directory; absolute paths, `..` and escaping symlinks are rejected.
 
-## 3. Build an installable ZIP
+### 3. Build an installable ZIP
 
 Mod folder package (default):
 
@@ -208,11 +237,11 @@ mods/overlay/images/key-fnv1a64-<16 lowercase hex digits>.lotex
 
 No shared manifest is included in an overlay ZIP. Competing mods deliberately provide the same destination path for the same identity. See [external managers](Mod-Organizer-2.md).
 
-## 4. Install and verify
+### 4. Install and verify
 
 For a portable installation, extract the ZIP beside the executable so that `mods/my-menu/mod.ini` is under the runtime's mod root. For another layout, copy the ZIP's `mods/` contents to `LO_MODS_DIR` or the application's selected mods directory.
 
-Use `LO_MODS_MODE=standalone` to ignore the top-level overlay while testing a mod folder. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's manifest and restart to verify restoration. Removing the mod folder also uninstalls it.
+Use `LO_MODS_MODE=standalone` to ignore the top-level overlay while testing a mod folder. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's `mod.ini` and restart to verify restoration. Removing the mod folder also uninstalls it.
 
 To inspect an extracted payload:
 

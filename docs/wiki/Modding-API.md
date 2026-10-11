@@ -194,7 +194,7 @@ Type 2 stores a complete DDS file with block-compressed levels:
 - Shape: 2D, one array slice, not a cube map.
 - Size: the DDS width, height and mip count must equal the LOTEX2 header's payload width, height and mip count. Level 0 must be a multiple of 4 on both sides.
 - Channels follow the original's host texture rather than plain RGBA. A G8 original uses BC4 (one channel). An A8R8G8B8 original stores B, G, R, A, so the packer swaps red and blue before compressing. DXT originals use plain RGBA.
-- The game uploads the blocks unchanged. Devices without BC support (some Mali GPUs) keep the original texture.
+- The game uploads the blocks unchanged. Devices without BC support (some Mali GPUs), or a run with `LO_TEXTURE_BC=0`, keep the original texture and log a `[mods]` warning once.
 - Levels the device cannot address as whole blocks are dropped, as for the original uploads.
 
 The game replaces only uploads it can match safely. These are tiled 2D base levels in the formats above, with a shorter side over 16 texels. Render targets, resolved surfaces, movie frames and the controller-prompt atlas are never replaced. Shaders keep seeing the original texture size, so a larger replacement samples like the original at a higher resolution.
