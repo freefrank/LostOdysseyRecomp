@@ -8394,17 +8394,15 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // sync epoch. Between two sync points only an unsynchronized guest CPU
             // write racing the GPU can change memory a draw already read; such a
             // write is seen at the next epoch instead of at the next draw.
-            // LO_REVALIDATE_EVERY_DRAW=1 compares on every draw; LO_REVALIDATE_VERIFY=1
-            // compares skipped sources too and logs mismatches.
+            // LO_REVALIDATE_VERIFY=1 compares skipped sources too and logs mismatches.
             uint64_t revalidationChecks = 0, revalidationSkips = 0, revalidationMismatches = 0;
             uint64_t revalidationEpoch = 0;
             template<class Matches>
             bool SourceMatches(uint64_t& validatedEpoch, Matches&& matches, uint32_t address)
             {
-                static const bool everyDraw = [] { const char* v = getenv("LO_REVALIDATE_EVERY_DRAW"); return v && strcmp(v, "0") != 0; }();
                 static const bool verify = [] { const char* v = getenv("LO_REVALIDATE_VERIFY"); return v && strcmp(v, "0") != 0; }();
                 const uint64_t epoch = g_commandProcessor.SyncEpoch();
-                if (!everyDraw && validatedEpoch == epoch) {
+                if (validatedEpoch == epoch) {
                     ++revalidationSkips;
                     if (!verify || matches()) return true;
                     static uint32_t reported = 0;
@@ -8821,56 +8819,47 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 auto& vsConstants = drawConstants[0];
                 auto& psConstants = drawConstants[1];
                 uint64_t constantGeneration[2]{};
-                // Preserve the full banks and zero-register MMIO fallback. The
-                // diagnostic switch provides a same-binary performance control.
-                static const bool legacyConstants = getenv("LO_LEGACY_CONSTANT_READS") != nullptr;
                 // Optional full comparison catches future paths outside the known
                 // zero-register MMIO fallback.
                 static const bool verifyConstants = getenv("LO_CONSTANT_SNAPSHOT_VERIFY") != nullptr;
-                if (legacyConstants) {
-                    for (uint32_t i = 0; i < 256 * 4; i++) vsConstants[i] = Reg(REG_ALU_CONSTANTS + i);
-                    for (uint32_t i = 0; i < 256 * 4; i++) psConstants[i] = Reg(REG_ALU_CONSTANTS + 256 * 4 + i);
-                    drawConstantsModified[0] = drawConstantsModified[1] = true;
-                } else {
-                    for (uint32_t bank = 0; bank < 2; ++bank) {
-                        const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
-                        auto& snapshot = constantSnapshot[bank];
-                        const bool refresh = generation != constantSnapshotGeneration[bank];
-                        // A direct guest MMIO store reaches draws only across a sync
-                        // point, so the zero-register fallback is read once per period.
-                        const uint64_t epoch = g_commandProcessor.SyncEpoch();
-                        const bool checkMmio = constantMmioEpoch[bank] != epoch;
-                        constantMmioEpoch[bank] = epoch;
-                        uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot, checkMmio);
-                        constantSnapshotGeneration[bank] = generation;
-                        if (refresh || changedBlocks) ++constantSnapshotVersion[bank];
-                        if (verifyConstants) {
-                            uint32_t check[256 * 4];
-                            g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);
-                            if (std::memcmp(check, snapshot.values, sizeof(check)) != 0) {
-                                static uint32_t reported = 0;
-                                if (reported++ < 16)
-                                    LOG_ERROR("renderer: {} constants changed without a generation change or dirty block (frame {})",
-                                        bank ? "pixel" : "vertex", frame);
-                                std::memcpy(snapshot.values, check, sizeof(check));
-                                snapshot.valid = false;
-                                ++constantSnapshotVersion[bank];
-                                changedBlocks = ~0ull;
-                            }
+                for (uint32_t bank = 0; bank < 2; ++bank) {
+                    const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
+                    auto& snapshot = constantSnapshot[bank];
+                    const bool refresh = generation != constantSnapshotGeneration[bank];
+                    // A direct guest MMIO store reaches draws only across a sync
+                    // point, so the zero-register fallback is read once per period.
+                    const uint64_t epoch = g_commandProcessor.SyncEpoch();
+                    const bool checkMmio = constantMmioEpoch[bank] != epoch;
+                    constantMmioEpoch[bank] = epoch;
+                    uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot, checkMmio);
+                    constantSnapshotGeneration[bank] = generation;
+                    if (refresh || changedBlocks) ++constantSnapshotVersion[bank];
+                    if (verifyConstants) {
+                        uint32_t check[256 * 4];
+                        g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);
+                        if (std::memcmp(check, snapshot.values, sizeof(check)) != 0) {
+                            static uint32_t reported = 0;
+                            if (reported++ < 16)
+                                LOG_ERROR("renderer: {} constants changed without a generation change or dirty block (frame {})",
+                                    bank ? "pixel" : "vertex", frame);
+                            std::memcpy(snapshot.values, check, sizeof(check));
+                            snapshot.valid = false;
+                            ++constantSnapshotVersion[bank];
+                            changedBlocks = ~0ull;
                         }
-                        if (drawConstantsModified[bank]) {
-                            std::memcpy(drawConstants[bank], snapshot.values, sizeof(drawConstants[bank]));
-                            drawConstantsModified[bank] = false;
-                        } else {
-                            // An unmodified copy equals the snapshot outside the changed blocks.
-                            constexpr size_t kBlock = ConstantBankSnapshot::kBlockWords;
-                            for (uint64_t blocks = changedBlocks; blocks; blocks &= blocks - 1) {
-                                const size_t first = size_t(std::countr_zero(blocks)) * kBlock;
-                                std::memcpy(drawConstants[bank] + first, snapshot.values + first, kBlock * sizeof(uint32_t));
-                            }
-                        }
-                        constantGeneration[bank] = constantSnapshotVersion[bank];
                     }
+                    if (drawConstantsModified[bank]) {
+                        std::memcpy(drawConstants[bank], snapshot.values, sizeof(drawConstants[bank]));
+                        drawConstantsModified[bank] = false;
+                    } else {
+                        // An unmodified copy equals the snapshot outside the changed blocks.
+                        constexpr size_t kBlock = ConstantBankSnapshot::kBlockWords;
+                        for (uint64_t blocks = changedBlocks; blocks; blocks &= blocks - 1) {
+                            const size_t first = size_t(std::countr_zero(blocks)) * kBlock;
+                            std::memcpy(drawConstants[bank] + first, snapshot.values + first, kBlock * sizeof(uint32_t));
+                        }
+                    }
+                    constantGeneration[bank] = constantSnapshotVersion[bank];
                 }
                 // Player DoF/bloom settings edit the tone-map draw's constant copy.
                 // DoF weight w = curve^c4 * c5 (c5.x near, c5.y far) blends the
