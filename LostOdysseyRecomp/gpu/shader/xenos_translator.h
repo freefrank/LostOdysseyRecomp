@@ -36,7 +36,9 @@ namespace xenos
     };
 
     // dwords: microcode in *host* byte order (already swapped from big-endian).
-    TranslatedShader TranslateShader(const uint32_t* dwords, uint32_t dwordCount, bool isPixelShader);
+    // uboConstants: the prelude's uniform-buffer form (cache::UsesUboConstants).
+    TranslatedShader TranslateShader(const uint32_t* dwords, uint32_t dwordCount, bool isPixelShader,
+        bool uboConstants = false);
 
     // HLSL prelude (constant buffers, fetch helpers) prepended to every shader.
     const char* GetShaderCommonHlsl();

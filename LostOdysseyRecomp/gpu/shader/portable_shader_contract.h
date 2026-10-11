@@ -16,6 +16,6 @@ inline Digest RuntimeContract(std::span<const uint8_t> image,
     if (image.size() != RuntimeXexBytes)
         throw std::runtime_error("portable shader contract needs the unbound executable prefix");
     return Contract(identity.translatorVersion, identity.options, identity.variant,
-        kShaderCommonHlsl, resources::variants::DiscoveryIdentity, image, 1, format);
+        ShaderCommonHlsl(cache::UsesUboConstants(identity)), resources::variants::DiscoveryIdentity, image, 1, format);
 }
 }

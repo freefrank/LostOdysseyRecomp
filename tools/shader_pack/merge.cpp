@@ -181,7 +181,7 @@ void Report(const fs::path& path,const pack::Report& result, const std::vector<C
         << ",\n  \"excluded\": " << excluded << ",\n  \"failures_omitted\": " << result.failuresOmitted
         << ",\n  \"producer\": " << std::quoted(result.producer)
         << ",\n  \"compiler\": " << std::quoted(std::string(compiler))
-        << ",\n  \"compile_options\": " << std::quoted(xenos::cache::DefaultOptions(xenos::cache::Backend::Vulkan))
+        << ",\n  \"compile_options\": " << std::quoted(xenos::cache::DefaultOptions(xenos::cache::Backend::Vulkan,xenos::cache::UboConstantsRequested()))
         << ",\n  \"candidates\": [\n";
     for(size_t i=0;i<entries.size();++i) {
         const auto& item=entries[i];
@@ -212,7 +212,7 @@ int Merge(int argc,char** argv) {
     Bytes image(pack::RuntimeXexBytes);
     if(!input.read(reinterpret_cast<char*>(image.data()),std::streamsize(image.size())))
         throw std::runtime_error("missing/short decrypted runtime image (use xexdump output)");
-    const auto contract=pack::RuntimeContract(image);
+    const auto contract=pack::RuntimeContract(image,xenos::cache::MakeIdentity(xenos::cache::Backend::Vulkan,"",xenos::cache::UboConstantsRequested()));
     pack::Reader reader(baseline,contract);
     std::vector<uint32_t> words;
     size_t added=0;
@@ -226,7 +226,7 @@ int Merge(int argc,char** argv) {
         for(size_t i=0;i<words.size();++i)
             words[i]=(uint32_t(source[i*4])<<24)|(uint32_t(source[i*4+1])<<16)|
                 (uint32_t(source[i*4+2])<<8)|source[i*4+3];
-        item.info=xenos::TranslateShader(words.data(),uint32_t(words.size()),item.pixel);
+        item.info=xenos::TranslateShader(words.data(),uint32_t(words.size()),item.pixel,xenos::cache::UboConstantsRequested());
         if(!item.info.errors.empty()) throw std::runtime_error("translation failed for " + Hex(item.hash) + ": " + item.info.errors);
         auto compiled=xenos::CompileHlsl(item.info.hlsl,"main",item.pixel?"ps_6_0":"vs_6_0",xenos::ShaderBinaryFormat::Spirv);
         if(!compiled.ok || compiled.bytecode.empty())

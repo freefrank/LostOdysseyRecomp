@@ -51,7 +51,7 @@ int main(int argc,char** argv) try {
         const auto image = ReadRuntimeImage(argv[3]);
         const auto backend = format == xenos::portable_pack::PackFormat::Dxil ?
             xenos::cache::Backend::D3D12 : xenos::cache::Backend::Vulkan;
-        const auto identity = xenos::cache::MakeIdentity(backend, "");
+        const auto identity = xenos::cache::MakeIdentity(backend, "", xenos::cache::UboConstantsRequested());
         const auto expected = xenos::portable_pack::RuntimeContract(image, identity, format);
         xenos::portable_pack::Reader reader(path, expected, format);
         reader.VerifyAll();
