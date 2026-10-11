@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - New Voice volume in Settings → Audio: cutscene dialogue has its own volume instead of following Sound effects. Voices in battle still follow Sound effects (#394).
 - A new install now starts at the original 720p and 30 FPS. Render resolution and Frame rate in Settings → Graphics raise them; saved settings keep their values.
 - Less CPU time per frame on the render thread, for a slightly higher frame rate where the CPU sets the limit, such as on Android.
+- Saving and loading no longer hold each message on screen for 3 seconds, and Continue on the title screen no longer waits an extra second.
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 声音新增“语音音量”：过场动画的对白有了自己的音量，不再跟随音效音量。战斗中的语音仍跟随音效音量（#394）。
 - 新安装默认为原版的 720p、30 FPS，可在 设置 → 图形 的“渲染分辨率”和“帧率”调高；已保存的设置不变。
 - 渲染线程每帧占用的 CPU 时间更少，在 CPU 决定帧率的设备上（例如 Android）帧率略有提升。
+- 存档和读档时，提示信息不再固定停留 3 秒；标题画面选 Continue 后也不再多等 1 秒。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
