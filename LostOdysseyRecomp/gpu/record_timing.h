@@ -94,13 +94,14 @@ namespace gpu::record_timing
         ULONG64 cycles = 0;
         QueryThreadCycleTime(GetCurrentThread(), &cycles);
         return { uint64_t(cycles), uint64_t(__rdtsc()) };
-#elif !defined(_WIN32)
+#elif !defined(_WIN32) && defined(CLOCK_THREAD_CPUTIME_ID)
         timespec thread{}, wall{};
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &thread);
         clock_gettime(CLOCK_MONOTONIC, &wall);
         return { uint64_t(thread.tv_sec) * 1000000000ull + uint64_t(thread.tv_nsec),
             uint64_t(wall.tv_sec) * 1000000000ull + uint64_t(wall.tv_nsec) };
 #else
+        // No thread CPU clock (newlib on the Switch has none): no share.
         return {};
 #endif
     }
