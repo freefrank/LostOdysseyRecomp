@@ -10749,9 +10749,10 @@ void main()
                             viewport, guestScissor, replacesAlpha ? fullCopyBounds : nullptr);
                     }
                 }
+                int32_t scissorLeft, scissorTop, scissorRight, scissorBottom;
                 if (!scenePromotionActivated) {
-                    scissor.left = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissor.right = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
-                    scissor.top = int32_t(rasterTarget->ScaleY(uint32_t(scissor.top))); scissor.bottom = int32_t(rasterTarget->ScaleY(uint32_t(scissor.bottom)));
+                    scissorLeft = int32_t(rasterTarget->ScaleX(uint32_t(scissor.left))); scissorRight = int32_t(rasterTarget->ScaleX(uint32_t(scissor.right)));
+                    scissorTop = int32_t(rasterTarget->ScaleY(uint32_t(scissor.top))); scissorBottom = int32_t(rasterTarget->ScaleY(uint32_t(scissor.bottom)));
                 } else {
                     // Activation can replace the map entry after the original
                     // render-target acquisition. Re-read the final attachments
@@ -10771,14 +10772,18 @@ void main()
                         drops.primMask |= 1u << (info.primitiveType & 31);
                         return;
                     }
+                    scissorLeft = scissor.left; scissorTop = scissor.top; scissorRight = scissor.right; scissorBottom = scissor.bottom;
                 }
                 // Height is a historical EDRAM allocation estimate. Attachments
                 // may have different padding while covering the same draw; keep
                 // that draw and constrain it to their common physical extent.
                 const int32_t attachmentWidth = int32_t(depthOnlyRaster ? depth->width : depth ? std::min(color->width, depth->width) : color->width);
                 const int32_t attachmentHeight = int32_t(depthOnlyRaster ? depth->height : depth ? std::min(color->height, depth->height) : color->height);
-                scissor.left = std::min(scissor.left, attachmentWidth); scissor.right = std::min(scissor.right, attachmentWidth);
-                scissor.top = std::min(scissor.top, attachmentHeight); scissor.bottom = std::min(scissor.bottom, attachmentHeight);
+                // Clamp in registers and store the rectangle once. Reloading four
+                // fields just stored one by one as one 16-byte vector cannot be
+                // store-forwarded and stalled every draw.
+                scissor = RenderRect(std::min(scissorLeft, attachmentWidth), std::min(scissorTop, attachmentHeight),
+                    std::min(scissorRight, attachmentWidth), std::min(scissorBottom, attachmentHeight));
                 if (scissor.right <= scissor.left || scissor.bottom <= scissor.top)
                 {
                     drops.scissor++;
