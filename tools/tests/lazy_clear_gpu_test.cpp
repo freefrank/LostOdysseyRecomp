@@ -305,6 +305,16 @@ std::vector<pc::Rect> RandomClearRects(std::mt19937& rng, uint32_t w, uint32_t h
     }
 }
 
+float ClearValue(std::mt19937& rng)
+{
+    switch (rng() % 4) {
+    case 0: return float(rng() % 256) / 255.0f;
+    case 1: return float(rng() % 1024) / 1023.0f;
+    case 2: return float(rng() % 1000) * 0.0317f; // 7e3 range, up to ~31.7
+    default: return float(rng() % 5) * 0.25f;
+    }
+}
+
 // The same seed gives the same operations in every mode.
 void RunScript(Harness& h, uint32_t seed)
 {
@@ -319,15 +329,16 @@ void RunScript(Harness& h, uint32_t seed)
         switch (rng() % 10) {
         case 0: case 1: { // colour clear
             Target& c = *t[rng() % 4];
-            const float v = float(rng() % 5) * 0.25f;
-            const float rgba[4] = {v, 1.0f - v, 0.5f, v * 0.5f};
+            // The renderer's clear values: guest words unpacked per class (k/255, k/1023,
+            // 7e3 floats, alpha k/3), most of them not exact in FP16 or 8-bit UNORM.
+            const float rgba[4] = {ClearValue(rng), ClearValue(rng), ClearValue(rng), float(rng() % 4) / 3.0f};
             h.Clear(c, pc::ColorOp(rgba, RandomClearRects(rng, c.width, c.height)));
             break;
         }
         case 2: case 3: { // depth/stencil clear, any aspect combination
             Target& d = *t[4 + rng() % 3];
             const uint32_t aspects = 1 + rng() % 3;
-            h.Clear(d, pc::DepthOp(aspects & 1, aspects & 2, float(rng() % 5) * 0.25f, rng() % 3,
+            h.Clear(d, pc::DepthOp(aspects & 1, aspects & 2, rng() % 2 ? float(rng() % 5) * 0.25f : float(rng() % 16777216) / 16777215.0f, rng() % 3,
                 RandomClearRects(rng, d.width, d.height)));
             break;
         }
