@@ -89,7 +89,21 @@ namespace gpu
         // A guest write to memory the GPU already read is only ordered against
         // later draws across such a point.
         uint64_t SyncEpoch() const { return m_syncEpoch.load(std::memory_order_relaxed); }
-        void AdvanceSyncEpoch() { m_syncEpoch.fetch_add(1, std::memory_order_relaxed); }
+        // What ended each sync period; counted only with LO_RENDER_TIMING.
+        enum class SyncSource : uint32_t {
+            Batch, Scratch, Interrupt, Swap, WaitRegMem, RegToMem, MemWrite, CondWrite,
+            EventShd, EventExt, EventZpd, Occlusion, Resolve, Count
+        };
+        void AdvanceSyncEpoch(SyncSource source)
+        {
+            m_syncEpoch.fetch_add(1, std::memory_order_relaxed);
+            if (m_countSyncSources) [[unlikely]]
+                m_syncSources[uint32_t(source)].fetch_add(1, std::memory_order_relaxed);
+        }
+        uint64_t SyncSourceCount(SyncSource source) const
+        {
+            return m_syncSources[uint32_t(source)].load(std::memory_order_relaxed);
+        }
         // Microcode of the last IM_LOAD for the vertex (false) / pixel (true) stage.
         const uint32_t* GetActiveShader(bool pixel, uint32_t& dwordCount, uint64_t& commandHash) const;
         // Byte identity of the owned IM_LOAD snapshot; resolved once per change.
@@ -179,6 +193,8 @@ namespace gpu
         std::atomic<uint64_t> m_constantDirty[2]{}; // 16-word blocks changed since the last snapshot update
         std::atomic<uint64_t> m_syncEpoch{1};
         alignas(64) std::atomic<bool> m_running{ false };
+        bool m_countSyncSources = false;
+        std::atomic<uint64_t> m_syncSources[uint32_t(SyncSource::Count)]{};
 
         IndirectBufferGuard m_indirectGuard;
         InterruptRegistration m_interruptRegistration;
