@@ -8436,22 +8436,38 @@ void main()
                 return SelectControllerAtlas(result, bindingInfo);
             }
 
+            // InvalidateRange's compact copy of every cached texture's key: a resolve
+            // scans this array instead of walking the map's nodes. Rebuilt when
+            // another path changed `textures`; its own erasures keep it in step.
+            std::vector<TextureKey> textureSpans;
+            uint64_t textureSpansVersion = 0;
+
             void InvalidateRange(uint32_t address, uint32_t size)
             {
-                for (auto it = textures.begin(); it != textures.end();)
+                if (textureSpansVersion != texturesVersion) {
+                    textureSpans.clear();
+                    for (const auto& entry : textures) textureSpans.push_back(entry.first);
+                    textureSpansVersion = texturesVersion;
+                }
+                for (size_t i = 0; i < textureSpans.size();)
                 {
-                    uint32_t texSize = it->first.width * it->first.height * 4; // conservative
-                    bool overlap = it->first.address < address + size && address < it->first.address + texSize;
-                    if (overlap)
+                    const TextureKey& key = textureSpans[i];
+                    uint32_t texSize = key.width * key.height * 4; // conservative
+                    bool overlap = key.address < address + size && address < key.address + texSize;
+                    const auto it = overlap ? textures.find(key) : textures.end();
+                    if (it != textures.end())
                     {
                         // The command list being recorded may still reference it, so
                         // hand it to the retired list (freed after the next fence wait).
                         Gpu().retiredTextures.push_back(std::move(it->second));
-                        it = textures.erase(it);
+                        textures.erase(it);
                         ++texturesVersion;
+                        textureSpans[i] = textureSpans.back();
+                        textureSpans.pop_back();
                     }
-                    else ++it;
+                    else ++i;
                 }
+                textureSpansVersion = texturesVersion;
             }
 
             // ---- pipeline state ---------------------------------------------------------
