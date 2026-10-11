@@ -217,12 +217,12 @@ Delete the file to turn sampling off. Per-thread CPU shares are logged every
 
 ## Known gaps
 
-- Slow: the GPU time per draw call is the limit, not the CPU. Candidates are
-  the occlusion queries, constants read through buffer device addresses, and
-  render pass breaks.
+- Slow: about 4 FPS in the opening battle in handheld mode, with 150 ms of GPU
+  time per frame. Candidates are vertex fetch through buffer device
+  addresses (the depth-only passes now cost the most), the occlusion queries,
+  and render pass breaks.
 - No on-console importer: discs are copied from a PC.
 - Shaders missing from both the pack and the PC cache cannot be compiled on the
   console.
-- The performance work of the Unleashed Switch ports (shader constants in
-  uniform buffers, direct calls between recompiled functions, PGO, the
-  patched NVK) is not ported yet.
+- The other performance work of the Unleashed Switch ports (direct calls
+  between recompiled functions, PGO, the patched NVK) is not ported yet.
