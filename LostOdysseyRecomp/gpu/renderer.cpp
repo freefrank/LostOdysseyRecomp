@@ -739,6 +739,10 @@ namespace gpu::renderer
                 record_timing::Origin origin = record_timing::Origin::Unknown; bool drawn = false;
             };
             std::unordered_map<PipelineKey, PipelineSlot, PipelineKeyHash> pipelines;
+            // GetPipeline's last hit. Slots are never erased or replaced, and
+            // unordered_map nodes keep their address across rehashes.
+            PipelineKey lastPipelineKey{};
+            PipelineSlot* lastPipelineSlot = nullptr;
             std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> hdrPipelines;
             // Full state recipes are portable; driver blobs and object pointers
             // are never persisted. Render maps stay on the command thread.
@@ -8165,20 +8169,24 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             RenderPipeline* GetPipeline(const PipelineKey& drawKey, Shader* vs, Shader* ps, RenderFormat, RenderFormat, bool mayDefer = false)
             {
                 const PipelineKey key = gpu::pipeline_cache::Normalize(drawKey);
-                auto it = pipelines.find(key);
-                const auto hit = [&] {
-                    if (it->second.sceneSerial != sceneSerial) {
-                        it->second.sceneSerial = sceneSerial;
+                const auto hit = [&](PipelineSlot& slot) {
+                    if (slot.sceneSerial != sceneSerial) {
+                        slot.sceneSerial = sceneSerial;
                         NoteRecipeUse(key);
                     }
                     if (!unusedSiblings.empty() && unusedSiblings.erase(key)) ++workerStats.hits;
-                    return it->second.pipeline.get();
+                    lastPipelineKey = key;
+                    lastPipelineSlot = &slot;
+                    return slot.pipeline.get();
                 };
-                if (it != pipelines.end()) return hit();
+                // Consecutive draws often repeat the key; skip the map lookup.
+                if (lastPipelineSlot && key == lastPipelineKey) return hit(*lastPipelineSlot);
+                auto it = pipelines.find(key);
+                if (it != pipelines.end()) return hit(it->second);
                 ScopedTimer timer{ tPipeline, cpuTimingEnabled };
                 if (!prefetchPool.workers.empty()) {
                     HarvestPrefetch();
-                    if (it = pipelines.find(key); it != pipelines.end()) return hit();
+                    if (it = pipelines.find(key); it != pipelines.end()) return hit(it->second);
                 }
                 const bool defer = mayDefer && pipelineAsync;
                 const auto started = std::chrono::steady_clock::now();
