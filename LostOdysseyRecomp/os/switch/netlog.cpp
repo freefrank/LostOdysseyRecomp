@@ -116,7 +116,10 @@ void Start(const char* setting)
         std::fprintf(stderr, "netlog: socketInitialize failed (%#x)\n", rc);
         return;
     }
-    if (R_FAILED(threadCreate(&g_thread, Serve, nullptr, nullptr, 0x10000, 0x3B, -2)) ||
+    // Above the game's threads (0x2C): Horizon runs strictly by priority, and a
+    // busy game thread on the same core would starve a lower one. It sleeps
+    // between sends, so it costs the game little.
+    if (R_FAILED(threadCreate(&g_thread, Serve, nullptr, nullptr, 0x10000, 0x2B, -2)) ||
         R_FAILED(threadStart(&g_thread)))
     {
         g_state = Off;
