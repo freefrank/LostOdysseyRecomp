@@ -13876,6 +13876,13 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 r.samplerBoundVersions = r.samplerTableAttempts = r.samplerTableCreates = 0;
                 r.samplerViewWrites = r.samplerWrites = 0;
                 r.samplerTableMs = 0;
+                if (r.nativeVulkan) {
+                    // Graphics pipeline rebinds plume skipped inside a render pass (all lists).
+                    static uint64_t skippedBefore = 0;
+                    const uint64_t skipped = plume::VulkanCommandList::skippedPipelineBinds.load(std::memory_order_relaxed);
+                    LOG_INFO("render binds frame={} pipeline_binds_skipped={}", r.frame, skipped - skippedBefore);
+                    skippedBefore = skipped;
+                }
                 const render_timing::CpuSegments cpu{r.drawsThisFrame, r.nShader, r.nPipeline, r.nTexture, r.nResolve,
                     r.tDraw, r.tConst, r.tSets, r.tVertex, r.tBind, r.tIndex, r.tRecord,
                     r.tShader, r.tPipeline, r.tTexture, r.tResolve, r.tFlush,
