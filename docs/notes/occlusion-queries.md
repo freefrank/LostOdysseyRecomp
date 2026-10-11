@@ -217,18 +217,30 @@ it none. Hysteresis 4 (an object measured visible within its last four counts
 stays drawn) removes about 40% of the late objects for about 2% more draws and
 is on.
 
-psvita, native Vulkan, 1280x720, FSR native AA, average frame ms / draws over
-the run (turns, walking, teleports, conversation), Adaptive then History:
+psvita, native Vulkan, 1280x720, FSR native AA, capped at 12 W, average frame ms
+(draws) per 15 s view, two ABBA cycles back to back; the second cycle ran at
+52–55 °C, the first while the box was still cooling from 68 °C:
 
-| Power cap | Adaptive | History | Conversation only |
+| View | Adaptive | History | Second cycle |
 |---|---|---|---|
-| 12 W (box at 55 °C) | 24.6 / 1673 | 22.3 / 1200 | 23.9 → 17.5 ms |
-| 45 W (box at 95 °C, throttling) | 16.0 / 1663 | 16.6 / 1361 | 13.0 → 16.4 ms |
+| Uhra boot view | 31.7 (2142) | 30.2 (1944) | 28.2 → 27.8 ms (−1%) |
+| Queen's Room spawn | 21.7 (1206) | 20.8 (1007) | 20.3 → 19.5 ms (−4%) |
+| Guest Area conversation | 29.4 (1848–2459) | 27.4 (1505) | 28.4 → 25.8 ms (−9%) |
 
-At 45 W this box sits at its 95 °C limit and its GPU clock swings between
-0.6 and 2 GHz from run to run (two Adaptive runs of the Queen's Room spawn in
-one session: 8.8 and 13.4 ms), so small differences there are noise. History
-keeps the GPU busier (no mid-frame sync), which at that limit lowers its clock.
+At 12 W this box's GPU stays at its lowest clock in both modes; the mid-frame
+wait that History removes costs the Adreno tablet far more (its CPU waits
+27–44 ms there and its GPU clock drops). At 45 W the box sits at its 95 °C limit
+and its GPU clock swings between 0.6 and 2 GHz from run to run (two Adaptive
+runs of the Queen's Room spawn in one session: 8.8 and 13.4 ms), so those
+numbers are not comparable.
+
+With the default policy the branch answers exactly as before: in one session,
+main and the branch tested the same queries (354 / 286 / 338 per frame in the
+three views, 52 / 97 / 122 zero), drew the same objects (2141 / 1206 / 1847) and
+switched Fast/Strict the same way, and the per-slot owner queue never handed out
+a different owner than the old map would have (0 of 1.75 million BEGIN events).
+In history mode the queue matters: the guest has usually allocated a slot again
+before the command processor reaches its BEGIN (1.5 of 2.15 million events).
 
 ## Validation so far
 
