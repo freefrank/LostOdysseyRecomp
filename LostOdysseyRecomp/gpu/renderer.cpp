@@ -9610,10 +9610,13 @@ void main()
                 static const uint32_t vfTraceCount = getenv("LO_DRAW_TRACE_COUNT") ? strtoul(getenv("LO_DRAW_TRACE_COUNT"), nullptr, 10) : 1;
                 const bool vfTrace = vfTraceFrame && frame >= vfTraceFrame && frame < vfTraceFrame + vfTraceCount;
                 std::string vfTraceLine;
-                for (uint32_t slot = 0; slot < kVertexFetchSlots; slot++)
+                // Only the slots the shader reads, in ascending order.
+                for (uint32_t word = 0; word < 2; ++word)
+                for (uint64_t pending = vs->info.vertexFetchSlotMask[word]; pending; pending &= pending - 1)
                 {
-                    if (!((vs->info.vertexFetchSlotMask[slot >> 6] >> (slot & 63)) & 1))
-                        continue;
+                    const uint32_t slot = word * 64 + uint32_t(std::countr_zero(pending));
+                    if (slot >= kVertexFetchSlots)
+                        break;
                     uint32_t vfetch[2];
                     g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS + slot * 2, 2, vfetch);
                     const uint32_t d0 = vfetch[0], d1 = vfetch[1];
@@ -9785,12 +9788,12 @@ void main()
                 auto bindTextures = [&](Shader* s)
                 {
                     if (!s) return;
-                    for (uint32_t slot = 0; slot < kTextureSlots; slot++)
+                    // Only the slots the shader samples, in ascending order.
+                    for (uint32_t pending = s->info.textureSlotMask; pending; pending &= pending - 1)
                     {
+                        const uint32_t slot = uint32_t(std::countr_zero(pending));
                         if (failedPlan)
                             return;
-                        if (!((s->info.textureSlotMask >> slot) & 1))
-                            continue;
                         uint32_t fetch[6];
                         g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS + slot * 6, 6, fetch);
                         const uint32_t declared = s->info.textureDimension[slot];
