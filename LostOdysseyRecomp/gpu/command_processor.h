@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <bit>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -70,7 +69,8 @@ namespace gpu
                 return value;
             uint32_t word;
             std::memcpy(&word, m_mmioWindow + size_t(index) * 4, sizeof(word));
-            return std::byteswap(word);
+            // Big-endian MMIO word (std::byteswap needs C++23; fixtures build C++20).
+            return (word >> 24) | ((word >> 8) & 0xFF00u) | ((word << 8) & 0xFF0000u) | (word << 24);
         }
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
