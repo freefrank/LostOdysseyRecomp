@@ -42,8 +42,14 @@ int main()
     Check(SampleScale(1280, 720, 1280, 720, 1) == 2.0, "2x MSAA counts samples");
     Check(SampleScale(0, 720, 1280, 720, 0) == 1.0, "unknown size keeps host samples");
     Check(GuestSamples(0.0) == 0 && GuestSamples(0.25) == 1 && GuestSamples(250.4) == 250, "rounding keeps any sample visible");
-    Check(HostPolicy(nullptr) == Policy::Adaptive && HostPolicy("") == Policy::Adaptive && HostPolicy("host") == Policy::Adaptive,
-        "adaptive host queries by default");
+    Check(HostPolicy(nullptr) == kDefaultPolicy && HostPolicy("") == kDefaultPolicy && HostPolicy("host") == kDefaultPolicy,
+        "platform default policy when unset");
+#ifdef __ANDROID__
+    Check(kDefaultPolicy == Policy::History, "history by default on Android");
+#else
+    Check(kDefaultPolicy == Policy::Adaptive, "adaptive by default on desktop");
+#endif
+    Check(HostPolicy("adaptive") == Policy::Adaptive, "adaptive on request");
     Check(HostPolicy("fast") == Policy::Fast && HostPolicy("strict") == Policy::Strict, "fast and strict pin one mode");
     Check(HostPolicy("history") == Policy::History, "history answers on request");
     Check(IsHistoryOwner(HistoryOwner(0x823CD744, 7)) && !IsHistoryOwner(OwnerKey(0x823D5688, 0)) && !IsHistoryOwner(0x11b000),

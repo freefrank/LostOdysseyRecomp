@@ -86,12 +86,21 @@ namespace gpu::occlusion
     // choice frame by frame.
     enum class Policy { Adaptive, Fast, Strict, History };
 
-    // LO_ZPD_MODE: unset or "host" selects Policy::Adaptive, "fast", "strict"
-    // and "history" pin one mode. The command processor's fake modes (grow,
-    // xenia, begin0, none) turn host queries off.
+    // History on Android, where Adaptive's switch to Strict stalls tiled GPUs
+    // for tens of milliseconds per frame; Adaptive elsewhere.
+#ifdef __ANDROID__
+    inline constexpr Policy kDefaultPolicy = Policy::History;
+#else
+    inline constexpr Policy kDefaultPolicy = Policy::Adaptive;
+#endif
+
+    // LO_ZPD_MODE: unset or "host" selects kDefaultPolicy; "adaptive", "fast",
+    // "strict" and "history" pin one policy. The command processor's fake
+    // modes (grow, xenia, begin0, none) turn host queries off.
     inline std::optional<Policy> HostPolicy(const char* mode)
     {
-        if (!mode || !*mode || std::strcmp(mode, "host") == 0) return Policy::Adaptive;
+        if (!mode || !*mode || std::strcmp(mode, "host") == 0) return kDefaultPolicy;
+        if (std::strcmp(mode, "adaptive") == 0) return Policy::Adaptive;
         if (std::strcmp(mode, "fast") == 0) return Policy::Fast;
         if (std::strcmp(mode, "strict") == 0) return Policy::Strict;
         if (std::strcmp(mode, "history") == 0) return Policy::History;

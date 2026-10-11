@@ -114,7 +114,8 @@ never culls. A record without a reported owner keys on its slot as before.
 
 | Value | END record | Culling | Uhra cost (D3D12, 2560x1440, uncapped, ABBA) |
 |---|---|---|---|
-| unset / `host` (default) | Fast, Strict while most queried objects read zero (below) | Only in Strict stretches | as `fast` in Uhra (it stays Fast) |
+| unset / `host` (default) | `history` on Android, `adaptive` elsewhere | | |
+| `adaptive` | Fast, Strict while most queried objects read zero (below) | Only in Strict stretches | as `fast` in Uhra (it stays Fast) |
 | `fast` (the default before adaptive) | Written at the event with the last measured count of the same record; 1 when that was zero or unknown | Never: no query reads zero | 128.8 FPS vs 130.3 fake (about 1%) |
 | `strict` | Written once the host GPU has counted it; the guest waits | With exact counts | 111.2 FPS vs 131.7 fake (about 15%) |
 | `history` | The game reads each query at the start of the next frame; the guest hooks answer from the newest count of the same object (below) | With counts about three frames old | not measured on D3D12 |
@@ -124,7 +125,7 @@ Fast follows Xenia's default `fast` mode: counts used as magnitudes, such as
 flare visibility, follow the real ones a frame or two late, while culling is
 unchanged from the fake counts, so a stale zero can never hide an object.
 
-### Adaptive (default since 2026-10-08)
+### Adaptive (default on desktop since 2026-10-08)
 
 Fast never culls, so the game draws every object its occlusion pass tests, also
 those the console would skip. In most places that costs little (Uhra: 15% of
@@ -168,7 +169,7 @@ query earlier did not shorten that wait and lowered the rate further (about
 104 FPS), so it was removed. Any failure (device loss, failed submit or wait,
 shutdown) writes the waiting records as visible, so a guest never waits forever.
 
-### History (`LO_ZPD_MODE=history`)
+### History (`LO_ZPD_MODE=history`, default on Android since 2026-10-11)
 
 Even Fast makes the guest wait in the middle of every frame: its same-frame
 read polls `GetData` until the command processor has reached the query. On
