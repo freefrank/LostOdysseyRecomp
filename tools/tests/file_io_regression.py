@@ -93,6 +93,9 @@ struct Request {
     void LockReleased() {}
 };
 }
+namespace gpu::guest_writes {
+void Note(uint32_t, uint32_t) {}
+}
 uint32_t IoGuestPcr() { return 0; }
 #define IO_TEST_STAGE(...) ((void)0)
 #define LOG_KERNEL(...) ((void)0)
