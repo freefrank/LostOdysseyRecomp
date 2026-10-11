@@ -1,7 +1,10 @@
 #pragma once
 
 #include <atomic>
+#include <bit>
 #include <condition_variable>
+#include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -57,6 +60,18 @@ namespace gpu
         // MMIO
         void WriteRegister(uint32_t index, uint32_t value);
         uint32_t ReadRegister(uint32_t index);
+        // ReadRegister inlined for the renderer's per-draw reads (same values):
+        // the register, or the big-endian MMIO word where the register is zero.
+        uint32_t ReadRegisterInline(uint32_t index)
+        {
+            if (index >= REGISTER_COUNT || !m_mmioWindow) [[unlikely]]
+                return ReadRegister(index);
+            if (const uint32_t value = m_registers[index]) [[likely]]
+                return value;
+            uint32_t word;
+            std::memcpy(&word, m_mmioWindow + size_t(index) * 4, sizeof(word));
+            return std::byteswap(word);
+        }
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
         // Bring a renderer copy of a constant bank up to date: blocks command writes
@@ -137,6 +152,8 @@ namespace gpu
         uint8_t* TranslatePhysical(uint32_t physicalAddress);
 
         std::vector<uint32_t> m_registers;
+        // Host view of the guest MMIO register window (MMIO_BASE), set by Init.
+        const uint8_t* m_mmioWindow = nullptr;
         struct MovieClearStage
         {
             bool active = false;

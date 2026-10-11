@@ -259,6 +259,7 @@ namespace gpu
     bool CommandProcessor::Init()
     {
         m_registers.assign(REGISTER_COUNT, 0);
+        m_mmioWindow = static_cast<const uint8_t*>(g_memory.Translate(MMIO_BASE));
         for (uint32_t bank = 0; bank < 2; ++bank) MarkConstantsChanged(bank, ~0ull);
 
         // Registers the guest reads back through plain loads: keep the MMIO

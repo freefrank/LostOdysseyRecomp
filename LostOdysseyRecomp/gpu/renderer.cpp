@@ -285,7 +285,7 @@ namespace gpu::renderer
         constexpr uint32_t kVertexFetchSlots = 96;
         constexpr uint32_t kTextureSlots = 32;
 
-        uint32_t Reg(uint32_t index) { return g_commandProcessor.ReadRegister(index); }
+        uint32_t Reg(uint32_t index) { return g_commandProcessor.ReadRegisterInline(index); }
         float RegF(uint32_t index) { uint32_t v = Reg(index); float f; memcpy(&f, &v, 4); return f; }
         uint8_t* Phys(uint32_t physicalAddress) { return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF))); }
 
