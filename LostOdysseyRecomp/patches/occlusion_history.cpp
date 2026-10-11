@@ -39,7 +39,10 @@ constexpr uint32_t kSunFlareAllocation = 0x823D5688;
 constexpr uint32_t kViewState = 4;                 // FViewInfo -> FSceneViewState*
 constexpr uint32_t kViewMatrix = 64;               // FViewInfo: 4x4 view matrix
 
-gpu::occlusion::HistoryAnswers g_answers;
+// Hysteresis 4: an object measured visible within its last four counts stays
+// drawn. On psvita it cut the objects drawn late during camera motion by about
+// 40% for about 2% more draws.
+gpu::occlusion::HistoryAnswers g_answers{4};
 bool g_inMainRender = false;
 bool g_pollRequested = false;
 std::unordered_map<uint32_t, std::array<float, 16>> g_lastView; // view state -> last view matrix

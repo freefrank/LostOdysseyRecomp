@@ -207,20 +207,28 @@ Strict adds the GPU to it. History removes the read from the frame:
   waits for, and the command processor only waits for the GPU when that record
   is unwritten.
 
-psvita, native Vulkan, 1280x720, FSR native AA, one run each (frame ms / draws):
+Objects that come out from behind an occluder are drawn up to three frames
+late. Against the counts the same queries measured (what Strict would draw), on
+psvita at 720p during camera turns, walking, teleports and the Guest Area
+conversation: about 1–3 of 300–800 tested primitives a frame at 45 W and 1–5 at
+12 W, each missing 1–3 frames (about 40% one frame, 40% three). Without the cut
+check a teleport left about 460 primitives undrawn for up to three frames; with
+it none. Hysteresis 4 (an object measured visible within its last four counts
+stays drawn) removes about 40% of the late objects for about 2% more draws and
+is on.
 
-| View | Adaptive 45 W | History 45 W | Adaptive 12 W | History 12 W |
-|---|---|---|---|---|
-| Uhra boot view | 17.7 / 2143 | 17.2 / 1941 | 49.8 / 2143 | 30.2 / 1941 |
-| Queen's Room spawn | 11.1 / 1206 | 15.3 / 1007 | 30.9 / 1205 | 20.6 / 1007 |
-| Queen's Room, inside | 15.1 / 2110 | 15.4 / 2029 | 41.9 / 2110 | 24.8 / 2029 |
-| Queen's Room stairs | 15.7 / 2986 | 13.7 / 1827 | 38.4 / 2986 | 20.8 / 1827 |
-| Guest Area conversation | 15.1 / 1847 | 15.1 / 1498 | 40.0 / 1847 | 27.4 / 1499 |
+psvita, native Vulkan, 1280x720, FSR native AA, average frame ms / draws over
+the run (turns, walking, teleports, conversation), Adaptive then History:
 
-At 45 W the Queen's Room spawn is slower with History (ABBA 11.2/11.3 vs
-13.2/13.7 ms): without the mid-frame sync the GPU stays busy (97% vs 73%) and
-the APU runs both GPU and CPU at lower clocks. Objects that come out from behind
-an occluder appear up to three frames late.
+| Power cap | Adaptive | History | Conversation only |
+|---|---|---|---|
+| 12 W (box at 55 °C) | 24.6 / 1673 | 22.3 / 1200 | 23.9 → 17.5 ms |
+| 45 W (box at 95 °C, throttling) | 16.0 / 1663 | 16.6 / 1361 | 13.0 → 16.4 ms |
+
+At 45 W this box sits at its 95 °C limit and its GPU clock swings between
+0.6 and 2 GHz from run to run (two Adaptive runs of the Queen's Room spawn in
+one session: 8.8 and 13.4 ms), so small differences there are noise. History
+keeps the GPU busier (no mid-frame sync), which at that limit lowers its clock.
 
 ## Validation so far
 
