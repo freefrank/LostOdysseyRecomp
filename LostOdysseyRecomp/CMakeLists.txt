@@ -870,7 +870,8 @@ if(LO_BUILD_GPU AND (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
     add_executable(LoLazyClearGpuTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/lazy_clear_gpu_test.cpp
         ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
-    target_include_directories(LoLazyClearGpuTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+    target_include_directories(LoLazyClearGpuTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume
+        ${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/inc)
     target_compile_features(LoLazyClearGpuTest PRIVATE cxx_std_20)
     target_compile_definitions(LoLazyClearGpuTest PRIVATE NOMINMAX)
     set_target_properties(LoLazyClearGpuTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
