@@ -83,5 +83,39 @@ int main()
     const auto calls = cache.calls;
     Check(pixel.RendererHash(cache) == ByteReference(relocated));
     Check(cache.calls == calls);
+    // A shader loaded again from its source reuses its snapshot and identity after
+    // a full compare; changed bytes at that source are captured again.
+    {
+        CapturedShader stage;
+        CountingCache ids;
+        Check(stage.RendererHash(ids) == ByteReference({}) && ids.calls == 1);
+        std::vector<uint32_t> a{1, 2, 3, 4, 5}, b{9, 8, 7};
+        Check(stage.Load(a.data(), 5) && stage.RendererHash(ids) == ByteReference(a));
+        Check(stage.Load(b.data(), 3) && stage.RendererHash(ids) == ByteReference(b));
+        Check(ids.calls == 3);
+        Check(stage.Load(a.data(), 5));
+        Check(stage.CommandHash() == WordReference(a) && stage.RendererHash(ids) == ByteReference(a));
+        Check(stage.Count() == 5 && stage.Words()[4] == 5 && ids.calls == 3);
+        Check(!stage.Load(a.data(), 5));
+        a[4] ^= 1;
+        Check(stage.Load(b.data(), 3) && stage.RendererHash(ids) == ByteReference(b) && ids.calls == 3);
+        Check(stage.Load(a.data(), 5));
+        Check(stage.CommandHash() == WordReference(a) && stage.RendererHash(ids) == ByteReference(a));
+        Check(stage.Words()[4] == a[4] && ids.calls == 4);
+        // Same source, other length: a new snapshot, not the stored one.
+        Check(stage.Load(a.data(), 4));
+        Check(stage.CommandHash() == WordReference({a[0], a[1], a[2], a[3]}));
+        // The stored microcode stays bounded; evicted sources are captured again.
+        std::vector<std::vector<uint32_t>> big(40, std::vector<uint32_t>(65536));
+        for (size_t s = 0; s < big.size(); ++s) {
+            for (size_t i = 0; i < big[s].size(); ++i) big[s][i] = uint32_t(i * 2654435761u + s);
+            Check(stage.Load(big[s].data(), 65536));
+            Check(stage.CommandHash() == WordReference(big[s]));
+        }
+        for (size_t s = 0; s < big.size(); s += 13) {
+            Check(stage.Load(big[s].data(), 65536));
+            Check(stage.CommandHash() == WordReference(big[s]) && stage.RendererHash(ids) == ByteReference(big[s]));
+        }
+    }
     std::printf("captured shader: %u checks passed\n", checks);
 }

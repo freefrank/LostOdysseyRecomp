@@ -44,53 +44,93 @@ namespace gpu::shader_identity
     };
 
     // In-memory index of a microcode snapshot: FNV-1a over the words in four
-    // interleaved lanes, folded in lane order (shorter multiply chains).
+    // interleaved lanes, folded in lane order (shorter multiply chains). The
+    // lanes live in registers; an array indexed by i & 3 went through memory.
     inline uint64_t CommandWordHash(const uint32_t* words, uint32_t count)
     {
-        uint64_t lane[4] = {0xcbf29ce484222325ull, 0xcbf29ce484222325ull ^ 1, 0xcbf29ce484222325ull ^ 2, 0xcbf29ce484222325ull ^ 3};
-        for (uint32_t i = 0; i < count; ++i)
-            lane[i & 3] = (lane[i & 3] ^ words[i]) * 0x100000001b3ull;
-        uint64_t hash = lane[0];
-        for (int k = 1; k < 4; ++k) hash = (hash ^ lane[k]) * 0x100000001b3ull;
-        return hash;
+        constexpr uint64_t kPrime = 0x100000001b3ull, kBasis = 0xcbf29ce484222325ull;
+        uint64_t lane0 = kBasis, lane1 = kBasis ^ 1, lane2 = kBasis ^ 2, lane3 = kBasis ^ 3;
+        uint32_t i = 0;
+        for (; i + 4 <= count; i += 4) {
+            lane0 = (lane0 ^ words[i]) * kPrime;
+            lane1 = (lane1 ^ words[i + 1]) * kPrime;
+            lane2 = (lane2 ^ words[i + 2]) * kPrime;
+            lane3 = (lane3 ^ words[i + 3]) * kPrime;
+        }
+        if (i < count) lane0 = (lane0 ^ words[i]) * kPrime;
+        if (i + 1 < count) lane1 = (lane1 ^ words[i + 1]) * kPrime;
+        if (i + 2 < count) lane2 = (lane2 ^ words[i + 2]) * kPrime;
+        uint64_t hash = lane0;
+        hash = (hash ^ lane1) * kPrime;
+        hash = (hash ^ lane2) * kPrime;
+        return (hash ^ lane3) * kPrime;
     }
 
     // IM_LOAD captures microcode on the command-processor thread. Guest memory
     // may change at any time, but draws consume this owned snapshot until the
     // next load. Revalidate all incoming bytes at each load, then resolve the
     // renderer identity only once for that snapshot, even across cache eviction.
+    // Snapshots are kept per source address: a shader loaded again from the same
+    // place reuses its copy and both hashes once all its bytes compare equal.
     class CapturedShader
     {
-        std::vector<uint32_t> words;
-        uint64_t commandHash = 0;
-        uint64_t rendererHash = 0;
-        bool rendererHashValid = false;
+        struct Snapshot
+        {
+            std::vector<uint32_t> words;
+            uint64_t commandHash = 0;
+            uint64_t rendererHash = 0;
+            bool rendererHashValid = false;
+        };
+        // Node-based: `current` stays valid while other sources are added.
+        std::unordered_map<const uint32_t*, Snapshot> snapshots;
+        Snapshot none; // before the first load
+        Snapshot* current = &none;
+        size_t storedWords = 0;
+        static constexpr size_t kStoredWordLimit = 2u << 20; // 8 MiB of microcode
 
     public:
+        CapturedShader() = default;
+        CapturedShader(const CapturedShader&) = delete;
+        CapturedShader& operator=(const CapturedShader&) = delete;
+
         bool Load(const uint32_t* source, uint32_t count)
         {
             if (!count || count > 0x10000) return false;
             const size_t size = size_t(count) * sizeof(uint32_t);
-            if (words.size() == count && !std::memcmp(words.data(), source, size))
+            if (current->words.size() == count && !std::memcmp(current->words.data(), source, size))
                 return false;
-            words.assign(source, source + count);
-            commandHash = CommandWordHash(words.data(), count);
-            rendererHashValid = false;
+            auto [it, inserted] = snapshots.try_emplace(source);
+            Snapshot& snapshot = it->second;
+            if (!inserted && snapshot.words.size() == count && !std::memcmp(snapshot.words.data(), source, size)) {
+                current = &snapshot;
+                return true;
+            }
+            if (storedWords - snapshot.words.size() + count > kStoredWordLimit) {
+                // Bounded: drop every other source (the one being loaded stays).
+                for (auto other = snapshots.begin(); other != snapshots.end();)
+                    other = other == it ? std::next(other) : snapshots.erase(other);
+                storedWords = snapshot.words.size();
+            }
+            storedWords = storedWords - snapshot.words.size() + count;
+            snapshot.words.assign(source, source + count);
+            snapshot.commandHash = CommandWordHash(snapshot.words.data(), count);
+            snapshot.rendererHashValid = false;
+            current = &snapshot;
             return true;
         }
 
-        const uint32_t* Words() const { return words.empty() ? nullptr : words.data(); }
-        uint32_t Count() const { return uint32_t(words.size()); }
-        uint64_t CommandHash() const { return commandHash; }
+        const uint32_t* Words() const { return current->words.empty() ? nullptr : current->words.data(); }
+        uint32_t Count() const { return uint32_t(current->words.size()); }
+        uint64_t CommandHash() const { return current->commandHash; }
 
         template<class IdentityCache>
         uint64_t RendererHash(IdentityCache& cache)
         {
-            if (!rendererHashValid) {
-                rendererHash = cache.Get(commandHash, Words(), Count());
-                rendererHashValid = true;
+            if (!current->rendererHashValid) {
+                current->rendererHash = cache.Get(current->commandHash, Words(), Count());
+                current->rendererHashValid = true;
             }
-            return rendererHash;
+            return current->rendererHash;
         }
     };
 }
