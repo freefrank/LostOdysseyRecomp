@@ -32,6 +32,8 @@ extern "C" PPC_FUNC(__imp__sub_823CF3F0);
 namespace
 {
 constexpr uint32_t kDeferredOcclusionFlag = 0x833180B4;
+constexpr uint32_t kOcclusionEnabled = 0x83235AB4;   // the game's own switch (normally 1)
+constexpr uint32_t kQueryPool = 0x83235AB8;          // pool: +0x18 objects, +0x20 next index
 constexpr uint32_t kMainSceneRender = 0x825B2AA8;  // return address in FSceneRenderer::Render
 constexpr uint32_t kPrimitiveRead = 0x823CEC48;    // return address of the read at 823CEC44
 constexpr uint32_t kShadowRead = 0x823CEAD0;       // return address of the read at 823CEACC
@@ -50,11 +52,13 @@ std::vector<std::pair<uint64_t, uint32_t>> g_completed;
 
 bool Enabled() { return gpu::renderer::OcclusionHistoryEnabled(); }
 
-void LogStats()
+void LogStats(uint8_t* base)
 {
     const auto& s = g_answers.GetStats();
-    LOG_INFO("occlusion history f{} reads={} ready={} measured={} zero={} unknown={} stale={} cut={} gap={} hysteresis={} capture={}",
-        g_answers.Frame(), s.reads, s.ready, s.measured, s.zero, s.unknown, s.stale, s.cut, s.gap, s.hysteresis, s.capture);
+    const uint32_t pool = PPC_LOAD_U32(kQueryPool);
+    LOG_INFO("occlusion history f{} reads={} ready={} measured={} zero={} unknown={} stale={} cut={} gap={} hysteresis={} capture={} pool={}",
+        g_answers.Frame(), s.reads, s.ready, s.measured, s.zero, s.unknown, s.stale, s.cut, s.gap, s.hysteresis, s.capture,
+        pool ? PPC_LOAD_U32(pool + 0x18) : 0);
 }
 }
 
@@ -107,7 +111,15 @@ PPC_FUNC(sub_823BAB50)
     if (main) {
         g_answers.BeginFrame();
         g_pollRequested = false;
-        if (g_answers.Frame() % 600 == 0) LogStats();
+        if (g_answers.Frame() % 600 == 0) LogStats(base);
+        // With the flag the game restarts its query pool only in a scene pass
+        // that tests occlusion (after reading last frame's queries, 823C0A20),
+        // while the sun flare allocates in every main render: a stretch without
+        // such a pass would grow the pool by an object a frame. Restart it here
+        // as the same-frame path does (823BABE0). Nothing allocates between
+        // this point and the deferred read.
+        if (PPC_LOAD_U32(kOcclusionEnabled))
+            if (const uint32_t pool = PPC_LOAD_U32(kQueryPool)) PPC_STORE_U32(pool + 0x20, 0);
     }
     const bool outer = g_inMainRender;
     g_inMainRender = main;
