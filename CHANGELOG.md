@@ -18,6 +18,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android (Turnip driver): slightly higher frame rate; visibility checks no longer pause the GPU.
 - Android: much higher frame rate in conversations and large rooms; objects coming into view can appear a few frames late.
 - Slightly higher frame rate, mostly with Vulkan.
+- Black shapes no longer flicker on the sea around Saman and the Experimental Staff (#424).
 
 ### 简体中文
 
@@ -31,6 +32,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android（Turnip 驱动）：可见性检测不再让 GPU 停顿，帧率略有提升。
 - Android：对话场景和大房间的帧率大幅提升；新进入视野的物体可能晚几帧出现。
 - 帧率略有提升，Vulkan 下更明显。
+- Saman 和 Experimental Staff 一带的海面不再闪烁黑色色块（#424）。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 

@@ -9452,6 +9452,22 @@ void main()
                 // The absolute lighting bias changes Z only. Classify the guest
                 // camera first so those lighting layers retain the base pass's XY jitter.
                 shared.ndcOffset[2] += layerDepthOffset;
+                // Depth pre-pass tolerance (#424). The title draws a mesh depth-only,
+                // then again with colour, testing GREATER_EQUAL against that depth.
+                // The two vertex shaders reach the same position through differently
+                // ordered float arithmetic, and the reversed depth (w - z) turns a
+                // last-bit difference into ~1e-4 of the depth: the sea's colour pass
+                // failed around single vertices and left black hexagons. Pull depth-only
+                // writers back by 2^-11 of their depth; the colour pass still writes its
+                // own depth, so only depth that nothing redraws keeps the offset.
+                if (key.colorMask == 0 && depth && (depthControl & 6) == 6 && (!ps || !ps->info.writesDepth) &&
+                    (((key.depthControl >> 4) & 7) == 4 || ((key.depthControl >> 4) & 7) == 6) &&
+                    (info.primitiveType == 4 || info.primitiveType == 5 || info.primitiveType == 6 || info.primitiveType == 13))
+                {
+                    constexpr float kPrepassDepthScale = 1.0f - 1.0f / 2048.0f;
+                    shared.ndcScale[2] *= kPrepassDepthScale;
+                    shared.ndcOffset[2] *= kPrepassDepthScale;
+                }
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
                 shared.vtxFmt = (vte >> 8) & 7;
