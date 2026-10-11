@@ -25,6 +25,7 @@
 #include "texture_content.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
+#include "pending_clear.h"
 #include "draw_attachment_policy.h"
 #include "vulkan_object_trace.h"
 #include "occlusion_queries.h"
@@ -456,6 +457,9 @@ namespace gpu::renderer
             bool controllerAtlasPlayStationVariant = false;
             controller_atlas::Identity controllerAtlasIdentity = controller_atlas::Identity::Unknown;
             uint64_t clearedFrame = ~0ull;   // LO_CLEAR_RT debugging
+            // EDRAM clears not recorded yet: run when the target is next bound
+            // (BindTargets) or transitioned for any other use (Transition).
+            gpu::pending_clear::Queue pendingClear;
             uint64_t sdrProducerFrame = ~0ull;
             uint32_t qualifiedSdrWidth = 0;
             uint32_t qualifiedSdrHeight = 0;
@@ -2724,7 +2728,7 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h));
                 commandList->setViewports(&viewport, 1);
                 RenderRect scissor{ 0, 0, int32_t(w), int32_t(h) };
@@ -2968,7 +2972,7 @@ namespace gpu::renderer
                 auto* pipeline = GetSceneCopyPromotionPipeline(destination.format, rgb);
                 if (!pipeline || !set) return false;
                 Transition(destination, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(&destination, nullptr));
+                BindTargets(&destination, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, float(destination.width), float(destination.height));
                 const RenderRect full{0, 0, int32_t(destination.width), int32_t(destination.height)};
                 commandList->setViewports(viewport); commandList->setScissors(full);
@@ -3741,7 +3745,7 @@ namespace gpu::renderer
                 commandList->clearColor(0, RenderColor(1, 1, 1, 1));
                 fgUiBindingExpected = true; // This diagnostic restores the same target.
                 Transition(source, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(&source, nullptr));
+                BindTargets(&source, nullptr);
                 const RenderViewport originalViewport(0.0f, 0.0f, float(source.width), float(source.height));
                 const RenderRect originalScissor{0, 0, int32_t(source.width), int32_t(source.height)};
                 commandList->setViewports(originalViewport);
@@ -3800,7 +3804,7 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 auto* set = AcquireSet(1); // Does not submit or change GPU slots.
                 set->setTexture(0, hdrSource ? hdrSource : src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, 1280.0f, 720.0f);
                 RenderRect scissor{0, 0, 1280, 720};
                 commandList->setViewports(&viewport, 1);
@@ -3865,7 +3869,7 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(static_cast<float>(x0), static_cast<float>(y0), static_cast<float>(w), static_cast<float>(h));
                 commandList->setViewports(&viewport, 1);
                 RenderRect scissor{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h) };
@@ -4907,6 +4911,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
             void Transition(HostTexture& tex, RenderTextureLayout layout, RenderBarrierStages stages)
             {
+                // Every use outside a pass that binds the target reads or
+                // partly overwrites it, so owed clears go first. Attachment
+                // writes leave them to the pass (BindTargets).
+                if (!tex.pendingClear.Empty() && layout != RenderTextureLayout::COLOR_WRITE &&
+                    layout != RenderTextureLayout::DEPTH_WRITE)
+                    RunPendingClears(tex);
                 if (layout == RenderTextureLayout::COLOR_WRITE || layout == RenderTextureLayout::COPY_DEST ||
                     layout == RenderTextureLayout::GENERAL || layout == RenderTextureLayout::DEPTH_WRITE)
                     MarkFgWritable(tex, "writable_transition");
@@ -4914,6 +4924,77 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 commandList->barriers(stages, RenderTextureBarrier(tex.texture.get(), layout));
                 tex.layout = layout;
+            }
+
+            // ---- deferred EDRAM clears (pending_clear.h) -------------------------
+            // A clear of an EDRAM target is queued on the texture and recorded
+            // right before the texture's next use, so a clear that is replaced
+            // first never runs and the others start the next pass that binds the
+            // target (plume Vulkan: loadOp CLEAR) instead of a pass of their own.
+            // Callers keep the bookkeeping that describes the contents (HDR,
+            // SDR, AA, FSR alpha, restore debt) at the logical clear.
+            static bool IsDepthTarget(const HostTexture& tex) { return tex.format == RenderFormat::D32_FLOAT_S8_UINT; }
+
+            void QueueClear(HostTexture& tex, pending_clear::Op op)
+            {
+                MarkFgWritable(tex, "edram_clear");
+                if (tex.pendingClear.Size() >= pending_clear::Queue::kMaxOps) RunPendingClears(tex);
+                tex.pendingClear.Record(std::move(op), tex.width, tex.height);
+            }
+
+            // Records queued clears into the bound framebuffer, where the target
+            // is colour attachment 0 or the depth attachment.
+            void ReplayClears(const HostTexture& tex, const std::vector<pending_clear::Op>& ops)
+            {
+                static const bool traceClearCall = getenv("LO_TRACE_CLEAR_CALL") != nullptr;
+                thread_local std::vector<RenderRect> rects;
+                for (const auto& op : ops) {
+                    rects.clear();
+                    for (const auto& r : op.rects) rects.push_back({r.left, r.top, r.right, r.bottom});
+                    const RenderRect* data = rects.empty() ? nullptr : rects.data();
+                    if (IsDepthTarget(tex)) {
+                        if (traceClearCall)
+                            LOG_INFO("clear begin f{} allocation={} size={}x{} count={} z={}", frame, tex.allocationSerial, tex.width, tex.height, rects.size(), op.depth);
+                        commandList->clearDepthStencil((op.aspects & pending_clear::Depth) != 0,
+                            (op.aspects & pending_clear::Stencil) != 0, op.depth, op.stencil, data, uint32_t(rects.size()));
+                        if (traceClearCall) LOG_INFO("clear end");
+                    } else
+                        commandList->clearColor(0, RenderColor(op.color[0], op.color[1], op.color[2], op.color[3]),
+                            data, uint32_t(rects.size()));
+                }
+                consecutiveResolveCopies.Invalidate();
+            }
+
+            // Runs the queue on the target's own framebuffer, which stays bound.
+            void RunPendingClears(HostTexture& tex)
+            {
+                const auto ops = tex.pendingClear.Take();
+                const bool depthTarget = IsDepthTarget(tex);
+                const auto layout = depthTarget ? RenderTextureLayout::DEPTH_WRITE : RenderTextureLayout::COLOR_WRITE;
+                if (tex.layout != layout) {
+                    commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(tex.texture.get(), layout));
+                    tex.layout = layout;
+                }
+                commandList->setFramebuffer(FramebufferFor(depthTarget ? nullptr : &tex, depthTarget ? &tex : nullptr));
+                ReplayClears(tex, ops);
+            }
+
+            // Binds colour/depth (either may be null) for a pass and starts it
+            // with their queued clears. A queue that does not fit the pass's
+            // render area (the colour extent when colour is bound) runs first on
+            // the target's own framebuffer.
+            RenderFramebuffer* BindTargets(HostTexture* color, HostTexture* depth)
+            {
+                const HostTexture* area = color ? color : depth;
+                for (HostTexture* tex : {color, depth})
+                    if (tex && !tex->pendingClear.Empty() &&
+                        !tex->pendingClear.FitsPass(tex->width, tex->height, area->width, area->height))
+                        RunPendingClears(*tex);
+                RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
+                commandList->setFramebuffer(framebuffer);
+                if (color && !color->pendingClear.Empty()) ReplayClears(*color, color->pendingClear.Take());
+                if (depth && !depth->pendingClear.Empty()) ReplayClears(*depth, depth->pendingClear.Take());
+                return framebuffer;
             }
 
             // ---- samplers ---------------------------------------------------------
@@ -7217,6 +7298,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (color) MarkFgWritable(*color, "color_framebuffer");
                 if (depth) MarkFgWritable(*depth, "depth_framebuffer");
+                return FramebufferFor(color, depth);
+            }
+
+            RenderFramebuffer* FramebufferFor(HostTexture* color, HostTexture* depth)
+            {
                 const std::pair<const RenderTexture*, const RenderTexture*> key(
                     color ? color->texture.get() : nullptr, depth ? depth->texture.get() : nullptr);
                 if (lastFramebuffer && key == lastFramebufferKey)
@@ -8651,7 +8737,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (fgUiBindingExpected && fgUiCapture) fgUiCapture->Reject("debug_clear_rt");
                         static const bool loud = strcmp(clearTargets, "magenta") == 0;
                         color->clearedFrame = frame;
-                        commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                        BindTargets(color, nullptr);
                         commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
                         color->hdrValid = false;
 #if defined(LO_GPU_PLUME)
@@ -10466,8 +10552,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // (04533/04534); reducing the depth draw's viewport would hide it.
                 recordProbe.Enter(record_timing::Phase::Framebuffer);
                 if (auto* sample = recordProbe.Sample()) { sample->width = rasterTarget->width; sample->height = rasterTarget->height; }
-                RenderFramebuffer* framebuffer = GetFramebuffer(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
-                commandList->setFramebuffer(framebuffer);
+                RenderFramebuffer* framebuffer = BindTargets(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
                 commandList->setViewports(&rasterViewport, 1);
                 commandList->setScissors(&scissor, 1);
                 recordProbe.Enter(record_timing::Phase::Trace);
@@ -10823,7 +10908,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             }
                             if (color->hdrSidecar && color->hdrSidecar->texture) {
                                 Transition(*color->hdrSidecar, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                                commandList->setFramebuffer(GetFramebuffer(color->hdrSidecar.get(), nullptr));
+                                BindTargets(color->hdrSidecar.get(), nullptr);
                                 commandList->clearColor(0, RenderColor(0, 0, 0, 1));
                                 auto* hdrCopySource=sceneAAOutput && textureBindings[0][0]==sceneAAOutput.get() && sceneAAHdrFrame==frame ? sceneAAHdrOutput.get() :
                                     sceneTaaSdrOutput && textureBindings[0][0]==sceneTaaSdrOutput && sceneTaaHdrFrame==frame ? sceneTaaHdrOutput :
@@ -10957,7 +11042,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             else {
                                 auto& sidecar = *color->hdrSidecar;
                                 Transition(sidecar, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                                commandList->setFramebuffer(GetFramebuffer(&sidecar, nullptr));
+                                BindTargets(&sidecar, nullptr);
                                 if (tone) commandList->clearColor(0, RenderColor(0, 0, 0, 1));
                                 commandList->setViewports(&rasterViewport, 1);
                                 commandList->setScissors(&scissor, 1);
@@ -12247,9 +12332,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 continue;
                             if (tex.get() == restoreDebt.target) DropRestoreDebt(); // The fill replaces every pixel.
                             RenderColor value = UnpackGuestWord(word, k.format);
-                            Transition(*tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                            commandList->setFramebuffer(GetFramebuffer(tex.get(), nullptr));
-                            commandList->clearColor(0, value);
+                            const float rgba[4] = {value.r, value.g, value.b, value.a};
+                            QueueClear(*tex, pending_clear::ColorOp(rgba));
                             tex->hdrValid = false;
 #if defined(LO_GPU_PLUME)
                             HandleFsrAlphaRgbWriter(*tex, "depth_color_tile_clear");
@@ -12265,7 +12349,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 LOG_INFO("renderer: depth fill (base={:#x} pitch={} msaa={} rect {}x{} z={} word={:#x}) wiped colour view class {} pitch {} to ({:g},{:g},{:g},{:g})",
                                     depthInfo & 0xFFF, pitch, (surfaceInfo >> 16) & 3, maxX, maxY, rectZ, word, k.format, k.pitch, value.r, value.g, value.b, value.a);
                         }
-                        // Re-bind the fill's own framebuffer for the draw that follows.
+                        // Re-bind the fill's own framebuffer for the draw that follows
+                        // (QueueClear may have run a full queue on another one).
                         commandList->setFramebuffer(framebuffer);
                     }
 
@@ -12282,30 +12367,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         HostTexture* target = renderTargets[k].get();
                         if (k.depth)
                         {
-                            Transition(*target, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                            commandList->setFramebuffer(GetFramebuffer(nullptr, target));
                             const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
                                 int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
                             auto mapped = MapDepthClear(pitch, (surfaceInfo >> 16) & 3, sourceRect,
                                 k.pitch, target->guestHeight, target->depthMsaa);
                             if (vulkan) CoalesceDepthClearRects(mapped);
-                            std::vector<RenderRect> clearRects;
+                            std::vector<pending_clear::Rect> clearRects;
                             clearRects.reserve(mapped.size());
                             for (const auto& r : mapped) clearRects.push_back({int32_t(target->ScaleX(uint32_t(r.left))), int32_t(target->ScaleY(uint32_t(r.top))),
                                 int32_t(target->ScaleX(uint32_t(r.right))), int32_t(target->ScaleY(uint32_t(r.bottom)))});
-                            // A zero rectangle count means a whole-resource clear in
-                            // the graphics API, so an empty mapping must be skipped.
+                            const size_t regions = clearRects.size();
+                            // An empty rectangle list would mean the whole texture,
+                            // so an empty mapping is skipped.
                             if (!clearRects.empty())
                             {
-                                static const bool traceClearCall = getenv("LO_TRACE_CLEAR_CALL") != nullptr;
-                                if (traceClearCall)
-                                    LOG_INFO("clear begin f{} base={} pitch={} size={}x{} count={} z={}", frame, k.base, k.pitch, target->width, target->height, clearRects.size(), rectZ);
                                 FlushMotionReplayQueue();
-                                commandList->clearDepthStencil(true, false, rectZ, 0, clearRects.data(), uint32_t(clearRects.size()));
-                                if (traceClearCall) LOG_INFO("clear end");
+                                QueueClear(*target, pending_clear::DepthOp(true, false, rectZ, 0, std::move(clearRects)));
                             }
                             if (logged++ < 8 || frame == captureFrame)
-                                LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, clearRects.size());
+                                LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, regions);
                             continue;
                         }
                         if (target->format != color->format || nx1 <= nx0 || ny1 <= ny0)
@@ -12323,7 +12403,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         Transition(*target, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                         if (otherDepth)
                             Transition(*otherDepth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                        commandList->setFramebuffer(GetFramebuffer(target, otherDepth));
+                        BindTargets(target, otherDepth);
                         // Viewport such that the rectangle's NDC bounds land on the full texture.
                         const float vpW = 2.0f * float(target->width) / (nx1 - nx0);
                         const float vpH = 2.0f * float(mappedRows) / (ny1 - ny0);
@@ -12932,7 +13012,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // Initialize only on allocation, preserving later partial
                     // resolves and their untouched destination pixels.
                     Transition(*rs.tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                    commandList->setFramebuffer(GetFramebuffer(rs.tex.get(), nullptr));
+                    BindTargets(rs.tex.get(), nullptr);
                     commandList->clearColor(0, RenderColor(0, 0, 0, 0));
                     static uint32_t created = 0;
                     if (created++ < 16)
@@ -13281,11 +13361,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     consecutiveResolveCopies.Invalidate();
                     uint32_t clear = Reg(REG_RB_COLOR_CLEAR);
-                    RenderColor c(float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f);
-                    Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                    commandList->setFramebuffer(GetFramebuffer(color, nullptr));
-                    RenderRect rect{ int32_t(color->ScaleX(x0)), int32_t(color->ScaleY(y0)), int32_t(color->ScaleX(x1)), int32_t(color->ScaleY(y1)) };
-                    commandList->clearColor(0, c, &rect, 1);
+                    const float c[4] = {float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f};
+                    QueueClear(*color, pending_clear::ColorOp(c, {{int32_t(color->ScaleX(x0)), int32_t(color->ScaleY(y0)),
+                        int32_t(color->ScaleX(x1)), int32_t(color->ScaleY(y1))}}));
                     color->hdrValid = false;
 #if defined(LO_GPU_PLUME)
                     HandleFsrAlphaRgbWriter(*color, "resolve_color_clear");
@@ -13305,10 +13383,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 HostTexture* depth = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
                 if (!depth || !depth->texture) return;
-                Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(nullptr, depth));
                 uint32_t clear = Reg(REG_RB_DEPTH_CLEAR);
-                commandList->clearDepthStencil(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF);
+                QueueClear(*depth, pending_clear::DepthOp(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF));
             }
 
             void ClearMovieBars(uint32_t surfaceInfo, uint32_t colorInfo,
@@ -13362,7 +13438,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 consecutiveResolveCopies.Invalidate();
                 Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                BindTargets(color, nullptr);
                 commandList->clearColor(0, RenderColor(0.0f, 0.0f, 0.0f, 1.0f), bars.data(), count);
                 color->hdrValid = false;
 #if defined(LO_GPU_PLUME)
