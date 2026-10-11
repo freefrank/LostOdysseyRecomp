@@ -493,6 +493,13 @@ namespace gpu::renderer
             RenderShaderFormat renderFormat = RenderShaderFormat::DXIL;
             float pointSizeLimit = 1.0e9f;
             uint64_t constantAddresses[3]{};
+            // Translated guest shaders read their constant banks from dynamic
+            // uniform buffers in set 5 (vertex, shared, pixel) instead of the
+            // addresses above: the Switch, or LO_VK_UBO_CONSTANTS (common_hlsl.h).
+            bool uboConstants = false;
+            static constexpr uint32_t kConstantSet = 5;
+            static constexpr uint32_t kConstantBankRange = 256 * 16;
+            uint32_t drawConstantOffsets[3]{};
             std::unique_ptr<RenderDescriptorSet> staticSamplerSet;
             RenderCommandQueue* queue = nullptr;
             static constexpr uint32_t kGpuSlots = 2;
@@ -555,6 +562,8 @@ namespace gpu::renderer
                 uint64_t occlusionBatch = 0;
                 draw_timing::Probe drawProbe;
                 std::unique_ptr<RenderBuffer> uploadRing;
+                // uboConstants: this ring's three constant bank descriptors.
+                std::unique_ptr<RenderDescriptorSet> constantSet;
                 uint8_t* uploadMapped = nullptr;
                 uint64_t uploadOffset = 0;
                 // Renderer-unique, renewed whenever the ring is created or rewound:
@@ -678,7 +687,7 @@ namespace gpu::renderer
             std::unique_ptr<RenderBuffer> readback;
 
             std::unique_ptr<RenderPipelineLayout> pipelineLayout;
-            RenderDescriptorSetBuilder setBuilders[5];
+            RenderDescriptorSetBuilder setBuilders[6];
             const bool descriptorReuse = [] {
                 const char* value = getenv("LO_DESCRIPTOR_REUSE");
                 return !value || std::string_view(value) != "0";
@@ -1957,6 +1966,8 @@ namespace gpu::renderer
             static_assert(gpu::render_arena::kVertexArenaSize <= 1073741824ull);
 
             static_assert(offsetof(SharedConstants,ndcScale)==160);
+            // The shared uniform buffer range, whole 16-byte rows (common_hlsl.h XeShared).
+            static constexpr uint32_t kSharedConstantsRange = (sizeof(SharedConstants) + 15) & ~15u;
             static_assert(offsetof(SharedConstants,transfer)==240);
             static_assert(offsetof(SharedConstants,vfetchOffset)==256);
 
@@ -2185,13 +2196,20 @@ namespace gpu::renderer
                     return InitFailure("device_or_queue");
                 cacheIdentity = xenos::cache::MakeIdentity(vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12, xenos::DxcIdentity());
                 // Metal translates the same SPIR-V as Vulkan, so both read one pack.
+                uboConstants = xenos::cache::UsesUboConstants(cacheIdentity);
+                if (uboConstants) {
+                    // Their shaders and layouts expect the constant addresses.
+                    motionInitFailed = fsrAlphaInitFailed = true;
+                    LOG_INFO("renderer: guest shader constants in uniform buffers (set {}); motion-vector and FSR alpha replay off",
+                        kConstantSet);
+                }
 
                 try {
-                    positionEvidence=std::make_unique<position_evidence::Collection>([](std::span<const uint8_t> raw) {
+                    positionEvidence=std::make_unique<position_evidence::Collection>([ubo=uboConstants](std::span<const uint8_t> raw) {
                         std::vector<uint32_t> swapped(raw.size()/sizeof(uint32_t));
                         std::memcpy(swapped.data(),raw.data(),raw.size());
                         for(auto& word:swapped)word=ByteSwap(word);
-                        const auto diagnostic=xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),false);
+                        const auto diagnostic=xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),false,ubo);
                         return position_evidence::Analyze(diagnostic.hlsl);
                     });
                 } catch(const std::exception& error) {
@@ -2228,7 +2246,11 @@ namespace gpu::renderer
                     // overlap the rejected buffer, so it never straddles the same boundary.
                     std::vector<std::unique_ptr<RenderBuffer>> straddling;
                     for (;;) {
-                        g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
+                        // A bank's uniform buffer range runs up to 4 KiB past its
+                        // offset, so with uboConstants the buffer carries that slack.
+                        g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize + (uboConstants ? kConstantBankRange : 0),
+                            vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE |
+                                (uboConstants ? RenderBufferFlag::CONSTANT : RenderBufferFlag::NONE) : RenderBufferFlag::NONE));
                         if (!g.uploadRing) return InitFailure("upload_ring.create", kUploadRingSize, i);
                         if (!vulkan) break;
                         const uint64_t address = g.uploadRing->getDeviceAddress();
@@ -2331,11 +2353,28 @@ namespace gpu::renderer
                     staticSamplerSet=setBuilders[4].create(device);
                     if (!staticSamplerSet) return InitFailure("static_sampler_set.create");
                 }
-                for (int i = 0; i < (vulkan?5:4); i++)
+                // Bindings b0 (vertex), b1 (shared), b2 (pixel) of space5, so the
+                // dynamic offsets are given in that order.
+                uint32_t constantDescriptors[3]{};
+                if (uboConstants) {
+                    setBuilders[kConstantSet].begin();
+                    for (uint32_t bank = 0; bank < 3; ++bank)
+                        constantDescriptors[bank] = setBuilders[kConstantSet].addDynamicConstantBuffer(bank);
+                    setBuilders[kConstantSet].end();
+                }
+                for (uint32_t i = 0; i < (uboConstants ? kConstantSet + 1 : vulkan ? 5u : 4u); i++)
                     layout.addDescriptorSet(setBuilders[i]);
                 layout.end();
                 pipelineLayout = layout.create(device);
                 if (!pipelineLayout) return InitFailure("pipeline_layout.create");
+                if (uboConstants)
+                    for (auto& g : gpuSlots) {
+                        g.constantSet = setBuilders[kConstantSet].create(device);
+                        if (!g.constantSet) return InitFailure("constant_set.create");
+                        g.constantSet->setBuffer(constantDescriptors[0], g.uploadRing.get(), kConstantBankRange);
+                        g.constantSet->setBuffer(constantDescriptors[1], g.uploadRing.get(), kSharedConstantsRange);
+                        g.constantSet->setBuffer(constantDescriptors[2], g.uploadRing.get(), kConstantBankRange);
+                    }
 
                 staticSet0 = setBuilders[0].create(device);
                 if (!staticSet0) return InitFailure("vertex_fetch_set.create");
@@ -4654,6 +4693,17 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // Three 32-slot texture banks per draw. Unused banks reuse one dummy
             // set; unique 2D combinations consume descriptorBatchLimit.
 
+            // A guest draw's constant banks, recorded in constantAddresses and
+            // drawConstantOffsets. Rebinding after another layout restores them.
+            void BindDrawConstants()
+            {
+                if (uboConstants)
+                    commandList->setGraphicsDescriptorSetDynamic(Gpu().constantSet.get(), kConstantSet, drawConstantOffsets, 3);
+                else
+                    commandList->setGraphicsPushConstants(0, constantAddresses);
+            }
+
+            // Host shaders that read constants keep the push-constant addresses.
             void SetConstantBuffer(uint64_t offset, uint32_t index)
             {
                 if(vulkan) {
@@ -6037,7 +6087,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::unique_ptr<startup::Writer> bundleWriter;
                 if (bundleEnabled && extracted.error.empty() && expansionComplete) {
                     try {
-                        bundleWriter = std::make_unique<startup::Writer>(bundlePath, xenos::GetShaderCommonHlsl());
+                        bundleWriter = std::make_unique<startup::Writer>(bundlePath, xenos::ShaderCommonHlsl(uboConstants));
                     } catch (const std::exception& e) { LOG_WARNING("renderer: startup bundle writer unavailable: {}", e.what()); }
                 }
                 LOG_INFO("renderer: shader source enumeration: {} memory records, {:.0f} ms", jobs.size(),
@@ -6104,7 +6154,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         std::vector<uint32_t> swapped(words.size());
                         std::transform(words.begin(), words.end(), swapped.begin(), [](uint32_t word) { return ByteSwap(word); });
                         const auto translateStarted = std::chrono::steady_clock::now();
-                        item.info = xenos::TranslateShader(swapped.data(), uint32_t(swapped.size()), item.pixel);
+                        item.info = xenos::TranslateShader(swapped.data(), uint32_t(swapped.size()), item.pixel, uboConstants);
                         item.translateUs = std::chrono::duration_cast<std::chrono::microseconds>(
                             std::chrono::steady_clock::now() - translateStarted).count();
                         if (const char* hlslDir = getenv("LO_SHADER_HLSL_DIR"))
@@ -6337,7 +6387,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!debugCaptureDir.empty() && it->second.valid && it->second.info.hlsl.empty()) {
                         std::vector<uint32_t> swapped(count);
                         for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
-                        it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel).hlsl;
+                        it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel, uboConstants).hlsl;
                     }
                     return it->second.valid ? &it->second : nullptr;
                 }
@@ -6357,7 +6407,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
-                entry.info = xenos::TranslateShader(swapped.data(), count, pixel);
+                entry.info = xenos::TranslateShader(swapped.data(), count, pixel, uboConstants);
                 struct ReleaseText {
                     std::string& text;
                     bool capture;
@@ -6438,7 +6488,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 entry.hdrShaderAttempted = true;
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
-                auto translated = xenos::TranslateShader(swapped.data(), count, true);
+                auto translated = xenos::TranslateShader(swapped.data(), count, true, uboConstants);
                 if (!translated.errors.empty() || !hdr_scene::RewriteTonemap(translated.hlsl)) {
                     LOG_WARNING("renderer HDR: tone-map translation changed; SDR fallback");
                     return nullptr;
@@ -6465,7 +6515,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
-                const std::string source = xenos::rect_list::Vertex(xenos::TranslateShader(swapped.data(), count, false));
+                const std::string source = xenos::rect_list::Vertex(xenos::TranslateShader(swapped.data(), count, false, uboConstants));
                 if (source.empty())
                 {
                     SHADER_LOG_WARNING("rect-list-failed", RendererByteFnv, "renderer: vertex shader {:016x} has no rect-list entry point", hash);
@@ -10077,7 +10127,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     constantAddresses[0] = base + vsOffset;
                     constantAddresses[1] = base + sharedOffset;
                     constantAddresses[2] = base + psOffset;
-                    commandList->setGraphicsPushConstants(0, constantAddresses);
+                    drawConstantOffsets[0] = uint32_t(vsOffset);
+                    drawConstantOffsets[1] = uint32_t(sharedOffset);
+                    drawConstantOffsets[2] = uint32_t(psOffset);
+                    BindDrawConstants();
                 } else {
                     SetConstantBuffer(vsOffset, 0);
                     SetConstantBuffer(sharedOffset, 1);
@@ -10524,7 +10577,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 commandList->setScissors(&scissor, 1);
                                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                                 commandList->setPipeline(pipeline);
-                                if (vulkan) commandList->setGraphicsPushConstants(0, constantAddresses);
+                                if (vulkan) BindDrawConstants();
                                 commandList->setGraphicsDescriptorSet(set0, 0);
                                 commandList->setGraphicsDescriptorSet(set1, 1);
                                 commandList->setGraphicsDescriptorSet(set2, 2);
@@ -10620,7 +10673,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setScissors(&scissor, 1);
                             commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            BindDrawConstants();
                             commandList->setGraphicsDescriptorSet(set0, 0);
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
@@ -11047,7 +11100,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setScissors(&scissor, 1);
                             commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            BindDrawConstants();
                             commandList->setGraphicsDescriptorSet(set0, 0);
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
@@ -11314,7 +11367,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setFramebuffer(framebuffer); commandList->setViewports(&rasterViewport, 1);
                             commandList->setScissors(&scissor, 1); commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            if (vulkan) commandList->setGraphicsPushConstants(0, constantAddresses);
+                            if (vulkan) BindDrawConstants();
                             else { SetConstantBuffer(vsOffset,0); SetConstantBuffer(sharedOffset,1); SetConstantBuffer(psOffset,2); }
                             commandList->setGraphicsDescriptorSet(set0,0); commandList->setGraphicsDescriptorSet(set1,1);
                             commandList->setGraphicsDescriptorSet(set2,2); commandList->setGraphicsDescriptorSet(set3,3);

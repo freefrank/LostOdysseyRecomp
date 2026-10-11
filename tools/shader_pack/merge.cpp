@@ -226,7 +226,7 @@ int Merge(int argc,char** argv) {
         for(size_t i=0;i<words.size();++i)
             words[i]=(uint32_t(source[i*4])<<24)|(uint32_t(source[i*4+1])<<16)|
                 (uint32_t(source[i*4+2])<<8)|source[i*4+3];
-        item.info=xenos::TranslateShader(words.data(),uint32_t(words.size()),item.pixel);
+        item.info=xenos::TranslateShader(words.data(),uint32_t(words.size()),item.pixel,xenos::cache::UboConstants());
         if(!item.info.errors.empty()) throw std::runtime_error("translation failed for " + Hex(item.hash) + ": " + item.info.errors);
         auto compiled=xenos::CompileHlsl(item.info.hlsl,"main",item.pixel?"ps_6_0":"vs_6_0",xenos::ShaderBinaryFormat::Spirv);
         if(!compiled.ok || compiled.bytecode.empty())

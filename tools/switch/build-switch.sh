@@ -53,14 +53,17 @@ log "Submodules"
 git config --global --add safe.directory '*' 2>/dev/null || true
 git submodule update --init --recursive --depth 1
 
-# Apply a chain of patches in order. When the chain's last patch is already in
-# place the tree is ready. Otherwise the dependency is reset to its pinned
-# commit (git checkout + clean) and the whole chain is applied, so a tree that
-# carries only the PC patches, or an older Switch patch, is brought up to date.
+# Apply a chain of patches in order. A stamp in the dependency's git directory
+# records the chain's content; when it matches, the tree is ready. Otherwise the
+# dependency is reset to its pinned commit (git checkout + clean) and the whole
+# chain is applied, so a tree that carries only the PC patches, or an older
+# version of any patch in the chain, is brought up to date.
 apply_chain() { # <dir> <patch>...
     local dir="$1"; shift
-    local last="${@: -1}"
-    if git -C "$dir" apply --reverse --check "$last" 2>/dev/null; then
+    local stamp chain
+    stamp="$(git -C "$dir" rev-parse --absolute-git-dir)/lo-patch-chain"
+    chain="$(git -C "$dir" rev-parse HEAD) $(cat "$@" | sha256sum | cut -d' ' -f1)"
+    if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$chain" ]; then
         echo "$dir: already patched"
         return
     fi
@@ -71,6 +74,7 @@ apply_chain() { # <dir> <patch>...
         git -C "$dir" apply "$patch" || die "$(basename "$patch") does not apply to $dir"
         echo "$dir: applied $(basename "$patch")"
     done
+    echo "$chain" > "$stamp"
 }
 P="$root/tools/patches"
 log "Patches"
