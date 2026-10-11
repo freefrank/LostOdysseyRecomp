@@ -608,6 +608,13 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
             LOG_KERNEL("'{}' -> open failed ({})", name, FileSystem::PathUtf8(hostPath));
             return STATUS_ACCESS_DENIED;
         }
+#if LO_PLATFORM_SWITCH
+        // newlib's fread refills a buffered FILE one buffer at a time, and with
+        // libnx reporting no block size that buffer is 1 KiB: a 512 KiB archive
+        // read became 512 SD requests. NtReadFile seeks before every read, so
+        // the buffer never helps; read straight into the guest's buffer.
+        setvbuf(handle->file, nullptr, _IONBF, 0);
+#endif
         handle->writable = wantWrite;
         if (wantWrite)
         {
