@@ -20,12 +20,7 @@
 #include <tuple>
 #include <vector>
 
-namespace plume {
-#ifdef _WIN32
-std::unique_ptr<RenderInterface> CreateD3D12Interface();
-#endif
-std::unique_ptr<RenderInterface> CreateVulkanInterface();
-}
+namespace plume { std::unique_ptr<RenderInterface> CreateD3D12Interface(); std::unique_ptr<RenderInterface> CreateVulkanInterface(); }
 
 namespace {
 using namespace plume;
@@ -381,18 +376,10 @@ void RunScript(Harness& h, uint32_t seed)
 int main(int argc, char** argv)
 {
     try {
-#ifdef _WIN32
         const bool vulkan = argc > 1 && std::string(argv[1]) == "--vulkan";
-#else
-        const bool vulkan = true;
-#endif
-        const int seedArg = argc > 1 && std::string(argv[1]) == "--vulkan" ? 2 : 1;
+        const int seedArg = vulkan ? 2 : 1;
         const uint32_t seeds = argc > seedArg ? uint32_t(std::stoul(argv[seedArg])) : 200;
-#ifdef _WIN32
         auto api = vulkan ? CreateVulkanInterface() : CreateD3D12Interface();
-#else
-        auto api = CreateVulkanInterface();
-#endif
         if (!api) throw std::runtime_error("render interface");
         auto device = api->createDevice();
         if (!device) throw std::runtime_error("render device");
