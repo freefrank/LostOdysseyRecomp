@@ -165,6 +165,17 @@ reads; off by default on the console).
 The runtime log (`state/logs/runtime-*.log`) is buffered on the console and
 written at least once a second; warnings and errors are written at once.
 
+### Live log over the network
+
+The log files cannot be read over FTP while the game has them open. With
+`LO_NETLOG=1` in env.txt the console also streams the runtime log and stderr
+over TCP (port 28780, or `LO_NETLOG=<port>`), starting with the newest
+megabyte. On a PC in the same network:
+
+    python tools/switch/netlog.py <console IP> --out netlog.txt
+
+It reconnects by itself, so it can be started before the game.
+
 ### CPU profile
 
 Put `LO_CPU_PROFILE=1` in env.txt (or create an empty file named

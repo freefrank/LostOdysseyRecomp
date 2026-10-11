@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <thread>
+#include <os/netlog.h>
 #ifdef __ANDROID__
 #include <android/log.h>
 #endif
@@ -95,6 +96,7 @@ namespace os::logger
         // the rest at least every second. The crash handlers flush on exit.
         // No stderr copy once the runtime log is open (stderr.log keeps the
         // driver's, profiler's and crash output).
+        os::netlog::Write(line.data(), line.size());
         if (g_file)
         {
             fwrite(line.data(), 1, line.size(), g_file);

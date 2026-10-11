@@ -2,8 +2,10 @@
 // Parts follow UnleashedRecomp-NX (os/switch/runtime_switch.cpp, crash_switch.cpp).
 #include <os/platform.h>
 #if LO_PLATFORM_SWITCH
+#include <os/netlog.h>
 #include <os/switch_platform.h>
 #include <switch.h>
+#include <sys/iosupport.h>
 #include <atomic>
 #include <cinttypes>
 #include <cstdio>
@@ -31,6 +33,18 @@ extern "C"
 
 namespace
 {
+// stderr (fd 2) goes through this device: the file plus the network log.
+FILE* g_stderrFile = nullptr;
+devoptab_t g_stderrDevice{};
+
+ssize_t StderrWrite(struct _reent*, void*, const char* data, size_t size)
+{
+    if (g_stderrFile)
+        std::fwrite(data, 1, size, g_stderrFile);
+    os::netlog::Write(data, size);
+    return ssize_t(size);
+}
+
 char g_crashLogPath[512] = "sdmc:/switch/LostOdysseyRecomp/crash.log";
 uintptr_t g_moduleBase = 0;
 uintptr_t g_moduleEnd = 0;
@@ -265,10 +279,16 @@ void Initialize(const std::filesystem::path& dataRoot)
     std::set_terminate(OnTerminate);
 
     // Horizon has no console behind stderr: keep the renderer's and the NVK
-    // driver's own diagnostics (UnleashedRecomp-NX does the same).
+    // driver's own diagnostics (UnleashedRecomp-NX does the same), and copy
+    // them to the network log.
     std::filesystem::rename(dataRoot / "stderr.log", dataRoot / "stderr.previous.log", ec);
-    if (std::freopen((dataRoot / "stderr.log").c_str(), "w", stderr))
-        std::setvbuf(stderr, nullptr, _IOLBF, 1024);
+    g_stderrFile = std::fopen((dataRoot / "stderr.log").c_str(), "w");
+    if (g_stderrFile)
+        std::setvbuf(g_stderrFile, nullptr, _IONBF, 0);
+    g_stderrDevice.name = "stderr";
+    g_stderrDevice.write_r = StderrWrite;
+    devoptab_list[STD_ERR] = &g_stderrDevice;
+    std::setvbuf(stderr, nullptr, _IOLBF, 1024);
 
     // Keep running (and rendering) while the HOME menu overlay is open, and
     // never let the console sleep during long loads or cutscenes.
@@ -293,6 +313,7 @@ void Initialize(const std::filesystem::path& dataRoot)
         }
         std::fclose(env);
     }
+    os::netlog::Start(std::getenv("LO_NETLOG"));
 
     appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
     appletSetAutoSleepDisabled(true);
