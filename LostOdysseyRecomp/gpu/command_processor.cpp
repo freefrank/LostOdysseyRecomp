@@ -991,7 +991,6 @@ namespace gpu
         case PM4_COND_WRITE: AdvanceSyncEpoch(SyncSource::CondWrite); break;
         case PM4_EVENT_WRITE_SHD: AdvanceSyncEpoch(SyncSource::EventShd); break;
         case PM4_EVENT_WRITE_EXT: AdvanceSyncEpoch(SyncSource::EventExt); break;
-        case PM4_EVENT_WRITE_ZPD: AdvanceSyncEpoch(SyncSource::EventZpd); break;
         default:
             break;
         }

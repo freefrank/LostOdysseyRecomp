@@ -85,14 +85,15 @@ namespace gpu
         uint64_t ConstantGeneration(uint32_t bank) const { return m_constantGeneration[bank & 1].load(std::memory_order_acquire); }
         // Advances wherever the guest and the GPU synchronize or the GPU side
         // writes guest memory: read-pointer and scratch writeback, fences,
-        // interrupts, swaps, memory waits, occlusion records, resolve readback.
-        // A guest write to memory the GPU already read is only ordered against
-        // later draws across such a point.
+        // interrupts, swaps, memory waits, resolve readback. A guest write to
+        // memory the GPU already read is only ordered against later draws across
+        // such a point. Occlusion queries are not one: the guest polls their
+        // records but never makes the command stream wait for them.
         uint64_t SyncEpoch() const { return m_syncEpoch.load(std::memory_order_relaxed); }
         // What ended each sync period; counted only with LO_RENDER_TIMING.
         enum class SyncSource : uint32_t {
             Batch, Scratch, Interrupt, Swap, WaitRegMem, RegToMem, MemWrite, CondWrite,
-            EventShd, EventExt, EventZpd, Occlusion, Resolve, Count
+            EventShd, EventExt, Resolve, Count
         };
         void AdvanceSyncEpoch(SyncSource source)
         {

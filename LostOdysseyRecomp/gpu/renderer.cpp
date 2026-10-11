@@ -4231,7 +4231,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // stored together, after every other count.
             void WriteOcclusionRecords(const std::vector<gpu::occlusion::Write>& writes)
             {
-                if (!writes.empty()) g_commandProcessor.AdvanceSyncEpoch(CommandProcessor::SyncSource::Occlusion);
                 for (const auto& write : writes) {
                     if (!write.apply) continue;
                     auto* words = reinterpret_cast<uint32_t*>(Phys(write.address));
@@ -13921,7 +13920,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // What ended this frame's sync periods, and the per-frame revalidation
                     // work of textures and zero-register constants.
                     using S = CommandProcessor::SyncSource;
-                    static_assert(uint32_t(S::Count) == 13, "log fields follow SyncSource");
+                    static_assert(uint32_t(S::Count) == 11, "log fields follow SyncSource");
                     static uint64_t before[uint32_t(S::Count)]{};
                     uint64_t delta[uint32_t(S::Count)];
                     for (uint32_t i = 0; i < uint32_t(S::Count); ++i) {
@@ -13933,11 +13932,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     auto& c1 = r.constantSnapshot[1];
                     LOG_INFO("render revalidation frame={} sync_batch={} sync_scratch={} sync_interrupt={} sync_swap={} "
                         "sync_wait_reg_mem={} sync_reg_to_mem={} sync_mem_write={} sync_cond_write={} sync_event_shd={} "
-                        "sync_event_ext={} sync_event_zpd={} sync_occlusion={} sync_resolve={} texture_rehashes={} "
+                        "sync_event_ext={} sync_resolve={} texture_rehashes={} "
                         "texture_full_scans={} texture_rehash_changes={} constant_mmio_block_checks={} "
                         "constant_mmio_block_diffs={} constant_mmio_word_changes={}",
                         r.frame, delta[0], delta[1], delta[2], delta[3], delta[4], delta[5], delta[6], delta[7], delta[8],
-                        delta[9], delta[10], delta[11], delta[12], r.textureRehashes, r.textureFullScans, r.textureRehashChanges,
+                        delta[9], delta[10], r.textureRehashes, r.textureFullScans, r.textureRehashChanges,
                         c0.mmioBlockChecks + c1.mmioBlockChecks, c0.mmioBlockDiffs + c1.mmioBlockDiffs,
                         c0.mmioWordChanges + c1.mmioWordChanges);
                     r.textureRehashes = r.textureFullScans = r.textureRehashChanges = 0;
