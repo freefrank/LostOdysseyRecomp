@@ -23,6 +23,7 @@
 #include "sampler_palette.h"
 #include "texture_key.h"
 #include "texture_content.h"
+#include "guest_writes.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
 #include "draw_attachment_policy.h"
@@ -441,8 +442,9 @@ namespace gpu::renderer
             uint32_t guestAddress = 0, guestBytes = 0;
             uint32_t mipAddress = 0, mipBytes = 0; // stored mip chain, if uploaded
             uint64_t guestHash = 0, guestFullHash = 0;
-            uint64_t checkedFrame = ~0ull;
+            uint64_t checkedFrame = ~0ull;      // last frame this texture was bound
             uint64_t nextFullScanFrame = 0;
+            uint32_t writeGeneration = 0;        // guest_writes generation at the last look
             uint64_t replacementPending = 0; // fingerprint of a mod replacement still being read
 
             // The source remains BC3. Only a verified controller atlas owns an
@@ -1415,7 +1417,6 @@ namespace gpu::renderer
                     resolved.erase(it);
             }
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
-            bool textureRevalidate = true; // LO_TEXTURE_STATIC=1 disables re-hashing cached textures
             bool textureBcFallback = false; // BC1-BC3 decoded to RGBA8 on the CPU (no device support, or LO_TEXTURE_BC=0)
             // LO_TEXTURE_FINGERPRINT_LOG=<file>: one CSV row per distinct uploaded
             // texture, to match against --export-assets fingerprints.
@@ -2431,7 +2432,6 @@ namespace gpu::renderer
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 if (!readback) return InitFailure("readback.create", kReadbackSize);
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
-                textureRevalidate = getenv("LO_TEXTURE_STATIC") == nullptr;
                 if (const char* sync = getenv("LO_MODS_TEXTURE_SYNC"); sync && *sync && strcmp(sync, "0") != 0)
                     textureReplacementSync = true;
                 if (const char* path = getenv("LO_TEXTURE_FINGERPRINT_LOG"); path && *path && !textureFingerprintLog) {
@@ -7808,13 +7808,21 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     HostTexture* cached = it->second.get();
                     // An original whose mod replacement was read since: re-create it.
                     const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
-                    // Titles stream texture data in after the first draw that uses
-                    // it, so a cached upload can be all zeroes forever. Re-hash the
-                    // guest bytes once per frame and re-upload when they change.
-                    if (!replacementArrived && (!textureRevalidate || cached->checkedFrame == frame || cached->guestBytes == 0)) {
-                        return SelectControllerAtlas(cached, bindingInfo);
+                    // Guest bytes get another look only when they can have changed
+                    // since the last one: a kernel file read into the texture's range
+                    // (titles stream data in after the first draw that uses it), or a
+                    // frame without this texture, during which its memory may have been
+                    // given other contents. Resolves into the range already dropped the
+                    // entry (InvalidateRange).
+                    bool examine = false;
+                    if (!replacementArrived && cached->guestBytes != 0 && cached->checkedFrame != frame) {
+                        const uint32_t written = GuestWriteGeneration(*cached);
+                        examine = cached->checkedFrame + 1 < frame || written != cached->writeGeneration;
+                        cached->checkedFrame = frame;
+                        cached->writeGeneration = written;
                     }
-                    cached->checkedFrame = frame;
+                    if (!replacementArrived && !examine)
+                        return SelectControllerAtlas(cached, bindingInfo);
                     ++textureRehashes;
                     bool changed = replacementArrived || SampledGuestHash(*cached) != cached->guestHash;
                     if (!changed && frame >= cached->nextFullScanFrame) {
@@ -7965,6 +7973,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 tex->guestAddress = sourceAddress;
                 tex->guestBytes = uint32_t(guestBytes);
                 tex->checkedFrame = frame;
+                // writeGeneration stays 0: a file read that landed before or during
+                // this upload makes the next bind look at the bytes once more.
                 if (controller_atlas::Candidate(dimension, format, originalWidth, originalHeight,
                         width, height, sourceMip)) {
                     auto rgba = controller_atlas::DecodeBc3(staging.data(), staging.size(), rowPitch);
@@ -8355,9 +8365,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 return desc;
             }
 
+            // Newest kernel file read into the texture's base or mip range.
+            uint32_t GuestWriteGeneration(const HostTexture& tex) const
+            {
+                return std::max(gpu::guest_writes::Newest(tex.guestAddress, tex.guestBytes),
+                    tex.mipBytes ? gpu::guest_writes::Newest(tex.mipAddress, tex.mipBytes) : 0u);
+            }
+
             // Streamed mips are re-read with their base, so hash both ranges.
-            // The sampled hash runs every active frame; the full one covers
-            // writes outside the sampled windows on the staggered schedule.
+            // The sampled hash runs whenever the bytes get another look; the full
+            // one also covers writes outside the sampled windows when it is due.
             uint64_t SampledGuestHash(const HostTexture& tex) const
             {
                 return texture_cache::SampledGuestContentHash(Phys(tex.guestAddress), tex.guestBytes,

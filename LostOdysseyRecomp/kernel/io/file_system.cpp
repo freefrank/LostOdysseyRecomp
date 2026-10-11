@@ -7,6 +7,7 @@
 #include <limits>
 #include <mutex>
 #include <cpu/guest_thread.h>
+#include <gpu/guest_writes.h>
 #include <kernel/xam.h>
 #include <kernel/xdm.h>
 #include <kernel/function.h>
@@ -752,6 +753,11 @@ uint32_t NtReadFile(uint32_t handleValue, uint32_t Event, uint32_t ApcRoutine, u
         IO_TEST_STAGE(TransferDone, handleValue);
     }
 
+    // Texture data can arrive this way: tell the renderer before the guest
+    // can see the read complete.
+    if (read)
+        gpu::guest_writes::Note(g_memory.MapVirtual(Buffer), uint32_t(read));
+
     // Keep the object alive through completion, without nesting the file lock
     // with the logger, APC queue or event wait machinery. Results are local.
     IO_TEST_STAGE(BeforeCompletion, handleValue);
@@ -1260,6 +1266,7 @@ uint32_t NtReadFileScatter(uint32_t handleValue, uint32_t Event, uint32_t ApcRou
                 }
                 size_t read = 0;
                 status = ReadWithRanges(*handle, offset + total, static_cast<uint8_t*>(g_memory.Translate(size_t(guestPtr))), chunk, read);
+                gpu::guest_writes::Note(uint32_t(guestPtr), uint32_t(read));
                 total += uint32_t(read);
                 remaining -= chunk;
                 if (status == STATUS_END_OF_FILE && total)
@@ -1289,6 +1296,7 @@ uint32_t NtReadFileScatter(uint32_t handleValue, uint32_t Event, uint32_t ApcRou
                         break;
                     }
                     const size_t read = fread(g_memory.Translate(size_t(guestPtr)), 1, chunk, handle->file);
+                    gpu::guest_writes::Note(uint32_t(guestPtr), uint32_t(read));
                     total += uint32_t(read);
                     remaining -= chunk;
                     if (ferror(handle->file))
