@@ -171,10 +171,14 @@ namespace gpu
         std::condition_variable m_writePtrChanged;
         std::atomic<bool> m_wake{ false }; // Wake(): end the current idle or WAIT_REG_MEM wait early
         std::atomic<uint32_t> m_counter{ 0 };
-        std::atomic<uint64_t> m_constantGeneration[2]{};
+        // The command thread updates these on every constant run and sync point.
+        // They get a cache line of their own, apart from the write pointer, its
+        // mutex and condition variable, m_wake and the vsync counter, which guest
+        // threads write.
+        alignas(64) std::atomic<uint64_t> m_constantGeneration[2]{};
         std::atomic<uint64_t> m_constantDirty[2]{}; // 16-word blocks changed since the last snapshot update
         std::atomic<uint64_t> m_syncEpoch{1};
-        std::atomic<bool> m_running{ false };
+        alignas(64) std::atomic<bool> m_running{ false };
 
         IndirectBufferGuard m_indirectGuard;
         InterruptRegistration m_interruptRegistration;
