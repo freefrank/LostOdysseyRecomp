@@ -171,6 +171,11 @@ namespace gpu::geometry_prepare
         // renderer's ring generation still equals ringGeneration (0: none).
         uint64_t ringOffset = 0;
         uint64_t ringGeneration = 0;
+        // Copy of data in the vertex arena, valid while that arena half's reset
+        // generation still equals arenaGeneration (UINT64_MAX: none).
+        uint64_t arenaOffset = UINT64_MAX;
+        uint64_t arenaGeneration = 0;
+        uint8_t arenaSlot = 0;
         uint64_t validatedEpoch = 0; // CommandProcessor::SyncEpoch of the last content match
         size_t AllocatedBytes() const { return content.AllocatedBytes() + data.capacity() * sizeof(uint32_t); }
     };

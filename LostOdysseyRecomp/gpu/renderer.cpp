@@ -2466,8 +2466,9 @@ namespace gpu::renderer
                     device->getCapabilities().occlusionQueryPrecise, kOcclusionQueriesPerSlot,
                     getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset", countingState);
                 BindGpuSlot();
+                // Cached index conversions live in the arena too (INDEX).
                 const auto vertexFlags = RenderBufferFlag::STORAGE |
-                    (vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE : RenderBufferFlag::NONE);
+                    (vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX : RenderBufferFlag::NONE);
                 vertexArena = device->createBuffer(RenderBufferDesc::UploadBuffer(gpu::render_arena::kVertexArenaSize, vertexFlags));
                 if (!vertexArena) return InitFailure("vertex_arena.create", gpu::render_arena::kVertexArenaSize);
                 if (vulkan && !vertexArena->getDeviceAddress())
@@ -10714,7 +10715,36 @@ void main()
                 // Upload indices first so no allocator pressure can Flush between the
                 // promoted fallback and the original guarded draw.
                 uint64_t preparedIndexOffset = UINT64_MAX;
-                if (useIndices) {
+                RenderBuffer* preparedIndexBuffer = uploadRing;
+                if (useIndices && cachedIndexEntry) {
+                    // A cache hit keeps its indices in the vertex arena, like a vertex
+                    // source, until that arena half is reset: later frames bind the
+                    // same bytes without copying them again.
+                    auto& entry = *cachedIndexEntry;
+                    const auto inArena = [&] {
+                        return entry.arenaOffset != UINT64_MAX && entry.arenaGeneration == motionArenaGeneration[entry.arenaSlot];
+                    };
+                    if (!inArena()) {
+                        const size_t bytes = indices.size() * 4;
+                        const size_t needed = (bytes + 15) & ~size_t(15);
+                        const uint32_t otherSlot = (gpuSlot + 1) % kGpuSlots;
+                        const uint32_t allocSlot = gpu::render_arena::VertexAllocSlot(
+                            gpuSlot, Gpu().arenaOffset, gpuSlots[otherSlot].arenaOffset, needed);
+                        if (allocSlot != gpu::render_arena::kGpuSlots) {
+                            uint64_t& local = gpuSlots[allocSlot].arenaOffset;
+                            entry.arenaOffset = gpu::render_arena::SlotBase(allocSlot) + local;
+                            entry.arenaSlot = uint8_t(allocSlot);
+                            entry.arenaGeneration = motionArenaGeneration[allocSlot];
+                            local += needed;
+                            std::memcpy(arenaMapped + entry.arenaOffset, indices.data(), bytes);
+                        }
+                    }
+                    if (inArena()) {
+                        preparedIndexBuffer = vertexArena.get();
+                        preparedIndexOffset = entry.arenaOffset;
+                    }
+                }
+                if (useIndices && preparedIndexOffset == UINT64_MAX) {
                     // A cache hit reuses its earlier upload while the ring has not
                     // been rewound since; the data then lives exactly as long as a
                     // fresh upload's would (until this slot is recycled).
@@ -10730,6 +10760,7 @@ void main()
                             cachedIndexEntry->ringGeneration = Gpu().uploadGeneration;
                         }
                     }
+                    preparedIndexBuffer = uploadRing; // the ring of the slot now holding the data
                 }
 
                 // Record.
@@ -11125,7 +11156,7 @@ void main()
                 recordProbe.Enter(record_timing::Phase::Draw);
                 if (useIndices)
                 {
-                    RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
+                    RenderIndexBufferView view(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                     commandList->setIndexBuffer(&view);
                     commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
                 }
@@ -11343,7 +11374,7 @@ void main()
                                 commandList->setScissors(&scissor, 1);
                                 commandList->setPipeline(hdrPipeline.get());
                                 if (useIndices) {
-                                    RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset),
+                                    RenderIndexBufferView view(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset),
                                         uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                                     commandList->setIndexBuffer(&view);
                                     commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
@@ -11428,7 +11459,7 @@ void main()
                                     commandList->setScissors(&scissor, 1);
                                     commandList->setPipeline(replay);
                                     if (useIndices) {
-                                        RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset),
+                                        RenderIndexBufferView view(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset),
                                             uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                                         commandList->setIndexBuffer(&view);
                                         commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
@@ -12225,7 +12256,7 @@ void main()
                                     const RenderBufferReference cb[4] = {{uploadRing, vsOffset}, {uploadRing, sharedOffset},
                                         {uploadRing, psOffset}, {uploadRing, mvOffset}};
                                     RenderDescriptorSet* sets[] = {set0, set1, set2, set3, set4};
-                                    const RenderIndexBufferView replayIndices(RenderBufferReference(uploadRing, preparedIndexOffset),
+                                    const RenderIndexBufferView replayIndices(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset),
                                         uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                                     if (!motionReplay->Draw(commandList, prepared.pipeline, cb, sets, vulkan ? 5 : 4,
                                         rasterViewport, scissor, useIndices, indexCount, baseVertex, useIndices ? &replayIndices : nullptr)) {
@@ -12708,7 +12739,7 @@ void main()
                         commandList->setScissors(&fullRect, 1);
                         if (useIndices) {
                             // Expanded rect list: replay its encoded corners.
-                            RenderIndexBufferView view(RenderBufferReference(uploadRing, preparedIndexOffset),
+                            RenderIndexBufferView view(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset),
                                 uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                             commandList->setIndexBuffer(&view);
                             commandList->drawIndexedInstanced(indexCount, 1, 0, baseVertex, 0);
