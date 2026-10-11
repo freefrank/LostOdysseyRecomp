@@ -5,6 +5,10 @@ One entry for every pack the game downloads at startup:
   vulkan  portable_vk.lospv    Vulkan on Windows, Linux and Android, and Metal on macOS
   d3d12   portable_dx12.lospd  Direct3D 12 (Windows only)
 
+and, on request, the Nintendo Switch pack (switch/portable_vk.lospv): Vulkan with
+the constants in uniform buffers (LO_VK_UBO_CONSTANTS). It is copied to the
+console by hand and never staged.
+
   python tools/shader_pack/build_packs.py --game <disc1> [--renderer vulkan d3d12]
 
 For each renderer the runtime runs with --prepare-shaders-only and
@@ -32,7 +36,10 @@ ROOT = Path(__file__).resolve().parents[2]
 WINDOWS = os.name == "nt"
 EXE = "LostOdysseyRecomp.exe" if WINDOWS else "LostOdysseyRecomp"
 TOOL = "LoShaderPackTool.exe" if WINDOWS else "LoShaderPackTool"
-PACKS = {"vulkan": "portable_vk.lospv", "d3d12": "portable_dx12.lospd"}
+PACKS = {"vulkan": "portable_vk.lospv", "d3d12": "portable_dx12.lospd", "switch": "switch/portable_vk.lospv"}
+# Settings each pack is exported and verified with.
+PACK_ENV = {"vulkan": {"LO_GRAPHICS_API": "vulkan"}, "d3d12": {"LO_GRAPHICS_API": "d3d12"},
+            "switch": {"LO_GRAPHICS_API": "vulkan", "LO_VK_UBO_CONSTANTS": "1"}}
 # Settings under which the runtime ignores or replaces distribution packs.
 OVERRIDES = ("LO_SHADER_PACK_PATH", "LO_NO_PORTABLE_SHADER_PACK", "LO_SHADER_FULL_SCAN", "LO_SHADER_HLSL_DIR",
              "LO_SHADER_RETRY_FAILURES", "LO_SHADER_EXPORT_PACK", "LO_NO_SHADER_PREPARE")
@@ -68,11 +75,12 @@ def export(runtime: Path, game: Path, renderer: str, output: Path, sources: list
                 shutil.copy2(item, work / item.name)
         executable = work / EXE
     pack = output / PACKS[renderer]
+    pack.parent.mkdir(parents=True, exist_ok=True)
     pack.unlink(missing_ok=True)
     env = {key: value for key, value in os.environ.items() if not key.startswith("LO_")}
     env.update(LO_BACKGROUND="1", LO_NO_UPDATE="1", LO_SHADER_PACK_DOWNLOAD="0", LO_AUDIO_MUTE="1",
-               LO_GRAPHICS_API=renderer, LO_SHADER_CACHE_DIR=str(work / "shader-cache"),
-               LO_SHADER_EXPORT_PACK=str(pack), LO_LOG_FILE=str(work / "runtime.log"))
+               LO_SHADER_CACHE_DIR=str(work / "shader-cache"),
+               LO_SHADER_EXPORT_PACK=str(pack), LO_LOG_FILE=str(work / "runtime.log"), **PACK_ENV[renderer])
     print(f"{renderer}: preparing shaders with {executable} (log {work / 'runtime.log'})", flush=True)
     started = time.monotonic()
     with open(work / "stdout.log", "wb") as log:
@@ -120,12 +128,18 @@ def main() -> int:
     packs = []
     for renderer in args.renderer:
         pack = export(runtime.resolve(), game, renderer, output, args.sources)
-        report = subprocess.run([str(tool), "verify-runtime", str(pack), str(args.image)], capture_output=True, text=True)
+        env = {key: value for key, value in os.environ.items() if not key.startswith("LO_")}
+        env.update(PACK_ENV[renderer])
+        report = subprocess.run([str(tool), "verify-runtime", str(pack), str(args.image)], capture_output=True,
+                                text=True, env=env)
         if report.returncode != 0:
             raise SystemExit(f"{renderer}: verify-runtime failed: {report.stderr.strip() or report.stdout.strip()}")
-        (output / f"{pack.name}.report.json").write_text(report.stdout, encoding="utf-8")
+        (pack.parent / f"{pack.name}.report.json").write_text(report.stdout, encoding="utf-8")
         print(f"{renderer}: verify-runtime passed", flush=True)
-        packs.append(pack)
+        if renderer != "switch":
+            packs.append(pack)
+    if not packs:
+        return 0
 
     publish = [sys.executable, str(ROOT / "tools/release/publish_shader_packs.py"), "--tool", str(tool),
                "--image", str(args.image), *map(str, packs)]

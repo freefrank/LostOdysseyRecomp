@@ -124,6 +124,7 @@ namespace xenos
             const uint32_t* code = nullptr;
             uint32_t dwordCount = 0;
             bool isPixelShader = false;
+            bool uboConstants = false;
             TranslatedShader result;
 
             std::string out;
@@ -911,7 +912,7 @@ namespace xenos
             {
                 out += isPixelShader ? kPixelSampleMacro : kVertexSampleMacro;
                 if (isPixelShader) out += "#define XE_PIXEL_SHADER 1\n";
-                out += kCommonHlsl;
+                out += ShaderCommonHlsl(uboConstants);
                 out += '\n';
                 for (uint32_t slot : vfetchSlots)
                     println("#ifdef __spirv__\n#define vfetch{0} xeVertexArena\n#else\nByteAddressBuffer vfetch{0} : register(t{0}, space0);\n#endif", slot);
@@ -1361,12 +1362,9 @@ namespace xenos
                 Emit();
                 // Conditional end blocks use a flag declared up front.
                 out.insert(out.find("\tuint xeVfetchBase = 0u;\n"), "\tbool xeEnd = false;\n");
-                // Both stages share one pipeline layout: pixel shader constants live in b2.
                 if (isPixelShader)
                 {
-                    size_t pos = out.find("cbuffer XeConstants : register(b0, space0)");
-                    if (pos != std::string::npos)
-                        out.replace(pos, strlen("cbuffer XeConstants : register(b0, space0)"), "cbuffer XeConstants : register(b2, space0)");
+                    UsePixelConstantRegister(out);
                     RebuildScreenPositionFromPixel(out);
                 }
                 result.hlsl = std::move(out);
@@ -1375,12 +1373,13 @@ namespace xenos
         };
     }
 
-    TranslatedShader TranslateShader(const uint32_t* dwords, uint32_t dwordCount, bool isPixelShader)
+    TranslatedShader TranslateShader(const uint32_t* dwords, uint32_t dwordCount, bool isPixelShader, bool uboConstants)
     {
         Translator t;
         t.code = dwords;
         t.dwordCount = dwordCount;
         t.isPixelShader = isPixelShader;
+        t.uboConstants = uboConstants;
         return t.Run();
     }
 

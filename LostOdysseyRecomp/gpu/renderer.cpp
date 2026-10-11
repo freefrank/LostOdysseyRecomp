@@ -26,6 +26,7 @@
 #include "guest_writes.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
+#include "pending_clear.h"
 #include "draw_attachment_policy.h"
 #include "vulkan_object_trace.h"
 #include "occlusion_queries.h"
@@ -458,6 +459,9 @@ namespace gpu::renderer
             bool controllerAtlasPlayStationVariant = false;
             controller_atlas::Identity controllerAtlasIdentity = controller_atlas::Identity::Unknown;
             uint64_t clearedFrame = ~0ull;   // LO_CLEAR_RT debugging
+            // EDRAM clears not recorded yet: run when the target is next bound
+            // (BindTargets) or transitioned for any other use (Transition).
+            gpu::pending_clear::Queue pendingClear;
             uint64_t sdrProducerFrame = ~0ull;
             uint32_t qualifiedSdrWidth = 0;
             uint32_t qualifiedSdrHeight = 0;
@@ -527,6 +531,13 @@ namespace gpu::renderer
             RenderShaderFormat renderFormat = RenderShaderFormat::DXIL;
             float pointSizeLimit = 1.0e9f;
             uint64_t constantAddresses[3]{};
+            // Translated guest shaders read their constant banks from dynamic
+            // uniform buffers in set 5 (vertex, shared, pixel) instead of the
+            // addresses above: the Switch, or LO_VK_UBO_CONSTANTS (common_hlsl.h).
+            bool uboConstants = false;
+            static constexpr uint32_t kConstantSet = 5;
+            static constexpr uint32_t kConstantBankRange = 256 * 16;
+            uint32_t drawConstantOffsets[3]{};
             std::unique_ptr<RenderDescriptorSet> staticSamplerSet;
             RenderCommandQueue* queue = nullptr;
             static constexpr uint32_t kGpuSlots = 2;
@@ -586,9 +597,16 @@ namespace gpu::renderer
                 std::vector<uint64_t> occlusionResults;
                 uint32_t occlusionUsed = 0;
                 uint32_t occlusionPoolsDirty = 0; // pools [0, n) need a reset before use
+                // Queries below occlusionPoolUsed may use host queries; the
+                // counted ones (occlusionCounting) are flagged in occlusionCounted.
+                uint32_t occlusionPoolUsed = 0;
+                std::vector<uint8_t> occlusionCounted;
+                uint32_t occlusionCountersDirty = 0; // counters [0, n) need zeroing before use
                 uint64_t occlusionBatch = 0;
                 draw_timing::Probe drawProbe;
                 std::unique_ptr<RenderBuffer> uploadRing;
+                // uboConstants: this ring's three constant bank descriptors.
+                std::unique_ptr<RenderDescriptorSet> constantSet;
                 uint8_t* uploadMapped = nullptr;
                 uint64_t uploadOffset = 0;
                 // Renderer-unique, renewed whenever the ring is created or rewound:
@@ -680,6 +698,21 @@ namespace gpu::renderer
             gpu::occlusion::AdaptiveMode occlusionAdaptive;
             uint64_t nextOcclusionBatch = 1;
             bool hostOcclusion = false;
+            // Turnip drains the GPU at the end of every occlusion query (a WFI
+            // on a7xx), about 1 ms a frame for the ~350 queries in Uhra on an
+            // Adreno 750. There a measured draw with no pixel shader and no
+            // colour writes instead runs a fragment shader with early
+            // depth/stencil tests that adds the samples passing them, a wave at
+            // a time, to its query's counter: the same count with no query.
+            // Counters live in a host-visible buffer at set 0 binding 0 (unused
+            // by the SPIR-V shaders), kOcclusionQueriesPerSlot per GPU slot;
+            // the CPU zeroes them before reuse and reads them with the slot's
+            // other query results.
+            bool occlusionCounting = false;
+            std::unique_ptr<RenderBuffer> occlusionCounters;
+            uint32_t* occlusionCounterWords = nullptr;
+            std::unique_ptr<RenderShader> occlusionCountPs;
+            std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> countingPipelines;
 
             // Vertex buffers live in a persistent arena keyed by (address, size,
             // endian). A fetch constant may describe a multi-megabyte buffer for a
@@ -713,7 +746,7 @@ namespace gpu::renderer
             std::unique_ptr<RenderBuffer> readback;
 
             std::unique_ptr<RenderPipelineLayout> pipelineLayout;
-            RenderDescriptorSetBuilder setBuilders[5];
+            RenderDescriptorSetBuilder setBuilders[6];
             const bool descriptorReuse = [] {
                 const char* value = getenv("LO_DESCRIPTOR_REUSE");
                 return !value || std::string_view(value) != "0";
@@ -2127,6 +2160,8 @@ namespace gpu::renderer
             static_assert(gpu::render_arena::kVertexArenaSize == 1073741824ull);
 
             static_assert(offsetof(SharedConstants,ndcScale)==160);
+            // The shared uniform buffer range, whole 16-byte rows (common_hlsl.h XeShared).
+            static constexpr uint32_t kSharedConstantsRange = (sizeof(SharedConstants) + 15) & ~15u;
             static_assert(offsetof(SharedConstants,transfer)==240);
             static_assert(offsetof(SharedConstants,vfetchOffset)==256);
 
@@ -2356,13 +2391,19 @@ namespace gpu::renderer
                     return InitFailure("device_or_queue");
                 cacheIdentity = xenos::cache::MakeIdentity(vulkan ? backend::Backend::Vulkan : backend::Backend::D3D12, xenos::DxcIdentity());
                 // Metal translates the same SPIR-V as Vulkan, so both read one pack.
+                uboConstants = xenos::cache::UsesUboConstants(cacheIdentity);
+                if (uboConstants)
+                    LOG_INFO("renderer: guest shader constants in uniform buffers (set {})", kConstantSet);
+                // The motion-vector and FSR alpha replays translate guest shaders in the
+                // pointer form, with their own layouts, and compile them at run time.
+                if (!xenos::DxcAvailable()) motionInitFailed = fsrAlphaInitFailed = true;
 
                 try {
-                    positionEvidence=std::make_unique<position_evidence::Collection>([](std::span<const uint8_t> raw) {
+                    positionEvidence=std::make_unique<position_evidence::Collection>([ubo=uboConstants](std::span<const uint8_t> raw) {
                         std::vector<uint32_t> swapped(raw.size()/sizeof(uint32_t));
                         std::memcpy(swapped.data(),raw.data(),raw.size());
                         for(auto& word:swapped)word=ByteSwap(word);
-                        const auto diagnostic=xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),false);
+                        const auto diagnostic=xenos::TranslateShader(swapped.data(),uint32_t(swapped.size()),false,ubo);
                         return position_evidence::Analyze(diagnostic.hlsl);
                     });
                 } catch(const std::exception& error) {
@@ -2399,7 +2440,11 @@ namespace gpu::renderer
                     // overlap the rejected buffer, so it never straddles the same boundary.
                     std::vector<std::unique_ptr<RenderBuffer>> straddling;
                     for (;;) {
-                        g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize, vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE : RenderBufferFlag::NONE));
+                        // A bank's uniform buffer range runs up to 4 KiB past its
+                        // offset, so with uboConstants the buffer carries that slack.
+                        g.uploadRing = device->createBuffer(RenderBufferDesc::UploadBuffer(kUploadRingSize + (uboConstants ? kConstantBankRange : 0),
+                            vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE | RenderBufferFlag::INDEX | RenderBufferFlag::STORAGE |
+                                (uboConstants ? RenderBufferFlag::CONSTANT : RenderBufferFlag::NONE) : RenderBufferFlag::NONE));
                         if (!g.uploadRing) return InitFailure("upload_ring.create", kUploadRingSize, i);
                         if (!vulkan) break;
                         const uint64_t address = g.uploadRing->getDeviceAddress();
@@ -2415,11 +2460,12 @@ namespace gpu::renderer
                 }
                 if (!hostOcclusion)
                     for (auto& g : gpuSlots) g.occlusionQueries.clear();
-                LOG_INFO("renderer: occlusion queries {} (precise={} per_batch={} LO_ZPD_MODE={})",
+                const char* countingState = InitOcclusionCounting();
+                LOG_INFO("renderer: occlusion queries {} (precise={} per_batch={} LO_ZPD_MODE={} fragment_counting={})",
                     !hostOcclusion ? "fake" : occlusionPolicy == gpu::occlusion::Policy::Strict ? "host-strict" :
                     occlusionPolicy == gpu::occlusion::Policy::Fast ? "host-fast" : "host-adaptive",
                     device->getCapabilities().occlusionQueryPrecise, kOcclusionQueriesPerSlot,
-                    getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset");
+                    getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset", countingState);
                 BindGpuSlot();
                 const auto vertexFlags = RenderBufferFlag::STORAGE |
                     (vulkan ? RenderBufferFlag::DEVICE_ADDRESSABLE : RenderBufferFlag::NONE);
@@ -2503,17 +2549,39 @@ namespace gpu::renderer
                     staticSamplerSet=setBuilders[4].create(device);
                     if (!staticSamplerSet) return InitFailure("static_sampler_set.create");
                 }
-                for (int i = 0; i < (vulkan?5:4); i++)
+                // Bindings b0 (vertex), b1 (shared), b2 (pixel) of space5, so the
+                // dynamic offsets are given in that order.
+                uint32_t constantDescriptors[3]{};
+                if (uboConstants) {
+                    setBuilders[kConstantSet].begin();
+                    for (uint32_t bank = 0; bank < 3; ++bank)
+                        constantDescriptors[bank] = setBuilders[kConstantSet].addDynamicConstantBuffer(bank);
+                    setBuilders[kConstantSet].end();
+                }
+                for (uint32_t i = 0; i < (uboConstants ? kConstantSet + 1 : vulkan ? 5u : 4u); i++)
                     layout.addDescriptorSet(setBuilders[i]);
                 layout.end();
                 pipelineLayout = layout.create(device);
                 if (!pipelineLayout) return InitFailure("pipeline_layout.create");
+                if (uboConstants)
+                    for (auto& g : gpuSlots) {
+                        g.constantSet = setBuilders[kConstantSet].create(device);
+                        if (!g.constantSet) return InitFailure("constant_set.create");
+                        g.constantSet->setBuffer(constantDescriptors[0], g.uploadRing.get(), kConstantBankRange);
+                        g.constantSet->setBuffer(constantDescriptors[1], g.uploadRing.get(), kSharedConstantsRange);
+                        g.constantSet->setBuffer(constantDescriptors[2], g.uploadRing.get(), kConstantBankRange);
+                    }
 
                 staticSet0 = setBuilders[0].create(device);
                 if (!staticSet0) return InitFailure("vertex_fetch_set.create");
                 for (uint32_t i = 0; i < (vulkan?1:kVertexFetchSlots); i++)
                     staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(),
                         vulkan ? 16 : gpu::render_arena::kVertexArenaSize);
+                // SPIR-V shaders fetch vertices by device address; the slot's
+                // only reader is the occlusion counting shader.
+                if (occlusionCounting)
+                    staticSet0->setBuffer(vfetchDescriptorBase, occlusionCounters.get(),
+                        uint64_t(kGpuSlots) * kOcclusionQueriesPerSlot * sizeof(uint32_t));
                 defaultSampler = device->createSampler(sampling::Describe(sampling::DefaultKey));
                 if (!defaultSampler) return InitFailure("default_sampler.create");
                 for (uint32_t i = 0; i < kSamplerPalette; i++)
@@ -2734,7 +2802,10 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                // A transfer over the whole target (copy blend, all channels)
+                // replaces every pixel, so clears it still owes are dead.
+                if (w == dst.width && h == dst.height) dst.pendingClear.Drop();
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h));
                 commandList->setViewports(&viewport, 1);
                 RenderRect scissor{ 0, 0, int32_t(w), int32_t(h) };
@@ -2978,7 +3049,7 @@ namespace gpu::renderer
                 auto* pipeline = GetSceneCopyPromotionPipeline(destination.format, rgb);
                 if (!pipeline || !set) return false;
                 Transition(destination, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(&destination, nullptr));
+                BindTargets(&destination, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, float(destination.width), float(destination.height));
                 const RenderRect full{0, 0, int32_t(destination.width), int32_t(destination.height)};
                 commandList->setViewports(viewport); commandList->setScissors(full);
@@ -3751,7 +3822,7 @@ namespace gpu::renderer
                 commandList->clearColor(0, RenderColor(1, 1, 1, 1));
                 fgUiBindingExpected = true; // This diagnostic restores the same target.
                 Transition(source, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(&source, nullptr));
+                BindTargets(&source, nullptr);
                 const RenderViewport originalViewport(0.0f, 0.0f, float(source.width), float(source.height));
                 const RenderRect originalScissor{0, 0, int32_t(source.width), int32_t(source.height)};
                 commandList->setViewports(originalViewport);
@@ -3810,7 +3881,7 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 auto* set = AcquireSet(1); // Does not submit or change GPU slots.
                 set->setTexture(0, hdrSource ? hdrSource : src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, 1280.0f, 720.0f);
                 RenderRect scissor{0, 0, 1280, 720};
                 commandList->setViewports(&viewport, 1);
@@ -3875,7 +3946,7 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
-                commandList->setFramebuffer(GetFramebuffer(&dst, nullptr));
+                BindTargets(&dst, nullptr);
                 RenderViewport viewport(static_cast<float>(x0), static_cast<float>(y0), static_cast<float>(w), static_cast<float>(h));
                 commandList->setViewports(&viewport, 1);
                 RenderRect scissor{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h) };
@@ -4273,14 +4344,93 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 g_occlusionAwaited.store(awaited, std::memory_order_release);
             }
 
+            // See occlusionCounting. Returns the state for the startup log.
+            const char* InitOcclusionCounting()
+            {
+                if (!hostOcclusion || !nativeVulkan) return "no";
+                // Measured only there; other drivers' queries cost little.
+                const auto* native = static_cast<const VulkanDevice*>(device);
+                if (native->physicalDeviceProperties.apiVersion < VK_API_VERSION_1_2) return "no";
+                VkPhysicalDeviceSubgroupProperties subgroup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+                VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES, &subgroup};
+                VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &driver};
+                vkGetPhysicalDeviceProperties2(native->physicalDevice, &properties);
+                if (driver.driverID != VK_DRIVER_ID_MESA_TURNIP) return "no";
+                VkPhysicalDeviceFeatures features{};
+                vkGetPhysicalDeviceFeatures(native->physicalDevice, &features);
+                if (!features.fragmentStoresAndAtomics) return "no (fragment atomics unsupported)";
+                if (!(subgroup.supportedStages & VK_SHADER_STAGE_FRAGMENT_BIT) ||
+                    !(subgroup.supportedOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT)) return "no (fragment ballot unsupported)";
+                // Helper invocations are left out: their atomics have no effect,
+                // but they may still take part in the wave's ballot.
+                static constexpr char kCountPs[] = R"HLSL(
+struct XePushConstantWords { uint2 VertexShaderConstants; uint2 SharedConstants; uint2 PixelShaderConstants; };
+[[vk::push_constant]] ConstantBuffer<XePushConstantWords> xePushWords;
+[[vk::binding(0, 0)]] RWByteAddressBuffer occlusionCounters;
+[[vk::ext_builtin_input(/* HelperInvocation */ 23)]] static const bool gl_HelperInvocation;
+[earlydepthstencil]
+void main()
+{
+    const bool counted = !gl_HelperInvocation;
+    const uint samples = WaveActiveCountBits(counted);
+    if (counted && WavePrefixCountBits(counted) == 0)
+        occlusionCounters.InterlockedAdd(xePushWords.PixelShaderConstants.x * 4, samples);
+}
+)HLSL";
+                const auto compiled = xenos::CompileCachedHlsl(kCountPs, "main", "ps_6_0", xenos::ShaderBinaryFormat::Spirv);
+                if (!compiled.ok) {
+                    LOG_WARNING("renderer: occlusion counting shader: {}", compiled.errors);
+                    return "no (shader compile failed)";
+                }
+                occlusionCountPs = device->createShader(compiled.bytecode.data(), compiled.bytecode.size(), "main", RenderShaderFormat::SPIRV);
+                const uint64_t bytes = uint64_t(kGpuSlots) * kOcclusionQueriesPerSlot * sizeof(uint32_t);
+                occlusionCounters = device->createBuffer(RenderBufferDesc::UploadBuffer(bytes, RenderBufferFlag::STORAGE));
+                occlusionCounterWords = occlusionCounters ? static_cast<uint32_t*>(occlusionCounters->map()) : nullptr;
+                if (!occlusionCountPs || !occlusionCounterWords) {
+                    occlusionCounterWords = nullptr;
+                    occlusionCounters.reset();
+                    occlusionCountPs.reset();
+                    return "no (resources)";
+                }
+                std::memset(occlusionCounterWords, 0, size_t(bytes));
+                for (auto& g : gpuSlots) g.occlusionCounted.assign(kOcclusionQueriesPerSlot, 0);
+                occlusionCounting = true;
+                return "yes";
+            }
+
+            // The counting pipeline for a measured draw, or null when the draw
+            // takes a host query: it has a pixel shader (which may discard) or
+            // colour writes (left undefined either way, but kept as they are).
+            RenderPipeline* CountingPipeline(const PipelineKey& key, Shader* vs, Shader* ps)
+            {
+                if (!occlusionCounting || ps || key.colorMask) return nullptr;
+                if (const auto known = countingPipelines.find(key); known != countingPipelines.end())
+                    return known->second.get(); // null after a failed creation: the query serves
+                ScopedTimer createTimer{ recordOtherPipelineMs, record_timing::Enabled() };
+                ++recordOtherPipelineCreates;
+                const auto started = std::chrono::steady_clock::now();
+                auto desc = DescribePipeline(key, vs, nullptr, false);
+                desc.pixelShader = occlusionCountPs.get();
+                auto& pipeline = countingPipelines[key];
+                pipeline = device->createGraphicsPipeline(desc);
+                if (!pipeline) LOG_WARNING("renderer: occlusion counting pipeline failed vs={:016x}; using a query", key.vs);
+                else if (countingPipelines.size() <= 16)
+                    LOG_INFO("renderer: occlusion counting pipeline {} vs={:016x} f{} {:.1f} ms", countingPipelines.size(), key.vs, frame,
+                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+                return pipeline.get();
+            }
+
             // The host query for a draw inside a guest occlusion query, or ~0u.
             uint32_t OcclusionQueryForDraw()
             {
                 if (!hostOcclusion || !occlusion.Active()) return ~0u;
                 if (Gpu().occlusionUsed >= kOcclusionQueriesPerSlot) { ++occlusionStats.capped; return ~0u; }
-                const uint32_t index = Gpu().occlusionUsed++;
-                Gpu().occlusionPoolsDirty = std::max(Gpu().occlusionPoolsDirty, index / kOcclusionPoolQueries + 1);
-                return index;
+                return Gpu().occlusionUsed++;
+            }
+            // OcclusionQueryForDraw will return a query and the draws can count.
+            bool OcclusionCountingPending()
+            {
+                return occlusionCounting && hostOcclusion && occlusion.Active() && Gpu().occlusionUsed < kOcclusionQueriesPerSlot;
             }
 
             // The slot's fence has completed, so its host queries are final.
@@ -4289,11 +4439,16 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (!s.occlusionUsed) return;
                 const auto readStart = std::chrono::steady_clock::now();
                 s.occlusionResults.resize(s.occlusionUsed);
-                for (uint32_t first = 0; first < s.occlusionUsed; first += kOcclusionPoolQueries) {
+                for (uint32_t first = 0; first < s.occlusionPoolUsed; first += kOcclusionPoolQueries) {
                     auto& pool = *s.occlusionQueries[first / kOcclusionPoolQueries];
                     pool.queryResults();
-                    std::copy_n(pool.getResults(), std::min(kOcclusionPoolQueries, s.occlusionUsed - first),
+                    std::copy_n(pool.getResults(), std::min(kOcclusionPoolQueries, s.occlusionPoolUsed - first),
                         s.occlusionResults.begin() + first);
+                }
+                if (s.occlusionCountersDirty) {
+                    const uint32_t* counters = occlusionCounterWords + size_t(&s - gpuSlots) * kOcclusionQueriesPerSlot;
+                    for (uint32_t i = 0; i < s.occlusionCountersDirty; ++i)
+                        if (s.occlusionCounted[i]) s.occlusionResults[i] = counters[i];
                 }
                 occlusionStats.readbackUs += uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - readStart).count());
@@ -4556,6 +4711,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (uint32_t p = 0; p < Gpu().occlusionPoolsDirty; ++p)
                             commandList->resetQueryPool(Gpu().occlusionQueries[p].get(), 0, kOcclusionPoolQueries);
                         Gpu().occlusionPoolsDirty = 0;
+                        // The slot's fence has completed: its counters are free.
+                        if (const uint32_t dirty = std::exchange(Gpu().occlusionCountersDirty, 0)) {
+                            std::memset(occlusionCounterWords + size_t(gpuSlot) * kOcclusionQueriesPerSlot, 0, dirty * sizeof(uint32_t));
+                            std::fill_n(Gpu().occlusionCounted.begin(), dirty, uint8_t(0));
+                        }
+                        Gpu().occlusionPoolUsed = 0;
                         Gpu().occlusionUsed = 0;
                         Gpu().occlusionBatch = nextOcclusionBatch++;
                     }
@@ -4819,6 +4980,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             // Three 32-slot texture banks per draw. Unused banks reuse one dummy
             // set; unique 2D combinations consume descriptorBatchLimit.
 
+            // A guest draw's constant banks, recorded in constantAddresses and
+            // drawConstantOffsets. Rebinding after another layout restores them.
+            void BindDrawConstants()
+            {
+                if (uboConstants)
+                    commandList->setGraphicsDescriptorSetDynamic(Gpu().constantSet.get(), kConstantSet, drawConstantOffsets, 3);
+                else
+                    commandList->setGraphicsPushConstants(0, constantAddresses);
+            }
+
+            // The replays translate in the pointer form; the renderer's own text is the
+            // uniform-buffer form with uboConstants, so they translate the microcode again.
+            const xenos::TranslatedShader& ReplayTranslation(const xenos::TranslatedShader& info) const
+            {
+                static const xenos::TranslatedShader none;
+                return uboConstants ? none : info;
+            }
+
+            // Host shaders that read constants keep the push-constant addresses.
             void SetConstantBuffer(uint64_t offset, uint32_t index)
             {
                 if(vulkan) {
@@ -4916,6 +5096,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             }
             void Transition(HostTexture& tex, RenderTextureLayout layout, RenderBarrierStages stages)
             {
+                // Every use outside a pass that binds the target reads or
+                // partly overwrites it, so owed clears go first. Attachment
+                // writes leave them to the pass (BindTargets).
+                if (!tex.pendingClear.Empty() && layout != RenderTextureLayout::COLOR_WRITE &&
+                    layout != RenderTextureLayout::DEPTH_WRITE)
+                    RunPendingClears(tex);
                 if (layout == RenderTextureLayout::COLOR_WRITE || layout == RenderTextureLayout::COPY_DEST ||
                     layout == RenderTextureLayout::GENERAL || layout == RenderTextureLayout::DEPTH_WRITE)
                     MarkFgWritable(tex, "writable_transition");
@@ -4923,6 +5109,77 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     return;
                 commandList->barriers(stages, RenderTextureBarrier(tex.texture.get(), layout));
                 tex.layout = layout;
+            }
+
+            // ---- deferred EDRAM clears (pending_clear.h) -------------------------
+            // A clear of an EDRAM target is queued on the texture and recorded
+            // right before the texture's next use, so a clear that is replaced
+            // first never runs and the others start the next pass that binds the
+            // target (plume Vulkan: loadOp CLEAR) instead of a pass of their own.
+            // Callers keep the bookkeeping that describes the contents (HDR,
+            // SDR, AA, FSR alpha, restore debt) at the logical clear.
+            static bool IsDepthTarget(const HostTexture& tex) { return tex.format == RenderFormat::D32_FLOAT_S8_UINT; }
+
+            void QueueClear(HostTexture& tex, pending_clear::Op op)
+            {
+                MarkFgWritable(tex, "edram_clear");
+                if (tex.pendingClear.Size() >= pending_clear::Queue::kMaxOps) RunPendingClears(tex);
+                tex.pendingClear.Record(std::move(op), tex.width, tex.height);
+            }
+
+            // Records queued clears into the bound framebuffer, where the target
+            // is colour attachment 0 or the depth attachment.
+            void ReplayClears(const HostTexture& tex, const std::vector<pending_clear::Op>& ops)
+            {
+                static const bool traceClearCall = getenv("LO_TRACE_CLEAR_CALL") != nullptr;
+                thread_local std::vector<RenderRect> rects;
+                for (const auto& op : ops) {
+                    rects.clear();
+                    for (const auto& r : op.rects) rects.push_back({r.left, r.top, r.right, r.bottom});
+                    const RenderRect* data = rects.empty() ? nullptr : rects.data();
+                    if (IsDepthTarget(tex)) {
+                        if (traceClearCall)
+                            LOG_INFO("clear begin f{} allocation={} size={}x{} count={} z={}", frame, tex.allocationSerial, tex.width, tex.height, rects.size(), op.depth);
+                        commandList->clearDepthStencil((op.aspects & pending_clear::Depth) != 0,
+                            (op.aspects & pending_clear::Stencil) != 0, op.depth, op.stencil, data, uint32_t(rects.size()));
+                        if (traceClearCall) LOG_INFO("clear end");
+                    } else
+                        commandList->clearColor(0, RenderColor(op.color[0], op.color[1], op.color[2], op.color[3]),
+                            data, uint32_t(rects.size()));
+                }
+                consecutiveResolveCopies.Invalidate();
+            }
+
+            // Runs the queue on the target's own framebuffer, which stays bound.
+            void RunPendingClears(HostTexture& tex)
+            {
+                const auto ops = tex.pendingClear.Take();
+                const bool depthTarget = IsDepthTarget(tex);
+                const auto layout = depthTarget ? RenderTextureLayout::DEPTH_WRITE : RenderTextureLayout::COLOR_WRITE;
+                if (tex.layout != layout) {
+                    commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(tex.texture.get(), layout));
+                    tex.layout = layout;
+                }
+                commandList->setFramebuffer(FramebufferFor(depthTarget ? nullptr : &tex, depthTarget ? &tex : nullptr));
+                ReplayClears(tex, ops);
+            }
+
+            // Binds colour/depth (either may be null) for a pass and starts it
+            // with their queued clears. A queue that does not fit the pass's
+            // render area (the colour extent when colour is bound) runs first on
+            // the target's own framebuffer.
+            RenderFramebuffer* BindTargets(HostTexture* color, HostTexture* depth)
+            {
+                const HostTexture* area = color ? color : depth;
+                for (HostTexture* tex : {color, depth})
+                    if (tex && !tex->pendingClear.Empty() &&
+                        !tex->pendingClear.FitsPass(tex->width, tex->height, area->width, area->height))
+                        RunPendingClears(*tex);
+                RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
+                commandList->setFramebuffer(framebuffer);
+                if (color && !color->pendingClear.Empty()) ReplayClears(*color, color->pendingClear.Take());
+                if (depth && !depth->pendingClear.Empty()) ReplayClears(*depth, depth->pendingClear.Take());
+                return framebuffer;
             }
 
             // ---- samplers ---------------------------------------------------------
@@ -6362,7 +6619,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::unique_ptr<startup::Writer> bundleWriter;
                 if (bundleEnabled && extracted.error.empty() && expansionComplete) {
                     try {
-                        bundleWriter = std::make_unique<startup::Writer>(bundlePath, xenos::GetShaderCommonHlsl());
+                        bundleWriter = std::make_unique<startup::Writer>(bundlePath, xenos::ShaderCommonHlsl(uboConstants));
                     } catch (const std::exception& e) { LOG_WARNING("renderer: startup bundle writer unavailable: {}", e.what()); }
                 }
                 LOG_INFO("renderer: shader source enumeration: {} memory records, {:.0f} ms", jobs.size(),
@@ -6429,7 +6686,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         std::vector<uint32_t> swapped(words.size());
                         std::transform(words.begin(), words.end(), swapped.begin(), [](uint32_t word) { return ByteSwap(word); });
                         const auto translateStarted = std::chrono::steady_clock::now();
-                        item.info = xenos::TranslateShader(swapped.data(), uint32_t(swapped.size()), item.pixel);
+                        item.info = xenos::TranslateShader(swapped.data(), uint32_t(swapped.size()), item.pixel, uboConstants);
                         item.translateUs = std::chrono::duration_cast<std::chrono::microseconds>(
                             std::chrono::steady_clock::now() - translateStarted).count();
                         if (const char* hlslDir = getenv("LO_SHADER_HLSL_DIR"))
@@ -6667,7 +6924,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (!debugCaptureDir.empty() && it->second.valid && it->second.info.hlsl.empty()) {
                         std::vector<uint32_t> swapped(count);
                         for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
-                        it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel).hlsl;
+                        it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel, uboConstants).hlsl;
                     }
                     last = {hash, &it->second};
                     return &it->second;
@@ -6688,7 +6945,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
-                entry.info = xenos::TranslateShader(swapped.data(), count, pixel);
+                entry.info = xenos::TranslateShader(swapped.data(), count, pixel, uboConstants);
                 struct ReleaseText {
                     std::string& text;
                     bool capture;
@@ -6769,7 +7026,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 entry.hdrShaderAttempted = true;
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
-                auto translated = xenos::TranslateShader(swapped.data(), count, true);
+                auto translated = xenos::TranslateShader(swapped.data(), count, true, uboConstants);
                 if (!translated.errors.empty() || !hdr_scene::RewriteTonemap(translated.hlsl)) {
                     LOG_WARNING("renderer HDR: tone-map translation changed; SDR fallback");
                     return nullptr;
@@ -6796,7 +7053,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 std::vector<uint32_t> swapped(count);
                 for (uint32_t i = 0; i < count; i++)
                     swapped[i] = ByteSwap(words[i]);
-                const std::string source = xenos::rect_list::Vertex(xenos::TranslateShader(swapped.data(), count, false));
+                const std::string source = xenos::rect_list::Vertex(xenos::TranslateShader(swapped.data(), count, false, uboConstants));
                 if (source.empty())
                 {
                     SHADER_LOG_WARNING("rect-list-failed", RendererByteFnv, "renderer: vertex shader {:016x} has no rect-list entry point", hash);
@@ -7232,6 +7489,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (color) MarkFgWritable(*color, "color_framebuffer");
                 if (depth) MarkFgWritable(*depth, "depth_framebuffer");
+                return FramebufferFor(color, depth);
+            }
+
+            RenderFramebuffer* FramebufferFor(HostTexture* color, HostTexture* depth)
+            {
                 const std::pair<const RenderTexture*, const RenderTexture*> key(
                     color ? color->texture.get() : nullptr, depth ? depth->texture.get() : nullptr);
                 if (lastFramebuffer && key == lastFramebufferKey)
@@ -8715,7 +8977,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         if (fgUiBindingExpected && fgUiCapture) fgUiCapture->Reject("debug_clear_rt");
                         static const bool loud = strcmp(clearTargets, "magenta") == 0;
                         color->clearedFrame = frame;
-                        commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                        BindTargets(color, nullptr);
                         commandList->clearColor(0, loud ? RenderColor(1.0f, 0.0f, 1.0f, 1.0f) : RenderColor(0.0f, 0.0f, 0.0f, 0.0f));
                         color->hdrValid = false;
 #if defined(LO_GPU_PLUME)
@@ -10528,8 +10790,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // (04533/04534); reducing the depth draw's viewport would hide it.
                 recordProbe.Enter(record_timing::Phase::Framebuffer);
                 if (auto* sample = recordProbe.Sample()) { sample->width = rasterTarget->width; sample->height = rasterTarget->height; }
-                RenderFramebuffer* framebuffer = GetFramebuffer(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
-                commandList->setFramebuffer(framebuffer);
+                RenderFramebuffer* framebuffer = BindTargets(depthOnlyRaster && !depthOnlyKeepsColor ? nullptr : color, depth);
                 commandList->setViewports(&rasterViewport, 1);
                 commandList->setScissors(&scissor, 1);
                 recordProbe.Enter(record_timing::Phase::Trace);
@@ -10630,7 +10891,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 if (render_timing::Enabled()) samplerBoundVersions += Gpu().samplerVersions.size() - versionsBefore;
                 set0 = vulkan ? staticSet0.get() : samplerVersion->descriptors.get();
                 RenderDescriptorSet* set4 = vulkan ? samplerVersion->descriptors.get() : nullptr;
-                commandList->setPipeline(pipeline);
+                // A draw that an occlusion query will measure binds its counting
+                // variant here instead, so a run of query boxes keeps one binding;
+                // OcclusionQueryForDraw takes the counter at the draw.
+                RenderPipeline* countingPipeline = OcclusionCountingPending() ? CountingPipeline(key, vs, ps) : nullptr;
+                commandList->setPipeline(countingPipeline ? countingPipeline : pipeline);
                 if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, pipeline);
                 // The command list keeps the constant for later rebinds of this
                 // pipeline, e.g. after the motion-vector replay.
@@ -10662,7 +10927,10 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     constantAddresses[0] = base + vsOffset;
                     constantAddresses[1] = base + sharedOffset;
                     constantAddresses[2] = base + psOffset;
-                    commandList->setGraphicsPushConstants(0, constantAddresses);
+                    drawConstantOffsets[0] = uint32_t(vsOffset);
+                    drawConstantOffsets[1] = uint32_t(sharedOffset);
+                    drawConstantOffsets[2] = uint32_t(psOffset);
+                    BindDrawConstants();
                 } else {
                     SetConstantBuffer(vsOffset, 0);
                     SetConstantBuffer(sharedOffset, 1);
@@ -10804,10 +11072,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 // Inside a guest occlusion query, count exactly this draw's samples.
                 recordProbe.Enter(record_timing::Phase::Occlusion);
                 const uint32_t occlusionIndex = OcclusionQueryForDraw();
-                RenderQueryPool* occlusionPool = occlusionIndex != ~0u
+                if (countingPipeline && occlusionIndex == ~0u) {
+                    commandList->setPipeline(pipeline);
+                    countingPipeline = nullptr;
+                }
+                RenderQueryPool* occlusionPool = occlusionIndex != ~0u && !countingPipeline
                     ? Gpu().occlusionQueries[occlusionIndex / kOcclusionPoolQueries].get() : nullptr;
-                if (occlusionPool)
+                if (countingPipeline) {
+                    // A draw without a pixel shader leaves the pixel constant
+                    // address unused; the counting shader takes its counter there.
+                    const uint64_t counter = uint64_t(gpuSlot) * kOcclusionQueriesPerSlot + occlusionIndex;
+                    commandList->setGraphicsPushConstants(0, &counter, 2 * sizeof(uint64_t), sizeof(counter));
+                    Gpu().occlusionCounted[occlusionIndex] = 1;
+                    Gpu().occlusionCountersDirty = std::max(Gpu().occlusionCountersDirty, occlusionIndex + 1);
+                }
+                else if (occlusionPool) {
+                    Gpu().occlusionPoolsDirty = std::max(Gpu().occlusionPoolsDirty, occlusionIndex / kOcclusionPoolQueries + 1);
+                    Gpu().occlusionPoolUsed = std::max(Gpu().occlusionPoolUsed, occlusionIndex + 1);
                     commandList->beginOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
+                }
                 recordProbe.Enter(record_timing::Phase::Draw);
                 if (useIndices)
                 {
@@ -10820,8 +11103,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     commandList->drawInstanced(indexCount, 1, uint32_t(baseVertex), 0);
                 }
                 recordProbe.Enter(record_timing::Phase::Occlusion);
-                if (occlusionPool) {
+                // A counted draw leaves its variant bound: the next draw binds and
+                // pushes its own, and nothing later in this draw's recording runs
+                // without a pixel shader.
+                if (occlusionPool)
                     commandList->endOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
+                if (countingPipeline || occlusionPool) {
                     const HostTexture* measured = depth ? depth : color;
                     occlusion.DrawMeasured({Gpu().occlusionBatch, occlusionIndex, gpu::occlusion::SampleScale(
                         measured->guestWidth, measured->guestHeight, measured->width, measured->height, (surfaceInfo >> 16) & 3)});
@@ -10885,7 +11172,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             }
                             if (color->hdrSidecar && color->hdrSidecar->texture) {
                                 Transition(*color->hdrSidecar, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                                commandList->setFramebuffer(GetFramebuffer(color->hdrSidecar.get(), nullptr));
+                                BindTargets(color->hdrSidecar.get(), nullptr);
                                 commandList->clearColor(0, RenderColor(0, 0, 0, 1));
                                 auto* hdrCopySource=sceneAAOutput && textureBindings[0][0]==sceneAAOutput.get() && sceneAAHdrFrame==frame ? sceneAAHdrOutput.get() :
                                     sceneTaaSdrOutput && textureBindings[0][0]==sceneTaaSdrOutput && sceneTaaHdrFrame==frame ? sceneTaaHdrOutput :
@@ -11019,7 +11306,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             else {
                                 auto& sidecar = *color->hdrSidecar;
                                 Transition(sidecar, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                                commandList->setFramebuffer(GetFramebuffer(&sidecar, nullptr));
+                                BindTargets(&sidecar, nullptr);
                                 if (tone) commandList->clearColor(0, RenderColor(0, 0, 0, 1));
                                 commandList->setViewports(&rasterViewport, 1);
                                 commandList->setScissors(&scissor, 1);
@@ -11124,7 +11411,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 commandList->setScissors(&scissor, 1);
                                 commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                                 commandList->setPipeline(pipeline);
-                                if (vulkan) commandList->setGraphicsPushConstants(0, constantAddresses);
+                                if (vulkan) BindDrawConstants();
                                 commandList->setGraphicsDescriptorSet(set0, 0);
                                 commandList->setGraphicsDescriptorSet(set1, 1);
                                 commandList->setGraphicsDescriptorSet(set2, 2);
@@ -11171,7 +11458,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     if (alphaDesc.depthEnabled && !alphaDesc.depthWriteEnabled &&
                         alphaDesc.depthFunction == RenderComparisonFunction::GREATER_EQUAL &&
                         !alphaDesc.stencilEnabled && !alphaDesc.geometryShader && key.prim != 8) {
-                        auto* alphaPipeline = fsrAlphaReplay->Prepare(key, alphaDesc, vs->info, ps->info,
+                        auto* alphaPipeline = fsrAlphaReplay->Prepare(key, alphaDesc, ReplayTranslation(vs->info), ReplayTranslation(ps->info),
                             vsWords, vsCount, psWords, psCount);
                         if (alphaPipeline) {
                             fsr_alpha::FrameIdentity identity{};
@@ -11222,7 +11509,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setScissors(&scissor, 1);
                             commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            BindDrawConstants();
                             commandList->setGraphicsDescriptorSet(set0, 0);
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
@@ -11439,7 +11726,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         samplerSupported) {
                         alphaPostprocessReason = "shader_pending";
                         auto* maskPipeline = fsrAlphaPostprocess->Prepare(key, pointSlots, postDesc,
-                            vs->info, ps->info, vsWords, vsCount, psWords, psCount);
+                            ReplayTranslation(vs->info), ReplayTranslation(ps->info), vsWords, vsCount, psWords, psCount);
                         if (!maskPipeline && !fsrAlphaPostprocess->LastError().empty())
                             alphaPostprocessReason = "shader_or_pipeline_failed";
                         if (maskPipeline) {
@@ -11649,7 +11936,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setScissors(&scissor, 1);
                             commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            commandList->setGraphicsPushConstants(0, constantAddresses);
+                            BindDrawConstants();
                             commandList->setGraphicsDescriptorSet(set0, 0);
                             commandList->setGraphicsDescriptorSet(set1, 1);
                             commandList->setGraphicsDescriptorSet(set2, 2);
@@ -11920,7 +12207,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             commandList->setFramebuffer(framebuffer); commandList->setViewports(&rasterViewport, 1);
                             commandList->setScissors(&scissor, 1); commandList->setGraphicsPipelineLayout(pipelineLayout.get());
                             commandList->setPipeline(pipeline);
-                            if (vulkan) commandList->setGraphicsPushConstants(0, constantAddresses);
+                            if (vulkan) BindDrawConstants();
                             else { SetConstantBuffer(vsOffset,0); SetConstantBuffer(sharedOffset,1); SetConstantBuffer(psOffset,2); }
                             commandList->setGraphicsDescriptorSet(set0,0); commandList->setGraphicsDescriptorSet(set1,1);
                             commandList->setGraphicsDescriptorSet(set2,2); commandList->setGraphicsDescriptorSet(set3,3);
@@ -12309,9 +12596,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 continue;
                             if (tex.get() == restoreDebt.target) DropRestoreDebt(); // The fill replaces every pixel.
                             RenderColor value = UnpackGuestWord(word, k.format);
-                            Transition(*tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                            commandList->setFramebuffer(GetFramebuffer(tex.get(), nullptr));
-                            commandList->clearColor(0, value);
+                            const float rgba[4] = {value.r, value.g, value.b, value.a};
+                            QueueClear(*tex, pending_clear::ColorOp(rgba));
                             tex->hdrValid = false;
 #if defined(LO_GPU_PLUME)
                             HandleFsrAlphaRgbWriter(*tex, "depth_color_tile_clear");
@@ -12327,7 +12613,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                                 LOG_INFO("renderer: depth fill (base={:#x} pitch={} msaa={} rect {}x{} z={} word={:#x}) wiped colour view class {} pitch {} to ({:g},{:g},{:g},{:g})",
                                     depthInfo & 0xFFF, pitch, (surfaceInfo >> 16) & 3, maxX, maxY, rectZ, word, k.format, k.pitch, value.r, value.g, value.b, value.a);
                         }
-                        // Re-bind the fill's own framebuffer for the draw that follows.
+                        // Re-bind the fill's own framebuffer for the draw that follows
+                        // (QueueClear may have run a full queue on another one).
                         commandList->setFramebuffer(framebuffer);
                     }
 
@@ -12344,30 +12631,25 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         HostTexture* target = renderTargets[k].get();
                         if (k.depth)
                         {
-                            Transition(*target, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                            commandList->setFramebuffer(GetFramebuffer(nullptr, target));
                             const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
                                 int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
                             auto mapped = MapDepthClear(pitch, (surfaceInfo >> 16) & 3, sourceRect,
                                 k.pitch, target->guestHeight, target->depthMsaa);
                             if (vulkan) CoalesceDepthClearRects(mapped);
-                            std::vector<RenderRect> clearRects;
+                            std::vector<pending_clear::Rect> clearRects;
                             clearRects.reserve(mapped.size());
                             for (const auto& r : mapped) clearRects.push_back({int32_t(target->ScaleX(uint32_t(r.left))), int32_t(target->ScaleY(uint32_t(r.top))),
                                 int32_t(target->ScaleX(uint32_t(r.right))), int32_t(target->ScaleY(uint32_t(r.bottom)))});
-                            // A zero rectangle count means a whole-resource clear in
-                            // the graphics API, so an empty mapping must be skipped.
+                            const size_t regions = clearRects.size();
+                            // An empty rectangle list would mean the whole texture,
+                            // so an empty mapping is skipped.
                             if (!clearRects.empty())
                             {
-                                static const bool traceClearCall = getenv("LO_TRACE_CLEAR_CALL") != nullptr;
-                                if (traceClearCall)
-                                    LOG_INFO("clear begin f{} base={} pitch={} size={}x{} count={} z={}", frame, k.base, k.pitch, target->width, target->height, clearRects.size(), rectZ);
                                 FlushMotionReplayQueue();
-                                commandList->clearDepthStencil(true, false, rectZ, 0, clearRects.data(), uint32_t(clearRects.size()));
-                                if (traceClearCall) LOG_INFO("clear end");
+                                QueueClear(*target, pending_clear::DepthOp(true, false, rectZ, 0, std::move(clearRects)));
                             }
                             if (logged++ < 8 || frame == captureFrame)
-                                LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, clearRects.size());
+                                LOG_INFO("renderer: depth clear f{} rect (pitch {}, {}x{} .. {}x{}) -> depth base={:#x} pitch={} size={}x{} to {} msaa={}->{} regions={}", frame, pitch, minX, minY, maxX, maxY, k.base, k.pitch, target->width, target->height, rectZ, (surfaceInfo >> 16) & 3, target->depthMsaa, regions);
                             continue;
                         }
                         if (target->format != color->format || nx1 <= nx0 || ny1 <= ny0)
@@ -12385,7 +12667,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         Transition(*target, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                         if (otherDepth)
                             Transition(*otherDepth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                        commandList->setFramebuffer(GetFramebuffer(target, otherDepth));
+                        BindTargets(target, otherDepth);
                         // Viewport such that the rectangle's NDC bounds land on the full texture.
                         const float vpW = 2.0f * float(target->width) / (nx1 - nx0);
                         const float vpH = 2.0f * float(mappedRows) / (ny1 - ny0);
@@ -12994,7 +13276,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     // Initialize only on allocation, preserving later partial
                     // resolves and their untouched destination pixels.
                     Transition(*rs.tex, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                    commandList->setFramebuffer(GetFramebuffer(rs.tex.get(), nullptr));
+                    BindTargets(rs.tex.get(), nullptr);
                     commandList->clearColor(0, RenderColor(0, 0, 0, 0));
                     static uint32_t created = 0;
                     if (created++ < 16)
@@ -13343,11 +13625,9 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 {
                     consecutiveResolveCopies.Invalidate();
                     uint32_t clear = Reg(REG_RB_COLOR_CLEAR);
-                    RenderColor c(float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f);
-                    Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                    commandList->setFramebuffer(GetFramebuffer(color, nullptr));
-                    RenderRect rect{ int32_t(color->ScaleX(x0)), int32_t(color->ScaleY(y0)), int32_t(color->ScaleX(x1)), int32_t(color->ScaleY(y1)) };
-                    commandList->clearColor(0, c, &rect, 1);
+                    const float c[4] = {float((clear >> 16) & 0xFF) / 255.0f, float((clear >> 8) & 0xFF) / 255.0f, float(clear & 0xFF) / 255.0f, float(clear >> 24) / 255.0f};
+                    QueueClear(*color, pending_clear::ColorOp(c, {{int32_t(color->ScaleX(x0)), int32_t(color->ScaleY(y0)),
+                        int32_t(color->ScaleX(x1)), int32_t(color->ScaleY(y1))}}));
                     color->hdrValid = false;
 #if defined(LO_GPU_PLUME)
                     HandleFsrAlphaRgbWriter(*color, "resolve_color_clear");
@@ -13367,10 +13647,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 HostTexture* depth = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
                 if (!depth || !depth->texture) return;
-                Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(nullptr, depth));
                 uint32_t clear = Reg(REG_RB_DEPTH_CLEAR);
-                commandList->clearDepthStencil(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF);
+                QueueClear(*depth, pending_clear::DepthOp(true, true, float(clear >> 8) / 16777215.0f, clear & 0xFF));
             }
 
             void ClearMovieBars(uint32_t surfaceInfo, uint32_t colorInfo,
@@ -13424,7 +13702,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
                 consecutiveResolveCopies.Invalidate();
                 Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                commandList->setFramebuffer(GetFramebuffer(color, nullptr));
+                BindTargets(color, nullptr);
                 commandList->clearColor(0, RenderColor(0.0f, 0.0f, 0.0f, 1.0f), bars.data(), count);
                 color->hdrValid = false;
 #if defined(LO_GPU_PLUME)

@@ -632,6 +632,10 @@ add_executable(LoDepthClearLayoutTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools
 target_include_directories(LoDepthClearLayoutTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoDepthClearLayoutTest PRIVATE cxx_std_20)
 
+add_executable(LoPendingClearTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/pending_clear_test.cpp)
+target_include_directories(LoPendingClearTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPendingClearTest PRIVATE cxx_std_20)
+
 # Host-only fixtures do not require guest generation or the runtime PCH.
 add_executable(LoRegisterSnapshotTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/register_snapshot_test.cpp)
 target_include_directories(LoRegisterSnapshotTest PRIVATE ${LO_RUNTIME_ROOT})
@@ -860,6 +864,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LO_BUILD_GPU)
     target_link_libraries(LoHdrSurfaceTest PRIVATE plume SDL3::SDL3-static ${CMAKE_DL_LIBS})
 endif()
 
+if(WIN32 AND LO_BUILD_GPU)
+    # Deferred EDRAM clears: clearing at once, loadOp CLEAR and deferred clears
+    # read back the same bytes (D3D12, or Vulkan with --vulkan; under Proton the
+    # same executable reaches vkd3d-proton and RADV).
+    add_executable(LoLazyClearGpuTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/lazy_clear_gpu_test.cpp
+        ${LO_RUNTIME_ROOT}/gpu/shader/dxc_compiler.cpp)
+    target_include_directories(LoLazyClearGpuTest PRIVATE ${LO_RUNTIME_ROOT} ${CMAKE_SOURCE_DIR}/thirdparty/plume)
+    target_compile_features(LoLazyClearGpuTest PRIVATE cxx_std_20)
+    target_compile_definitions(LoLazyClearGpuTest PRIVATE NOMINMAX)
+    set_target_properties(LoLazyClearGpuTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+    target_link_libraries(LoLazyClearGpuTest PRIVATE plume d3d12 dxgi fmt::fmt)
+endif()
+
 if(APPLE AND LO_BUILD_GPU)
     # The same HDR readback fixture runs on a Mac with a Metal device.
     add_executable(LoPresentationTest EXCLUDE_FROM_ALL
@@ -886,7 +904,7 @@ if(WIN32 AND LO_BUILD_GPU)
     foreach(binary dxcompiler.dll dxil.dll)
         list(APPEND LO_DXC_RUNTIME_FILES "${LO_DXC_BINARY_DIR}/${binary}")
     endforeach()
-    set(LO_DXC_RUNTIME_TARGETS LostOdysseyRecomp LoShaderTool LoShaderAluTest LoPresentationTest LoTemporalAATest LoAmbientOcclusionGpuTest LoRenderResolutionShaderTest LoVulkanBackendTest LoVulkanTextureReuseTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest LoPresentCaptureTest)
+    set(LO_DXC_RUNTIME_TARGETS LostOdysseyRecomp LoShaderTool LoShaderAluTest LoPresentationTest LoTemporalAATest LoAmbientOcclusionGpuTest LoRenderResolutionShaderTest LoVulkanBackendTest LoVulkanTextureReuseTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest LoPresentCaptureTest LoLazyClearGpuTest)
 elseif(UNIX AND NOT ANDROID AND LO_BUILD_GPU)
     if(LO_TARGET_PLATFORM STREQUAL "macos")
         # Universal (arm64 + x86_64) build shipped with dxc-bin.

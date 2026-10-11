@@ -82,6 +82,23 @@ never culls. A record without a reported owner keys on its slot as before.
   the pools in use only: reading a pool costs time for every query in it, used
   or not (RADV on a Radeon 8060S: 110–290 µs per frame for one 4096-query pool,
   30–60 µs for the pools in use).
+- Turnip (Vulkan driver ID `MESA_TURNIP`, Android on Adreno): Turnip
+  drains the GPU at the end of every occlusion query (a WFI on a7xx), about
+  1 ms a frame for Uhra's ~350 queries on the TB321FU. There a measured draw with
+  no guest pixel shader and no colour writes, which is every query box the game
+  draws, instead binds a variant of its pipeline whose fragment shader has
+  early depth/stencil tests and adds the samples that pass them to the query's
+  counter (one atomic per wave of non-helper lanes). The counters are a
+  host-visible buffer at set 0 binding 0, unused by the SPIR-V shaders,
+  4096 per GPU slot; the CPU zeroes them when the slot's list opens and reads
+  them with the slot's other results. Other measured draws keep host queries.
+  Needs `fragmentStoresAndAtomics` and subgroup ballot in fragment shaders;
+  otherwise, and on every other driver (where queries cost little), every
+  draw uses queries. On the TB321FU the counts equalled the host queries in
+  4.36 million comparisons, Fast and Strict; the only four differences were
+  host-query readings of the first query of a batch that differed from its
+  steady value while the counter kept it. The counting variant is bound where
+  the guest pipeline would be, so a run of query boxes keeps one binding.
 - `gpu/occlusion_queries.h` keeps the bookkeeping, tested by
   `tools/tests/occlusion_queries_test.cpp` (review-regressions):
   - Host samples are converted with the target's guest/host size ratio times the

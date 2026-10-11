@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <span>
 #include <string>
@@ -23,26 +24,57 @@ struct Identity {
     std::string options;
     std::string variant = "guest-microcode";
 };
+// Translated SPIR-V reads the Xenos constants through device addresses, except on
+// the Switch: there it reads dynamic uniform buffers in descriptor set 5
+// (common_hlsl.h). The Switch has no shader compiler, so its pack is exported on
+// a PC (build_packs.py --renderer switch). LO_VK_UBO_CONSTANTS=1 asks for that
+// form; the shader pack tools follow it, and the runtime only while it exports a
+// pack (LO_SHADER_EXPORT_PACK). Play on Windows, Linux and Android ignores it.
+// Metal and DXIL never use uniform buffers.
+inline bool UboConstantsRequested() {
+#if LO_PLATFORM_MACOS
+    return false;
+#else
+    const char* value = std::getenv("LO_VK_UBO_CONSTANTS");
+    return value && *value && std::string_view(value) != "0";
+#endif
+}
+inline bool UboConstants() {
+#if LO_PLATFORM_SWITCH
+    return true;
+#else
+    static const bool selected = [] {
+        const char* exportPath = std::getenv("LO_SHADER_EXPORT_PACK");
+        return exportPath && *exportPath && UboConstantsRequested();
+    }();
+    return selected;
+#endif
+}
+inline constexpr std::string_view UboConstantsOption = ";constants-ubo-set5";
 // This describes the current CompileHlsl argument contract, including the
 // vertex-only SPIR-V Y inversion. Update it whenever those arguments change.
-inline std::string DefaultOptions(Backend backend) {
+inline std::string DefaultOptions(Backend backend, bool uboConstants = UboConstants()) {
     switch (backend) {
     case Backend::D3D12: return "main;vs/ps_6_0;HV2021;no-parentheses-equality;no-unused-value;all-resources-bound;O3;strip-debug;strip-reflect";
     case Backend::Vulkan:
         // Shared by Vulkan on every platform and by Metal (SPIR-V to MSL).
-        return "main;vs/ps_6_0;HV2021;no-parentheses-equality;no-unused-value;all-resources-bound;O3;strip-debug;spirv;vulkan1.2;dx-layout;vs-invert-y;vertex-bda-shared1024-v2-u32-push";
+        return std::string("main;vs/ps_6_0;HV2021;no-parentheses-equality;no-unused-value;all-resources-bound;O3;strip-debug;spirv;vulkan1.2;dx-layout;vs-invert-y;vertex-bda-shared1024-v2-u32-push") +
+            std::string(uboConstants ? UboConstantsOption : std::string_view{});
     case Backend::D3D11: return "reserved-dxbc-sm5-no-compiler";
     }
     return {};
 }
-inline Identity MakeIdentity(Backend backend, std::string_view compiler) {
+inline Identity MakeIdentity(Backend backend, std::string_view compiler, bool uboConstants = UboConstants()) {
     Identity result;
     result.backend = backend;
     result.format = backend == Backend::Vulkan ? Format::Spirv :
         backend == Backend::D3D11 ? Format::Dxbc : Format::Dxil;
     result.compiler = compiler;
-    result.options = DefaultOptions(backend);
+    result.options = DefaultOptions(backend, uboConstants);
     return result;
+}
+inline bool UsesUboConstants(const Identity& identity) {
+    return identity.backend == Backend::Vulkan && identity.options.ends_with(UboConstantsOption);
 }
 inline bool ValidIdentity(const Identity& identity) {
     const bool pair = (identity.backend == Backend::D3D12 && identity.format == Format::Dxil) ||

@@ -52,6 +52,11 @@ struct PresentationOptions
     // the left one for the left tile and the right one for the right tile, and
     // neither gets the curve (the DLSS 5 neural rendering page).
     bool calibrationSplitScene = false;
+    // The target accepts storage writes (a swap chain image created with
+    // storage usage). A bicubic upscale into it then runs the same pixel
+    // shader as a compute pass (Vulkan, RGBA8 swap chains). The target
+    // finishes in GENERAL instead of COLOR_WRITE.
+    bool storageTarget = false;
 };
 // Owned by the presentation thread. Resources stay alive until the present fence.
 class Presentation
@@ -64,7 +69,10 @@ class Presentation
     Presentation();
     ~Presentation();
     bool Init(plume::RenderDevice *device);
-    bool Init(plume::RenderDevice *device, plume::RenderFormat swapchainFormat);
+    // storageSwapchain: the swap chain images accept storage writes
+    // (RenderSwapChain::hasStorageTextures), so the final bicubic upscale can
+    // run as a compute pass (PresentationOptions::storageTarget).
+    bool Init(plume::RenderDevice *device, plume::RenderFormat swapchainFormat, bool storageSwapchain = false);
     void SetOutputTransform(const hdr::OutputTransform& transform);
     // Draw and ProcessSceneColor keep one framebuffer per caller-owned target,
     // keyed by texture address and size. Call this, with no recorded draw of this

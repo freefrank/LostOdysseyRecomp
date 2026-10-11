@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cache.h"
+#include "common_hlsl.h"
 #include "resource_cpx_index_sha256.h"
 #include "resource_variant_identity.h"
 #include "xenos_translator.h"
@@ -172,11 +173,7 @@ struct Decoder {
 };
 inline std::string Prelude(std::string_view common, bool pixel) {
     std::string result(common);
-    if (pixel) {
-        const std::string from="cbuffer XeConstants : register(b0, space0)";
-        if (const auto pos=result.find(from);pos!=std::string::npos)
-            result.replace(pos,from.size(),"cbuffer XeConstants : register(b2, space0)");
-    }
+    if (pixel) UsePixelConstantRegister(result);
     return result;
 }
 inline std::vector<uint8_t> Encode(const Record& r, std::string_view common) {
