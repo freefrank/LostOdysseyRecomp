@@ -21,6 +21,16 @@ Release notes also appear in the automatic updater. Keep each language to 2–4
 short, player-facing bullets; put test counts, commit IDs, CI logs and validation
 details in technical notes rather than the changelog entry.
 
+After a release is public, point the PortForge manifest (`.forge.json`) at it and
+commit the change with the release record:
+
+```sh
+python tools/release/update_forge_manifest.py v0.9.27
+```
+
+The script replaces the version in every build and checks each download URL
+before writing.
+
 The v0.7.9 Windows transition ZIP carried the old SHA map in `files`, allowing
 already published v0.7.3 updaters to upgrade automatically. The v0.7.9 updater
 ignores the map values and installs the downloaded archive directly after
