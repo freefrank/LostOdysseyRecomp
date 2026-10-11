@@ -30,6 +30,8 @@
 | LoShaderAluTest | 真实 GPU ALU 旧值读取、后续结果、gamma、swizzle 和 resolve R/B 往返 | Windows D3D12 |
 | LoStencilTest | 左半写 stencil=3，EQUAL/NOT_EQUAL 的 GPU 像素读回；D24 端点静态断言 | Windows D3D12，LO_BUILD_GPU=ON |
 
+> 2026-10 测试精简：`LoStencilTest` 已从仓库移除，上文中它的命令和结果仅为历史记录。
+
 另以 LoShaderTool 编译开场现场捕获的 162 个 shader，结果 0 失败；捕获数据只在本地，不作为仓库测试资产。
 
 ## 实机复现

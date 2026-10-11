@@ -323,6 +323,8 @@ The probe and runtime pass the directory containing the staged `nvngx_dlss.dll` 
 
 This section documents implementation and targeted verification for BR-01, BR-02, BR-03, and graphics menu stability following the post-v0.6.7 audit. Historical baseline findings, prior gate evidence, and previously established boundaries are preserved above. Diagnostic-path item K-01 remains unchanged. Implementation and targeted tests are complete; production capture finalization and a fresh full executable rebuild remain pending, while visual gameplay acceptance and public release remain to be conducted.
 
+> 2026-10 test pruning: `LoTemporalLifecycleBr01Test`, `LoTemporalLifecycleBr01OwnerTest`, `LoDlssCapabilitySnapshotTest` and `LoDlssRuntimeStatusTest` below were removed from the tree; their results are historical. `LoDlssStatusLogTest` and `LoPresentCaptureTest` remain.
+
 ### BR-01: Temporal Lifecycle Harmonization and Clock Advancement (Committed in 0625923)
 - **Root Cause & Fix**: Prior code omitted `dlssSrRequested` when updating `temporalFrameTime` and choosing jitter across frame gaps, causing normal DLSS SR and DLAA to continuously reset temporal history after 250 ms. Implemented `gpu::temporal::TemporalConsumerActive` in `LostOdysseyRecomp/gpu/temporal_lifecycle.h` to unify consumer checks across frame start, interval detection, and frame end.
 - **Boundary Correction**: Corrected the frame-end reset predicate to `decision.reset = !decision.complete || (decision.gap && !decision.gapAlreadyReset)`, guaranteeing that uncompleted frames reset history regardless of frame-start long-gap resets.

@@ -153,13 +153,7 @@ as a verified pitch-preserving or whole-game synchronized fast-forward system.
 
 ## Verification
 
-Standalone fixtures do not require copyrighted inputs or GPU SDKs:
-
-```sh
-cmake -S tools/tests/cheats -B out/cheats -DCMAKE_BUILD_TYPE=Release
-cmake --build out/cheats --config Release
-ctest --test-dir out/cheats -C Release --output-on-failure
-```
+The standalone cheat fixtures (`tools/tests/cheats`: core, UI and runtime adapter) were removed from the tree in the 2026-10 test pruning; recover them from git history if needed. They did not require copyrighted inputs or GPU SDKs. Recorded results:
 
 Locally executed in Linux with Clang ASan/UBSan and GCC: 3,982 core/clock checks,
 5,435 UI checks including 5,000 navigation steps, and 61 checks compiling the
