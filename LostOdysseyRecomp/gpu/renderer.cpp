@@ -2214,7 +2214,6 @@ namespace gpu::renderer
             // MMIO stores by compare. drawConstants is the copy a draw may modify
             // (TAA jitter).
             ConstantBankSnapshot constantSnapshot[2];
-            uint64_t constantSnapshotGeneration[2]{UINT64_MAX, UINT64_MAX};
             uint64_t constantSnapshotVersion[2]{};
             uint64_t constantMmioEpoch[2]{}; // sync period of the last zero-register MMIO check
             uint32_t drawConstants[2][256 * 4]{};
@@ -9085,17 +9084,15 @@ void main()
                 // zero-register MMIO fallback.
                 static const bool verifyConstants = getenv("LO_CONSTANT_SNAPSHOT_VERIFY") != nullptr;
                 for (uint32_t bank = 0; bank < 2; ++bank) {
-                    const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
                     auto& snapshot = constantSnapshot[bank];
-                    const bool refresh = generation != constantSnapshotGeneration[bank];
                     // A direct guest MMIO store reaches draws only across a sync
                     // point, so the zero-register fallback is read once per period.
                     const uint64_t epoch = g_commandProcessor.SyncEpoch();
                     const bool checkMmio = constantMmioEpoch[bank] != epoch;
                     constantMmioEpoch[bank] = epoch;
                     uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot, checkMmio);
-                    constantSnapshotGeneration[bank] = generation;
-                    if (refresh || changedBlocks) ++constantSnapshotVersion[bank];
+                    // Every command write leaves a dirty block, so no change means no new version.
+                    if (changedBlocks) ++constantSnapshotVersion[bank];
                     if (verifyConstants) {
                         uint32_t check[256 * 4];
                         g_commandProcessor.ReadRegisters(REG_ALU_CONSTANTS + bank * 256 * 4, 256 * 4, check);

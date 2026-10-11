@@ -78,11 +78,10 @@ namespace gpu
         // changed since the last update, then, with checkMmio, zero-register words
         // whose direct MMIO store changed. Returns the 16-word blocks re-read or changed.
         uint64_t UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot, bool checkMmio);
-        // ALU constant banks (0: vertex 0x4000-0x43FF, 1: pixel 0x4400-0x47FF). The
-        // generation changes whenever command packets change a value in the bank.
-        // Direct MMIO stores are checked separately at zero-register fallback words.
+        // ALU constant banks (0: vertex 0x4000-0x43FF, 1: pixel 0x4400-0x47FF).
+        // Register writes mark the changed 16-word blocks dirty; direct MMIO stores
+        // are checked separately at zero-register fallback words.
         static constexpr uint32_t kAluConstantBase = 0x4000, kAluConstantBankSize = 0x400;
-        uint64_t ConstantGeneration(uint32_t bank) const { return m_constantGeneration[bank & 1].load(std::memory_order_acquire); }
         // Advances wherever the guest and the GPU synchronize or the GPU side
         // writes guest memory: read-pointer and scratch writeback, fences,
         // interrupts, swaps, memory waits, resolve readback. A guest write to
@@ -143,7 +142,11 @@ namespace gpu
 
         // Same effects as WriteRegister; skips its special cases for plain banks.
         void WriteRegisterFast(uint32_t index, uint32_t value);
+        // Any thread (guest MMIO stores reach WriteRegister on guest threads).
         void MarkConstantsChanged(uint32_t bank, uint64_t blocks);
+        // Command thread only: packet writes, read back by UpdateConstantSnapshot
+        // on the same thread without a locked instruction.
+        void MarkCommandConstantsChanged(uint32_t bank, uint64_t blocks) { m_commandConstantDirty[bank] |= blocks; }
         bool WritePlainRun(uint32_t first, const uint32_t* guestWords, uint32_t count);
 
         void WorkerMain();
@@ -190,8 +193,10 @@ namespace gpu
         // They get a cache line of their own, apart from the write pointer, its
         // mutex and condition variable, m_wake and the vsync counter, which guest
         // threads write.
-        alignas(64) std::atomic<uint64_t> m_constantGeneration[2]{};
-        std::atomic<uint64_t> m_constantDirty[2]{}; // 16-word blocks changed since the last snapshot update
+        // 16-word blocks changed since the last snapshot update: by command packets
+        // (command thread, plain) and by WriteRegister from any thread (atomic).
+        alignas(64) uint64_t m_commandConstantDirty[2]{};
+        std::atomic<uint64_t> m_constantDirty[2]{};
         std::atomic<uint64_t> m_syncEpoch{1};
         alignas(64) std::atomic<bool> m_running{ false };
         bool m_countSyncSources = false;

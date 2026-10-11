@@ -21,6 +21,7 @@
 #include <kernel/io/file_system.h>
 #include <notified_wait.h>
 #include <set>
+#include <utility>
 #include <mutex>
 #include <host_ui/host_ui.h>
 #include <fstream>
@@ -397,12 +398,10 @@ namespace gpu
         m_writePtrChanged.notify_one();
     }
 
-    // Dirty blocks before the generation: a reader that sees the new generation
-    // also takes its blocks. Guest MMIO stores reach WriteRegister on other threads.
+    // Guest MMIO stores reach WriteRegister on other threads.
     inline void CommandProcessor::MarkConstantsChanged(uint32_t bank, uint64_t blocks)
     {
         m_constantDirty[bank].fetch_or(blocks, std::memory_order_release);
-        m_constantGeneration[bank].fetch_add(1, std::memory_order_release);
     }
 
     static uint64_t ConstantBlockBit(uint32_t index)
@@ -532,7 +531,7 @@ namespace gpu
             m_registers[index] = value;
             reinterpret_cast<be<uint32_t>*>(g_memory.Translate(MMIO_BASE))[index] = value;
             if (constantChanged)
-                MarkConstantsChanged((index - kAluConstantBase) / kAluConstantBankSize, ConstantBlockBit(index));
+                MarkCommandConstantsChanged((index - kAluConstantBase) / kAluConstantBankSize, ConstantBlockBit(index));
             return;
         }
         WriteRegister(index, value);
@@ -577,7 +576,7 @@ namespace gpu
         }
         copy(constantEnd, end);
         for (uint32_t bank = 0; bank < 2; ++bank)
-            if (changed[bank]) MarkConstantsChanged(bank, changed[bank]);
+            if (changed[bank]) MarkCommandConstantsChanged(bank, changed[bank]);
         return true;
     }
 
@@ -602,8 +601,9 @@ namespace gpu
     {
         bank &= 1;
         const uint32_t first = kAluConstantBase + bank * kAluConstantBankSize;
-        const uint64_t dirty = m_constantDirty[bank].load(std::memory_order_relaxed)
-            ? m_constantDirty[bank].exchange(0, std::memory_order_acquire) : 0;
+        const uint64_t dirty = std::exchange(m_commandConstantDirty[bank], 0) |
+            (m_constantDirty[bank].load(std::memory_order_relaxed)
+                ? m_constantDirty[bank].exchange(0, std::memory_order_acquire) : 0);
         return UpdateConstantBankSnapshot(snapshot, m_registers.data() + first,
             static_cast<const uint32_t*>(g_memory.Translate(MMIO_BASE + first * 4)), dirty, checkMmio);
     }
