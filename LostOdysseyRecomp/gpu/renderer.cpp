@@ -8412,6 +8412,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     VertexStageTimer timer(vertexTiming.find, vertexTimingEnabled, address, bytes);
                     return vertexCache.find(key);
                 }();
+                bool changed = false;
                 if (it != vertexCache.end())
                 {
                     const bool matches = [&] {
@@ -8424,14 +8425,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         it->second.lastFrame = frame;
                         return it->second.offset;
                     }
-                    // Contents changed. Overwriting in place would corrupt draws
-                    // already recorded into an open command list, so allocate fresh.
+                    // Contents changed. Overwriting the arena copy in place would
+                    // corrupt draws already recorded into an open command list, so
+                    // allocate fresh; the entry itself is refreshed below.
                     if (it->second.slot == uint8_t(gpuSlot))
                         vertexRevalidations++;
-                    {
-                        VertexStageTimer timer(vertexTiming.erase, vertexTimingEnabled, address, bytes);
-                        vertexCache.erase(it);
-                    }
+                    changed = true;
                 }
 
                 // Allocate (16-byte aligned, 16 bytes of slack for the shader's
@@ -8442,11 +8441,37 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                 const uint32_t otherSlot = (gpuSlot + 1) % kGpuSlots;
                 const uint32_t allocSlot = gpu::render_arena::VertexAllocSlot(
                     gpuSlot, Gpu().arenaOffset, gpuSlots[otherSlot].arenaOffset, needed);
-                if (allocSlot == gpu::render_arena::kGpuSlots)
+                if (allocSlot == gpu::render_arena::kGpuSlots) {
+                    if (changed) {
+                        VertexStageTimer timer(vertexTiming.erase, vertexTimingEnabled, address, bytes);
+                        vertexCache.erase(it);
+                    }
                     return UINT64_MAX;
+                }
                 uint64_t& local = gpuSlots[allocSlot].arenaOffset;
                 const uint64_t offset = gpu::render_arena::SlotBase(allocSlot) + local;
                 local += needed;
+                if (changed) {
+                    // Same key, same size: refresh the entry and reuse its snapshot
+                    // storage instead of erasing it and inserting a new allocation.
+                    auto& entry = it->second;
+                    entry.offset = offset;
+                    entry.lastFrame = frame;
+                    entry.slot = uint8_t(allocSlot);
+                    entry.validatedEpoch = g_commandProcessor.SyncEpoch();
+                    {
+                        VertexStageTimer timer(vertexTiming.capture, vertexTimingEnabled, address, bytes);
+                        vertexCache.Recapture(it, guest, bytes);
+                    }
+                    {
+                        VertexStageTimer timer(vertexTiming.copy, vertexTimingEnabled, address, bytes);
+                        geometry_prepare::CopyDwordsSwapped(arenaMapped + offset, guest, sizeDwords, endian);
+                        memset(arenaMapped + offset + bytes, 0, 16);
+                    }
+                    vertexUploads++;
+                    vertexBytesUploaded += bytes;
+                    return offset;
+                }
                 VertexEntry entry{ offset, {}, frame, uint8_t(allocSlot) };
                 entry.validatedEpoch = g_commandProcessor.SyncEpoch();
                 {

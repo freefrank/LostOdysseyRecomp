@@ -45,6 +45,13 @@ namespace gpu::geometry_prepare
             capturedBytes -= it->second.content.AllocatedBytes();
             return entries.erase(it);
         }
+        // New contents for an entry that stays cached; keeps the byte total.
+        void Recapture(Map::iterator it, const uint8_t* data, size_t bytes)
+        {
+            capturedBytes -= it->second.content.AllocatedBytes();
+            it->second.content.Capture(data, bytes);
+            capturedBytes += it->second.content.AllocatedBytes();
+        }
         size_t CapturedBytes() const { return capturedBytes; }
         size_t size() const { return entries.size(); }
         size_t bucket_count() const { return entries.bucket_count(); }
