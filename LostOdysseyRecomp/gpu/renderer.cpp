@@ -2728,6 +2728,9 @@ namespace gpu::renderer
                 Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
+                // A transfer over the whole target (copy blend, all channels)
+                // replaces every pixel, so clears it still owes are dead.
+                if (w == dst.width && h == dst.height) dst.pendingClear.Drop();
                 BindTargets(&dst, nullptr);
                 RenderViewport viewport(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h));
                 commandList->setViewports(&viewport, 1);

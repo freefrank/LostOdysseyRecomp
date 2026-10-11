@@ -3,7 +3,8 @@
 //   reference: clear at once, whole clears split in two rectangles so plume
 //              records them inside a pass (vkCmdClearAttachments only);
 //   eager:     clear at once (plume Vulkan turns whole clears into loadOp CLEAR);
-//   lazy:      gpu/pending_clear.h with the renderer's execution points.
+//   lazy:      gpu/pending_clear.h with the renderer's execution points (and the
+//              drop of owed clears under a transfer over the whole target).
 // Usage: LoLazyClearGpuTest [--vulkan] [seeds]
 #include <gpu/pending_clear.h>
 #include <gpu/shader/dxc_compiler.h>
@@ -127,6 +128,9 @@ public:
         Transition(dst, RenderTextureLayout::COLOR_WRITE);
         auto set = shaders_.textures.create(&device_);
         set->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
+        // TransferRegion: a transfer over the whole target replaces every pixel.
+        if (mode_ == Mode::Lazy && rect.left <= 0 && rect.top <= 0 &&
+            rect.right >= int32_t(dst.width) && rect.bottom >= int32_t(dst.height)) dst.pending.Drop();
         Bind(&dst, nullptr);
         RenderViewport viewport(0, 0, float(dst.width), float(dst.height));
         commands_->setViewports(&viewport, 1);
@@ -346,7 +350,7 @@ void RunScript(Harness& h, uint32_t seed)
         }
         case 7: { // transfer between the 64x48 colour views
             const uint32_t src = rng() % 3, dst = (src + 1 + rng() % 2) % 3;
-            h.Blit(*t[src], *t[dst], RandomRect(rng, 64, 48));
+            h.Blit(*t[src], *t[dst], rng() % 2 ? RenderRect{0, 0, 64, 48} : RandomRect(rng, 64, 48));
             break;
         }
         case 8: // resolve / readback

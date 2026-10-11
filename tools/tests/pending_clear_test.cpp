@@ -241,6 +241,19 @@ struct Renderer {
         if (!t.pending.Empty()) Run(t);
         reads.push_back(gpu.Read(t));
     }
+    // TransferRegion: reads src, then draws over dst (all of it when the sizes match);
+    // a transfer over the whole target drops the clears dst still owes.
+    void Transfer(Texture& src, Texture& dst, Rect rect)
+    {
+        if (!src.pending.Empty()) Run(src);
+        gpu.End(); // the read barrier
+        uint32_t v = 2166136261u;
+        for (uint32_t x : src.value) v = (v ^ x) * 16777619u;
+        if (lazy && rect.left <= 0 && rect.top <= 0 && rect.right >= int32_t(dst.width) && rect.bottom >= int32_t(dst.height))
+            dst.pending.Drop();
+        Bind(&dst, nullptr);
+        gpu.Draw(rect, v, 0.0f, 0);
+    }
 };
 
 // Scripted execution points: whole clears become loadOp CLEAR of the next pass
@@ -313,7 +326,7 @@ void Randomized()
             auto& t = textures[mode];
             const int steps = 4 + int(rng() % 40);
             for (int s = 0; s < steps; ++s) {
-                switch (rng() % 6) {
+                switch (rng() % 7) {
                 case 0: case 1: { // colour clear
                     Texture& c = t[rng() % 3];
                     const float v = float(rng() % 4) * 0.25f;
@@ -341,6 +354,12 @@ void Randomized()
                     const Rect rect{x0, y0, x0 + 1 + int(rng() % (w - x0)), y0 + 1 + int(rng() % (h - y0))};
                     r.Bind(c, d);
                     r.gpu.Draw(rect, rng() % 100, float(rng() % 4) * 0.25f, rng() % 3);
+                    break;
+                }
+                case 5: { // transfer between the two 8x6 colour views, whole or part of the target
+                    const uint32_t src = rng() % 2;
+                    const Rect rect = rng() % 2 ? Rect{0, 0, 8, 6} : Rect{0, 0, 1 + int(rng() % 8), 1 + int(rng() % 6)};
+                    r.Transfer(t[src], t[1 - src], rect);
                     break;
                 }
                 default: // read (resolve, transfer source, readback)
