@@ -121,6 +121,19 @@ namespace gpu::geometry_prepare
             if (bytes) std::memcpy(snapshot.data(), data, bytes);
             captured = true;
         }
+        // Capture into storage released by another snapshot (no allocation
+        // when its capacity suffices).
+        void Capture(const uint8_t* data, size_t bytes, std::vector<uint8_t>&& storage)
+        {
+            snapshot = std::move(storage);
+            Capture(data, bytes);
+        }
+        // Hands the storage back for reuse; the snapshot no longer matches.
+        std::vector<uint8_t> Release()
+        {
+            captured = false;
+            return std::move(snapshot);
+        }
     };
     // Performance-first vertex policy: large buffers retain the v0.5.8 sample
     // coverage. Unsampled writes may be missed; tracked in the roadmap (#57).

@@ -3,6 +3,8 @@
 #include "geometry_prepare.h"
 #include <ankerl/unordered_dense.h>
 #include <algorithm>
+#include <array>
+#include <bit>
 
 namespace gpu::geometry_prepare
 {
@@ -28,8 +30,29 @@ namespace gpu::geometry_prepare
         size_t capturedBytes = 0;
         size_t evictionCursor = 0;
         uint64_t evictions = 0;
+        // Changes whenever an entry is added, removed or recaptured: a pointer
+        // taken at an unchanged version still names the same, unchanged entry.
+        uint64_t version = 1;
+        // Snapshot storage of removed entries, reused by new ones, by size class
+        // (floor(log2(capacity))), at most kSparePerClass each and kSpareBytes total.
+        std::array<std::vector<std::vector<uint8_t>>, 64> spare;
+        size_t spareBytes = 0;
+        static size_t SizeClass(size_t bytes) { return size_t(std::bit_width(bytes)) - 1; }
+        void Keep(VertexEntry& entry)
+        {
+            auto storage = entry.content.Release();
+            const size_t capacity = storage.capacity();
+            if (!capacity) return;
+            auto& list = spare[SizeClass(capacity)];
+            if (list.size() < kSparePerClass && spareBytes + capacity <= kSpareBytes) {
+                spareBytes += capacity;
+                list.push_back(std::move(storage));
+            }
+        }
 
     public:
+        static constexpr size_t kSparePerClass = 16;
+        static constexpr size_t kSpareBytes = 16ull << 20;
         static constexpr size_t kCapacity = 65536;
         static constexpr size_t kEvictionCandidates = 16;
         static constexpr size_t kByteCapacity = 256ull << 20;
@@ -43,6 +66,8 @@ namespace gpu::geometry_prepare
         auto find(uint64_t key) { return entries.find(key); }
         auto erase(Map::iterator it) {
             capturedBytes -= it->second.content.AllocatedBytes();
+            Keep(it->second);
+            ++version;
             return entries.erase(it);
         }
         // New contents for an entry that stays cached; keeps the byte total.
@@ -51,6 +76,27 @@ namespace gpu::geometry_prepare
             capturedBytes -= it->second.content.AllocatedBytes();
             it->second.content.Capture(data, bytes);
             capturedBytes += it->second.content.AllocatedBytes();
+            ++version;
+        }
+        uint64_t Version() const { return version; }
+        // Storage for a new entry's snapshot: a released one of at least `bytes`
+        // from the same size class or the next one up (under 4x), else empty.
+        std::vector<uint8_t> TakeSpare(size_t bytes)
+        {
+            if (!bytes) return {};
+            const size_t first = SizeClass(bytes);
+            for (size_t c = first; c <= first + 1 && c < spare.size(); ++c) {
+                auto& list = spare[c];
+                for (size_t i = list.size(); i-- > 0;)
+                    if (list[i].capacity() >= bytes) {
+                        std::vector<uint8_t> storage = std::move(list[i]);
+                        if (i + 1 != list.size()) list[i] = std::move(list.back());
+                        list.pop_back();
+                        spareBytes -= storage.capacity();
+                        return storage;
+                    }
+            }
+            return {};
         }
         size_t CapturedBytes() const { return capturedBytes; }
         size_t size() const { return entries.size(); }
@@ -83,6 +129,7 @@ namespace gpu::geometry_prepare
             }
             const auto [it, inserted] = entries.emplace(key, std::move(entry));
             if (inserted) capturedBytes += bytes;
+            ++version;
         }
     };
 

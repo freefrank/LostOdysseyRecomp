@@ -340,6 +340,36 @@ void TestExactContent()
         Check(content.Matches(source.data(), source.size()), "small buffer matches after restore");
     }
 }
+// The renderer's per-epoch lookups trust an entry pointer while the version is
+// unchanged; removed entries hand their snapshot storage to new captures.
+void TestVersionAndSpareStorage()
+{
+    VertexCache cache(4);
+    const uint64_t v0 = cache.Version();
+    cache.emplace(1, Entry(1));
+    Check(cache.Version() != v0, "insert changes the version");
+    const uint64_t v1 = cache.Version();
+    auto it = cache.find(1);
+    Check(cache.Version() == v1, "lookup keeps the version");
+    const auto nine = Bytes(9);
+    cache.Recapture(it, nine.data(), nine.size());
+    Check(cache.Version() != v1, "recapture changes the version");
+    const uint64_t v2 = cache.Version();
+    cache.erase(cache.find(1));
+    Check(cache.Version() != v2, "erase changes the version");
+    auto storage = cache.TakeSpare(24);
+    Check(storage.capacity() >= 24, "erased snapshot storage is reused");
+    Check(cache.TakeSpare(24).capacity() == 0, "spare storage is handed out once");
+    VertexEntry entry{Offset(5), {}, 1, 0};
+    const auto five = Bytes(5);
+    entry.content.Capture(five.data(), five.size(), std::move(storage));
+    Check(entry.content.Matches(five.data(), five.size()), "capture into reused storage");
+    Check(!entry.content.Matches(nine.data(), nine.size()), "reused storage holds the new bytes only");
+    Check(cache.TakeSpare(4096).capacity() == 0, "no spare of a larger size class");
+    for (uint64_t key = 10; key < 20; ++key) cache.emplace(key, Entry(key));
+    Check(cache.size() == 4, "evictions keep the capacity");
+    Check(cache.TakeSpare(24).capacity() >= 24, "evicted snapshot storage is reused");
+}
 }
 
 int main()
@@ -363,6 +393,7 @@ int main()
     TestIndexContentAndBudget();
     TestExactContent();
     TestVertexSamplingPolicy();
+    TestVersionAndSpareStorage();
     std::printf("vertex cache: %llu checks passed (bounded metadata fixture; no GPU or game)\n",
         static_cast<unsigned long long>(checks));
 }

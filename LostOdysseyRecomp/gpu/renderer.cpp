@@ -8680,11 +8680,28 @@ void main()
                 return ok;
             }
 
+            // Sources already found and validated in the current sync epoch, by
+            // key hash: a repeat skips the map lookup. Valid while the cache's
+            // version is unchanged (no entry added, removed or recaptured since).
+            struct VertexLookup { uint64_t key = 0, epoch = 0, version = 0; geometry_prepare::VertexEntry* entry = nullptr; };
+            std::array<VertexLookup, 256> vertexLookups{};
+
             // Returns the arena offset of the swapped copy of a guest vertex buffer.
             uint64_t GetVertexBuffer(uint32_t address, uint32_t sizeDwords, uint32_t endian)
             {
                 const size_t bytes = size_t(sizeDwords) * 4;
                 const uint64_t key = (uint64_t(address) << 32) | (uint64_t(sizeDwords) << 2) | endian;
+                static const bool verify = [] { const char* v = getenv("LO_REVALIDATE_VERIFY"); return v && strcmp(v, "0") != 0; }();
+                auto& lookup = vertexLookups[(key * 0x9E3779B97F4A7C15ull) >> 56];
+                const uint64_t epoch = g_commandProcessor.SyncEpoch();
+                if (!vertexTimingEnabled && !verify && lookup.entry && lookup.key == key && lookup.epoch == epoch &&
+                    lookup.version == vertexCache.Version())
+                {
+                    // What the map path does for a source validated this epoch.
+                    ++revalidationSkips;
+                    lookup.entry->lastFrame = frame;
+                    return lookup.entry->offset;
+                }
                 const uint8_t* guest = Phys(address);
                 if (vertexTimingEnabled && vertexTiming.find.calls == 0)
                 {
@@ -8707,6 +8724,8 @@ void main()
                     if (gpu::render_arena::VertexCacheReusable(matches))
                     {
                         it->second.lastFrame = frame;
+                        if (it->second.validatedEpoch == epoch)
+                            lookup = {key, epoch, vertexCache.Version(), &it->second};
                         return it->second.offset;
                     }
                     // Contents changed. Overwriting the arena copy in place would
@@ -8760,7 +8779,7 @@ void main()
                 entry.validatedEpoch = g_commandProcessor.SyncEpoch();
                 {
                     VertexStageTimer timer(vertexTiming.capture, vertexTimingEnabled, address, bytes);
-                    entry.content.Capture(guest, bytes);
+                    entry.content.Capture(guest, bytes, vertexCache.TakeSpare(bytes));
                 }
                 {
                     VertexStageTimer timer(vertexTiming.copy, vertexTimingEnabled, address, bytes);
