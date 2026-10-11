@@ -522,7 +522,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     uint32_t traceInputSerial = 0;
     uint64_t traceInputTick = 0;
     bool traceInputPending = false, traceInputActive = false;
-    if (const char* path = getenv("LO_TEST_INPUT_FILE"))
+    static const char* const testInputFile = getenv("LO_TEST_INPUT_FILE");
+    if (const char* path = testInputFile)
     {
         static unsigned lastSerial = 0, pollsLeft = 0, buttons = 0, pollCount = 0;
         static TestInputPulse tickPulse;

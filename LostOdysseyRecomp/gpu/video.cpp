@@ -1063,7 +1063,8 @@ namespace gpu::video
             // Vulkan gives the presentation engine ownership after vkQueuePresent.
             // The explicit presented-screenshot diagnostic retains an owned image
             // before that handoff; no extra copy is made during normal gameplay.
-            if(!g_vulkan || !getenv("LO_SCREENSHOT_PRESENTED")) return;
+            static const bool presentedScreenshot = getenv("LO_SCREENSHOT_PRESENTED") != nullptr;
+            if(!g_vulkan || !presentedScreenshot) return;
             const auto w=g_swapChain->getWidth(),h=g_swapChain->getHeight();
             const auto format=g_swapChain->getFormat();
             if(!g_presentedSnapshot || w!=g_snapshotWidth || h!=g_snapshotHeight || format!=g_snapshotFormat) {
