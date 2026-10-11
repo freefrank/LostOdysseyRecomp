@@ -781,6 +781,17 @@ namespace gpu::renderer
             // unordered_map nodes keep their address across rehashes.
             PipelineKey lastPipelineKey{};
             PipelineSlot* lastPipelineSlot = nullptr;
+            // Recent hits by raw draw key, indexed by a hash of a few fields: a
+            // repeat skips normalization, the key hash and the map lookup.
+            struct PipelineLookup { PipelineKey raw{}, key{}; PipelineSlot* slot = nullptr; };
+            std::array<PipelineLookup, 256> pipelineLookups{};
+            static size_t PipelineLookupIndex(const PipelineKey& k)
+            {
+                uint64_t h = k.vs * 0x9E3779B97F4A7C15ull ^ k.ps * 0xC2B2AE3D27D4EB4Full ^
+                    ((uint64_t(k.blend) << 32 | k.depthControl) * 0x165667B19E3779F9ull) ^ (uint64_t(k.colorMask) << 32 | k.rtFormat);
+                h = (h ^ (h >> 31)) * 0x94D049BB133111EBull;
+                return size_t(h >> 56);
+            }
             std::unordered_map<PipelineKey, std::unique_ptr<RenderPipeline>, PipelineKeyHash> hdrPipelines;
             // Full state recipes are portable; driver blobs and object pointers
             // are never persisted. Render maps stay on the command thread.
@@ -930,6 +941,11 @@ namespace gpu::renderer
             } libraryPrecompile;
             std::unordered_map<RenderTargetKey, std::unique_ptr<HostTexture>, RenderTargetKeyHash> renderTargets;
             std::unordered_map<TextureKey, std::unique_ptr<HostTexture>, TextureKeyHash> textures;
+            // Changes on every insert into or erase from `textures`; an iterator
+            // remembered at an unchanged version is still valid.
+            uint64_t texturesVersion = 1;
+            struct TextureLookup { TextureKey key{}; decltype(textures)::iterator it{}; uint64_t version = 0; };
+            std::array<TextureLookup, 256> textureLookups{};
 
             // Resolve results kept on the GPU, keyed by guest physical address.
             // The game samples them through fetch constants pointing at the
@@ -1396,8 +1412,16 @@ namespace gpu::renderer
             uint64_t sceneAAConfigFrame=~0ull,sceneAAAppliedFrame=~0ull,sceneAAAllocation=0;
 
             // The entry at `base` whose destination format the fetch can read.
+            // Bases that may have resolve entries, by hash. Bits are set when an
+            // entry is created and cleared only with the map, so a clear bit is a
+            // certain miss and most texture fetches skip the map lookup.
+            std::bitset<4096> resolvedBases;
+            static size_t ResolvedBaseBit(uint32_t base) { return size_t((base * 0x9E3779B1u) >> 20); }
+
             ResolvedSurface* FindResolved(uint32_t base, uint32_t fetchFormat)
             {
+                if (!resolvedBases.test(ResolvedBaseBit(base)))
+                    return nullptr;
                 auto it = resolved.find(base);
                 if (it == resolved.end())
                     return nullptr;
@@ -1411,6 +1435,8 @@ namespace gpu::renderer
             // debug dumps want, since they ask for a surface, not a format.
             ResolvedSurface* NewestResolved(uint32_t base)
             {
+                if (!resolvedBases.test(ResolvedBaseBit(base)))
+                    return nullptr;
                 auto it = resolved.find(base);
                 if (it == resolved.end())
                     return nullptr;
@@ -1423,6 +1449,7 @@ namespace gpu::renderer
 
             ResolvedSurface& ResolvedSlot(uint32_t base, uint32_t destFormat)
             {
+                resolvedBases.set(ResolvedBaseBit(base));
                 std::vector<ResolvedSurface>& list = resolved[base];
                 for (ResolvedSurface& rs : list)
                     if (rs.destFormat == destFormat)
@@ -7279,6 +7306,7 @@ void main()
                     lastFramebuffer = nullptr;
                     renderTargets.clear();
                     resolved.clear();
+                    resolvedBases.reset();
                     tileOwner.clear();
                     if (temporalHistory) temporalHistory->Reset();
                     temporalScene.Reset(frame);
@@ -8065,9 +8093,11 @@ void main()
                     Transition(*rs->tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                     return rs->tex.get();
                 }
-                auto it = textures.find(key);
+                auto& recentTexture = textureLookups[TextureKeyHash{}(key) & (textureLookups.size() - 1)];
+                auto it = recentTexture.version == texturesVersion && recentTexture.key == key ? recentTexture.it : textures.find(key);
                 if (it != textures.end())
                 {
+                    recentTexture = {key, it, texturesVersion};
                     HostTexture* cached = it->second.get();
                     // An original whose mod replacement was read since: re-create it.
                     const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
@@ -8102,6 +8132,7 @@ void main()
                     if (!replacementArrived) textureReuploads++;
                     Gpu().retiredTextures.push_back(std::move(it->second));
                     textures.erase(it);
+                    ++texturesVersion;
                 }
 
                 ScopedTimer timer{ tTexture, cpuTimingEnabled };
@@ -8306,6 +8337,7 @@ void main()
                         {
                             HostTexture* result = tex.get();
                             textures.emplace(key, std::move(tex));
+                            ++texturesVersion;
                             return SelectControllerAtlas(result, bindingInfo);
                         }
                         textureReplacementFailures.insert(fingerprint);
@@ -8379,6 +8411,7 @@ void main()
 
                 HostTexture* result = tex.get();
                 textures.emplace(key, std::move(tex));
+                ++texturesVersion;
                 return SelectControllerAtlas(result, bindingInfo);
             }
 
@@ -8394,6 +8427,7 @@ void main()
                         // hand it to the retired list (freed after the next fence wait).
                         Gpu().retiredTextures.push_back(std::move(it->second));
                         it = textures.erase(it);
+                        ++texturesVersion;
                     }
                     else ++it;
                 }
@@ -8455,18 +8489,26 @@ void main()
             // drawKey is the draw's raw state; pipelines and recipes use its normalized form.
             // mayDefer: with LO_PIPELINE_ASYNC=1 the draw may be skipped (nullptr and
             // pipelineDeferred) while a worker builds its pipeline.
+            RenderPipeline* PipelineHit(PipelineSlot& slot, const PipelineKey& key)
+            {
+                if (slot.sceneSerial != sceneSerial) {
+                    slot.sceneSerial = sceneSerial;
+                    NoteRecipeUse(key);
+                }
+                if (!unusedSiblings.empty() && unusedSiblings.erase(key)) ++workerStats.hits;
+                lastPipelineKey = key;
+                lastPipelineSlot = &slot;
+                return slot.pipeline.get();
+            }
+
             RenderPipeline* GetPipeline(const PipelineKey& drawKey, Shader* vs, Shader* ps, RenderFormat, RenderFormat, bool mayDefer = false)
             {
+                auto& recent = pipelineLookups[PipelineLookupIndex(drawKey)];
+                if (recent.slot && recent.raw == drawKey) return PipelineHit(*recent.slot, recent.key);
                 const PipelineKey key = gpu::pipeline_cache::Normalize(drawKey);
                 const auto hit = [&](PipelineSlot& slot) {
-                    if (slot.sceneSerial != sceneSerial) {
-                        slot.sceneSerial = sceneSerial;
-                        NoteRecipeUse(key);
-                    }
-                    if (!unusedSiblings.empty() && unusedSiblings.erase(key)) ++workerStats.hits;
-                    lastPipelineKey = key;
-                    lastPipelineSlot = &slot;
-                    return slot.pipeline.get();
+                    recent = {drawKey, key, &slot};
+                    return PipelineHit(slot, key);
                 };
                 // Consecutive draws often repeat the key; skip the map lookup.
                 if (lastPipelineSlot && key == lastPipelineKey) return hit(*lastPipelineSlot);
