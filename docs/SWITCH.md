@@ -26,7 +26,8 @@ filtering, render and shadow resolution, upscalers, frame generation and HDR.
   writes them (`disc1` … `disc4`, each with `default.xex`, `LO.fpi` and the
   `*.fpd` archives). The supported editions are the PC version's: Asian
   multilingual or USA/Europe, not mixed.
-- The Vulkan shader pack (`portable_vk.lospv`), see [Shaders](#shaders).
+- The Switch shader pack (`portable_vk.lospv`, built on a PC), see
+  [Shaders](#shaders).
 - To build: a PC with Docker. Windows: Docker Desktop with the WSL 2 backend,
   plus Git.
 
@@ -74,15 +75,26 @@ caches match.
 - **Rect lists** are drawn with the precompiled geometry shader rather than
   the PC default (a vertex-shader variant compiled per game shader), which
   would need DXC. `LO_RECT_LIST_GS=0` switches back.
-- **Game shaders** come from the shader pack, `shaders/portable_vk.lospv`:
-  - from a PC installation that has run with Vulkan: its
-    `shaders/portable_vk.lospv`, or
-  - the `vulkan` pack listed in `index.json` of the
-    [`shader-packs` release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/shader-packs),
-    renamed to `portable_vk.lospv`.
-- Optional: a PC's Vulkan shader cache (`cache/shaders/`, after a Vulkan run)
-  copied to `sdmc:/switch/LostOdysseyRecomp/cache/shaders` adds game shaders
-  the PC compiled that the pack lacks.
+- **Game shaders** come from the shader pack, `shaders/portable_vk.lospv`.
+  The Switch reads shader constants from uniform buffers, which the hardware
+  keeps in its constant banks, so it needs its own pack: the PC `vulkan` pack
+  from the [`shader-packs` release](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/shader-packs)
+  does not match and is rejected. Build it on a Windows or Linux PC from the
+  same source as the NRO:
+  1. Build the PC runtime and the `LoShaderPackTool` target
+     ([BUILDING.md](BUILDING.md)).
+  2. Run
+     ```
+     python tools/shader_pack/build_packs.py --renderer switch --game <your disc1 folder>
+     ```
+     It prepares every game shader with the PC runtime in the background
+     (about 6 minutes) and checks the result.
+  3. Copy `out/shader-pack-build/switch/portable_vk.lospv` to
+     `sdmc:/switch/LostOdysseyRecomp/shaders/portable_vk.lospv`.
+- Optional: a PC's Vulkan shader cache (`cache/shaders/`) from a run with
+  `LO_VK_UBO_CONSTANTS=1`, copied to `sdmc:/switch/LostOdysseyRecomp/cache/shaders`,
+  adds game shaders the PC compiled that the pack lacks. A cache from an
+  ordinary PC run does not match.
 
 The pack and any PC cache must come from the same game edition. A shader missing from all of them cannot be
 compiled on the console: the renderer logs it (`shader pack: …`, shader
@@ -197,7 +209,7 @@ Delete the file to turn sampling off. Per-thread CPU shares are logged every
 | Guest memory | 4 GiB `virtmem` reservation; pages backed on allocation with `svcMapProcessCodeMemory` + `svcMapProcessMemory`; the physical C and E views map the same pages as A (`kernel/guest_address_space_switch.cpp`) |
 | Threads | Guest code threads get 4 MiB stacks (libnx defaults to 128 KiB) |
 | Graphics | plume Vulkan on statically linked Mesa NVK, `VK_NN_vi_surface` on the libnx window (`tools/patches/plume-switch.patch`, `volk-switch.patch`) |
-| Shaders | Prebuilt SPIR-V pack plus the PC's Vulkan shader cache; DXC is not available (`LO_SWITCH_DXC_IDENTITY`) |
+| Shaders | Prebuilt SPIR-V pack plus the PC's Vulkan shader cache; DXC is not available (`LO_SWITCH_DXC_IDENTITY`). Guest shaders read their constants from dynamic uniform buffers in descriptor set 5 (`gpu/shader/common_hlsl.h`, `cache::UboConstants()`), which NVK keeps in the Maxwell constant banks |
 | Window, input, audio | devkitPro's SDL 3.4 fork (`thirdparty/SDL-switch`), built without EGL (`tools/patches/sdl-switch-no-egl.patch`) |
 | XMA audio | Xenia's FFmpeg fork with `thirdparty/ffmpeg-config/switch-aarch64` |
 | Graphics settings | `settings::Validate()` pins a 720p scene, 1x shadow maps and no AA, AO, anisotropic filtering, upscaling, frame generation or HDR; `GraphicsRowHidden()` hides those rows |
