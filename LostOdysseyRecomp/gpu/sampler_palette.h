@@ -102,9 +102,17 @@ public:
     template<class MakeSampler, class MakeSet>
     std::optional<uint32_t> Select(uint64_t recipe, MakeSampler&& makeSampler, MakeSet&& makeSet) {
         if (!current_) return std::nullopt;
+        // A draw's textures mostly repeat the last few recipes; skip the tree.
+        for (const auto& hit : recent_)
+            if (hit.recipe == recipe) {
+                if (diagnosticsEnabled_) ++diagnostics_.hits;
+                used_ |= uint64_t(1) << hit.index;
+                return hit.index;
+            }
         if (const auto found = current_->slots.find(recipe); found != current_->slots.end()) {
             if (diagnosticsEnabled_) ++diagnostics_.hits;
             used_ |= uint64_t(1) << found->second;
+            recent_[recentNext_++ % recent_.size()] = {recipe, found->second};
             return found->second;
         }
         if (diagnosticsEnabled_) ++diagnostics_.misses;
@@ -138,10 +146,15 @@ private:
         if (!descriptors) return false;
         next->descriptors = std::move(descriptors);
         current_ = std::move(next);
+        recent_ = {};
         if (diagnosticsEnabled_) ++diagnostics_.published;
         return true;
     }
     Lease current_;
+    // Recipe -> slot of current_ for recent Select hits; Publish forgets them.
+    struct RecentHit { uint64_t recipe = ~uint64_t(0); uint32_t index = 0; };
+    std::array<RecentHit, 4> recent_{};
+    uint32_t recentNext_ = 0;
     uint64_t used_ = 1;
     bool diagnosticsEnabled_ = false;
     Diagnostics diagnostics_{};
