@@ -1,4 +1,4 @@
-> **历史归档 / Historical snapshot — 2026-09-04.** 保留当时的调查和旧假设，不代表当前状态。先读[当前状态](../../STATUS.md)和[接手入口](../../notes/handoff.md)。
+> **历史归档 / Historical snapshot — 2026-09-04.** 保留当时的调查和旧假设，不代表当前状态。先读[当前状态](../../STATUS.md)和[接手入口](../notes/handoff.md)。
 
 # 内核 HLE 笔记
 

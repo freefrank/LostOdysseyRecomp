@@ -1,6 +1,6 @@
 # Card A city measurement — published v0.5.11 — 2026-09-14
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record is the current Card A baseline for fence / mid-frame Flush / descriptor splits / GPU queue on the **published v0.5.11** package. It does not authorize runtime changes, a version bump, whole-game acceptance, or a new GitHub Release. Historical v0.5.4 city `fence_wait` 15.40 ms and the two-slot diagnostic 1.67 ms **must not** replace these numbers.
 

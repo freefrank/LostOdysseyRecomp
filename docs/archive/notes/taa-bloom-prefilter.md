@@ -1,6 +1,6 @@
 # TAA bloom prefilter candidate (2026-09-12)
 
-> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 The rear enemy eye flicker was reproduced in the user's current battle scene
 with TAA enabled and disappeared when the user turned TAA off. The latest

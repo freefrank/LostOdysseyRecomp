@@ -1,14 +1,14 @@
 # 文档与知识库整理记录 — 2026-09-30
 
-[文档入口](../README.md) · [当前状态](../STATUS.md) · [路线图](../ROADMAP.zh-CN.md) · [Project](https://github.com/users/freefrank/projects/3)
+[文档入口](../../README.md) · [当前状态](../../STATUS.md) · [路线图](../../ROADMAP.zh-CN.md) · [Project](https://github.com/users/freefrank/projects/3)
 
 本次检查仓库原有的 223 份第一方 Markdown 文档，包括根目录、`docs/`、工具、打包与工作流说明；其中 `docs/notes/` 有 144 篇正文。第三方依赖和子模块文档由上游维护，生成的 `out/` 不进入文档索引。当前结论以源码、已记录的验证与验收、GitHub Release／Issue／Project 回读为依据。
 
 ## 入口与生命周期
 
-`docs/README.md` 现在提供完整入口；`STATUS.md` 负责当前实现、验证、验收与发布摘要，中英文 roadmap 负责剩余工作，`CHANGELOG.md` 继续保存版本变化。原 STATUS 超过 1,100 行的结果与实验记录完整保存在 [2026-09-29 快照](../archive/STATUS-2026-09-29.md)，并调整相对链接。
+`docs/README.md` 现在提供完整入口；`STATUS.md` 负责当前实现、验证、验收与发布摘要，中英文 roadmap 负责剩余工作，`CHANGELOG.md` 继续保存版本变化。原 STATUS 超过 1,100 行的结果与实验记录完整保存在 [2026-09-29 快照](../STATUS-2026-09-29.md)，并调整相对链接。
 
-144 篇 notes 均列入[主题索引](../notes/README.md)，保留原路径和证据。分类如下：
+144 篇 notes 均列入[主题索引](../../notes/README.md)，保留原路径和证据。分类如下：
 
 | 文档角色 | 篇数 | 处理方式 |
 |---|---:|---|
@@ -37,7 +37,7 @@ Project 从最初回读的 233 项归整至 237 项，本地清单从 218 项扩
 
 实际改动 26 条记录：新建 4 条、14 条既有事项迁移状态、8 条更新证据／Source key／正文。已发布的 D3D12 shader 包和 FSR／DLSS FG 移至 Done；明确延期的研究、UI 分离、SDK 例外及平台工作移至 Paused／Deferred；动态 MFG 保留已实现但尚有验证余项的状态。补入 #74、#85、#88 和 #90 的 save-state 事项，HDR 与 macOS 复用现有记录并关联 #90／#96。
 
-远端多出的 1 条为无 Source key 的历史 Issue #17 重复链接，明确保留为外部项，不制造第二份本地任务。已有维护者 Done 的事项按其当前状态同步，不凭旧“未实现”说明重开。最终 2026-09-30T07:28:19Z 回读后，计划检查为 236 unchanged、0 create／update／conflict。完整迁移和边界见 [Project 对账](../project-management/reconciliation-2026-09-30.md)。本轮没有修改 Issue／PR 状态或评论。
+远端多出的 1 条为无 Source key 的历史 Issue #17 重复链接，明确保留为外部项，不制造第二份本地任务。已有维护者 Done 的事项按其当前状态同步，不凭旧“未实现”说明重开。最终 2026-09-30T07:28:19Z 回读后，计划检查为 236 unchanged、0 create／update／conflict。完整迁移和边界见 [Project 对账](../../project-management/reconciliation-2026-09-30.md)。本轮没有修改 Issue／PR 状态或评论。
 
 ## Basic Memory
 

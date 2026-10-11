@@ -1,6 +1,6 @@
 # PR69 foreground validation — 2026-09-26
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md). Gate 1 was later accepted on 2026-09-27 with the known SDK synchronization report retained as backlog; earlier NOT PASSED wording is historical. [Gate 1 record](gate1-host-repair-20260927.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md). Gate 1 was later accepted on 2026-09-27 with the known SDK synchronization report retained as backlog; earlier NOT PASSED wording is historical. [Gate 1 record](gate1-host-repair-20260927.md).
 
 PR [#69](https://github.com/freefrank/LostOdysseyRecomp/pull/69) foreground validation used the executable with SHA-256 `8b4d456b8754e320845f5801d22278933030b77db6437c0dfa1ccdda37f1670c` from the `a15c4a9` build. The run started at `2026-09-26T23:23:40Z`, ended at `2026-09-26T23:23:52Z`, and used `out/streamline-fg-p0/pr69-foreground-20260926/`.
 

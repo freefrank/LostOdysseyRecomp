@@ -1,6 +1,6 @@
 # AMD resolve initialization
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Date: **2026-09-06**
 
@@ -12,7 +12,7 @@ Date: **2026-09-06**
 
 A newly allocated placed render-target resolve destination received a partial copy before full-subresource initialization: 432×242 pixels copied into a 448×242 FP16 allocation. This violates the applicable [D3D12 placed-texture metadata initialization requirement](https://microsoft.github.io/DirectX-Specs/d3d/ResourceHeaps.html#metadata-initialization-and-resource-invalidation-for-placed-textures). A state transition alone does not initialize metadata; the failure is not merely unfilled right-edge padding.
 
-In [renderer.cpp](../../LostOdysseyRecomp/gpu/renderer.cpp):
+In [renderer.cpp](../../../LostOdysseyRecomp/gpu/renderer.cpp):
 
 - Immediately after allocating `rs.tex`, `ResolveOnGpu` transitions it to `COLOR_WRITE`, binds `GetFramebuffer`, and performs a full `clearColor(0, transparent black)`. Initialization occurs once per allocation, preserving untouched pixels during subsequent partial updates.
 - After `Flush` waits for GPU completion, framebuffer cache entries referencing retiring textures are erased before `retiredTextures.clear()`. This prevents initialization RTVs from surviving texture retirement and matching reused pointers.
@@ -37,7 +37,7 @@ Warning 820 concerns the missing optimized clear value, a performance suggestion
 
 ## Build and regression
 
-The new [LoResolveCopyGpuTest](../../tools/tests/resolve_copy_gpu_test.cpp), registered in [CMake](../../LostOdysseyRecomp/CMakeLists.txt), passed on AMD: three allocations × two passes, each with zero mismatches and 418176 nonzero **components**. It checks padded resolves, partial-update preservation and reallocation. The deliberate `--uninitialized` negative control exited 1: 104544 mismatched pixels, all-zero output. Texture-layout and depth-clear-layout tests passed.
+The new [LoResolveCopyGpuTest](../../../tools/tests/resolve_copy_gpu_test.cpp), registered in [CMake](../../../LostOdysseyRecomp/CMakeLists.txt), passed on AMD: three allocations × two passes, each with zero mismatches and 418176 nonzero **components**. It checks padded resolves, partial-update preservation and reallocation. The deliberate `--uninitialized` negative control exited 1: 104544 mismatched pixels, all-zero output. Texture-layout and depth-clear-layout tests passed.
 
 Logs:
 

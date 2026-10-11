@@ -1,6 +1,6 @@
 # Uhra City CPU Optimization Results — 2026-09-18
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Method, baselines, two delivered optimizations (index conversion cache, BOLT),
 and the variance caveats behind every number below.

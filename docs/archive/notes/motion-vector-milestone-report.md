@@ -2,13 +2,13 @@
 
 # Motion Vector Implementation Milestone Report (M0 - M4)
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 ## 1. 代码基线与提交历史
 - **代码基线分支**: `mv`
 - **里程碑提交记录**:
   - `742ac47` - **M0**: 修复构建破坏、未初始化MV读取漏洞(`in.motionVectorValid`门控)、`BeginFrame(frameIndex, epoch)`幂等性与测试数组越界修复。
-  - `6702175` - **M1**: 基于 `LostOdysseyRecomp-build-inputs/feedback` 真实微码与渲染观测，产出 `docs/notes/motion-vector-vs-position-dependency-report.md`，梳理高频 VS 位置依赖、常数槽位及蒙皮骨骼规则。
+  - `6702175` - **M1**: 基于 `LostOdysseyRecomp-build-inputs/feedback` 真实微码与渲染观测，产出 `docs/archive/notes/motion-vector-vs-position-dependency-report.md`，梳理高频 VS 位置依赖、常数槽位及蒙皮骨骼规则。
   - `be9f248` - **M2**: 实现 GPU Motion Vector Producer 渲染通道(`MotionVectorGPU`)、两阶段冻结匹配(`FinalizeFrame` / `ambiguousRejectedMatches`)、TAA subpixel jitter 补偿计算与零向量支持。
   - `cac8535` - **M3**: 刚体(钟楼 Bell Stand slot 4)与角色骨骼蒙皮(Slot 233)位置依赖保留与反向位移验证，更新 `temporal_aa.cpp` 动态深度连续性判定，防止运动物体被静态相机反投影预测剔除。
   - `[Current M4]`: 诊断统计输出、边界/限制/未覆盖项梳理与交接文档生成。

@@ -1,8 +1,8 @@
 # FSR / DLSS FG Codex 历史交接记录
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
 
-> 历史记录。文中的暂停状态、验证待办和恢复边界均为当时快照，不代表当前状态。[2026-09-24 交接](fsr-dlss-fg-codex-handoff.zh-CN.md)也是历史检查点；现行进度见[路线图](../ROADMAP.md)。
+> 历史记录。文中的暂停状态、验证待办和恢复边界均为当时快照，不代表当前状态。[2026-09-24 交接](fsr-dlss-fg-codex-handoff.zh-CN.md)也是历史检查点；现行进度见[路线图](../../ROADMAP.md)。
 
 日期：2026-09-23。用户已明确停止开发并要求形成 checkpoint；当前 native goal 为 paused。本文记录可复用证据、状态和恢复边界，不表示发布或验收完成。
 
@@ -17,7 +17,7 @@
 
 ## 已确认的验证边界
 
-新增四项 P2 设计/构建验证通过：R8 传播 CPU 检查、5 项 SPIR-V、静态审阅、Windows/Linux 双平台构建。证据见 [`out/fsr-postprocess-cpu/result.json`](../../out/fsr-postprocess-cpu/result.json)、[`fsr-p2-postprocess-build-result.json`](../../out/streamline-fg-p0/fsr-p2-postprocess-build-result.json) 和 [`fsr-p2-postprocess-static-review.json`](../../out/streamline-fg-p0/fsr-p2-postprocess-static-review.json)。Windows 构建 SHA256 为 `eb84f8b4b24eb10f01c5dd4e2895e57e611c2b33cc876693a986fee516cdd77d`，Linux 为 `7bdf80fa8683bfff51d2bd5dd873558694e272e756e3f757954fb2f12ca79323`。
+新增四项 P2 设计/构建验证通过：R8 传播 CPU 检查、5 项 SPIR-V、静态审阅、Windows/Linux 双平台构建。证据见 [`out/fsr-postprocess-cpu/result.json`](../../../out/fsr-postprocess-cpu/result.json)、[`fsr-p2-postprocess-build-result.json`](../../../out/streamline-fg-p0/fsr-p2-postprocess-build-result.json) 和 [`fsr-p2-postprocess-static-review.json`](../../../out/streamline-fg-p0/fsr-p2-postprocess-static-review.json)。Windows 构建 SHA256 为 `eb84f8b4b24eb10f01c5dd4e2895e57e611c2b33cc876693a986fee516cdd77d`，Linux 为 `7bdf80fa8683bfff51d2bd5dd873558694e272e756e3f757954fb2f12ca79323`。
 
 Windows 实景 `fsr-postprocess-windows-01` 的 frame 12000 中，四种 PS 共六个 draw 均不可发布：三种 blur 对应五个 draw（2072、2075、2078、2081、2084）为 `quad_unavailable`，tone draw 2085 为 `sampler_unavailable`。这些 pass 均未 record/publish，final scene 为 unsupported；独立 loader 检查 exit1。该结果不能写成 postprocess GPU、SDK mask 或 P2 通过。证据见 `out/streamline-fg-p0/fsr-postprocess-windows-01` 和其中的 `postprocess-independent-check.json`。
 
@@ -31,7 +31,7 @@ P2 设计包含 alpha replay、resolve/fetch bridge 和后处理传播。已保�
 
 旧 validated bridge 的 Windows 基线为 `e470f7c`，位于 `out/streamline-fg-p0/p2-bridge-validated-baseline/windows` 及对应 remote evidence；Hypocenter 路线确认 AimRing 与 87 伤害，见 `route-replay-timeline.json`，这不是画质验收。
 
-P0 SDK 内部 layout 障碍的只读诊断保存在 [`p0-api-layout-trace.md`](../../out/streamline-fg-p0/p0-api-layout-trace.md)、[`p0-api-input-trace.md`](../../out/streamline-fg-p0/p0-api-input-trace.md) 和 [`p0-host-remediation-followup.md`](../../out/streamline-fg-p0/p0-host-remediation-followup.md)。不修改 SDK，也不把诊断写成根因修复。
+P0 SDK 内部 layout 障碍的只读诊断保存在 [`p0-api-layout-trace.md`](../../../out/streamline-fg-p0/p0-api-layout-trace.md)、[`p0-api-input-trace.md`](../../../out/streamline-fg-p0/p0-api-input-trace.md) 和 [`p0-host-remediation-followup.md`](../../../out/streamline-fg-p0/p0-host-remediation-followup.md)。不修改 SDK，也不把诊断写成根因修复。
 
 接续资产包括原样复制到 `tools/tests/fsr/` 的 `postprocess_mask_reference.py`、`check-postprocess-capture.py`、`check-postprocess-host.py` 和 `check-fsr-isolated-timing.py`。四个脚本随本检查点提交。历史 dirty 的 ROADMAP 双语文件、`docs/project-management/items.json`、`sync-state.json`、`cmake/LoStreamline.cmake`、`tools/tests/streamline_fg` 和 `.omx` 保留本地，未纳入本次提交，也未同步远程看板。`out` 中的游戏截图、原始捕获和构建产物同样只保留本机；恢复时先检查这些文件的实际状态。
 

@@ -1,6 +1,6 @@
 # Issue #70 DX12/Vulkan optimization
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 状态：v0.7.3 已发布；首轮实现与限定验证完成，尚无用户验收，Issue #70 仍开放。
 

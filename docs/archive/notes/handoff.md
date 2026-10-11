@@ -1,8 +1,8 @@
 # 接手入口
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
-> **历史交接记录。** 本页保留 2026-09-05 至 2026-09-07 的接续证据和当时限制，不是当前执行指令。当前发布、验证边界和待办以 [STATUS](../STATUS.md) 与[路线图](../ROADMAP.zh-CN.md)为准；已关闭 Issue 不再表示“等待验证”。
+> **历史交接记录。** 本页保留 2026-09-05 至 2026-09-07 的接续证据和当时限制，不是当前执行指令。当前发布、验证边界和待办以 [STATUS](../../STATUS.md) 与[路线图](../../ROADMAP.zh-CN.md)为准；已关闭 Issue 不再表示“等待验证”。
 
 ## 2026-09-07（本地）taa-fix 开发分支接续：敌人消散仍待修复
 
@@ -30,7 +30,7 @@
 
 ## 2026-09-07 v0.5.0 Vulkan 与 DX11 TODO
 
-用户确定下一主版本 v0.5.0 开发 Windows PC Vulkan 与 Direct3D 11 支持，已写入[中文路线图](../ROADMAP.zh-CN.md#v050-pc-graphics)／[English roadmap](../ROADMAP.md#v050-pc-graphics)，并补充[后端交接与 DX11 独立拆分](switch-vulkan-handoff.md)。本次仅记录待办，后端实现、实际包验证和玩家验收均未完成。先择取 PC Vulkan 可复用改动、保留 D3D12 基线，再独立推进 DX11；Switch rebase 及 Linux／Steam Deck 仍需各自的平台验收。下方合并数字和旧版本状态保留为历史记录，开发时重查；当前发布状态以 [STATUS](../STATUS.md) 为准。
+用户确定下一主版本 v0.5.0 开发 Windows PC Vulkan 与 Direct3D 11 支持，已写入[中文路线图](../../ROADMAP.zh-CN.md#v050-pc-graphics)／[English roadmap](../../ROADMAP.md#v050-pc-graphics)，并补充[后端交接与 DX11 独立拆分](switch-vulkan-handoff.md)。本次仅记录待办，后端实现、实际包验证和玩家验收均未完成。先择取 PC Vulkan 可复用改动、保留 D3D12 基线，再独立推进 DX11；Switch rebase 及 Linux／Steam Deck 仍需各自的平台验收。下方合并数字和旧版本状态保留为历史记录，开发时重查；当前发布状态以 [STATUS](../../STATUS.md) 为准。
 
 ## 2026-09-07 Switch 移植与 PC Vulkan 交接
 
@@ -38,13 +38,13 @@
 
 ## 2026-09-06 当前交接
 
-> 2026-09-30 补充：下文关于关闭 Gitea Actions、CI 使用 GitHub 的叙述属于 2026-09-06 的决定。现在拉取请求检查已迁到 Gitea Actions（`git.zkx.ca`），2026-10-01 起发布打包也在 Gitea 上运行；Mod Wiki 发布和 Issue 分析仍在 GitHub Actions，见 [Pull request checks and releases on Gitea](ci-gitea.md)。
+> 2026-09-30 补充：下文关于关闭 Gitea Actions、CI 使用 GitHub 的叙述属于 2026-09-06 的决定。现在拉取请求检查已迁到 Gitea Actions（`git.zkx.ca`），2026-10-01 起发布打包也在 Gitea 上运行；Mod Wiki 发布和 Issue 分析仍在 GitHub Actions，见 [Pull request checks and releases on Gitea](../../notes/ci-gitea.md)。
 
-[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](render-state-capture.md)与[输入](controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
+[v0.2.1 已正式发布](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.2.1)，包含 F1 渲染捕获自动 ZIP 与多手柄／键盘 E/R 输入；托管 CI、正式包验证及隔离启动／捕获均通过。参见[捕获](../../notes/render-state-capture.md)与[输入](../../notes/controller-input.md)，不代表 AMD 缺陷已修复；文本补丁仍暂停。
 
 用户最终决定再次关闭本仓库 Gitea Actions；API PATCH `has_actions=false` 后 GET 已验证为 false。`git ls-remote origin main` 返回 `98b8fcc`，代码镜像继续保留，CI 与正式发布使用 GitHub。此前 `win-t640` 的 `windows-2022:host` 标签已修复并恢复接单，但 Release 16 与 test 17／18 均在 `setup-python@v5` 安装 Python 3.12.10 时失败，尚未进入 C++ 编译。T640 的 `Setup_20260906134712_Failed.txt` 记录 `0x80004005`，提示无法打开 engine process path 的句柄及初始化 engine section/state。本轮不再修复 Python 环境，不改变全局 runner 或其他仓库。GitHub [正式 CI 34053765472](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34053765472) 已全部成功，包括 LoHidTest；v0.2.1 正式发布不受影响。
 
-最新公开版本为 v0.2.1，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../STATUS.md) 和[中文路线图](../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
+最新公开版本为 v0.2.1，标签指向 `906d7c039f7e709c57af2c5278a43e259bfba8e5`，两远端标签均已确认。正式 ZIP 为 38,203,314 字节，SHA256 为 `cd583a6a28b47a1b2e7e31984052cd4eb6c953f5df333198f41540114eb4afb3`；44 项 manifest 哈希、安装器自测通过。冷缓存隔离运行 54 秒，德文标题菜单目视正常；frame 400 的 ZIP 共 60 项，每项 CRC／SHA256 校验通过，压缩后恢复约 30 fps。证据见 `out/release-v0.2.1/package-validation.json` 和 `out/release-v0.2.1/smoke/runtime.log`。此前 v0.2 的代码标签 `dcc9462`、发布记录提交 `b572d0a` 保留为历史。当前进度与近期 TODO 以 [STATUS](../../STATUS.md) 和[中文路线图](../../ROADMAP.zh-CN.md)为准；以下 2026-09-05 的构建名、PID、授权与实验安排保留作历史记录，不是新的执行指令。
 
 v0.2 新增 USA/Europe `0.0.0.3` 兼容，保留 Europe/Asia `0.0.0.4`，对应用户确认的 [Redump #11817](https://redump.info/disc/11817) 与 [#39111](https://redump.info/disc/39111)。两版已通过自动选盘受控流程，章节交界剧情和完整通关仍待验证。
 
@@ -58,9 +58,9 @@ v0.2 新增 USA/Europe `0.0.0.3` 兼容，保留 Europe/Asia `0.0.0.4`，对应�
 
 用户已确认原始对白和修复后的游戏录音听感正常。XMA 跨包帧结束时曾额外跳过续接包中的新帧，导致对白被截短；现已保留这些帧，不改变采样率或音量。同段装甲车对白从 2129 帧恢复到完整 4062 帧，游戏录音相对原始音轨的时间斜率从 0.547 恢复为 1.000。另有 34 个多声道缓冲、4264 帧解码零错误。
 
-本地验证构建 `135DCA79` 已安装，存档和配置文件校验未变。验证范围为该过场与上述音频样本；其他对白、战斗声音和循环子帧边界仍需覆盖。详细证据见 [音频记录](audio-output.md)。下方较早实验的未完成状态按各自日期理解。
+本地验证构建 `135DCA79` 已安装，存档和配置文件校验未变。验证范围为该过场与上述音频样本；其他对白、战斗声音和循环子帧边界仍需覆盖。详细证据见 [音频记录](../../notes/audio-output.md)。下方较早实验的未完成状态按各自日期理解。
 
-先读[成果与交接报告](../WORK_REPORT_2026-09-05.md)、[状态总表](../STATUS.md)、[路线图](../ROADMAP.md)，再读对应专项证据。报告覆盖当前代码状态；日期化实验中的“下一步”和PID只代表当时现场。
+先读[成果与交接报告](../WORK_REPORT_2026-09-05.md)、[状态总表](../../STATUS.md)、[路线图](../../ROADMAP.md)，再读对应专项证据。报告覆盖当前代码状态；日期化实验中的“下一步”和PID只代表当时现场。
 
 ## 当前优先事项
 
@@ -76,13 +76,13 @@ Ring外环已在选定遇敌验证；随时存档后台保存/重载通过、桌
 
 30分钟heartbeat用于中断恢复，不表示持续有agent运行。任务是否运行需实时查询；不要把日志仍跑当作游戏正常。当前报告不宣布通关、全音频完整或所有阴影修复。私有产物留在ignored的out目录。
 
-[专项索引](README.md) · [旧交接](../archive/2026-09-04/handoff.md) · [发布约定](../PUBLISHING.md)
+[专项索引](../../notes/README.md) · [旧交接](../2026-09-04/handoff.md) · [发布约定](../../PUBLISHING.md)
 
 
-窗口修正730E2653已编译并独立游戏阻塞测试通过，详见docs/notes/window-event-pump.md；用户40932仍旧FB版，重启存档确认待答。Map13连续帧已明确捕获暗亮交替，根因未定。
+窗口修正730E2653已编译并独立游戏阻塞测试通过，详见docs/archive/notes/window-event-pump.md；用户40932仍旧FB版，重启存档确认待答。Map13连续帧已明确捕获暗亮交替，根因未定。
 
 
-2026-09-05 海报修正 AC3B3A73 已完成并单独保存 out/poster-fixed.exe，未替换用户主程序。只读 float24 补光层保留绝对深度偏移，避免浅反向深度下 D32 ULP 偏移过小；基底/补光GPU顶点回放差74ULP，旧bias24ULP。相同exe开关AB各300帧，海报ROI暗像素>20的帧旧169/300、新0/300；GPU额外验证旧拒绝/新通过/前景遮挡保留。详见docs/notes/map12-poster-depth.md。所有研究游戏均自动退出；用户继续正常游戏，不重启。跨地图回归仍待后续，Map13按用户要求暂缓。
+2026-09-05 海报修正 AC3B3A73 已完成并单独保存 out/poster-fixed.exe，未替换用户主程序。只读 float24 补光层保留绝对深度偏移，避免浅反向深度下 D32 ULP 偏移过小；基底/补光GPU顶点回放差74ULP，旧bias24ULP。相同exe开关AB各300帧，海报ROI暗像素>20的帧旧169/300、新0/300；GPU额外验证旧拒绝/新通过/前景遮挡保留。详见docs/archive/notes/map12-poster-depth.md。所有研究游戏均自动退出；用户继续正常游戏，不重启。跨地图回归仍待后续，Map13按用户要求暂缓。
 
 
 更正：用户明确没有在玩；此前“用户继续正常游戏”是助手误解。已核对主程序无进程，将已验证 AC3B3A73 exe/pdb 更新到主构建目录，安装后 SHA256 一致。未启动游戏，原 save/profile 未改动；旧730E2653仍保留在out/window-pump-fixed.exe。

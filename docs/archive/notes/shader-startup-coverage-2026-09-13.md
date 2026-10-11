@@ -1,6 +1,6 @@
 # Startup shader coverage follow-up — 2026-09-13
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 The local change moves the newly observed `1474db97dfc0afad` declaration variant into the existing startup shader preparation path. Its original source, `11bc08f69da45bb3`, was already extracted from original game resources; the missing coverage was CPX SDK metadata plus the packed 40-byte static-mesh declaration. The earlier log recorded a 32.178 ms DXC compile for this variant during gameplay.
 

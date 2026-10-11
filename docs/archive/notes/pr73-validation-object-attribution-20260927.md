@@ -1,6 +1,6 @@
 # PR73：validation对象归因与深度-only附件修正
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
 
 日期：2026-09-27。代码基线：`ae82bfbfe94a576efe727504053b257b8e4e9572`。本记录补充[FSR+FG恢复记录](pr73-fsr-fg-recovery-20260927.md)，不覆盖旧运行报告，也不将旧binary证据移植到本次代码。
 

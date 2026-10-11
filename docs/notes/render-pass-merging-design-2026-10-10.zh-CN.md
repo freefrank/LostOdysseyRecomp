@@ -504,7 +504,7 @@ pass 结束的方式：`setFramebuffer` 换目标约 260 次，barrier 约 46 �
   - 分辨率扫描：原生 GPU 42.6 ms，1080 是 27.0 ms，720 是 17.1 ms（`draw_ms` 20.2）；
   - 粗略拟合：GPU ≈ 7–8 ms 固定部分 + 每百万像素约 8.5 ms。
 - **手机 T1**：`apk-289\out\perf\T1-trace.runtime.log`。站点映射用 `renderer.cpp.before-diag` 核对，偏移是 27 和 6。
-- **旧结论（OPTIMIZATION_PLAN.md）**：2026-09-29 在 M1 Pro 上测到，pass 结束的原因里颜色目标切换占 39%，barrier 22%，深度目标切换 21%。当时判断合并空间小。那次没有区分别名清除传播；本次按站点分类后，它占了将近一半的 pass。
+- **旧结论（[OPTIMIZATION_PLAN.md](../archive/OPTIMIZATION_PLAN.md)）**：2026-09-29 在 M1 Pro 上测到，pass 结束的原因里颜色目标切换占 39%，barrier 22%，深度目标切换 21%。当时判断合并空间小。那次没有区分别名清除传播；本次按站点分类后，它占了将近一半的 pass。
 - **待确认**：
   - Turnip 26.0.0 R8 是否带有 `TU_AUTOTUNE_ALGO`；
   - KEEP_COLOR 慢 9% 的原因；

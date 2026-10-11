@@ -28,7 +28,7 @@
 
 ## 1. 构建与依赖
 
-**证据。** [`cmake/LoPlatform.cmake`](../../cmake/LoPlatform.cmake) 第 9–16 行只接受 Windows、Apple、Linux；第 35–40 行已经识别 `aarch64`。在 WSL Manjaro 执行如下只读脚本探针：
+**证据。** [`cmake/LoPlatform.cmake`](../../../cmake/LoPlatform.cmake) 第 9–16 行只接受 Windows、Apple、Linux；第 35–40 行已经识别 `aarch64`。在 WSL Manjaro 执行如下只读脚本探针：
 
 ```sh
 cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 -P cmake/LoPlatform.cmake
@@ -36,11 +36,11 @@ cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 -P cmake/LoPl
 
 退出码 `1`，输出 `Unsupported target platform 'Android'`（第 16 行）。这只验证平台识别模块，不是 NDK configure 或编译结果。
 
-[`CMakeLists.txt`](../../CMakeLists.txt) 第 23–28 行已将 x86 的 `-march=sandybridge` 限制在 x86；[`LostOdysseyRecompLib/CMakeLists.txt`](../../LostOdysseyRecompLib/CMakeLists.txt) 把生成的 PPC C++ 编为静态库。这些是 ARM64 复用基础，无须从 PowerPC 指令翻译重新开始。
+[`CMakeLists.txt`](../../../CMakeLists.txt) 第 23–28 行已将 x86 的 `-march=sandybridge` 限制在 x86；[`LostOdysseyRecompLib/CMakeLists.txt`](../../../LostOdysseyRecompLib/CMakeLists.txt) 把生成的 PPC C++ 编为静态库。这些是 ARM64 复用基础，无须从 PowerPC 指令翻译重新开始。
 
-但 [`LostOdysseyRecomp/CMakeLists.txt`](../../LostOdysseyRecomp/CMakeLists.txt) 第 136 行仍是 `add_executable`，第 186–191 行对所有 UNIX 使用桌面 RPATH、`pthread dl` 和 `find_package(CURL)`；第 843–858 行的非 Apple DXC 路径指向 `lib/x64/libdxcompiler.so`。Android Bionic 将 pthread 实现放在 libc 中，桌面依赖和 `.so` 不能直接沿用。[Bionic 官方说明](https://android.googlesource.com/platform/bionic/+/main/README.md)
+但 [`LostOdysseyRecomp/CMakeLists.txt`](../../../LostOdysseyRecomp/CMakeLists.txt) 第 136 行仍是 `add_executable`，第 186–191 行对所有 UNIX 使用桌面 RPATH、`pthread dl` 和 `find_package(CURL)`；第 843–858 行的非 Apple DXC 路径指向 `lib/x64/libdxcompiler.so`。Android Bionic 将 pthread 实现放在 libc 中，桌面依赖和 `.so` 不能直接沿用。[Bionic 官方说明](https://android.googlesource.com/platform/bionic/+/main/README.md)
 
-[`thirdparty/ffmpeg.cmake`](../../thirdparty/ffmpeg.cmake) 第 10–35 行已有按平台/ISA 选择配置和 AArch64 NEON 源码的机制；仓库仅有 `thirdparty/ffmpeg-config/macos-aarch64/config.h`。Android 需针对固定的 Xenia FFmpeg fork，用 NDK 生成独立配置并核对 XMA decoder，不能换成没有相同 XMA 支持的普通发行库。
+[`thirdparty/ffmpeg.cmake`](../../../thirdparty/ffmpeg.cmake) 第 10–35 行已有按平台/ISA 选择配置和 AArch64 NEON 源码的机制；仓库仅有 `thirdparty/ffmpeg-config/macos-aarch64/config.h`。Android 需针对固定的 Xenia FFmpeg fork，用 NDK 生成独立配置并核对 XMA decoder，不能换成没有相同 XMA 支持的普通发行库。
 
 **判断。** 首次实现需要：
 
@@ -53,11 +53,11 @@ cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 -P cmake/LoPl
 
 ## 2. Guest 内存与 ARM64 运行时
 
-**证据。** [`kernel/guest_address_space_layout.h`](../../LostOdysseyRecomp/kernel/guest_address_space_layout.h) 第 10–16 行定义的 E 视图 backing offset 为 `0xA0001000`。[`kernel/guest_address_space.cpp`](../../LostOdysseyRecomp/kernel/guest_address_space.cpp) 第 199–245 行的非 Mac POSIX 路径在 `0x100000000` 固定预留 4 GiB 虚拟地址，使用 `SYS_memfd_create`，以 `MAP_SHARED | MAP_FIXED` 建立全部四个别名。该 E offset 只对齐到 4 KB，在 16 KB 页设备上不能原样传给 `mmap`。
+**证据。** [`kernel/guest_address_space_layout.h`](../../../LostOdysseyRecomp/kernel/guest_address_space_layout.h) 第 10–16 行定义的 E 视图 backing offset 为 `0xA0001000`。[`kernel/guest_address_space.cpp`](../../../LostOdysseyRecomp/kernel/guest_address_space.cpp) 第 199–245 行的非 Mac POSIX 路径在 `0x100000000` 固定预留 4 GiB 虚拟地址，使用 `SYS_memfd_create`，以 `MAP_SHARED | MAP_FIXED` 建立全部四个别名。该 E offset 只对齐到 4 KB，在 16 KB 页设备上不能原样传给 `mmap`。
 
 这里的 **4 GiB 是 guest 虚拟地址预留，不能据此宣称消耗 4 GiB 物理内存**；实际 backing、常驻页和 GPU 资源占用应分别测量。
 
-[`kernel/guest_address_space_macos.cpp`](../../LostOdysseyRecomp/kernel/guest_address_space_macos.cpp) 第 11–18、43–82、107–130 行已针对大页问题跳过 E 视图并设置访问探针，但采用 Mach VM。Android 不能直接复制这一 backend，也不能仅因 Mac 的有限运行成功就宣布所有 E 访问都不存在。
+[`kernel/guest_address_space_macos.cpp`](../../../LostOdysseyRecomp/kernel/guest_address_space_macos.cpp) 第 11–18、43–82、107–130 行已针对大页问题跳过 E 视图并设置访问探针，但采用 Mach VM。Android 不能直接复制这一 backend，也不能仅因 Mac 的有限运行成功就宣布所有 E 访问都不存在。
 
 **判断。** Android 应有单独的 guest memory 适配：区分 guest 页与 host 页，探测 `sysconf(_SC_PAGESIZE)`，对 reserve、alias、commit/protect/unmap 和 E 访问建立可观测验证。优先研究保留别名语义的方案；若原型暂时省略 E，必须让实际访问被记录或明确失败，并以覆盖证据限制支持范围。
 
@@ -65,18 +65,18 @@ cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 -P cmake/LoPl
 
 ARM64 其他基础与风险：
 
-- [`cpu/ppc_context.h`](../../LostOdysseyRecomp/cpu/ppc_context.h) 第 3–12 行、[`cpu/guest_thread.cpp`](../../LostOdysseyRecomp/cpu/guest_thread.cpp) 第 29–53、98–118 行使用 guest TLS/context；[`XenonRecomp-lostodyssey.patch`](../../tools/patches/XenonRecomp-lostodyssey.patch) 第 687–698 行的 timebase 使用平台中立的 active game clock。
-- [`os/guest_code_thread.h`](../../LostOdysseyRecomp/os/guest_code_thread.h) 第 46–49 行依赖 Linux 默认大线程栈的假设；Android 必须测量或显式设置 guest worker 栈，不能沿用“Linux 默认 8 MiB”的判断。
-- [`os/platform.h`](../../LostOdysseyRecomp/os/platform.h) 第 7–23 行没有 Android 分类；`__linux__` 会进入 Linux 分支。与 CMake 一样，需要把 Android 的系统边界明确出来。
-- [`os/crash_handler.cpp`](../../LostOdysseyRecomp/os/crash_handler.cpp) 第 364–374 行的非 Windows handler 为空；需要可用的 native crash/logcat 证据，Mac 的 Mach 探针不能代替 Android 诊断。
+- [`cpu/ppc_context.h`](../../../LostOdysseyRecomp/cpu/ppc_context.h) 第 3–12 行、[`cpu/guest_thread.cpp`](../../../LostOdysseyRecomp/cpu/guest_thread.cpp) 第 29–53、98–118 行使用 guest TLS/context；[`XenonRecomp-lostodyssey.patch`](../../../tools/patches/XenonRecomp-lostodyssey.patch) 第 687–698 行的 timebase 使用平台中立的 active game clock。
+- [`os/guest_code_thread.h`](../../../LostOdysseyRecomp/os/guest_code_thread.h) 第 46–49 行依赖 Linux 默认大线程栈的假设；Android 必须测量或显式设置 guest worker 栈，不能沿用“Linux 默认 8 MiB”的判断。
+- [`os/platform.h`](../../../LostOdysseyRecomp/os/platform.h) 第 7–23 行没有 Android 分类；`__linux__` 会进入 Linux 分支。与 CMake 一样，需要把 Android 的系统边界明确出来。
+- [`os/crash_handler.cpp`](../../../LostOdysseyRecomp/os/crash_handler.cpp) 第 364–374 行的非 Windows handler 为空；需要可用的 native crash/logcat 证据，Mac 的 Mach 探针不能代替 Android 诊断。
 
 ## 3. Vulkan：版本、Surface、格式与资源预算
 
-**证据。** 当前 plume 请求 Vulkan **1.2**（[`plume_vulkan.cpp`](../../thirdparty/plume/plume_vulkan.cpp) 第 4910–4915 行），DXC SPIR-V 编译也使用 `vulkan1.2` target（[`dxc_compiler.cpp`](../../LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp) 第 234–237 行）。应用已有设备能力门槛：[`gpu/backend_selection.h`](../../LostOdysseyRecomp/gpu/backend_selection.h) 第 39–64 行要求 Vulkan 1.2、BDA、`shaderInt64`、`scalarBlockLayout` 与部分 descriptor limits，并在 `video.cpp` 第 1749 行执行。不能把“手机支持 Vulkan”或某个 Android 版本当作这些条件已满足。[Android Vulkan native engine 指南](https://developer.android.com/games/develop/vulkan/native-engine-support)
+**证据。** 当前 plume 请求 Vulkan **1.2**（[`plume_vulkan.cpp`](../../../thirdparty/plume/plume_vulkan.cpp) 第 4910–4915 行），DXC SPIR-V 编译也使用 `vulkan1.2` target（[`dxc_compiler.cpp`](../../../LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp) 第 234–237 行）。应用已有设备能力门槛：[`gpu/backend_selection.h`](../../../LostOdysseyRecomp/gpu/backend_selection.h) 第 39–64 行要求 Vulkan 1.2、BDA、`shaderInt64`、`scalarBlockLayout` 与部分 descriptor limits，并在 `video.cpp` 第 1749 行执行。不能把“手机支持 Vulkan”或某个 Android 版本当作这些条件已满足。[Android Vulkan native engine 指南](https://developer.android.com/games/develop/vulkan/native-engine-support)
 
 ### Surface 接入是已知接口缺口
 
-[`thirdparty/plume/CMakeLists.txt`](../../thirdparty/plume/CMakeLists.txt) 第 16–20 行将 SDL Vulkan 选项限制到系统名精确为 `Linux`。Android 会关闭该选项；其 `RenderWindow` 成为 `ANativeWindow*`（[`plume_render_interface_types.h`](../../thirdparty/plume/plume_render_interface_types.h) 第 63–66 行），但应用的通用非 Windows/macOS 分支传入 `SDL_Window*` 并调用 SDL 版本的接口（[`gpu/video.cpp`](../../LostOdysseyRecomp/gpu/video.cpp) 第 1725–1728、1828–1829 行）。
+[`thirdparty/plume/CMakeLists.txt`](../../../thirdparty/plume/CMakeLists.txt) 第 16–20 行将 SDL Vulkan 选项限制到系统名精确为 `Linux`。Android 会关闭该选项；其 `RenderWindow` 成为 `ANativeWindow*`（[`plume_render_interface_types.h`](../../../thirdparty/plume/plume_render_interface_types.h) 第 63–66 行），但应用的通用非 Windows/macOS 分支传入 `SDL_Window*` 并调用 SDL 版本的接口（[`gpu/video.cpp`](../../../LostOdysseyRecomp/gpu/video.cpp) 第 1725–1728、1828–1829 行）。
 
 plume 已有 Android native surface 分支（`plume_vulkan.cpp` 第 2163–2174 行），所以方向明确：选择完善 Android SDL Vulkan 集成，或显式取得 `ANativeWindow` 并使用 native 接口；同时处理 Surface 的创建、销毁和重建。
 
@@ -92,13 +92,13 @@ plume 已有 Android native surface 分支（`plume_vulkan.cpp` 第 2163–2174 
 | BC1 / BC2 / BC3 | renderer 第 5475–5477 行将 guest DXT 格式直接映射到 BC；第 5873–5881 行创建失败直接返回 | 检查 sampled format 支持；该路径没有 BC→RGBA 回退，缺失时需解压/转码策略及其内存预算 |
 | 深度与浮点目标 | renderer 第 5352–5364 行使用 `D32_FLOAT_S8_UINT`，第 5175–5189 行使用 RGBA16F 目标 | 按实际用途查询 attachment、sampled、transfer 等 format feature 位，必要时适配格式 |
 
-上述 renderer 引用均指 [`gpu/renderer.cpp`](../../LostOdysseyRecomp/gpu/renderer.cpp)；arena 容量常量位于 [`gpu/render_arena_policy.h`](../../LostOdysseyRecomp/gpu/render_arena_policy.h) 第 7–9 行。
+上述 renderer 引用均指 [`gpu/renderer.cpp`](../../../LostOdysseyRecomp/gpu/renderer.cpp)；arena 容量常量位于 [`gpu/render_arena_policy.h`](../../../LostOdysseyRecomp/gpu/render_arena_policy.h) 第 7–9 行。
 
 设备探针还应完整记录 Vulkan features（包括 descriptor indexing、scalar block layout 等）、limits、驱动、内存堆/类型，以及一个代表性 shader + pipeline + draw 的结果。仅列出扩展不足以验证功能。没有证据支持现阶段宣称某个 Adreno/Mali 型号可玩，或对两家驱动兼容性作排名。
 
 ## 4. Shader 编译与分发
 
-**证据。** portable pack 可以减少 guest shader 编译，但 [`gpu/renderer.cpp`](../../LostOdysseyRecomp/gpu/renderer.cpp) 第 2030–2038、2139、2241–2261 行的内建 shader 仍调用 `CompileCachedHlsl`；[`dxc_compiler.cpp`](../../LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp) 第 333–363 行在 miss 时编译。guest shader miss 在 renderer 第 4733–4750、5000–5011 行也进入编译路径。
+**证据。** portable pack 可以减少 guest shader 编译，但 [`gpu/renderer.cpp`](../../../LostOdysseyRecomp/gpu/renderer.cpp) 第 2030–2038、2139、2241–2261 行的内建 shader 仍调用 `CompileCachedHlsl`；[`dxc_compiler.cpp`](../../../LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp) 第 333–363 行在 miss 时编译。guest shader miss 在 renderer 第 4733–4750、5000–5011 行也进入编译路径。
 
 缓存身份依赖 `DxcIdentity`（renderer 第 1841 行）；DXC 不能装载时 identity 为空（dxc 第 175–190 行）。非 Mac `.so` 查找路径和现有打包指向桌面/x64，未提供 Android ARM64 DXC。因此“复制 `portable_vk.lospv` 后就能去掉 DXC”不成立。
 
@@ -113,11 +113,11 @@ plume 已有 Android native surface 分支（`plume_vulkan.cpp` 第 2163–2174 
 
 | 领域 | 已有行为 | 所需工作 |
 |---|---|---|
-| 入口、路径、更新 | [`main.cpp`](../../LostOdysseyRecomp/main.cpp) 第 65–72 行读 `/proc/self/exe`，第 267–315 行运行桌面 updater / `posix_spawn`；[`os/user_paths.h`](../../LostOdysseyRecomp/os/user_paths.h) 第 19–85 行采用可执行目录或 HOME/XDG | 使用 app-specific files/cache/save 路径；原型禁用桌面自更新；APK 升级交给 Android 安装流程 |
-| 游戏数据 | 当前游戏定位/加载依赖普通目录和文件路径（main 第 318–402 行、[`settings/game_path.h`](../../LostOdysseyRecomp/settings/game_path.h) 第 142–184 行） | 选择 SAF 导入到应用可访问目录，或实现 URI/FD 后端。前者涉及空间和中断恢复，后者涉及 seek/mmap/大量小文件；需明确取舍 |
-| 生命周期 | 当前窗口/输入事件处理主要覆盖桌面事件，未发现应用自己的 `SDL_APP_*` 处理；退出有 `std::_Exit`（main 第 116–122 行、[`hid/hid.cpp`](../../LostOdysseyRecomp/hid/hid.cpp) 第 234–249 行） | 处理前后台、音频暂停、guest 时间/线程、Surface 重建、状态落盘和进程被回收后的重启 |
+| 入口、路径、更新 | [`main.cpp`](../../../LostOdysseyRecomp/main.cpp) 第 65–72 行读 `/proc/self/exe`，第 267–315 行运行桌面 updater / `posix_spawn`；[`os/user_paths.h`](../../../LostOdysseyRecomp/os/user_paths.h) 第 19–85 行采用可执行目录或 HOME/XDG | 使用 app-specific files/cache/save 路径；原型禁用桌面自更新；APK 升级交给 Android 安装流程 |
+| 游戏数据 | 当前游戏定位/加载依赖普通目录和文件路径（main 第 318–402 行、[`settings/game_path.h`](../../../LostOdysseyRecomp/settings/game_path.h) 第 142–184 行） | 选择 SAF 导入到应用可访问目录，或实现 URI/FD 后端。前者涉及空间和中断恢复，后者涉及 seek/mmap/大量小文件；需明确取舍 |
+| 生命周期 | 当前窗口/输入事件处理主要覆盖桌面事件，未发现应用自己的 `SDL_APP_*` 处理；退出有 `std::_Exit`（main 第 116–122 行、[`hid/hid.cpp`](../../../LostOdysseyRecomp/hid/hid.cpp) 第 234–249 行） | 处理前后台、音频暂停、guest 时间/线程、Surface 重建、状态落盘和进程被回收后的重启 |
 | 输入 | SDL_GameController 已有；未发现 runtime 的 `SDL_FINGER*` 处理 | 第一轮用实体手柄验证；触控 UI/虚拟按键为独立后续工作 |
-| 音频 | [`apu/audio.cpp`](../../LostOdysseyRecomp/apu/audio.cpp) 第 96–111、127–175 行使用 SDL float stereo 队列，SDL 子模块自带 Android backend | 可复用，但 XMA、暂停恢复、设备切换与延迟仍需真机验证 |
+| 音频 | [`apu/audio.cpp`](../../../LostOdysseyRecomp/apu/audio.cpp) 第 96–111、127–175 行使用 SDL float stereo 队列，SDL 子模块自带 Android backend | 可复用，但 XMA、暂停恢复、设备切换与延迟仍需真机验证 |
 
 SAF 返回 URI，不能当作普通路径；provider 给出的 FD 也可能不可 seek。应验证授权持久化、随机读取、目录移动/删除后的错误处理。[SAF 官方指南](https://developer.android.com/training/data-storage/shared/documents-files)、[ContentResolver FD 契约](https://developer.android.com/reference/android/content/ContentResolver#openFileDescriptor(android.net.Uri,%20java.lang.String))
 
@@ -157,9 +157,9 @@ adb shell getconf PAGE_SIZE
 
 ## 开发 checkpoint（2026-10-02）
 
-在初始研究之后，`trail/android-port-research` 已开始实现一个受限的 Android ARM64 诊断路径。根 CMake 当时只在 `LO_BUILD_ANDROID_PROBE` 路径提前构建探针，并拒绝完整游戏目标；后续完整 runtime 已改为独立的 opt-in 路径。探针位于 [`tools/android_probe`](../../tools/android_probe/)，APK 工程位于 [`packaging/android`](../../packaging/android/)。它使用 SDL2 的 `SDLActivity` 和 native report UI，提供 **Run checks**、**Test audio** 与 **Copy report** 操作，并将报告写入 `files/probe-report.txt`，native 日志使用 `LOAndroidProbe` 标签。
+在初始研究之后，`trail/android-port-research` 已开始实现一个受限的 Android ARM64 诊断路径。根 CMake 当时只在 `LO_BUILD_ANDROID_PROBE` 路径提前构建探针，并拒绝完整游戏目标；后续完整 runtime 已改为独立的 opt-in 路径。探针位于 [`tools/android_probe`](../../../tools/android_probe/)，APK 工程位于 [`packaging/android`](../../../packaging/android/)。它使用 SDL2 的 `SDLActivity` 和 native report UI，提供 **Run checks**、**Test audio** 与 **Copy report** 操作，并将报告写入 `files/probe-report.txt`，native 日志使用 `LOAndroidProbe` 标签。
 
-当前工具链固定为 Gradle 8.11.1（wrapper 含官方 SHA-256 校验）、Android Gradle Plugin 8.9.3、NDK 28.2.13676358、SDK 35、Build Tools 35.0.0、CMake 3.22.1、minSdk 26，且只生成 `arm64-v8a`。WSL 中已确认可复用 `/home/freefrank/Android/Sdk`；不需要另装一套 SDK。构建命令和安装/取证命令见 [`packaging/android/README.md`](../../packaging/android/README.md)。
+当前工具链固定为 Gradle 8.11.1（wrapper 含官方 SHA-256 校验）、Android Gradle Plugin 8.9.3、NDK 28.2.13676358、SDK 35、Build Tools 35.0.0、CMake 3.22.1、minSdk 26，且只生成 `arm64-v8a`。WSL 中已确认可复用 `/home/freefrank/Android/Sdk`；不需要另装一套 SDK。构建命令和安装/取证命令见 [`packaging/android/README.md`](../../../packaging/android/README.md)。
 
 探针的内存实验使用固定 4 GiB 虚拟地址保留和小别名；当前只对 16 KB 主机页的 E alias 路径明确报告不支持，A/C 检查仍可执行。它不证明完整 guest 映射、保护、取消映射或游戏运行语义。Vulkan 目前只记录能力、限制、格式和内存堆，并在每次检查运行一个 clear/present frame；不含 shader、pipeline 或游戏渲染。探针不请求游戏文件或存储权限。
 
@@ -177,7 +177,7 @@ adb shell getconf PAGE_SIZE
 
 ## 第二阶段 checkpoint：Android ARM64 重编译库（2026-10-02）
 
-第一提交已完成探针交付；本次增量处理 host/target 分离：主机运行 XenonRecomp 生成 PPC C++，Android NDK 以 ARM64/PIC 编译 `LostOdysseyRecompLib` 静态库，同时关闭 runtime、GPU 和 tools。246 个生成的 PPC 源文件及 function mapping 来自私有构建输入，不能提交到仓库。对应说明和命令见 [`packaging/android/README.md`](../../packaging/android/README.md)。
+第一提交已完成探针交付；本次增量处理 host/target 分离：主机运行 XenonRecomp 生成 PPC C++，Android NDK 以 ARM64/PIC 编译 `LostOdysseyRecompLib` 静态库，同时关闭 runtime、GPU 和 tools。246 个生成的 PPC 源文件及 function mapping 来自私有构建输入，不能提交到仓库。对应说明和命令见 [`packaging/android/README.md`](../../../packaging/android/README.md)。
 
 该切片要求 WSL system CMake ≥3.28；Gradle APK 的 CMake 3.22.1 只适用于探针。推荐配置命令为：
 
@@ -212,7 +212,7 @@ host 侧已用 `motion_replay_fixture.h` 经真实 translator 和 host DXC 生�
 
 随后 `tools/android/build-runtime.sh`、`:runtime:assembleDebug` 和 `:runtime:lintDebug` 均成功；运行版 APK 通过 v2 签名及 16 KB zip 对齐检查，并已用 ADB 安装成功。最初从共享 Download 目录迁移资源时，shell 所有者和 `0660` 权限导致应用首次读取 `default.xex` 失败；为应用专属 external files 目录补充可读权限后，运行版成功加载 XEX。当前仍没有完整可玩流程证据。
 
-本切片加入固定版本的 Android FFmpeg 配置与隐藏符号边界、Android ARM64 DXC 构建，以及 `libc++` 的 `atomic_ref`／`jthread` 兼容处理。vertex fetch 改为 BDA 路径，避免把完整 1 GiB vertex arena 声明成单一 storage-buffer descriptor，同时保持桌面 HLSL 原文不变。开发平板报告的 128 MiB `maxStorageBufferRange` 因此不再是原先的直接 descriptor 阻塞项；真实 shader draw/readback、设备性能和完整 shader 覆盖仍需验证。Android runtime 的 FFmpeg/DXC 构建细节见 [Android DXC 构建记录](android-dxc-build-2026-10-02.md)。
+本切片加入固定版本的 Android FFmpeg 配置与隐藏符号边界、Android ARM64 DXC 构建，以及 `libc++` 的 `atomic_ref`／`jthread` 兼容处理。vertex fetch 改为 BDA 路径，避免把完整 1 GiB vertex arena 声明成单一 storage-buffer descriptor，同时保持桌面 HLSL 原文不变。开发平板报告的 128 MiB `maxStorageBufferRange` 因此不再是原先的直接 descriptor 阻塞项；真实 shader draw/readback、设备性能和完整 shader 覆盖仍需验证。Android runtime 的 FFmpeg/DXC 构建细节见 [Android DXC 构建记录](../../notes/android-dxc-build-2026-10-02.md)。
 
 运行时保留 SDL 的实体手柄路径，并加入屏幕触摸手柄。触摸控件可以在 Android UI 中关闭，开关保存在 `SharedPreferences`；这只证明实现范围，尚未证明在游戏内菜单、战斗和恢复流程中可用。资源开发测试将使用应用专属 external files 目录；设备上已有的约 20.27 GiB 四张光盘资源会迁移到该目录，文档不记录设备序列号或游戏私有数据。
 
@@ -267,7 +267,7 @@ Android 源码新增了可配置的十五个虚拟手柄控件，并保留 SDL �
 
 USB／蓝牙使用同一自动隐藏策略：实体手柄连接时隐藏虚拟控件并保留 `CTRL`，用户可重新显示并同时操作；最后一只实体手柄断开时恢复保存的触摸偏好。Android InputManager 事件与每秒一次的 SDL controller 状态补查共同检测连接，补查在后台停止。自动隐藏不把临时状态写成用户关闭偏好。Java 可见性模型检查通过；新 SDL 下 `LoHidTest`、`LoAndroidTouchInputTest` 均通过，覆盖按键合并、扳机取强、左右摇杆独立取活动来源，以及清空触摸不清空 SDL 输入。虚拟扳机测试使用 SDL 映射后的实际轴值，避免假设原始 `[-32768,32767]` 等于 GameController 的 `[0,32767]`。实体 USB／蓝牙热插拔按用户安排暂未验收。真机手动隐藏至仅 `CTRL`、再重新显示已通过。
 
-Android shader bundle 在隔离的宿主构建和缓存目录生成：28,484 条记录、27,674 个唯一二进制、240,411,592 bytes、失败 0 条，完整 payload 和 Android runtime 合同验证通过。SHA-256 为 `d8ac36aab5a697af75836155788745f13be3efc1b390361116ebaf6cbfbe18f3`。复制到平板 `files/shaders/portable_vk.lospv` 后，设备 hash 一致。默认启动无跳过编译的 ADB extras，日志确认 bundle 命中、startup DXC actual calls 0，标题画面正常。一次启动的 197 条 pipeline recipe 中 67 ready、130 missing shaders、0 failed；driver pipeline 准备与未覆盖运行期 shader 仍可能需要处理。包目前手动安装，未内置 APK，也未接入 Android 在线下载。构建与部署方法见 [Android README](../../packaging/android/README.md)。
+Android shader bundle 在隔离的宿主构建和缓存目录生成：28,484 条记录、27,674 个唯一二进制、240,411,592 bytes、失败 0 条，完整 payload 和 Android runtime 合同验证通过。SHA-256 为 `d8ac36aab5a697af75836155788745f13be3efc1b390361116ebaf6cbfbe18f3`。复制到平板 `files/shaders/portable_vk.lospv` 后，设备 hash 一致。默认启动无跳过编译的 ADB extras，日志确认 bundle 命中、startup DXC actual calls 0，标题画面正常。一次启动的 197 条 pipeline recipe 中 67 ready、130 missing shaders、0 failed；driver pipeline 准备与未覆盖运行期 shader 仍可能需要处理。包目前手动安装，未内置 APK，也未接入 Android 在线下载。构建与部署方法见 [Android README](../../../packaging/android/README.md)。
 
 后台返回问题分为两处：默认 Activity launch mode 允许桌面图标创建第二个 SDLActivity，导致同一进程重复运行 SDL_main；`singleTop` 已避免这条重复入口。其后仍可复现相同 PID／Activity 下黑屏，logcat 明确记录 Surface 已销毁并创建新实例，而 Vulkan 继续向旧 BufferQueue 提交。运行时现按前后台与窗口变化重建完整 Vulkan surface／swapchain，等待 GPU 后释放旧图像信号量，并让 shader 准备画面复用同一路径。SDL Android 局部补丁在 Activity mutex 下读取 native window，并持有额外 ANativeWindow 引用完成 Vulkan surface 创建，避免与 UI 销毁回调并发释放。
 

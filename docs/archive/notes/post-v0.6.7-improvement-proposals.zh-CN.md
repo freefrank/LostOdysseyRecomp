@@ -1,6 +1,6 @@
 # 改进建议：v0.6.7 之后的渲染与设置界面
 
-> **历史方案或草稿。** 下文目标与命令仅对应拟定时点，不是当前执行任务；已交付范围和后续工作见[路线图](../ROADMAP.md)与[项目状态](../STATUS.md)。
+> **历史方案或草稿。** 下文目标与命令仅对应拟定时点，不是当前执行任务；已交付范围和后续工作见[路线图](../../ROADMAP.md)与[项目状态](../../STATUS.md)。
 
 日期：2026-09-22。审计终点：`83655ac29d5aba85adc575c77ddf3269c8f40b6c`。配套的[bug report](post-v0.6.7-bug-report.zh-CN.md) 记录已确认缺陷；本篇给出后续实现建议，**在原审计时点均未实施**。当前状态：建议顺序第 1 项（BR-01 帧生命周期、BR-02 能力快照、BR-03 执行层状态反馈闭环）与第 2 项（共享 GraphicsRow 枚举与测试 ID 索引重构）已完成本地实现与定向验证；真实游戏画质验收与版本发布待做；第 3 项及后续其余建议均待做。
 
@@ -90,7 +90,7 @@ A / Z 确认      B / Esc 返回      LB / RB 切分类
 
 ### 键盘、手柄和鼠标要遵守相同逻辑
 
-当前 [Start/Enter](../../LostOdysseyRecomp/settings/menu.cpp#L676) 只把焦点移到保存行，并抑制同帧确认；按第二次 Enter 也不会保存，因为键盘 Enter 映射 Start。近期最小改动是把真实按键提示补到帮助栏：`Start/Enter 跳到保存，A/Z 确认`。若希望 Enter 兼作确认，应明确规定“已经聚焦保存行时确认”，同时保留首按只定位的保护。
+当前 [Start/Enter](../../../LostOdysseyRecomp/settings/menu.cpp#L676) 只把焦点移到保存行，并抑制同帧确认；按第二次 Enter 也不会保存，因为键盘 Enter 映射 Start。近期最小改动是把真实按键提示补到帮助栏：`Start/Enter 跳到保存，A/Z 确认`。若希望 Enter 兼作确认，应明确规定“已经聚焦保存行时确认”，同时保留首按只定位的保护。
 
 右侧选项看起来是独立格子，但现有鼠标处理对选择行主要执行“下一项”，不一定直接选择点中的格子。这是既有交互问题，新增四格 DLSS 模式后更容易造成误会。建议命中检测返回具体 option index，点击某格就选某格；手柄仍按左右循环。
 
@@ -100,7 +100,7 @@ A / Z 确认      B / Esc 返回      LB / RB 切分类
 
 ### 菜单用稳定的行 ID
 
-Graphics 页的 `Publish`、帮助、隐藏判定、动作判定、增减值、保存/亮度处理和测试重复使用数字行号。新增 Upscaler 和 DLSS quality 后，测试已经出现漂移：[menu_flow_test.cpp:481–489](../../tools/tests/menu_flow_test.cpp#L481) 仍用 `{5, 7}` 生成 `graphics-aa.bmp` / `graphics-rate.bmp`，当前它们实际对应 Upscaler / 普通缩放质量；AA 和 Frame rate 已在 4、8。
+Graphics 页的 `Publish`、帮助、隐藏判定、动作判定、增减值、保存/亮度处理和测试重复使用数字行号。新增 Upscaler 和 DLSS quality 后，测试已经出现漂移：[menu_flow_test.cpp:481–489](../../../tools/tests/menu_flow_test.cpp#L481) 仍用 `{5, 7}` 生成 `graphics-aa.bmp` / `graphics-rate.bmp`，当前它们实际对应 Upscaler / 普通缩放质量；AA 和 Frame rate 已在 4、8。
 
 先引入 `enum class GraphicsRow`，集中定义 `Count`、显隐、可操作性和帮助映射，把测试也改成引用 ID。需要进一步减少重复时，再使用小型 row descriptor。无需为了十几个选项实现通用表单引擎。
 
@@ -130,11 +130,11 @@ NGX controller 继续由 GPU 线程拥有。CPU planner 与 UI 都只接收小�
 
 ### 先测量 promotion 分配，再做资源复用
 
-[PrepareSceneCopyDestination:1653](../../LostOdysseyRecomp/gpu/renderer.cpp#L1653) 每次创建 promoted、scratch、composite 三张输出纹理，再按生命周期退休。可以记录每帧创建次数、CPU 创建耗时、在途资源峰值和帧时间，确认成本后按尺寸、格式和已完成 fence 复用。
+[PrepareSceneCopyDestination:1653](../../../LostOdysseyRecomp/gpu/renderer.cpp#L1653) 每次创建 promoted、scratch、composite 三张输出纹理，再按生命周期退休。可以记录每帧创建次数、CPU 创建耗时、在途资源峰值和帧时间，确认成本后按尺寸、格式和已完成 fence 复用。
 
 复用不能跨越尚未完成的提交；分辨率、格式、模式切换仍需正确失效。目标是减少已测得的分配开销，本轮没有 FPS 提升结论。
 
-更新（2026-10-04）：这一项已由 [PR #189](https://github.com/freefrank/LostOdysseyRecomp/pull/189) 实现，起因是 [#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172) 的报告：已完成的 promoted、scratch、composite 图像回到渲染器池，按格式、尺寸和用法复用。该修复已合并，尚未进入已发布版本。上文“没有 FPS 提升结论”描述的是 2026-09-22 的审计时点；实现后的验证范围和限制见[项目状态](../STATUS.md#delivered-behavior-and-validation-scope)。
+更新（2026-10-04）：这一项已由 [PR #189](https://github.com/freefrank/LostOdysseyRecomp/pull/189) 实现，起因是 [#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172) 的报告：已完成的 promoted、scratch、composite 图像回到渲染器池，按格式、尺寸和用法复用。该修复已合并，尚未进入已发布版本。上文“没有 FPS 提升结论”描述的是 2026-09-22 的审计时点；实现后的验证范围和限制见[项目状态](../../STATUS.md#delivered-behavior-and-validation-scope)。
 
 ### SDK 路径与打包保持一个来源
 

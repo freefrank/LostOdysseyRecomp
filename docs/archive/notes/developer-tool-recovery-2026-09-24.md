@@ -1,6 +1,6 @@
 # Developer-tool recovery record — 2026-09-24
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This note records the bounded recovery inventory and cleanup outcome for reusable Codex and developer-tool material. The tracked migration and registered old worktree cleanup are complete; two empty scratch roots remain as documented residue.
 
@@ -15,7 +15,7 @@ The private feedback archive source was migrated into the repository-owned `tool
 | Triage skill, review rules, and compact diagnostic guidance | `tools/feedback_archive/skills/lo-feedback-triage/` | Review state stays separate from implementation, validation, and acceptance. |
 | Render investigation skill and agents | `tools/opencode/` | Repository-owned OpenCode source installed into ignored `.opencode/`; no private session state migrated. |
 
-The repository-owned OpenCode render workflow is already documented under [`tools/opencode/README.md`](../../tools/opencode/README.md). Capture analysis utilities remain under [`tools/capture_analysis/README.md`](../../tools/capture_analysis/README.md).
+The repository-owned OpenCode render workflow is already documented under [`tools/opencode/README.md`](../../../tools/opencode/README.md). Capture analysis utilities remain under [`tools/capture_analysis/README.md`](../../../tools/capture_analysis/README.md).
 
 ## Historical Git metadata incident
 

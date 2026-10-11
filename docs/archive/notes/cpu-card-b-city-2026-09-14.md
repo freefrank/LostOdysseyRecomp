@@ -1,6 +1,6 @@
 # Card B city measurement — published v0.5.11 — 2026-09-14
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record is the current Card B profile for vertex-cache stages, shader/pipeline lookup and the B1/B2/B3 implementation gates on the **same published v0.5.11** package as [Card A](cpu-card-a-city-2026-09-14.md). It does not authorize runtime changes, SIMD expansion, another hash mix, `poll_wait` expansion, a version bump, whole-game acceptance, or a new GitHub Release. Historical source-0.5.8 `memcmp` 7% render-self and texture hash chain 84 **must not** replace these numbers.
 

@@ -1,6 +1,6 @@
 # Map12 poster black-patch repair — 2026-09-05
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Local artifact: `out/poster-fixed.exe`, SHA256 `AC3B3A73DCC04A87BB01B8A17120869D878B216B811E283719C6581B3976EFF8`. Installed into the main build directory after verifying no running game; user clarified they were not playing. No game launch or save changes. Window pump and ground-shadow fixes remain included.
 

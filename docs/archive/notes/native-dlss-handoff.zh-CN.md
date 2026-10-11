@@ -1,6 +1,6 @@
 # 原生 Vulkan DLSS Super Resolution 开发与交接指南 (Native DLSS Handoff & Guide)
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 日期：2026-09-21
 特性分支：`dlss`
@@ -61,7 +61,7 @@
    3. 常量确证：PS 常量 `c10.x = 0x3ee8ba2e` (`0.4545454383` ≈ `1.0 / 2.2`) 三帧严格一致，数学表达式为 `pow(saturate(M + 0.1725 * bloom), 1.0 / 2.2)`，输出确认为针对该捕获链路的**显示编码 SDR**（gamma 2.2 曲线），并非精确的标准 sRGB transfer、非已解码、亦非线性 HDR。该结论严格限定于本次分析链路，不向全游戏泛化。
   4. Resolve 与采样：Resolve 至 Allocation 20（`R8G8B8A8_UNORM`），带 RB 交换；Draw 659（VS `8bbd4da701845d16`，PS `cda578aef1724fdc`，`colorMask = 15`，copy blend `ONE / ZERO / ADD`）采样 `shared_texture_info = 0x00160a00`，`sign = 0`（fetch BGR）。RB 交换与 fetch BGR 净效果为恒等映射，无额外 gamma。Draw 632 与 659 之间的 24 次 Draw 均为 `(colorMask & 7) == 0`（深度/模板或仅 alpha 写）。Draw 660 开始绘制 UI，最终输出到前缓冲 Allocation 4（`0x00714000`）。写版本号逐帧递增：Alloc 9 为 207457/207475/207493，Alloc 20 为 207464/207482/207500，Frontbuffer 为 207465/207483/207501。
    5. 关键历史捕获观察：`candidate_ready = true`，但 `temporal_history_verified = false`；该旧三帧计划均为 `consumer = 0 (None)`，`input = 1280x720`，`output = 1280x720`，`epoch = 1`。这是启动阶段 sizing 会话尚未持久化时的捕获结果，不是当前实现状态；Sizing Session Persistence 修复已由 `.cache/evidence/native-dlss-p2-sizing-fix.json` 验证，后续 live-game 记录已确认 `1707x960 -> 2560x1440` 的 qualified SR 生产执行。该历史捕获不应被解读为当前低分辨率仍未验证。
-- 完整的轻量化 SDR 色彩资格追踪与几何判定规范已记录在 [docs/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md)。
+- 完整的轻量化 SDR 色彩资格追踪与几何判定规范已记录在 [docs/archive/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md)。
 
 ### 新原生测试 `LoNativeDlssRendererTest` 的能力与边界
 

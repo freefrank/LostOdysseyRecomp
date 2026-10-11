@@ -1,6 +1,6 @@
 # Gate 1 host repair follow-up — 2026-09-27
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This note records the host-side repair work on the Gate 1 validation branch. The repair evidence is bounded to its tests and runs; the later maintainer acceptance and remaining limits are recorded under “Status and limits” below.
 
@@ -34,4 +34,4 @@ Gate 1 was **accepted as passed by the maintainer on 2026-09-27**, with the know
 
 The SDK pacer trace and official sample reproduction are recorded in the [SDK attribution note](v0.8.0-fg-sdk-sync-attribution-20260926.md). Upstream synchronization reports [#84](https://github.com/NVIDIA-RTX/Streamline/issues/84) and [#112](https://github.com/NVIDIA-RTX/Streamline/issues/112) remain open at this review; no released fix was found in v2.14.1. Further validation requires a corrected SDK or a demonstrated valid integration fix, alongside stronger display evidence.
 
-See the [bounded validation report](../../out/gate1-repair-20260927/REPORT.md) for run artifacts and the foreground evidence.
+See the [bounded validation report](../../../out/gate1-repair-20260927/REPORT.md) for run artifacts and the foreground evidence.

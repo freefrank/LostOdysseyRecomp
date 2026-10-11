@@ -1,6 +1,6 @@
 # Unicode startup and save paths (2026-09-06)
 
-> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 [Issue #4](https://github.com/freefrank/LostOdysseyRecomp/issues/4) reports a crash after the first save. The supplied log records a successful save write, followed by a changed encoding of the installation path when reopening the save. This points to a path-conversion defect, but does not establish the cause of the reported gameplay crash.
 

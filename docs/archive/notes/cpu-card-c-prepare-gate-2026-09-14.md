@@ -1,6 +1,6 @@
 # Card C prepare gate — published v0.5.11 — 2026-09-14
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record is the current Card C gate for bounded Parallel Prepare / Serial Commit. It reuses the **same published v0.5.11** city log as [Card B](cpu-card-b-city-2026-09-14.md) plus a static inventory of existing prepare workers. It does **not** authorize a new worker pool, per-frame Parallel Prepare, a version bump, whole-game acceptance, or a new GitHub Release. No new city drive was launched.
 

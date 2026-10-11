@@ -1,6 +1,6 @@
 # Native DLSS P2 follow-up — 2026-09-21
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 ## Earlier follow-up and evidence checker
 
@@ -168,7 +168,7 @@ Read-only analysis of `p2-oracle.jsonl`, frame render states, and shaders verifi
    - **Historical capture limitation**: In the old foreground executable (`PID 42720`), downscaling did not activate and internal lower resolution was not exercised. That observation belongs to the pre-fix capture stage; the later live-game record confirms qualified `1707x960 -> 2560x1440` production SR.
    - *Display environment for future capture*: Display monitor `DISPLAY3` is a 4K 144Hz panel supporting 1440p. Future game capture runs will target a 1440p Quality window, with actual output dimensions determined strictly from runtime logs.
 
-The full design for runtime SDR qualification tracking and geometric quad predicate is recorded in [docs/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md). The focused CPU qualification boundary passed, and current qualified SR proof covers the actual physical uploaded quad, exact resolve ordinal and net RGB view; other candidate paths remain `Unknown`.
+The full design for runtime SDR qualification tracking and geometric quad predicate is recorded in [docs/archive/notes/native-dlss-color-qualification-plan.md](native-dlss-color-qualification-plan.md). The focused CPU qualification boundary passed, and current qualified SR proof covers the actual physical uploaded quad, exact resolve ordinal and net RGB view; other candidate paths remain `Unknown`.
 
 ## Capabilities and limits of `LoNativeDlssRendererTest`
 

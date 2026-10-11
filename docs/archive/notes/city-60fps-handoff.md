@@ -1,6 +1,6 @@
 # City 60 FPS handoff — 2026-09-12
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Diagnostic work, not player acceptance. The current source and release target
 are **0.5.6**; the measured executable remains from source version **0.5.4**.

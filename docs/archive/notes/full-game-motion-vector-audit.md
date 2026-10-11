@@ -1,6 +1,6 @@
 # Full-Game Motion Vector Audit (Phase 0)
 
-> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Investigation record.** Findings and open items are bounded to the recorded captures and dates. For current issue, delivery and acceptance status, see [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 **Date:** 2026-09-18  
 **Scope:** Investigation of Native Velocity Pipeline & Build-Inputs VP/VS Evidence  
@@ -134,7 +134,7 @@ As cautioned in Section 14 of the Handoff:
 ## 5. Next Steps (Phase 1 & Phase 2)
 
 1. **Phase 1 (Complete):** Native velocity path documented and rejected as sole whole-scene provider; private archive evidence audited and verified.
-2. **Phase 2:** Deliver `docs/notes/full-game-motion-vector-design.md` detailing:
+2. **Phase 2:** Deliver `docs/archive/notes/full-game-motion-vector-design.md` detailing:
    - Screen-space motion vector conventions (Current - Previous, unjittered pixels, RG16_FLOAT).
    - Render target integration in `renderer.cpp` and `temporal_history.h`.
    - Host-driven previous constant tracking and velocity generation pipeline.

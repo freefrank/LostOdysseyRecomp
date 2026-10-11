@@ -8,9 +8,9 @@
 
 本地验证构建 `135DCA79` 已安装，存档和配置文件校验未变。验证范围为该过场与上述音频样本；其他对白、战斗声音和循环子帧边界仍需覆盖。详细证据见 [音频记录](../notes/audio-output.md)。下方较早实验的未完成状态按各自日期理解。
 
-当前更新：**14F09F15** 修正深度模式误执行残留PS导致的地面投影消失。营地移动/停下/返回的遮罩与画面回归、GPU模板定向测试通过；跨地图/遇敌仍需验证。详见[阴影记录](../notes/shadow-texture-lod.md)。
+当前更新：**14F09F15** 修正深度模式误执行残留PS导致的地面投影消失。营地移动/停下/返回的遮罩与画面回归、GPU模板定向测试通过；跨地图/遇敌仍需验证。详见[阴影记录](notes/shadow-texture-lod.md)。
 
-后续更新：10F4D144启动驱动崩溃已通过分批深度清除修正，当前本地构建9693E361；GPU读回与重复标题启动通过，遇敌阴影仍待验。见[启动崩溃专项](../notes/startup-depth-clear-crash.md)。
+后续更新：10F4D144启动驱动崩溃已通过分批深度清除修正，当前本地构建9693E361；GPU读回与重复标题启动通过，遇敌阴影仍待验。见[启动崩溃专项](notes/startup-depth-clear-crash.md)。
 
 本报告汇总代码、专项记录与后台证据。代码现已提交：运行时 `2a4f47d`、调试与遇敌 `42c543f`、图形 `c4fc9e4`。本次用户明确授权提交并双推，游戏验证边界保持不变。完整九项状态见[状态总表](../STATUS.md)。构建成功、后台验证和用户确认分别记录，不互相替代。
 
@@ -26,7 +26,7 @@
 | 音频完整路线 | `518AF9B5…`：营地→装甲车CG→城门并实际左移恢复控制；原稳定解码错误在该路线未再出现 | 不等于间歇崩溃已修好，也不等于全部声音已验证 |
 | 调试功能 | 判胜已获用户确认；同地图/POI传送、地图ID与名称已有局部验证 | 攻击力倍率未实现，判胜满足快速推进的部分需求 |
 
-相关证据：[战斗与Ring](../notes/battle-ring-resource.md)、[随时存档](../notes/save-anywhere.md)、[音频](../notes/audio-output.md)、[临界区](../notes/critical-section-endian.md)。标题动态背景、模型破面、首战后CG白屏等此前成果见[路线图](../ROADMAP.md)，不计作本轮新增完成项。
+相关证据：[战斗与Ring](notes/battle-ring-resource.md)、[随时存档](../notes/save-anywhere.md)、[音频](../notes/audio-output.md)、[临界区](../notes/critical-section-endian.md)。标题动态背景、模型破面、首战后CG白屏等此前成果见[路线图](../ROADMAP.md)，不计作本轮新增完成项。
 
 ## 阴影：根因、代码和验证边界
 
@@ -39,7 +39,7 @@
 - 最新EXE SHA256：`10F4D144B6E1BF99546D9FA6BA35556FD5C187A1A61DBD68D822B998470DD3E1`。
 - **这份新构建尚未在游戏中运行，不能宣布阴影修复完成。** 单采样host对部分MSAA覆盖仍是像素级近似；颜色别名清除未在此修改。
 
-Polygon offset和显式零LOD也已接入并通过各自测试，但不能代替本次图块清除修正的游戏回归。火焰黑红格子、箱子破坏黑色效果仍开放。详见[阴影调查](../notes/shadow-texture-lod.md)、[偏移](../notes/polygon-offset.md)、[火焰](../notes/fire-hit-rendering.md)。
+Polygon offset和显式零LOD也已接入并通过各自测试，但不能代替本次图块清除修正的游戏回归。火焰黑红格子、箱子破坏黑色效果仍开放。详见[阴影调查](notes/shadow-texture-lod.md)、[偏移](notes/polygon-offset.md)、[火焰](../notes/fire-hit-rendering.md)。
 
 ## 下一步验收顺序
 

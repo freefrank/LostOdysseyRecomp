@@ -14,7 +14,7 @@
 
 - **版本与交付：**[v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) 已正式公开，为 latest、非 draft、非 prerelease，于 2026-09-10T05:31:57Z 发布。此前 v0.5.0 发布保留为历史检查点。当前源码改动目标为 `v0.5.2`，已在 `updater` 本地提交为 `ed59f4402b421207456a8530a369b2ac9c6a2a89`，尚未发布；source-0.5.0 候选证据不建立 v0.5.2 游戏运行结论。
 - **v0.5.0 工作：**Map16 性能、DPI 呈现、独立 shader 日志、可选 shader 收集和稀疏相机时序收集已有界定验证。`0.5.0-position-evidence-1` 在每个 VS 仅运行一次保守 HLSL 位置数据流分析，并在 `UnknownShader` 返回前独立记录相机、视口、深度和矩阵有限值检查的结果；它不自动授权 jitter。Worker 同时接受 schema 1 和 schema 2；2026-09-10 只读快照包含 768 条 schema 2 观察，但不扩展画面验收。四条 c7 路径已在同一 D 盘 slot 02 Ghost Town — City of Ruins 场景获用户认可为修复成功：六张间隔 presented 帧覆盖约 11.37 秒，未见闪烁。这不是连续视频或更广场景覆盖；shader 家族回归、全屏、Alt+Enter、物体／骨骼 MV 和全游戏性能仍待完成。
-- **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](../notes/issue12-root-cause.md)和[交接文档](../notes/issue12-handoff-2026-09-09.md)。
+- **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](../notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
 - **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
 - **下一步——证据或验收：**原版风格设置及字体／返回／保存修正已完成有界验证，新用户反馈另行记录；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
 - **保持挂起或等待证据：**Issue #9 已按项目用户验收关闭，不声称原报告者确认或两个症状存在共同根因。AMD 阴影调查和敌人消散闪烁保留原有待办或暂停状态，本次整理不自动恢复。Issue #10 记录 v0.5.0 之外未来的 FSR 工作；Issue #11 已完成用户确认的 Xenia → recomp 直接复制读取；反向兼容与转换不在此边界内。
@@ -23,9 +23,9 @@
 
 以下修复及有界验证已完成。原报告者确认和更广流程推进单独保留为后续工作。
 
-- [x] 修复本机复现的议会崩溃：字宽 switch 分派使用客体低 32 位。843 个表的合约核对、109 项生成代码检查和旧索引负对照通过。见[议会根因](../notes/issue7-cutscene-crash.md)。
+- [x] 修复本机复现的议会崩溃：字宽 switch 分派使用客体低 32 位。843 个表的合约核对、109 项生成代码检查和旧索引负对照通过。见[议会根因](notes/issue7-cutscene-crash.md)。
 - [x] 修正另外九类 PPC 标量、寻址与分支翻译错误，并同步受跟踪的依赖补丁。重新生成的代码通过 3,258 项原生检查；冻结的旧生成器在相同输入中有 1,533 项失败。见[实现与未覆盖范围](../notes/recompiler-width-audit.md)。
-- [x] 核验精确的 `v0.4.1-issue7-semantics-r2` 候选版：完整通过议会剧情、恢复主街移动、原生保存及独立重启读档。实测路径使用亚洲版 Disc 1、英文、FXAA、1280x720 和 30 FPS。构建／源码审计及开发 ZIP 全部 47 个成员的哈希和 CRC 通过；不代表完整通关。见[实景与包验证](../notes/issue7-cutscene-crash.md#2026-09-07-follow-up-semantics-implementation)。
+- [x] 核验精确的 `v0.4.1-issue7-semantics-r2` 候选版：完整通过议会剧情、恢复主街移动、原生保存及独立重启读档。实测路径使用亚洲版 Disc 1、英文、FXAA、1280x720 和 30 FPS。构建／源码审计及开发 ZIP 全部 47 个成员的哈希和 CRC 通过；不代表完整通关。见[实景与包验证](notes/issue7-cutscene-crash.md#2026-09-07-follow-up-semantics-implementation)。
 - [ ] 由 Issue #7 原报告者使用其存档与硬件确认结果；本机复现不证明与其未记录异常完全相同。Issue 已关闭，本项跟踪剩余确认。
 - [ ] 使用原生存档继续后续章节、其他版本及硬件回归，记录新增语义修复实际自然到达的路径，包括 BLRL；已验证的本机议会修复仅在复发时重新打开。
 - [x] 六条战斗 TAA 路径通过 17,287 项 CPU 检查及限定的 Map3 32 相位场景／轮胎回归；后台 ZIP 和三日志保留通过独立用例与导出实跑。相关结果属于各自候选版，见[验证边界](../STATUS.md)。
@@ -34,8 +34,8 @@
 
 ## 已发布里程碑：v0.4.1
 
-1. [x] 修正已核对的 TAA 补光／深度偏移及阴影重建坐标不一致。本地实现、整合构建及选定 CPU／GPU 检查通过，见[验证范围](../notes/shadow-texture-lod.md)。
-2. [x] 第一候选 `6d3bc037…` 原场景验收失败后，补齐两个遗漏的场景深度材质层。r2 的整合构建、8,192 项 CPU jitter 检查及同位置 Map3、TAA／60 FPS／Auto 1440p 实际绘制检查通过；近处轮胎 ROI 平均亮度波动下降，单像素仍有变化。见[对照与边界](../notes/shadow-texture-lod.md)。
+1. [x] 修正已核对的 TAA 补光／深度偏移及阴影重建坐标不一致。本地实现、整合构建及选定 CPU／GPU 检查通过，见[验证范围](notes/shadow-texture-lod.md)。
+2. [x] 第一候选 `6d3bc037…` 原场景验收失败后，补齐两个遗漏的场景深度材质层。r2 的整合构建、8,192 项 CPU jitter 检查及同位置 Map3、TAA／60 FPS／Auto 1440p 实际绘制检查通过；近处轮胎 ROI 平均亮度波动下降，单像素仍有变化。见[对照与边界](notes/shadow-texture-lod.md)。
 3. [x] 完成 r2 原 Map3 位置的 TAA／AA Off 对照及玩家视觉验收。用户确认启用 TAA 后轮胎不闪，运行中的 EXE 与 r2 一致。本机 Map3 缺陷已解决；其他地图、运动场景和硬件列为回归，第一候选失败记录继续保留。
 
 [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 已于 2026-09-08 00:03:50 UTC 从 `eb43f10` 发布，包含已验收的 TAA 修复及带日志的三帧导出。发布 CI 34171122945、全部 45 项 manifest、安装器自测、8 项无图形启动路径及匿名下载核验通过。正式包检查未重做 GPU 或玩家视觉验收；相关范围保留在上方 r2 证据中。独立 AMD 首战与另一 RX 9060 XT 报告继续分别挂起。见[发布证据](../STATUS.md)。
@@ -63,7 +63,7 @@
 
 ### v0.5.0 体验优化待办
 
-用户于 2026-09-08 提出。以下是与上方 PC 后端规划并列、优先 Windows 的独立需求；12 项均已完成本轮实现及必要的限定验证，玩家验收和发布证据仍按各项所述范围分别保留。详见[体验优化需求](../notes/v0.5.0-qol-requirements.md)。每实现一个功能并完成必要验证，版本增加 `0.0.1`，不要求创建 Release 或强制玩家验收；v0.5.0 仍是目标里程碑，累计超过该版本不人为进位 minor。历史 source `0.5.0` 的本地开发候选及其 ZIP 身份如上记录，v0.4.15 ZIP 保留为历史证据；已本地提交的 source 0.4.3–0.4.15 序列不改写这些产物。
+用户于 2026-09-08 提出。以下是与上方 PC 后端规划并列、优先 Windows 的独立需求；12 项均已完成本轮实现及必要的限定验证，玩家验收和发布证据仍按各项所述范围分别保留。详见[体验优化需求](notes/v0.5.0-qol-requirements.md)。每实现一个功能并完成必要验证，版本增加 `0.0.1`，不要求创建 Release 或强制玩家验收；v0.5.0 仍是目标里程碑，累计超过该版本不人为进位 minor。历史 source `0.5.0` 的本地开发候选及其 ZIP 身份如上记录，v0.4.15 ZIP 保留为历史证据；已本地提交的 source 0.4.3–0.4.15 序列不改写这些产物。
 
 1. [x] 现代化安装器以识别支持的多种目录结构、ISO、已解压目录和 XEX 输入；可选 MD5／SHA-256 身份识别，并美化界面但不削弱兼容性核对。源码与合成桌面流程已验证；冻结安装器／DPI 包覆盖仍待完成。已本地提交为 `b094a1a98be441e24b8a14f2c02a2fd60020629a`（source 0.4.16）。
 2. [x] `game-path.txt` 为空时，在配置／根目录解析 `default.xex`，或在导入根目录下解析 `disc1`；并回退相邻的 `game/disc1`、`game`、EXE 和 EXE 父目录下的 `game`。实际 main 启动路径已到达 parser 并按预期提前退出。
@@ -83,7 +83,7 @@
 
 [v0.4.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.0) 已于 2026-09-07 21:56:34 UTC 从 `40362d78` 发布，发布 CI 和正式包检查通过。两个已核对版本均通过正式包的隔离 Map2 启动检查，Auto 1080p／TAA 及包内编译器依赖已核实。此为限定静态场景检查，不代表全游戏或新增玩家画质验收。 已包含 v0.3.0 标签之后的测试工具。详见[当前发布证据](../STATUS.md)。
 
-此前 v0.4.0 检查点完成了所记录的实现与限定验证：文字／UI、Debug、空间 AA／缩放、实验性 TAA、采样 60 FPS 行为及 DLSS/FSR 可行性研究。更多流程列为回归，无新增用户验收。见[实现检查点与验收标准](../notes/v0.4.0-development.md)。相关实现已包含在 v0.4.0 中，下方验证和验收边界继续保留。
+此前 v0.4.0 检查点完成了所记录的实现与限定验证：文字／UI、Debug、空间 AA／缩放、实验性 TAA、采样 60 FPS 行为及 DLSS/FSR 可行性研究。更多流程列为回归，无新增用户验收。见[实现检查点与验收标准](notes/v0.4.0-development.md)。相关实现已包含在 v0.4.0 中，下方验证和验收边界继续保留。
 
 1. [x] 通过按输出分辨率绘制宿主设置页及支持场景的 UI 前 AA 改善文字清晰度。同一真实 Navigation 帧重放、生产 GPU 控制和 v7 最终 AA 跳过记录，验证后续 UI 移除了重复 AA；实际七行图形页布局也已通过。该 v7 构建的 guest UI 仍为 720p；不支持场景／CPU 回退及更多字形／语言质量列为独立回归覆盖。
 2. [x] 增加独立英文／简体中文 Debug menu：fixture、启动及实际 Map2 教学状态 EN → SC → EN 检查通过，包含动态地图／无战斗／等待可控角色文本和语言恢复。Capture render state 保持最上方；其他战斗／状态／布局变体列为回归，不宣称新增用户验收。
@@ -97,7 +97,7 @@
 
 ### 2026-09-07 新增后续需求
 
-用户反馈所有场景均看不出 upscale 改善，此前也反馈切换 TAA 看不出差别，并明确要求真正的内部分辨率最高到 4K，优先跟随输出。既有执行链检查在对应构建范围内继续有效；新构建的可感知改善仍待用户复查。记录中的开发构建以 `c548b48` 为基础并包含后续改动；后续实现已包含在 v0.4.0 中。见[后续交接](../notes/handoff-v0.4.0-followup.md)。
+用户反馈所有场景均看不出 upscale 改善，此前也反馈切换 TAA 看不出差别，并明确要求真正的内部分辨率最高到 4K，优先跟随输出。既有执行链检查在对应构建范围内继续有效；新构建的可感知改善仍待用户复查。记录中的开发构建以 `c548b48` 为基础并包含后续改动；后续实现已包含在 v0.4.0 中。见[后续交接](notes/handoff-v0.4.0-followup.md)。
 
 1. [x] 亚洲／美欧裸 FPD 与 CPX 联合元数据按导入资源身份自动匹配，无区域选项。两版各 52 个资源文件命中索引、CPX 零回退，20,686 个来源名称／哈希与保留的 strict 完整扫描一致；从 Disc 2 进入可复用同组兄弟盘清单。旧 profile、未知／提取失败回退、未读内容边界及显式完整扫描保持；fixture 与主构建通过。读取量分别为 142,093,208／142,289,816 字节，观测 12.537／12.631 秒不作为受控提速、启动或 FPS 结论。新包通过两版 Map2 Auto 1080p 检查，包内依赖与来源哈希已核实，用户数据保持；原报告战斗／全游戏验收不在此范围。旧单版计时保留为[历史证据](../notes/shader-preparation.md)。
 2. [x] 增加最高 3840×2160 的真实内部分辨率 Auto 跟随输出及手动 720p／1080p／1440p／2160p，与输出和空间滤波质量独立。八行五语言设置实现通过 212 项 CPU／菜单检查和 10 张 GDI 图；37 项尺寸检查及 16 个翻译 shader 的 DXC 编译通过。GPU 采样与非法分配后恢复检查通过。固定 1080p 输出／AA3 的 Map2 静止／移动实测验证原生 720p、Auto 1080p 和 4K 来源／深度／TAA 输入及部分记录的历史复用，没有 CPU／分配回退；已检查的细杆和地表细节改善。build-v3 的 Auto 4K 输出、中文八行图形页、预览不写盘、15.017 秒回退、1440p Keep、实际 1440p 场景返回及同进程重开通过。此前 v3 Auto 4K 窗口复用为 108／256 条，已定位的相机参考点错误由下项处理；新版本用户画质验收及更广场景／硬件仍待验证。
@@ -121,9 +121,9 @@
 
 ## 历史里程碑：v0.2
 
-v0.2 已发布，包含两套已核对版本、按版本提供的文本／语音选项、先导入后设置及自动读取已导入盘。对应 [Redump 11817：USA, Europe，0.0.0.3](https://redump.info/disc/11817) 与 [Redump 39111：Europe, Asia，0.0.0.4](https://redump.info/disc/39111)。导入仍严格核对 XEX 哈希，不代表完成整张 ISO 的 Redump 哈希比对。两版原管理器均通过 1 → 2 → 3 → 4 → 1 受控流程，章节交界剧情仍未覆盖。见 [v0.2 发布说明](../RELEASE-v0.2.md)和[自动选盘](../notes/disc-selection.md)。
+v0.2 已发布，包含两套已核对版本、按版本提供的文本／语音选项、先导入后设置及自动读取已导入盘。对应 [Redump 11817：USA, Europe，0.0.0.3](https://redump.info/disc/11817) 与 [Redump 39111：Europe, Asia，0.0.0.4](https://redump.info/disc/39111)。导入仍严格核对 XEX 哈希，不代表完成整张 ISO 的 Redump 哈希比对。两版原管理器均通过 1 → 2 → 3 → 4 → 1 受控流程，章节交界剧情仍未覆盖。见 [v0.2 发布说明](RELEASE-v0.2-historical.md)和[自动选盘](../notes/disc-selection.md)。
 
-v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、五语言界面、着色器索引／并行准备及对白、脚下投影、海报和窗口响应修复。见 [v0.1 发布说明](../RELEASE-v0.1.md)。
+v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、五语言界面、着色器索引／并行准备及对白、脚下投影、海报和窗口响应修复。见 [v0.1 发布说明](RELEASE-v0.1-historical.md)。
 
 **语音问题已解决，用户已确认验收。** XMA 续接包处理现在保留新帧，不改变采样率或音量。装甲车对白从 2,129 帧恢复到 4,062 帧，与原始音轨的时间斜率从 0.547 恢复为 1.000；另外 34 个多声道缓冲、4,264 帧解码无错误。其他场景的音频属于常规回归覆盖，不再将已解决的对白问题列为待修复。见[音频证据](../notes/audio-output.md)。
 
@@ -131,18 +131,18 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 
 以下保留既有兼容性和回归待办；上方里程碑区分已发布工作与后续开发。
 
-1. [ ] 凯姆首战身体阴影调查在按要求复查 v0.4.0 并完成最后一分钟核对后，于 2026-09-07 继续挂起。Radeon 8060S 上的正式包测试未确认复现 RX 9060 XT 报告，尚无根因或修复；恢复调查需要报告者的视频、日志、设置及正常／异常捕获。Map 13 仍未解决，两项报告的关联未知。见[证据与边界](../notes/kaim-body-shadow-v040.md)。
+1. [ ] 凯姆首战身体阴影调查在按要求复查 v0.4.0 并完成最后一分钟核对后，于 2026-09-07 继续挂起。Radeon 8060S 上的正式包测试未确认复现 RX 9060 XT 报告，尚无根因或修复；恢复调查需要报告者的视频、日志、设置及正常／异常捕获。Map 13 仍未解决，两项报告的关联未知。见[证据与边界](notes/kaim-body-shadow-v040.md)。
    新的匿名 RX 9060 XT D3D12/FXAA、3840×2160、source-0.5.0 capture 覆盖开场战斗 6105–6107 帧。包内没有 Vulkan runtime log，也没有士兵从可见到消失的对照，因此既未复现报告，也不关联 TAA 覆盖；调查继续挂起。
 - [ ] 缩小 F1 render capture export 体积，同时保留明确的完整诊断模式。用户要求本场景的反馈包不大于 200,000,000 bytes。完整保留实验达到 168,528,727 bytes，较原 ZIP 小 76.4130%：它存储 39 个 stride-shuffled 无损 raw 文件和 42 个可直接查看的 WebP85 preview，不存可重建的 PPM/BMP。195 个 stored 文件和独立恢复的 201 个文件均与来源 size/SHA256 匹配。压缩为 57.001 秒、peak working set 为 3.10 GB；2.734 秒预处理和 11.927 秒 preview 处理另计。一次新的真实 F1 ZIP capture 从 325.117 到 385.166 秒，共 60.049 秒后超时；原目录仍保留，早先 4450–4452 capture 已由用户删除。这是失败证据，不是端到端结果或 exporter 修复。完整原布局恢复需要 Python 和 NumPy，preview 可直接查看。7z 的速度、内存、lifecycle 和 dependency 取舍仍属实现工作。尚未实现 compact export format 或修复。
 2. [ ] 排查攻击动画卡顿，采集帧耗时、着色器编译日志并做冷／暖缓存对照。用户回复将其归因于着色器编译，但尚无采样证据确认原因。
 3. [~] 研究文字模糊或乱码，与原机和 Xenia 对照，进行中；这与已暂停的文本语言互补补丁是不同任务。
 4. [ ] 回归喷火阶段阴影闪烁。同一玩家反馈该现象似乎消失，仅算单次观察，不宣称全面修复；火焰受击格子仍是单独开放的问题。
 5. [x] **v0.5.0 — 游戏／DLC 自动导入已实现：**已本地提交的 source [`0.4.15`](https://github.com/freefrank/LostOdysseyRecomp/commit/f77d943261e14105d17c880ffa40c171b4191dcc) 批次可将失落的奥德赛 CON/LIVE/PIRS STFS 包导入共享 DLC 目录，支持事务解包、重复／冲突保护及运行时枚举／打开／读取；它移除了手动 DLC／Game Discs 模式选择，对选取的文件、目录和混合来源自动分类、统一复核并导入。既有三包导入及重复保留证据继续复用。目录 filter 修复使 `spa.bin` 不再混入 `*.fpi`；原生 fixed 30-call 证据及冻结 source-0.4.18 runtime session 已完整读取 `LODLC002`、`LODLC001`、`LODLC003` 的 header/index/payload，`spa.bin` 零匹配、crash 为零且正常显示主菜单。13 个导入文件和隔离 save/config 未改变，两游戏均已退出。奖励领取、地下城游玩、用户验收和发布仍未测试。此验证完成时源码为 0.4.21，当前本地源码为 0.4.22、尚未提交；目标仍为 v0.5.0。
-6. [ ] **P0 v0.5.0 发布前：**为阴影／TAA 诊断将 shader 日志从 runtime 摘要分流。既有覆盖审计设计（最近三组会话、累计清单、F1 快照及全 draw 记录）保留为可复用参考，不会因本轮优先级自动成为同批必须实现的范围。日志分流已排入下一 session，尚未开始，见[日志与覆盖 TODO](../notes/taa-coverage-audit.md#shader-log-coverage-todo)。
+6. [ ] **P0 v0.5.0 发布前：**为阴影／TAA 诊断将 shader 日志从 runtime 摘要分流。既有覆盖审计设计（最近三组会话、累计清单、F1 快照及全 draw 记录）保留为可复用参考，不会因本轮优先级自动成为同批必须实现的范围。日志分流已排入下一 session，尚未开始，见[日志与覆盖 TODO](notes/taa-coverage-audit.md#shader-log-coverage-todo)。
 7. [ ] 分析 [Issue #9](https://github.com/freefrank/LostOdysseyRecomp/issues/9)：v0.4.2、Ryzen 9950X3D / RTX 5090 上报告 CPU 温度高和 TAA 纹理闪烁。两个症状均未验证，不假定同一根因，也不直接合并到此前的敌人消失报告。
 8. [x] 在固定的 v0.4.15 D3D12 Map2 配置中定位 Windows 稳态 CPU 热点（Ryzen 7 9800X3D／RTX 5080、60 FPS、SMAA、720p internal、配置 1080p output）。45.0001416 秒内进程使用 110.875 CPU 秒（整机 CPU 15.3993%；2.46388 个逻辑核当量）；112,344 个 on-CPU 样本无丢失事件、20 个缺栈。承载 GPU query 轮询和 guest 共享值零超时轮询的线程分别占进程 CPU 计时的 40.389% 与 39.994%（合计 80.3833%）；两条实际路径分别占进程 on-CPU 样本 36.5618% 与 33.0948%（合计 69.6566%），路径份额是样本分布而非 CPU 计时归因。GPU WorkerMain 占进程 CPU 计时 16.164%，其中 `getenv_nolock` 为该线程 exclusive 样本的 24.6787%。该结果只隔离单场景 D3D12 路径，不诊断温度、不证明后端回归或全游戏行为。GPU query 等待策略、零超时轮询及每 draw 环境变量查询是在 profiling 阶段提出的候选；后续实现见下一条。见热点报告 (historical local path, unavailable in this checkout: `out/v0.5.0/cpu-hotspots/report/HOTSPOTS.html`)和CPU 对比 (historical local path, unavailable in this checkout: `out/v0.5.0/cpu-comparison/report/REPORT.html`)。
 9. [~] 由该 profile 实施一批 CPU 效率修复：仅在已测 GPU query 和共享值轮询路径使用有界等待，并将四个禁用 capture 的环境值移出每 draw 热路径缓存。源码 `0.4.16` 构建成功，新的 `LoPollWaitTest` 通过。有效的新 D3D12 Map2 对比未重跑 v0.4.15：60.0003575 秒内均值为 4.3033598%／0.6885376 个逻辑核当量，保留的 v0.4.15 为 15.6200169%／2.4992027；3,599 个 PresentMon 事件在单 swapchain 上完整覆盖 CPU 窗口，采样后受控输入仍留在 Map2。该结果是整个批次的单次结果，不归因于单项改动，也不代表全游戏。首次 Vulkan CPU 窗口与 PresentMon 零重叠而排除；替代采集在开始前被用户物理 Escape 停止。Vulkan 对比、玩家验收及发布仍待完成。见优化报告 (historical local path, unavailable in this checkout: `out/v0.5.0/cpu-optimization/REPORT.md`)。
-10. [~] **P0 v0.5.0 发布前：**源码和发布目标固定为 0.5.0。shader 标识、顶点／索引准备及精确限帧修复通过定向检查；固定 Map16 D3D12 4K/TAA3 RTSS 48.01→54.05→59.76 FPS，最终内部均值/p95 为 16.72/17.16 ms。限定场景已接近 60 FPS，系统条件限制已记录；其他场景和用户验收仍开放。见[诊断与修复](../notes/v0.5.0-performance-diagnosis-2026-09-09.md)。
+10. [~] **P0 v0.5.0 发布前：**源码和发布目标固定为 0.5.0。shader 标识、顶点／索引准备及精确限帧修复通过定向检查；固定 Map16 D3D12 4K/TAA3 RTSS 48.01→54.05→59.76 FPS，最终内部均值/p95 为 16.72/17.16 ms。限定场景已接近 60 FPS，系统条件限制已记录；其他场景和用户验收仍开放。见[诊断与修复](notes/v0.5.0-performance-diagnosis-2026-09-09.md)。
 11. [~] 诊断剩余 4K TAA 地面／阴影及闪烁覆盖。已验收的四条 c7 Sol 修复仍限定于候选 `1c9911a3` 和约 11.37 秒的六张静止样本。新的用户 Vulkan、仅 TAA capture 17468–17470 使用较早的 `ececed95`，它只加入 `0b786` c7，早于后续四路径修复；每张 capture 有 1,495 个 draw，缺少后续四条 c7 路径的 145 draw/frame（140/1/3/1；141 次 depth write）。1.690／3.156／1.561 秒是 F1 capture 导出间隔，不是普通 60 FPS history。本证据不重开已验收的 Sol 范围，不定位新根因，也不建立更广／发布覆盖。
 
 原有事项继续排队：偶发 GPU query/wait 故障及长时间稳定性；火焰受击格子／箱子特效和两个资源着色器失败；两版章节交界、存档读回、遇敌和多语言回归；全屏／独占、鼠标及跨 DPI 验收。Map 13 身体／环境阴影明暗闪烁仍开放；已验收的脚下投影修复继续常规回归。用户要求在处理新增性能、TAA 地面／阴影及 shader 日志任务前暂停 Reddit 帖子；v0.5.0 GitHub Release 仍为 draft。
@@ -153,7 +153,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [x] Unicode 启动／存档路径修复 `7dbb668` 已以 `04dd7d0` 合并；8 项启动路径及 8 组存储测试通过。Issue #4 完整游戏崩溃仍未复现，路径测试不代表游戏内验收。
 - [x] `v0.2.2` 已于 UTC 2026-09-07 03:11:10 正式发布，标签 `f03efe370d444db1a8a9c1213c240da697f58504` 已双推，CI `34077788392` 全通过。正式包 CRC／44 项 manifest、安装器自测、8 项启动路径及中文工作目录 Map 12 验证通过。
 
-本次要求的抗锯齿、缩放和帧率工作已列入 v0.4.0。**用户于 2026-09-06 暂停文本语言互补补丁研究**：无成品、无运行时代码改动、不在 v0.2 中；语音不在该研究范围。见[挂起研究](../notes/text-language-patch.md)。
+本次要求的抗锯齿、缩放和帧率工作已列入 v0.4.0。**用户于 2026-09-06 暂停文本语言互补补丁研究**：无成品、无运行时代码改动、不在 v0.2 中；语音不在该研究范围。见[挂起研究](notes/text-language-patch.md)。
 
 ## 阶段 0：准备
 
@@ -161,7 +161,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [x] 使用 `tools/god_extract.py` 提取四盘，存入不跟踪的 `LostOdysseyRecompLib/private/disc1..4`。
 - [x] 确认支持的 XEX 为 Europe, Asia 版本 4 和 USA, Europe 版本 3；TU 不在已核对集合内；按可执行文件详情和哈希匹配，不仅依赖区域标签。见 [XEX](../notes/xex.md)。
 - [x] XenonAnalyse 生成初版 841 张跳转表；安装 Ghidra 12.1.3 和 XEXLoaderWV，无界面导入 `default.xex`。
-- [x] Xenia Canary 实跑开场战斗，保存相同机位对照。见[对比记录](../notes/xenia-render-comparison.md)。
+- [x] Xenia Canary 实跑开场战斗，保存相同机位对照。见[对比记录](notes/xenia-render-comparison.md)。
 
 ## 阶段 1：产出可编译代码
 
@@ -174,7 +174,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 
 - [x] 修正小纹理 level-0 packed-mip 偏移，恢复动态标题背景。见[记录](../notes/title-packed-mips.md)。
 - [x] 实现线程、同步、内存、文件系统和 XAM 用户档案 HLE；标题循环实跑通过，60 fps swap 不代表游戏逻辑已解锁帧率。
-- [x] 接通 plume/D3D12，正确显示 Press START。见 [GPU](../notes/gpu.md)。
+- [x] 接通 plume/D3D12，正确显示 Press START。见 [GPU](notes/gpu.md)。
 - [x] 接通 Xenia FFmpeg XMAFRAMES 与 SDL 48 kHz 双声道音频；修复循环终点、游标归属、文件读取竞争、命令寄存器和对白跳帧。共享句柄测试从 8,000 次读取中 932 次错误降为零，连续 32 次 MMIO kick/clear 通过；用户确认语音问题解决。其他场景继续常规回归，开场 WMV 播放单独待修。见[音频](../notes/audio-output.md)。
 - [x] SDL 手柄输入及键盘回退。
 - [ ] 避免输入法干扰游戏按键：游戏控制期间关闭 SDL 文本输入／IME，仅在真正文本输入场景启用，不改变用户全局输入法。验证中文输入法下 Z/X/A/S 和 F1、焦点切换及键盘／手柄切换。用户已确认另一台电脑切英文输入法后恢复操作；v0.2.1 尚未修复。见[输入记录](../notes/controller-input.md)。
@@ -183,34 +183,34 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 
 ## 阶段 3：推进完整通关
 
-- [~] 后续遇敌：修复开场资源遗留导致的主角 T 姿势和攻击停滞；独立验证普通攻击、反击和自然胜利，敌人姿态及闪烁待查。见[遇敌动画](../notes/encounter-animation.md)。
+- [~] 后续遇敌：修复开场资源遗留导致的主角 T 姿势和攻击停滞；独立验证普通攻击、反击和自然胜利，敌人姿态及闪烁待查。见[遇敌动画](notes/encounter-animation.md)。
 - [x] Windows debug 判胜调用原游戏胜利阶段和结果初始化，用户确认可跳过战斗。
 - [ ] 火焰受击异常需原机参考；Xenia 同样异常，不能单独作为目标。
-- [ ] Debug menu 增加可恢复、不写入存档的主角攻击力／伤害调整。见[需求](../debug-menu-requirements.md)。
+- [ ] Debug menu 增加可恢复、不写入存档的主角攻击力／伤害调整。见[需求](debug-menu-requirements.md)。
 - [~] 修复异步存档完成、缩略图 ABI、持久化枚举、NT 写入和 CREATE_ALWAYS；手动保存、覆盖及独立进程读回通过，完整兼容性待验。见[存储](../notes/save-storage.md)。
 - [x] 自动读取已导入盘并重载原索引；两版存储路径和原管理器换盘测试均通过。见[证据](../notes/disc-selection.md)。
 - [ ] 验证两版真实章节交界剧情及之后存档读回；受控管理器测试不代表完整推进。
 - [ ] 逐一验证过场、战斗、千年之梦和大地图。
-- [~] 独立存档按攻略推进：Hypocenter 残骸／Ram、戒指教学、自然胜利、早期 Wasteland 遇敌、Gorge 营地、装甲车剧情和城门控制已有局部证据；用户已到 Map 13，尚未通关。见[攻略测试](../notes/walkthrough-testing.md)与[戒指](../notes/battle-ring-resource.md)。
+- [~] 独立存档按攻略推进：Hypocenter 残骸／Ram、戒指教学、自然胜利、早期 Wasteland 遇敌、Gorge 营地、装甲车剧情和城门控制已有局部证据；用户已到 Map 13，尚未通关。见[攻略测试](notes/walkthrough-testing.md)与[戒指](notes/battle-ring-resource.md)。
 - [x] 修正物理地址别名，恢复开场人物材质：A/C 共享，E 偏移一页；Windows/Linux 别名测试及场景验证通过。见[记录](../notes/physical-alias-rendering.md)。
-- [x] 修正 16 位索引对齐、resolve 尺寸和纹理解码，解决开场破面、后续轮廓偏移及 gamma 缺失；数值测试和场景对照通过。见[记录](../notes/rendering-index-and-resolve.md)。
-- [x] 接通 stencil、修复 D3D12 参考值和 D24 清理，恢复高光。见[记录](../notes/lighting-stencil-depth-clear.md)。
+- [x] 修正 16 位索引对齐、resolve 尺寸和纹理解码，解决开场破面、后续轮廓偏移及 gamma 缺失；数值测试和场景对照通过。见[记录](notes/rendering-index-and-resolve.md)。
+- [x] 接通 stencil、修复 D3D12 参考值和 D24 清理，恢复高光。见[记录](notes/lighting-stencil-depth-clear.md)。
 - [x] 绘制前转换 EDRAM，修复首战后白屏，恢复场景和炮口火焰，进入重型坦克战斗。见[记录](../notes/post-battle-whiteout.md)。
-- [ ] 修复其余崩溃并完整通关；此前 RPBattle__Scene memset 截断崩溃已修复。见[重编译](../notes/recomp.md)与[交接](../notes/handoff.md)。
+- [ ] 修复其余崩溃并完整通关；此前 RPBattle__Scene memset 截断崩溃已修复。见[重编译](../notes/recomp.md)与[交接](notes/handoff.md)。
 - [x] 同地图传送、坐标记录／返回和轴向调整；原生传送、恢复行走及游戏菜单中拒绝操作已测。见[传送](../notes/debug-teleport.md)。
 - [x] 自动枚举当前地图存档、出口、机关和拾取 POI；Hypocenter 落点、出口附近及旧编号拒绝已测。见[传送](../notes/debug-teleport.md)。
 
 ## 当前反馈与回归
 
-- [x] 脚下投影：修复 mode-5 stencil 绘制残留像素着色器；营地移动和 GPU 测试通过，用户确认基本修复；继续跨地图／遇敌回归。见[阴影](../notes/shadow-texture-lod.md)。
-- [x] Map 12 海报黑斑：polygon-offset 修复通过 300 帧 A/B 和浅深度遮挡测试，其他地图及近裁剪面继续回归。见[海报](../notes/map12-poster-depth.md)。
+- [x] 脚下投影：修复 mode-5 stencil 绘制残留像素着色器；营地移动和 GPU 测试通过，用户确认基本修复；继续跨地图／遇敌回归。见[阴影](notes/shadow-texture-lod.md)。
+- [x] Map 12 海报黑斑：polygon-offset 修复通过 300 帧 A/B 和浅深度遮挡测试，其他地图及近裁剪面继续回归。见[海报](notes/map12-poster-depth.md)。
 - [ ] Map 13 身体／环境阴影明暗闪烁按后续用户反馈仍开放；已验收脚下投影属于另一项修复，尚未证明与海报同因。
 - [ ] 火焰受击黑红格子，以原机画面为参考。
-- [x] Ring 外环：测试中正常变化，释放 RT 获得 Good 和 101 伤害，用户确认手柄操作正常。见[记录](../notes/battle-ring-resource.md)。
+- [x] Ring 外环：测试中正常变化，释放 RT 获得 Good 和 101 伤害，用户确认手柄操作正常。见[记录](notes/battle-ring-resource.md)。
 - [ ] 第二地图箱子破坏特效黑色。
 - [x] Debug 地图 ID／本地化名称：标题未知状态、Hypocenter/Gorge 和 2→3 切图已测。见[地图](../notes/debug-map-info.md)。
 - [~] 随时存档：非存档点槽 03 保存／重启读回、权限恢复、原生存档点和营地切换通过；F1 开关有隔离尺寸／回调测试，其他桌面和游戏流程待验。见[记录](../notes/save-anywhere.md)。
-- [~] 营地／窗口无响应：大小端临界区归属和递归修复通过四线程及选定流程测试，窗口消息泵修改已发布；独立 GPU query/wait 指针损坏仍待修。见[临界区](../notes/critical-section-endian.md)与 [GPU 等待](../notes/third-map-hang.md)。
+- [~] 营地／窗口无响应：大小端临界区归属和递归修复通过四线程及选定流程测试，窗口消息泵修改已发布；独立 GPU query/wait 指针损坏仍待修。见[临界区](../notes/critical-section-endian.md)与 [GPU 等待](notes/third-map-hang.md)。
 - [x] 语音问题已解决并经用户确认，输出及对白时序修复已发布；营地→装甲车→城门流程不再出现此前稳定解码错误。其他场景音频属于常规回归，长时间运行稳定性单独跟踪。见[音频](../notes/audio-output.md)。
 
 ## 阶段 4：现代化

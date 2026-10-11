@@ -342,4 +342,4 @@ completed in 989 ms during that cold start; see [index evidence](shader-resource
 
 References: [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
 [Microsoft DXC release](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.8.2407),
-and the [v0.5.0 release preparation matrix](../RELEASE-v0.5.0.md).
+and the [v0.5.0 release preparation matrix](../archive/RELEASE-v0.5.0-preparation.md).

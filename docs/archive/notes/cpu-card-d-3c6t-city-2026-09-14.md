@@ -1,6 +1,6 @@
 # Card D 3C6T city measurement — published v0.5.11 — 2026-09-14
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record is a process-level 3-physical-core / 6-hardware-thread envelope on the **same published v0.5.11** package as [Card A](cpu-card-a-city-2026-09-14.md). It does **not** implement host pinning, does not change `KeSetAffinityThread`, does not authorize a version bump, whole-game acceptance, Steam Deck validation, or a new GitHub Release. UnleashedRecomp's affinity stub is the same no-pin baseline; do not treat that project as a pinning recipe.
 

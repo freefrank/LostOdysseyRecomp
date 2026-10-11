@@ -1,6 +1,6 @@
 # Bug report：v0.6.7 之后的代码审计
 
-> **调查记录。** 结论与待办只对应文中日期、版本和捕获；现行问题、交付与验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **调查记录。** 结论与待办只对应文中日期、版本和捕获；现行问题、交付与验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 审计日期：2026-09-22。基线为 `v0.6.7`（`f92c24da03816b4c0c7664fbc8589169a205b555`），终点为 `main` 的 `83655ac29d5aba85adc575c77ddf3269c8f40b6c`，即仓库记录 v0.6.11 发布后的状态。本报告中的行号均对应这个终点。改进方向另见[改进建议](post-v0.6.7-improvement-proposals.zh-CN.md)。
 
@@ -21,13 +21,13 @@ P1 应优先修复；BR-02 和 BR-03 可在对应条件下处理；K-01 仍是�
 
 ## BR-01：正常 DLSS/DLAA 持续重置历史
 
-**定位：** [renderer.cpp:6990](../../LostOdysseyRecomp/gpu/renderer.cpp#L6990)、[帧时间更新:7046](../../LostOdysseyRecomp/gpu/renderer.cpp#L7046)、[长间隔处理:4181](../../LostOdysseyRecomp/gpu/renderer.cpp#L4181)。新增性：`v0.6.7` 没有普通 SR 路径；`744ab91` 加入 `dlssSrRequested` 后，旧帧尾判定未相应扩展，DLAA 继承同一路径。
+**定位：** [renderer.cpp:6990](../../../LostOdysseyRecomp/gpu/renderer.cpp#L6990)、[帧时间更新:7046](../../../LostOdysseyRecomp/gpu/renderer.cpp#L7046)、[长间隔处理:4181](../../../LostOdysseyRecomp/gpu/renderer.cpp#L4181)。新增性：`v0.6.7` 没有普通 SR 路径；`744ab91` 加入 `dlssSrRequested` 后，旧帧尾判定未相应扩展，DLAA 继承同一路径。
 
 ### 触发与后果
 
 在支持 DLSS 的配置上选择任意 SR 档位或 DLAA，以默认诊断设置正常运行，不设置 `LO_DLSS_INPUT_PROBE=1`。距离初始化或最近一次成功更新 `temporalFrameTime` 超过 250 ms 后，就满足问题条件；不需要真的出现 250 ms 卡顿。
 
-普通 SR 路由得到 `temporalExperiment=false`、`temporalInputProbe=false`、`dlssSrRequested=true`。初始化逻辑在 [4155–4158](../../LostOdysseyRecomp/gpu/renderer.cpp#L4155) 正确开启 jitter，但帧尾只检查前两个布尔值：
+普通 SR 路由得到 `temporalExperiment=false`、`temporalInputProbe=false`、`dlssSrRequested=true`。初始化逻辑在 [4155–4158](../../../LostOdysseyRecomp/gpu/renderer.cpp#L4155) 正确开启 jitter，但帧尾只检查前两个布尔值：
 
 ```cpp
 if (auto& owner = g_renderer->temporalHistory;
@@ -41,13 +41,13 @@ if (auto& owner = g_renderer->temporalHistory;
 
 这里省略了无关语句；上述条件和赋值对应生产帧尾。普通 SR 永远跳过这个时间更新。下一帧在 `4181` 比较的仍是过期时间，于是每帧都执行 `Reset()` 并增加 `temporalEpoch`。同一分支的 jitter 选择也遗漏 `dlssSrRequested`，把前面开启的 jitter 又关掉。
 
-[HistoryOwner::Reset:282](../../LostOdysseyRecomp/gpu/temporal_history.h#L282) 清除两个帧槽的 `inputsComplete`；[BeginFrame:299](../../LostOdysseyRecomp/gpu/temporal_history.h#L299) 又处理不断变化的 epoch；[CaptureColorInputs:355](../../LostOdysseyRecomp/gpu/temporal_history.h#L355) 因前帧不完整持续要求重置。因此正常 DLSS/DLAA 无法维持预期的帧间累积。NGX 的 Create/Evaluate 仍可能返回成功。
+[HistoryOwner::Reset:282](../../../LostOdysseyRecomp/gpu/temporal_history.h#L282) 清除两个帧槽的 `inputsComplete`；[BeginFrame:299](../../../LostOdysseyRecomp/gpu/temporal_history.h#L299) 又处理不断变化的 epoch；[CaptureColorInputs:355](../../../LostOdysseyRecomp/gpu/temporal_history.h#L355) 因前帧不完整持续要求重置。因此正常 DLSS/DLAA 无法维持预期的帧间累积。NGX 的 Create/Evaluate 仍可能返回成功。
 
 **可以确认的是历史和 jitter 生命周期错误。** 细线、稳定性和运动画质会受多大影响，需要修复前后的固定场景对照；本轮没有测量这些结果，也没有把该问题描述为已发生的黑屏或崩溃。
 
 ### 为什么现有通过记录没有排除它
 
-[native_dlss_renderer_gpu_test.cpp:3](../../tools/tests/native_dlss_renderer_gpu_test.cpp#L3) 定义 `LO_RENDERER_P2_EMBEDDED_TEST`，生产源在 [6621](../../LostOdysseyRecomp/gpu/renderer.cpp#L6621) 排除公共游戏入口。fixture 直接驱动目标提升、NGX、提交与恢复，手动推进帧编号，不经过完整 `DrawImpl` 与公共帧尾。CPU planner 中“稳定 DLAA 不改变 geometry epoch”的检查也不覆盖这里的 renderer `temporalEpoch`。
+[native_dlss_renderer_gpu_test.cpp:3](../../../tools/tests/native_dlss_renderer_gpu_test.cpp#L3) 定义 `LO_RENDERER_P2_EMBEDDED_TEST`，生产源在 [6621](../../../LostOdysseyRecomp/gpu/renderer.cpp#L6621) 排除公共游戏入口。fixture 直接驱动目标提升、NGX、提交与恢复，手动推进帧编号，不经过完整 `DrawImpl` 与公共帧尾。CPU planner 中“稳定 DLAA 不改变 geometry epoch”的检查也不覆盖这里的 renderer `temporalEpoch`。
 
 本地已有 `game-sr-runtime.json` 和它指向的日志没有连续成功帧的 temporal epoch、reset、jitter 序列；日志标记为历史 `c2f06023b7df-dirty` 构建。这些记录证明过有界 SR 执行，不能支持或反证当前问题。
 
@@ -59,16 +59,16 @@ if (auto& owner = g_renderer->temporalHistory;
 
 ## BR-02：首次开启 DLSS 时的能力状态数据竞争
 
-**定位：** [video.cpp:481–488](../../LostOdysseyRecomp/gpu/video.cpp#L481) 读取可变报告；[dlss_ngx.cpp:638](../../LostOdysseyRecomp/gpu/dlss_ngx.cpp#L638) 写入 `report_.state`。读路径由 `3f400309` 引入，运行时写路径由 `d018be72` 引入。
+**定位：** [video.cpp:481–488](../../../LostOdysseyRecomp/gpu/video.cpp#L481) 读取可变报告；[dlss_ngx.cpp:638](../../../LostOdysseyRecomp/gpu/dlss_ngx.cpp#L638) 写入 `report_.state`。读路径由 `3f400309` 引入，运行时写路径由 `d018be72` 引入。
 
 ### 触发与因果
 
-以 Upscaler 关闭的配置启动，在游戏设置中首次开启 DLSS。启动阶段的尺寸预热只在 [video.cpp:713](../../LostOdysseyRecomp/gpu/video.cpp#L713) 检查到 DLSS 配置时执行，其余情况会在运行中建立持久 NGX session。
+以 Upscaler 关闭的配置启动，在游戏设置中首次开启 DLSS。启动阶段的尺寸预热只在 [video.cpp:713](../../../LostOdysseyRecomp/gpu/video.cpp#L713) 检查到 DLSS 配置时执行，其余情况会在运行中建立持久 NGX session。
 
 两端调用链如下：
 
-- 游戏 CPU：[`teleport.cpp:417`](../../LostOdysseyRecomp/debug/teleport.cpp#L417) → [`BeginCpuFrame:55`](../../LostOdysseyRecomp/gpu/frame_plan.cpp#L55) → `BackendDeviceState()` → `g_dlssController->Report().state`。
-- GPU worker：[`PresentFrontbuffer:1259`](../../LostOdysseyRecomp/gpu/video.cpp#L1259) → [`ServicePendingDlssSizing:497`](../../LostOdysseyRecomp/gpu/video.cpp#L497) → `QueryOutputSizing()` → `EnsureSession()` → 修改 `report_.state`。该 worker 在 [`command_processor.cpp:236`](../../LostOdysseyRecomp/gpu/command_processor.cpp#L236) 独立创建。
+- 游戏 CPU：[`teleport.cpp:417`](../../../LostOdysseyRecomp/debug/teleport.cpp#L417) → [`BeginCpuFrame:55`](../../../LostOdysseyRecomp/gpu/frame_plan.cpp#L55) → `BackendDeviceState()` → `g_dlssController->Report().state`。
+- GPU worker：[`PresentFrontbuffer:1259`](../../../LostOdysseyRecomp/gpu/video.cpp#L1259) → [`ServicePendingDlssSizing:497`](../../../LostOdysseyRecomp/gpu/video.cpp#L497) → `QueryOutputSizing()` → `EnsureSession()` → 修改 `report_.state`。该 worker 在 [`command_processor.cpp:236`](../../../LostOdysseyRecomp/gpu/command_processor.cpp#L236) 独立创建。
 
 报告字段不是 atomic，读取端也没有锁。仅对 `g_deviceEpoch` 使用 acquire/release 不能同步同一 epoch 下随后发生的报告修改，即使写入值仍然是 `Available`，也存在 C++ 数据竞争。
 
@@ -82,7 +82,7 @@ if (auto& owner = g_renderer->temporalHistory;
 
 ## BR-03：DLSS 请求被保存，实际回退没有界面反馈
 
-**定位：** [menu.cpp:202–209](../../LostOdysseyRecomp/settings/menu.cpp#L202)、[帮助文案:275](../../LostOdysseyRecomp/settings/menu.cpp#L275)、[生产计划器:176](../../LostOdysseyRecomp/gpu/frame_plan.h#L176)。由 `943062f` 对外暴露 DLSS 菜单后形成普通玩家路径。
+**定位：** [menu.cpp:202–209](../../../LostOdysseyRecomp/settings/menu.cpp#L202)、[帮助文案:275](../../../LostOdysseyRecomp/settings/menu.cpp#L275)、[生产计划器:176](../../../LostOdysseyRecomp/gpu/frame_plan.h#L176)。由 `943062f` 对外暴露 DLSS 菜单后形成普通玩家路径。
 
 ### 触发与因果
 
@@ -90,7 +90,7 @@ if (auto& owner = g_renderer->temporalHistory;
 
 生产 planner 则要求 Vulkan、设备和 DLSS 能力可用、对应档位尺寸就绪，才进入 `DlssSr`；条件不满足时保留 legacy 路径。这一回退本身是正确的保活行为，缺陷在于**设置页面没有显示请求与实际运行的差异和原因**。用户无法在界面判断 DLSS 是否起效。
 
-这个场景不需要特殊环境：Windows 的默认配置是 [`D3D12`](../../LostOdysseyRecomp/settings/config.h#L42)，[后端选择](../../LostOdysseyRecomp/gpu/backend_selection.h#L91) 会优先使用请求后端，成功后不会为了 DLSS 自动改成 Vulkan。Vulkan 下 NGX 不可用也有相同反馈缺口；能力/尺寸错误仅写日志。
+这个场景不需要特殊环境：Windows 的默认配置是 [`D3D12`](../../../LostOdysseyRecomp/settings/config.h#L42)，[后端选择](../../../LostOdysseyRecomp/gpu/backend_selection.h#L91) 会优先使用请求后端，成功后不会为了 DLSS 自动改成 Vulkan。Vulkan 下 NGX 不可用也有相同反馈缺口；能力/尺寸错误仅写日志。
 
 ### 最小修复与回归
 
@@ -100,7 +100,7 @@ if (auto& owner = g_renderer->temporalHistory;
 
 ## K-01：诊断路径等待失败后仍释放 GPU 资源
 
-**定位：** [video.cpp:527–545](../../LostOdysseyRecomp/gpu/video.cpp#L527)，关联 [renderer.cpp:6640](../../LostOdysseyRecomp/gpu/renderer.cpp#L6640)。此项已登记在[既有验证文档](native-dlss-validation.md)，不是本轮新发现。
+**定位：** [video.cpp:527–545](../../../LostOdysseyRecomp/gpu/video.cpp#L527)，关联 [renderer.cpp:6640](../../../LostOdysseyRecomp/gpu/renderer.cpp#L6640)。此项已登记在[既有验证文档](../../notes/native-dlss-validation.md)，不是本轮新发现。
 
 设置 `LO_NO_RENDERER` 时，正常 Renderer 的独立 drain 不会执行；`ResetGpu()` 忽略 `WaitForPresentGpu()` 的失败结果后继续释放 presentation、command list 和 device。在原生等待失败且无法证明 GPU 已结束使用资源的情况下，会破坏资源销毁顺序。
 
@@ -126,7 +126,7 @@ if (auto& owner = g_renderer->temporalHistory;
 
 ## 未提升为确认 bug 的重点
 
-- `motionInvalidity` 已产生，但 [NGX Evaluate 参数:766](../../LostOdysseyRecomp/gpu/dlss_ngx.cpp#L766) 没有消费该纹理。SDK 的 bias-current-color mask 与现有 invalidity 语义不能直接等同。需对新出现物体、被拒绝的 replay draw 和遮挡边缘做固定场景验证，再决定 reset/fallback/mask 策略，不能只凭“有一个 mask 没绑定”断言画面已经错误。
+- `motionInvalidity` 已产生，但 [NGX Evaluate 参数:766](../../../LostOdysseyRecomp/gpu/dlss_ngx.cpp#L766) 没有消费该纹理。SDK 的 bias-current-color mask 与现有 invalidity 语义不能直接等同。需对新出现物体、被拒绝的 replay draw 和遮挡边缘做固定场景验证，再决定 reset/fallback/mask 策略，不能只凭“有一个 mask 没绑定”断言画面已经错误。
 - 原有 execution fixture 使用返回 `void` 的 submit/wait，不能证明提交或等待失败时的安全退役。此项是验证缺口，已有文档记录；正常 Renderer 的 checked 路径另有覆盖，不据此宣称正常游戏必然释放过早。
 
 建议先处理 BR-01、BR-02，并补齐 BR-03 的状态反馈，再进行针对性的真实画面验收；设置界面其余改进可按配套文档独立安排。

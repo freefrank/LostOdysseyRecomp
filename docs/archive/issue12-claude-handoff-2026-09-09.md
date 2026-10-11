@@ -1,6 +1,6 @@
 # Issue #12 跳零问题：给 Claude 的调查交接
 
-> **历史归档。** 本交接记录于 2026-09-09，保留当时的调查边界、复现材料和下一步探针计划。它不是当前 Issue 状态或执行指令；当前结论以 [Issue #12 调查记录](../notes/issue12-funeral-crash.md)、[根因记录](../notes/issue12-root-cause.md)和 [STATUS](../STATUS.md) 为准。
+> **历史归档。** 本交接记录于 2026-09-09，保留当时的调查边界、复现材料和下一步探针计划。它不是当前 Issue 状态或执行指令；当前结论以 [Issue #12 调查记录](notes/issue12-funeral-crash.md)、[根因记录](../notes/issue12-root-cause.md)和 [STATUS](../STATUS.md) 为准。
 
 请在以下范围内继续调查：找出葬礼交花流程使用的无效对象，是在哪里被释放、覆盖、错误复制或错误保留的。不要先通过跳过 null virtual call 来掩盖问题；需要先确认上游对象生命周期。
 
@@ -116,7 +116,7 @@ SHA256 1980265b382cd8ca9b08137c12c4aaf85477d1ab12b82ab5b9e41c5a3a0f3745
 
 ## 证据索引
 
-- 主调查记录：`docs/notes/issue12-funeral-crash.md`
+- 主调查记录：`docs/archive/notes/issue12-funeral-crash.md`
 - 静态 / native 目标分析：`out/issue12-triage/translation/crash-analysis/REPORT.md`
 - run04 对象细节：`out/issue12-triage/translation/crash-analysis/RUN04-OBJECT-REPORT.md`
 - debugger 捕获：`out/issue12-triage/debug-probe/capture-run04/`

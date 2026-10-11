@@ -1,14 +1,14 @@
 # Switch 移植评估与 PC Vulkan 后端交接（2026-09-07）
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 ## 2026-09-07 补充：v0.5.0 PC Vulkan 与 DX11 目标
 
-用户确定下一主版本 **v0.5.0** 的目标为 Windows PC Vulkan 与 Direct3D 11（DX11）支持。实施与验收见[中文 TODO](../ROADMAP.zh-CN.md#v050-pc-graphics)／[English TODO](../ROADMAP.md#v050-pc-graphics)，目前全部待完成。本次仅补充规划，不代表新后端已实现、构建通过或可玩；保留可用 D3D12 基线，Switch 和 Linux／Steam Deck 分别另做平台适配与验收。
+用户确定下一主版本 **v0.5.0** 的目标为 Windows PC Vulkan 与 Direct3D 11（DX11）支持。实施与验收见[中文 TODO](../../ROADMAP.zh-CN.md#v050-pc-graphics)／[English TODO](../../ROADMAP.md#v050-pc-graphics)，目前全部待完成。本次仅补充规划，不代表新后端已实现、构建通过或可玩；保留可用 D3D12 基线，Switch 和 Linux／Steam Deck 分别另做平台适配与验收。
 
 下方保留原评估：合并基线 `5c371fc`、缓存版本 21／22、1,998／2,000 着色器结果及冲突数量均为当时快照，开发前须按实际 `main`、资源／变体集合与依赖重查。原文“跑到标题画面”是启动门槛；v0.5.0 还须完成各后端独立 GPU 检查、原生存档场景对照、实际包和硬件验收。不能把标题通过作为完整后端验收，也不能把旧缓存版本递增建议直接用于新基线。
 
-本次代码核对补充：当前 [video.cpp](../../LostOdysseyRecomp/gpu/video.cpp) 仍创建 D3D12 接口；[renderer.cpp](../../LostOdysseyRecomp/gpu/renderer.cpp)、[presentation.cpp](../../LostOdysseyRecomp/gpu/presentation.cpp)、[temporal_aa.cpp](../../LostOdysseyRecomp/gpu/temporal_aa.cpp) 与 [smaa_pipeline.h](../../LostOdysseyRecomp/gpu/shader/smaa_pipeline.h) 的着色器创建仍使用 DXIL。现有 [plume 构建](../../thirdparty/plume/CMakeLists.txt) 已纳入 Vulkan 编译单元，但 SDL Vulkan 选项受 Linux 条件限制：Windows 需要核查并接通 SDL／WSI、loader／volk 和运行时选择，不能按旧快照判断为缺少整个 Vulkan 编译单元。plume 当前后端为 D3D12／Vulkan／Metal，着色器格式接口没有 DXBC；DX11 需要独立后端和编译／绑定适配，不能仅增加环境变量开关。
+本次代码核对补充：当前 [video.cpp](../../../LostOdysseyRecomp/gpu/video.cpp) 仍创建 D3D12 接口；[renderer.cpp](../../../LostOdysseyRecomp/gpu/renderer.cpp)、[presentation.cpp](../../../LostOdysseyRecomp/gpu/presentation.cpp)、[temporal_aa.cpp](../../../LostOdysseyRecomp/gpu/temporal_aa.cpp) 与 [smaa_pipeline.h](../../../LostOdysseyRecomp/gpu/shader/smaa_pipeline.h) 的着色器创建仍使用 DXIL。现有 [plume 构建](../../../thirdparty/plume/CMakeLists.txt) 已纳入 Vulkan 编译单元，但 SDL Vulkan 选项受 Linux 条件限制：Windows 需要核查并接通 SDL／WSI、loader／volk 和运行时选择，不能按旧快照判断为缺少整个 Vulkan 编译单元。plume 当前后端为 D3D12／Vulkan／Metal，着色器格式接口没有 DXBC；DX11 需要独立后端和编译／绑定适配，不能仅增加环境变量开关。
 
 ### 当前渲染层的额外 TODO
 
@@ -100,7 +100,7 @@
 
 ## v0.5.0 DX11：独立工作拆分（2026-09-07 新增 TODO）
 
-下列均为待开发、待验证事项，DX11 与 Vulkan 不共用完成标记；详细顺序以[路线图](../ROADMAP.zh-CN.md#v050-pc-graphics)为准。
+下列均为待开发、待验证事项，DX11 与 Vulkan 不共用完成标记；详细顺序以[路线图](../../ROADMAP.zh-CN.md#v050-pc-graphics)为准。
 
 1. **先验证契约与最低能力。** 核对现有 render 抽象需要的格式、资源、绘制与同步操作。评估 DXBC／Shader Model 5 编译路线、逐 draw 资源／采样器重映射、slot／UAV 限制、几何着色器与同步回读。当前翻译器使用 Shader Model 6 profiles 和 64 项采样器数组，须验证转换方案；候选路线不视为定案，不支持项及回退策略要明确记录。
 2. **实现真正的后端。** 接通设备／交换链、资源与管线状态、常量和资源绑定、resolve／拷贝／同步／回读，验证最低硬件能力及错误处理；保留 D3D12 可用入口。

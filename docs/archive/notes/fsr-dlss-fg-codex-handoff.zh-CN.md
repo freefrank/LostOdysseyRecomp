@@ -1,8 +1,8 @@
 # FSR / DLSS FG 历史交接（2026-09-24）
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
-更新时间：2026-09-24。本文是当时的 FSR P2 状态与接续入口；2026-09-30 的现行进度以[路线图](../ROADMAP.md)和[项目状态](../STATUS.md)为准。详细历史测试过程见[历史交接记录](fsr-dlss-fg-codex-history.zh-CN.md)和[进度证据日志](fsr-dlss-fg-codex-progress.zh-CN.md)；已提交源码不等于当时公开发布或 P2 全面验收。
+更新时间：2026-09-24。本文是当时的 FSR P2 状态与接续入口；2026-09-30 的现行进度以[路线图](../../ROADMAP.md)和[项目状态](../../STATUS.md)为准。详细历史测试过程见[历史交接记录](fsr-dlss-fg-codex-history.zh-CN.md)和[进度证据日志](fsr-dlss-fg-codex-progress.zh-CN.md)；已提交源码不等于当时公开发布或 P2 全面验收。
 
 ## 当前状态
 
@@ -42,4 +42,4 @@ Gate B 第三次审查与一次额外授权审查均已用完。已定义的三�
 - [Codex 进度证据日志](fsr-dlss-fg-codex-progress.zh-CN.md)：日期化过程记录；不能取代本页的当前状态。
 - [旧 OpenCode handoff](fsr-dlss-fg-handoff.zh-CN.md)：P0 阶段早期快照，仅作历史来源。
 - [导入任务记录](fsr-dlss-fg-imported-tasks.zh-CN.md)：原始需求与阶段映射的历史记录；其中旧的“当前”状态不再适用。
-- [项目状态](../STATUS.md)：面向项目的英文实现、验证和发布状态摘要。
+- [项目状态](../../STATUS.md)：面向项目的英文实现、验证和发布状态摘要。

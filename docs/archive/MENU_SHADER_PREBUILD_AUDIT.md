@@ -1,6 +1,6 @@
 # Menu / shader prebuild audit — 2026-09-16 (America/Edmonton)
 
-> Historical audit of the baseline below. Later cache and lifecycle repairs supersede some findings; see the [0.6.0 follow-up audit](audits/0.6.0-prerelease.md) and [current status](STATUS.md). Issue closure instructions and implementation gaps below describe 2026-09-16, not the current tracker.
+> Historical audit of the baseline below. Later cache and lifecycle repairs supersede some findings; see the [0.6.0 follow-up audit](audits/0.6.0-prerelease.md) and [current status](../STATUS.md). Issue closure instructions and implementation gaps below describe 2026-09-16, not the current tracker.
 
 ## Scope and evidence
 

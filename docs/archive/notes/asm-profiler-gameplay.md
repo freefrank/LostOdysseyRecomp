@@ -1,8 +1,8 @@
 # Assembly profiler gameplay captures — 2026-09-11
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
-Diagnostic sampling of the published v0.5.4 runtime. This is validation evidence, not a performance fix, player acceptance or a new Release. See the [historical profiler result](../archive/STATUS-2026-09-29.md#optional-assembly-profiler) and [current status](../STATUS.md).
+Diagnostic sampling of the published v0.5.4 runtime. This is validation evidence, not a performance fix, player acceptance or a new Release. See the [historical profiler result](../STATUS-2026-09-29.md#optional-assembly-profiler) and [current status](../../STATUS.md).
 
 ## Conditions
 

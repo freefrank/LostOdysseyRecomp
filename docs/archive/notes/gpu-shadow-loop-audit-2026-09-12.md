@@ -1,10 +1,10 @@
 # 4K Vulkan shadow-loop GPU audit — 2026-09-12
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 以下“不是生产 translator 修复”等表述仅指最初诊断阶段；后续实施状态见下方“实施跟进”。
 
-本文记录最初的单帧 RenderDoc 诊断与单 shader 离线探针，以及后续 `gpu-perf` 分支上的有界修复；实现已纳入已发布的 v0.5.7，游戏实景验收仍待完成。目标是定位 RTX 5080 在 3840×2160 Vulkan 下的高 GPU 负载。诊断使用同一发布 EXE 0.5.6，SHA-256 为 `1fff598e1a0872da2a7728ceb9921aa2e4a1bff0bd818c224827b84eaf3f5aaa`。正确捕获是 [`audit_frame12462.rdc`](../../out/gpu-profile-20260912/session-02/audit_frame12462.rdc)，大小 1,274,168,861 bytes；较早的 `audit_frame7922.rdc` 不是本结论的依据。
+本文记录最初的单帧 RenderDoc 诊断与单 shader 离线探针，以及后续 `gpu-perf` 分支上的有界修复；实现已纳入已发布的 v0.5.7，游戏实景验收仍待完成。目标是定位 RTX 5080 在 3840×2160 Vulkan 下的高 GPU 负载。诊断使用同一发布 EXE 0.5.6，SHA-256 为 `1fff598e1a0872da2a7728ceb9921aa2e4a1bff0bd818c224827b84eaf3f5aaa`。正确捕获是 [`audit_frame12462.rdc`](../../../out/gpu-profile-20260912/session-02/audit_frame12462.rdc)，大小 1,274,168,861 bytes；较早的 `audit_frame7922.rdc` 不是本结论的依据。
 
 ## 结论
 
@@ -33,7 +33,7 @@
 
 `LoShaderLoopTest` 已通过 11 个 guard case 和 12 个 D3D12 case，每个 case 覆盖 64 个 mixed-lane 输入，并与独立 CPU group-of-64 参考实现一致。9 个相关 guest shader 均通过 DXIL 与 SPIR-V 编译，其中 8 个采用保守 guard 优化，1 个保留原路径；cache test 已通过 99 项检查（证据：`out/gpu-profile-20260912/production-01/backend-cache-test.log`）。正式 translator 的 PS SPIR-V 与原探针完全一致，因此复用原 ABBA 与 PNG 证据，没有重复 GPU 测量。
 
-同一分支的主程序 Release build 已成功，证据为 [`build.log`](../../out/gpu-profile-20260912/production-01/build.log)。resolve-copy 实现位于 renderer 与 `resolve_copy_policy.h`：仅去重同 batch 内完全相同的复制，并在 Draw、clear、transfer、分配、提交或外部访问时失效；metadata、layout 和 clear 副作用仍保留。`LoResolveCopyPolicyTest` 通过 30/30；既有 `LoResolveCopyGpuTest` 的 Vulkan 与 D3D12 记录均为每后端 3 allocation × 2 pass、`mismatch_pixels=0`，并验证 copy/skipped/逻辑 resolve 次数及 source-clear 强制重新 copy。`LO_RESOLVE_COPY_REUSE=0` 可关闭该路径，GPU stats/timing 会记录 `recorded` 与 `skipped`。
+同一分支的主程序 Release build 已成功，证据为 [`build.log`](../../../out/gpu-profile-20260912/production-01/build.log)。resolve-copy 实现位于 renderer 与 `resolve_copy_policy.h`：仅去重同 batch 内完全相同的复制，并在 Draw、clear、transfer、分配、提交或外部访问时失效；metadata、layout 和 clear 副作用仍保留。`LoResolveCopyPolicyTest` 通过 30/30；既有 `LoResolveCopyGpuTest` 的 Vulkan 与 D3D12 记录均为每后端 3 allocation × 2 pass、`mismatch_pixels=0`，并验证 copy/skipped/逻辑 resolve 次数及 source-clear 强制重新 copy。`LO_RESOLVE_COPY_REUSE=0` 可关闭该路径，GPU stats/timing 会记录 `recorded` 与 `skipped`。
 
 捕获中的 EID 5529/5532 重复复制为 66,355,200 bytes；尚未在修复 EXE 的实际游戏中验证命中，也未测量整帧收益。最终用户 EXE 和 `gpu-perf.cmd` 已准备但尚未启动游戏。已交付的诊断 EXE 是 `D:/Mihoyo/LostOdysseyRecomp-windows-x64/LostOdysseyRecomp-gpu-perf.exe`，SHA-256 为 `313CDD34712154A88FEEAF9C25D8AB1409705D327D8B0FD15252A52562C1C211`，来自包含既有 dirty 工作的 `0.5.6-hotfix1` 工作树，不代表干净发布产物；实现已推送于 [`4715b60`](https://github.com/freefrank/LostOdysseyRecomp/commit/4715b60)，并由 [`1d139c9`](https://github.com/freefrank/LostOdysseyRecomp/commit/1d139c9) 合并 `github/main` 的 `b39c2c9`，已纳入发布的 v0.5.7。
 
@@ -43,4 +43,4 @@ CPU 前采窗口为 GPU batch 平均 17.345 ms、CPU draw 5.587 ms；CPU 数字�
 
 [官方 Xenia 源码](https://github.com/xenia-project/xenia/blob/master/src/xenia/gpu/ucode.h)将该控制流定义为 guest 64-invocation group 级 predicated break。不能把本次 shader 的 per-lane `break` 直接照搬为通用生产 translator 修复；任何生产改动都需要按 shader/wave 语义另行设计，并进行匹配回放、图像和多场景验证。最初诊断阶段没有生产代码改动、没有新版本、没有提交或发布，也没有跨场景用户验收。
 
-证据：[`ab-counters.json`](../../out/gpu-profile-20260912/ab-01/ab-counters.json)、[`original-a.png`](../../out/gpu-profile-20260912/ab-01/original-a.png)、[`break-a.png`](../../out/gpu-profile-20260912/ab-01/break-a.png)、[`constant-detail.json`](../../out/gpu-profile-20260912/focus-01/constant-detail.json)、[`hotspot-source-audit.md`](../../out/gpu-profile-20260912/analysis-01/hotspot-source-audit.md)、[`predicated-break-compile-identity.json`](../../out/gpu-profile-20260912/analysis-01/predicated-break-compile-identity.json)、[`shader-map-resolved.json`](../../out/gpu-profile-20260912/analysis-01/shader-map-resolved.json)。
+证据：[`ab-counters.json`](../../../out/gpu-profile-20260912/ab-01/ab-counters.json)、[`original-a.png`](../../../out/gpu-profile-20260912/ab-01/original-a.png)、[`break-a.png`](../../../out/gpu-profile-20260912/ab-01/break-a.png)、[`constant-detail.json`](../../../out/gpu-profile-20260912/focus-01/constant-detail.json)、[`hotspot-source-audit.md`](../../../out/gpu-profile-20260912/analysis-01/hotspot-source-audit.md)、[`predicated-break-compile-identity.json`](../../../out/gpu-profile-20260912/analysis-01/predicated-break-compile-identity.json)、[`shader-map-resolved.json`](../../../out/gpu-profile-20260912/analysis-01/shader-map-resolved.json)。

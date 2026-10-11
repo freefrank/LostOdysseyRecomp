@@ -1,6 +1,6 @@
 # Menu boundary fixes (base 6e48a9c9)
 
-> Historical repair and validation record for the named baseline. The test commands remain a focused reference; the results and missing coverage below belong to that repair, not today's checkout. See [current status](STATUS.md) and the [test catalog](../tools/tests/README.md) before resuming work.
+> Historical repair and validation record for the named baseline. The test commands remain a focused reference; the results and missing coverage below belong to that repair, not today's checkout. See [current status](../STATUS.md) and the [test catalog](../../tools/tests/README.md) before resuming work.
 
 ## Changes
 

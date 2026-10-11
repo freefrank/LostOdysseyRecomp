@@ -1,6 +1,6 @@
 # 阴影纹理采样 LOD（2026-09-05）
 
-> **调查记录。** 结论与待办只对应文中日期、版本和捕获；现行问题、交付与验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **调查记录。** 结论与待办只对应文中日期、版本和捕获；现行问题、交付与验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 ## 2026-09-24：f2548 桥面闪烁调查
 
@@ -14,9 +14,9 @@
 
 ## v0.4.2 已发布 — 2026-09-08
 
-已发布的 v0.4.2 包含六条已核对的战斗地形／物件／蒙皮 TAA 路径。17,287 项 CPU 检查、原 Map3 战斗 32 相位对照及原轮胎回归属于下文标识的独立候选；这些结果不等于最终 v0.4.2 包的实跑。敌人消散闪烁仍未修复，原报告者及更广场景验收保持待办。正式包 CI、产物身份／完整性和匿名下载核验已通过，复用既有功能证据，未重复运行应用；详见[状态总表](../STATUS.md)。下文保留各阶段证据。
+已发布的 v0.4.2 包含六条已核对的战斗地形／物件／蒙皮 TAA 路径。17,287 项 CPU 检查、原 Map3 战斗 32 相位对照及原轮胎回归属于下文标识的独立候选；这些结果不等于最终 v0.4.2 包的实跑。敌人消散闪烁仍未修复，原报告者及更广场景验收保持待办。正式包 CI、产物身份／完整性和匿名下载核验已通过，复用既有功能证据，未重复运行应用；详见[状态总表](../../STATUS.md)。下文保留各阶段证据。
 
-当前汇总见[成果报告](../WORK_REPORT_2026-09-05.md)和[状态总表](../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
+当前汇总见[成果报告](../WORK_REPORT_2026-09-05.md)和[状态总表](../../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
 
 2026-09-08 更新：已验收的 Map3 TAA 轮胎修复现已包含在正式发布的 [v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 中；详见文末发布记录。其余独立阴影报告保持原状态。
 
@@ -152,9 +152,9 @@ f1526／1527／1528 裤腿 ROI（x648–671、y480–511）的显示 RGB 均值�
 
 整合 Release 构建通过；`LoTemporalJitterTest` 共 6,463 项 CPU 检查使用捕获常量和独立 shader 数学验证 32 个相位、四种分辨率下的绘制层对齐、阴影重建、深度 UV 与拒绝条件。Scene fixture、75 项相机数学、141 项历史诊断，以及 GPU temporal resolve 和 polygon offset fixture 均通过。
 
-冻结开发包 EXE `6d3bc037…` 在有效 Map2 存档点完成 Auto 1440p 的 TAA／AA Off 检查，实际加载的 EXE、DXC 和 DXIL 哈希已核对，两种输出均经目视检查。TAA 的 32 个阴影相位全部应用补偿，上传常量与 float32 公式完全一致；Off 的 32 个样本均保持 VS／PS 常量不变。该位置没有原报告的轮胎补光 pass；依据导出坐标尝试定位原网格未成功，不能算原场景实跑通过。对应轮胎层的证据仍限定为捕获常量的 CPU 回归，修正版原位连续画面与玩家验收待完成。TAA 继续为实验功能，当前改动未发布。包身份与限定证据见[状态总表](../STATUS.md)。
+冻结开发包 EXE `6d3bc037…` 在有效 Map2 存档点完成 Auto 1440p 的 TAA／AA Off 检查，实际加载的 EXE、DXC 和 DXIL 哈希已核对，两种输出均经目视检查。TAA 的 32 个阴影相位全部应用补偿，上传常量与 float32 公式完全一致；Off 的 32 个样本均保持 VS／PS 常量不变。该位置没有原报告的轮胎补光 pass；依据导出坐标尝试定位原网格未成功，不能算原场景实跑通过。对应轮胎层的证据仍限定为捕获常量的 CPU 回归，修正版原位连续画面与玩家验收待完成。TAA 继续为实验功能，当前改动未发布。包身份与限定证据见[状态总表](../../STATUS.md)。
 
-诊断与测试说明见 [tools/tests/README.md](../../tools/tests/README.md)。本地证据保留在 `out/tire-flicker-20260907-f14774/REPORT.md` 和 `out/v0.4.1-tire-fix/`，原始私人导出不纳入公开文档。另一个 AMD 首战身体阴影导出 `f3182` 仍未确定时序根因，用户要求挂起；本次实现不关闭该报告，也不重新判定前述 Map 13 调查。
+诊断与测试说明见 [tools/tests/README.md](../../../tools/tests/README.md)。本地证据保留在 `out/tire-flicker-20260907-f14774/REPORT.md` 和 `out/v0.4.1-tire-fix/`，原始私人导出不纳入公开文档。另一个 AMD 首战身体阴影导出 `f3182` 仍未确定时序根因，用户要求挂起；本次实现不关闭该报告，也不重新判定前述 Map 13 调查。
 
 ## 2026-09-07：第一候选原场景验收失败
 
@@ -176,7 +176,7 @@ r2 的整合构建、8,192 项 `LoTemporalJitterTest` 和 Scene fixture 通过�
 
 实际 EXE `da681c89…` 在同用户存档、同 Map3 位置，TAA／60 FPS／Auto 1440p 下记录完整 32 相位：128 个基础深度、64 个轮胎材质、128 个补光和 32 个阴影绘制均已应用偏移，配对 VP 上传逐 bit 相同，阴影补偿公式完全一致，没有 frame-gap reset。近处轮胎最终 TAA ROI 的 32 相位平均亮度范围从第一候选的 2.2184 降至 r2 的 0.19284（0–255）；单像素范围仍非零，不能据此宣称零闪烁或全面修复。r2 尚待玩家视觉验收，第一候选的失败结论继续保留。
 
-开发 ZIP 为 `out/v0.4.1-tire-v2/delivery/LostOdysseyRecomp-windows-x64-v0.4.1-dev-r2.zip`，包含另项已实现的三帧导出；45 个包文件和 importer self-test 通过，包身份见[状态总表](../STATUS.md)。详细证据为 `out/v0.4.1-tire-v2/capture-review/REPORT.md`、`r2-map3-60/audit.json` 和 `r2-map3-60/pixel-audit.json`。本检查点的 r2 AA Off 包实跑仍在补充，不提前记为通过。
+开发 ZIP 为 `out/v0.4.1-tire-v2/delivery/LostOdysseyRecomp-windows-x64-v0.4.1-dev-r2.zip`，包含另项已实现的三帧导出；45 个包文件和 importer self-test 通过，包身份见[状态总表](../../STATUS.md)。详细证据为 `out/v0.4.1-tire-v2/capture-review/REPORT.md`、`r2-map3-60/audit.json` 和 `r2-map3-60/pixel-audit.json`。本检查点的 r2 AA Off 包实跑仍在补充，不提前记为通过。
 
 ## 2026-09-07：r2 原轮胎位置用户验收通过
 
@@ -188,7 +188,7 @@ r2 实际解压包的同位置 AA Off 检查也已完成：352 条绘制上传�
 
 ## 2026-09-08：v0.4.1 正式发布
 
-[v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 于 00:03:50 UTC 从 `eb43f108d2cdd3aef682a32b202425c28d168472` 发布，包含 r2 已验收修复及三帧日志导出。正式 EXE 为 `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`；与 r2 相比，渲染和捕获源码未变，源码版本改为 `0.4.1`。CI、45 项包文件、安装器及 8 项无图形启动路径检查、匿名下载核验通过。本轮正式包没有加载游戏或重做 GPU／玩家验收，画面依据仍为上方 r2 的同 Map3 对照与用户确认。独立 AMD 报告继续挂起；包哈希及证据见[状态总表](../STATUS.md)。
+[v0.4.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.4.1) 于 00:03:50 UTC 从 `eb43f108d2cdd3aef682a32b202425c28d168472` 发布，包含 r2 已验收修复及三帧日志导出。正式 EXE 为 `9e0e13d991830de84d7fb85ac7a2543f779dbf7936ee5acd4cabe7cce5b2c57f`；与 r2 相比，渲染和捕获源码未变，源码版本改为 `0.4.1`。CI、45 项包文件、安装器及 8 项无图形启动路径检查、匿名下载核验通过。本轮正式包没有加载游戏或重做 GPU／玩家验收，画面依据仍为上方 r2 的同 Map3 对照与用户确认。独立 AMD 报告继续挂起；包哈希及证据见[状态总表](../../STATUS.md)。
 
 <a id="battle-terrain-flicker-v041"></a>
 
@@ -212,7 +212,7 @@ F1 记录的是临时上传修改前的 guest 常量；AA3、scene-ready 或 TAA
 
 `LoTemporalJitterTest` 通过 17,287 项 CPU 检查，覆盖 32 相位和 720p／1080p／1440p／4K。使用捕获常量独立计算三层位置后，修正的深度／材质／补光结果完全一致，Z/W、材质补光的 clip-derived 采样坐标、蒙皮路径与 Off／拒绝条件均受检查。旧材质不偏移的负对照产生最高 0.487771 像素层间分离；修正后的实际 raster offset 相对目标 jitter 最大误差为 0.000426 像素。这是两个不同指标，均非游戏画面改善幅度。原轮胎与 d55 阴影重建 CPU 用例继续通过。日志：`out/battle-taa-fix/LoTemporalJitterTest.log`。
 
-`renderer.cpp` 增加 `LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE=1`，可在定向 resolve trace 活跃时记录已提交绘制的实际常量。`slot` 保留生产映射结果，`log_slot` 仅指明诊断读取槽位，使拒绝新增 shader 的旧基线也能记录原始／上传 VP；诊断不会强制 jitter 或绕过保护条件。用法见[测试说明](../../tools/tests/README.md)。
+`renderer.cpp` 增加 `LO_TEMPORAL_DRAW_LOG_WITH_RESOLVE_TRACE=1`，可在定向 resolve trace 活跃时记录已提交绘制的实际常量。`slot` 保留生产映射结果，`log_slot` 仅指明诊断读取槽位，使拒绝新增 shader 的旧基线也能记录原始／上传 VP；诊断不会强制 jitter 或绕过保护条件。用法见[测试说明](../../../tools/tests/README.md)。
 
 候选使用独立 v0.4.1 源码快照，排除并行的 Issue #7 崩溃诊断改动，版本为 `0.4.2-dev`。本检查点仅确认实现与 CPU 验证；实际上传、修正版／Off 连续画面对照、Map3 轮胎回归和实际开发包验证仍在进行，尚无玩家验收、提交、推送或发布。上节诊断保持其原日期边界；本战斗缺陷暂不关闭，已验收轮胎与两个分别挂起的 AMD 报告不合并。
 

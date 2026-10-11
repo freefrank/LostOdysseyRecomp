@@ -1,6 +1,6 @@
 # LORecomp：Clang 优化与测试基准交接文档 (2026-09-17)
 
-> **历史归档。** 本交接记录于 2026-09-17，保留当时的设备基线、构建产物与基准卡点诊断。它不是当前系统状态或执行指令；乌斯拉城后续实测与交付结果以 [乌斯拉城 CPU 优化实测报告](../notes/PERF_CITY_UHRA_RESULTS.zh-CN.md) 与 [STATUS](../STATUS.md) 为准。
+> **历史归档。** 本交接记录于 2026-09-17，保留当时的设备基线、构建产物与基准卡点诊断。它不是当前系统状态或执行指令；乌斯拉城后续实测与交付结果以 [乌斯拉城 CPU 优化实测报告](notes/PERF_CITY_UHRA_RESULTS.zh-CN.md) 与 [STATUS](../STATUS.md) 为准。
 
 本文档面向接手 LORecomp 优化计划后续基准测试与 PR 05–09 推进的 Agent。文档汇总当前设备状态、已完成产物、实测诊断证据与下一步具体操作路径。
 
@@ -74,7 +74,7 @@
 ### 4.1 历史成熟脚本机制
 参考工程内的成熟测试脚本：
 - `out/perf-ring/drive-city.ps1`
-- `docs/notes/city-60fps-handoff.md`
+- `docs/archive/notes/city-60fps-handoff.md`
 - `.omo/cpu-perf/drive-city-3c6t.ps1`
 
 成熟脚本的核心机制**不是纯静态固定帧按键**，而是配合动态状态机：

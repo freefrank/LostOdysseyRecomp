@@ -1,6 +1,6 @@
 # v0.4.0 后续开发交接（2026-09-07）
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。 下文 `out/...` 为历史本地证据路径；这些文件当前不在工作树，也不随仓库分发。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。 下文 `out/...` 为历史本地证据路径；这些文件当前不在工作树，也不随仓库分发。
 
 ## 2026-09-07：v0.4.0 正式发布
 
@@ -8,7 +8,7 @@
 
 两版均通过普通便携 game-path 路径启动，实际 EXE 和 DXC／DXIL 路径及哈希已核对。Map2 Auto 1080p／TAA3 达到有效 1920×1080，无分配回退及 error／fatal／critical 日志。各空发现缓存命中 52 文件、零扫描／CPX 回退，20,686 来源哈希与各版保留的完整扫描基准一致；亚洲／美欧分别读取 142,093,208／142,289,816 字节。编译缓存为此前任务副本，不作全冷性能对照。两张截图已检查，静态结果不证明时序伪影已修复；两个已知预编译失败仍保留。7 项用户文件及两份 seed 哈希不变，任务进程由 harness 结束（exit 1，不记作自然退出验证）。
 
-证据见 `out/release-v0.4.0/{package-validation.json,installer-self-test.json,smoke-result.json,release-published.json,public-verification.json}` 及 [STATUS](../STATUS.md)。发布说明按用户要求在标签之后改为独立英文／简体中文区块，属于文案排版调整，未改变标签或产物内容；公开正文与当前 changelog 版本正文一致。新构建画质验收、Issue #5 原战斗和 Issue #6 原机器诊断仍未完成。下文旧提交前说明和冻结开发包记录保留各自时点，不作为当前发布状态。
+证据见 `out/release-v0.4.0/{package-validation.json,installer-self-test.json,smoke-result.json,release-published.json,public-verification.json}` 及 [STATUS](../../STATUS.md)。发布说明按用户要求在标签之后改为独立英文／简体中文区块，属于文案排版调整，未改变标签或产物内容；公开正文与当前 changelog 版本正文一致。新构建画质验收、Issue #5 原战斗和 Issue #6 原机器诊断仍未完成。下文旧提交前说明和冻结开发包记录保留各自时点，不作为当前发布状态。
 
 ## 2026-09-07 提交前状态说明
 
@@ -49,11 +49,11 @@
 
 两版都运行当前交付包 EXE `3aae46b8…`，live 模块确认包内 DXC／DXIL；日志分别识别 Asia/default（5 种游戏语言）和 USA/Europe（6 种）。相同 Map2 seed 的普通 Auto 1080p／AA3／30 FPS 静止检查均到达场景，有效内部尺寸与已审阅截图均为 1920×1080，无分配回退；每版实际清单内全部 20,686 来源哈希与 scanner 一致。7 项用户文件、任务 seed 和 EXE 保持，任务进程均由 harness 结束，不记作自然退出验证。
 
-两版仍有相同的已知 `ps_78af7d75d932c582`／`vs_291187f5ef8ba74a` 预编译失败，不属于本次新漏提取。本次验证不涵盖原报告战斗、章节换盘、全语言／全游戏画质或新玩家验收。证据在 `out/v0.4.0-followup/edition-validation/` 的 `scanner/{layout-audit.json,comparison.json}`、`runtime-summary.json` 及两版 runtime 子目录；版别详情见本次验证报告（历史本地路径：`out/v0.4.0-followup/edition-validation/REPORT.md`）及[美欧版记录](europe-support.md)。本轮未修改源码、包或发布状态。
+两版仍有相同的已知 `ps_78af7d75d932c582`／`vs_291187f5ef8ba74a` 预编译失败，不属于本次新漏提取。本次验证不涵盖原报告战斗、章节换盘、全语言／全游戏画质或新玩家验收。证据在 `out/v0.4.0-followup/edition-validation/` 的 `scanner/{layout-audit.json,comparison.json}`、`runtime-summary.json` 及两版 runtime 子目录；版别详情见本次验证报告（历史本地路径：`out/v0.4.0-followup/edition-validation/REPORT.md`）及[美欧版记录](../../notes/europe-support.md)。本轮未修改源码、包或发布状态。
 
 ### 此前交付：CPX 已知布局直接提取（2026-09-07）
 
-正常发现改为完整的小型 FPI 摘要＋FPD 名称／大小＋extent offset／size 布局绑定，跳过已知空包、non-CPX extent 和已成功提取的重复 profile；含 shader 的首个包只读取 header／table／所需 block，全部微码校验后才发布来源。未读块及同尺寸重复副本修改不在此契约的检查范围内。未知布局回到整包读取／SHA256 身份路径，仍匹配 profile 时可用索引；未知内容或提取失败完整回退。renderer 的 `LO_SHADER_FULL_SCAN=1` 禁用各索引并以 strict 每次完整扫描；v5 direct／strict 清单与旧 v4 分离。见 [shader 准备说明](shader-preparation.md)。
+正常发现改为完整的小型 FPI 摘要＋FPD 名称／大小＋extent offset／size 布局绑定，跳过已知空包、non-CPX extent 和已成功提取的重复 profile；含 shader 的首个包只读取 header／table／所需 block，全部微码校验后才发布来源。未读块及同尺寸重复副本修改不在此契约的检查范围内。未知布局回到整包读取／SHA256 身份路径，仍匹配 profile 时可用索引；未知内容或提取失败完整回退。renderer 的 `LO_SHADER_FULL_SCAN=1` 禁用各索引并以 strict 每次完整扫描；v5 direct／strict 清单与旧 v4 分离。见 [shader 准备说明](../../notes/shader-preparation.md)。
 
 正式亚洲版串行应用冷缓存对照为 30.015 → 13.280 秒（减少 55.75%），资源读取 9,781,918,469 → 142,093,208 字节（减少 98.55%），解码量相同；20,686 个来源名称／逐 SHA256 全等，集合摘要 `57cb834795fd99419f0a1980f86e38c7123317eed3d627576269f61fd03055fc`。候选暖发现 1.654 秒，只读 10,616,568 字节来源校验。两组顺序执行且没有并行构建，未清空 OS 缓存，不是完整启动或 FPS 测量；旧 49.578 秒及构建并行的 13.264 秒初测只作诊断。证据见 `cpx-direct/{baseline-final-cold.log,candidate-final-cold.log,candidate-final-warm.log,source-comparison-final.json,fixtures.log}`。
 
@@ -73,7 +73,7 @@
 
 该次 TAA 修复开发包为 `out/v0.4.0-followup/packages-taa-fixed/LostOdysseyRecomp-windows-x64-c548b480-dev.zip`，41,418,024 字节，SHA256 `f88ea47ced4a6556f184cdf432919bf467d9e0ab28d87819604dca108ab7f094`；45 项 manifest、EXE 和两份编译 DLL 与受测 build 一致，安装器 self-test 返回 0，无游戏／用户数据。主代理读取 Auto 4K 进程模块，确认使用 build 自带的 DXC／DXIL；证据为 `package-taa-fixed-audit.json`。旧 `packages-final` ZIP 保持原样；新包仍为含未提交改动的本地开发包，未 commit／push／release。
 
-Plume 两处纹理创建失败返回 null 已同步到主仓库补丁，原有 hunk 保留；从固定子模块 HEAD 的隔离 index／object store 应用后，Git 规范化 blob 与当前源一致，原始混合换行差异单独记录。XenonRecomp 补丁核验也通过，真实子模块源／index／HEAD 未改变。见 [依赖补丁说明](../../tools/patches/README.md) 和 `patch-sync-validation.json`。
+Plume 两处纹理创建失败返回 null 已同步到主仓库补丁，原有 hunk 保留；从固定子模块 HEAD 的隔离 index／object store 应用后，Git 规范化 blob 与当前源一致，原始混合换行差异单独记录。XenonRecomp 补丁核验也通过，真实子模块源／index／HEAD 未改变。见 [依赖补丁说明](../../../tools/patches/README.md) 和 `patch-sync-validation.json`。
 
 ### 既有 freeze 修复与本轮关联检索
 
@@ -85,7 +85,7 @@ Plume 两处纹理创建失败返回 null 已同步到主仓库补丁，原有 h
 
 | 工作 | 实现与证据边界 |
 |---|---|
-| CPX 定位索引 | 已实现完整压缩包 SHA256 身份校验、已知空包免解码、按 shader 所在独立块提取、未知／修改包完整扫描回退及去重免重复比较读取。独立应用冷缓存对照均输出 20,686 个同名且逐 SHA256 一致的来源；发现阶段 74.457 → 35.484 秒，解码字节减少 94.82%。未清空 Windows 文件缓存，不包含 DXIL 编译、PSO 或整体启动耗时。见[详细验证](shader-preparation.md#2026-09-07cpx-内置定位索引本地未发布)。 |
+| CPX 定位索引 | 已实现完整压缩包 SHA256 身份校验、已知空包免解码、按 shader 所在独立块提取、未知／修改包完整扫描回退及去重免重复比较读取。独立应用冷缓存对照均输出 20,686 个同名且逐 SHA256 一致的来源；发现阶段 74.457 → 35.484 秒，解码字节减少 94.82%。未清空 Windows 文件缓存，不包含 DXIL 编译、PSO 或整体启动耗时。见[详细验证](../../notes/shader-preparation.md#2026-09-07cpx-内置定位索引本地未发布)。 |
 | 内部分辨率 | 设置和渲染实现已接入：Auto 按实际输出内的 16:9 区域选取，最高 3840×2160；手动 720p／1080p／1440p／2160p，输出分辨率独立。212 项配置／菜单检查、五语言 720p／4K 共 10 张八行 GDI 图，以及 37 项尺寸规则、16 个翻译 shader 的 DXC 编译通过。36 项 GPU 数值采样及非法宽度失败／随后正常分配恢复通过。build-v2 同 Map2／AA3／1080p 输出下的静止和移动实测，已验证实际 720p、Auto 1080p、4K 场景／深度／TAA 来源及历史复用，无 CPU／分配回退；最终 build-v3 Auto 4K 输出、八行图形页、预览／15.017 秒回退／Keep、实际 1440p 场景返回和同进程重开也已通过。新版本用户验收与更多场景／硬件仍待完成。 |
 | [Issue #5](https://github.com/freefrank/LostOdysseyRecomp/issues/5) | 原函数范围吞并了间接调用入口 `0x82AFA388`，并发现同类入口 `0x82AFD150`。本地四盘镜像的边界指令一致；已拆分配置并重新生成入口，生成库构建通过。56 项真实生成 dispatch／分支／script cursor 检查通过。原报告的 USA, Europe 战斗存档未提供，仍待对应场景复测；不宣称整场战斗或报告版本已验收。 |
 | [Issue #6](https://github.com/freefrank/LostOdysseyRecomp/issues/6) | 附件仅 5 行，在游戏加载前报告 4 GiB guest 地址空间失败；没有失败阶段或 OS 错误码，尚无证据认定和 #5 同根因。已增加阶段、错误码／文本、映射上下文及系统内存诊断，保留原映射行为。186 项注入失败检查及真实 alias 分配／释放检查通过；原机器根因和恢复仍未知。 |
@@ -104,7 +104,7 @@ Plume 两处纹理创建失败返回 null 已同步到主仓库补丁，原有 h
 
 本轮开发 ZIP 为 `out/v0.4.0-followup/packages-final/LostOdysseyRecomp-windows-x64-c548b480-dev.zip`，41,415,021 字节，SHA256 `e3d5dd6ecec00d407677e871f80ec300377c38f8c936b838484b055eb20e3ee8`。45 项 manifest 文件哈希与依赖白名单检查通过，包内 EXE 与最终 v3 一致，安装指南逐字节匹配修正后的 `docs/INSTALLING.md`，`InstallGame --self-test` 返回 0，未打入游戏或用户数据；证据 `package-final-audit.json`。`c548b480-dev` 记录本地基础提交及开发包身份，包含本轮未提交改动，不是该 clean commit 的正式 Release。公开下载仍为 v0.3.0，未新增 commit／push／release 或玩家验收。补充运行最终 ZIP 解压的同 SHA256 EXE，进程模块确认加载包内且与 manifest 哈希一致的 `dxcompiler.dll`／`dxil.dll`，复制 Map2 存档在普通 Auto 1080p／AA3／30 FPS 设置下通过静止与短移动检查，source／TAA／depth 各 12 帧为 1920×1080、无 allocation fallback，7 项用户文件复核不变；证据为 `package-final-smoke/result.json`、`package-final-smoke/loaded-shader-libraries.json` 和 `package-final-audit.json`，使用任务自有暖缓存，不用于冷启动或 FPS 结论，ZIP 哈希保持不变。
 
-本地证据集中在 `out/v0.4.0-followup/`：`cpx/validation.md`、`cpx/source-comparison.json`、`settings/cpu-test.log`、`issues/bounds-image-audit.json`、`issues/memory/validation.md`。用户 EXE、save、profile、settings、game-path 的保护清单为 `user-baseline.json`；本轮实机验证使用与用户安装隔离的产物和任务自有缓存；v2 场景对照共用该任务缓存，不属于冷 I/O 基准。当前进度以本节及 [STATUS](../STATUS.md) 为准。
+本地证据集中在 `out/v0.4.0-followup/`：`cpx/validation.md`、`cpx/source-comparison.json`、`settings/cpu-test.log`、`issues/bounds-image-audit.json`、`issues/memory/validation.md`。用户 EXE、save、profile、settings、game-path 的保护清单为 `user-baseline.json`；本轮实机验证使用与用户安装隔离的产物和任务自有缓存；v2 场景对照共用该任务缓存，不属于冷 I/O 基准。当前进度以本节及 [STATUS](../../STATUS.md) 为准。
 
 下文保留开发开始前的同日交接。其“本次仅整理”“CPX 仍完整解码”“内部仍为 720p”及 v3 清单说明描述当时版本；本轮资源清单已经升为 v4，并增加来源列表完整性摘要。旧 PID、旧构建及旧验证窗口不代表当前运行状态。
 
@@ -123,7 +123,7 @@ Plume 两处纹理创建失败返回 null 已同步到主仓库补丁，原有 h
 - 当前提交：`c548b4802a3e96cdcfd93d0b5a30f68317be3b73`（`c548b48`，67 文件），仅本地提交，未 push／发布。正式公开版仍为 v0.3.0；此前 `c` 授权不包含推送或发布。
 - 已验证 0.4.0-dev EXE SHA256：`81752F19551DC111F6083CCCCAF383BA7F863ED5AB657592B7FB9F3DA3E682EF`；本次再次读取用户 EXE，哈希一致。
 - 本地 ZIP：`out/v0.4.0-delivery/packages/LostOdysseyRecomp-windows-x64-239e8516-dev.zip`，38,439,812 字节，SHA256 `1A3C51D84F8A46F43C26CECEC4579EC305BF489F0C09647EF63A87FFEA3F06AB`。
-- ZIP 的 `239e8516-dev` 是打包时脏源码身份；不能因后来提交而改写 manifest／冻结身份，或将它描述为从当前提交重新构建的正式包。见本地 [交付说明](../../out/v0.4.0-delivery/README.md) 与 [验证记录](../../out/v0.4.0-delivery/package-verification.json)。
+- ZIP 的 `239e8516-dev` 是打包时脏源码身份；不能因后来提交而改写 manifest／冻结身份，或将它描述为从当前提交重新构建的正式包。见本地 [交付说明](../../../out/v0.4.0-delivery/README.md) 与 [验证记录](../../../out/v0.4.0-delivery/package-verification.json)。
 
 用户实际目录来自此前进程 63860／60472 的可执行文件路径，本次已按字面路径读取目录、设置与日志：
 
@@ -137,7 +137,7 @@ D:\Mihoyo\LostOdysseyRecomp-windows-x64-2cd56708-dev`哈哈
 
 保护用户目录的 `game`、`save`、`profile`、`settings.ini`、`game-path.txt` 和现有 `cache`；使用独立实验目录及存档／设置副本，变更前后核对哈希。冷缓存对照另建目录，不清理用户暖缓存，不覆盖可用 EXE。只清理本轮拥有的进程和临时产物，保留审阅证据。
 
-仓库还有既有混合文档差异、`captures/`、根 `settings.ini` 及两个子模块的修改；不要还原、顺手提交或清空。选择边界见 [本地提交清单](../../out/v0.4.0-commit/docs-selection.md)。子模块适配已有 [受版本管理的补丁与说明](../../tools/patches/README.md)，不要将已应用补丁重复应用或重置子模块丢失修改。
+仓库还有既有混合文档差异、`captures/`、根 `settings.ini` 及两个子模块的修改；不要还原、顺手提交或清空。选择边界见 [本地提交清单](../../../out/v0.4.0-commit/docs-selection.md)。子模块适配已有 [受版本管理的补丁与说明](../../../tools/patches/README.md)，不要将已应用补丁重复应用或重置子模块丢失修改。
 
 ## 优先一：CPX 内置定位索引
 
@@ -163,7 +163,7 @@ D:\Mihoyo\LostOdysseyRecomp-windows-x64-2cd56708-dev`哈哈
 
 验收：独立冷缓存基线／候选的 shader 集合与 hash 完全一致，比较真实读取量、解码量、发现时间，再测暖缓存及损坏／未知身份回退。UI 分开显示缓存验证、按索引提取、回退扫描、编译；修复 CPX 条目数被当作 MB 显示的问题。
 
-源码入口：[resource_index_types.h](../../LostOdysseyRecomp/gpu/shader/resource_index_types.h)；[resource_scan.h](../../LostOdysseyRecomp/gpu/shader/resource_scan.h) 的裸索引约 75–108 行、缓存约 151–184 行、CPX 约 220–256 行、manifest 写入约 262–267 行；[renderer.cpp](../../LostOdysseyRecomp/gpu/renderer.cpp) 的发现调用；[video.cpp](../../LostOdysseyRecomp/gpu/video.cpp) 的进度显示。行号仅对应本次读到的版本。
+源码入口：[resource_index_types.h](../../../LostOdysseyRecomp/gpu/shader/resource_index_types.h)；[resource_scan.h](../../../LostOdysseyRecomp/gpu/shader/resource_scan.h) 的裸索引约 75–108 行、缓存约 151–184 行、CPX 约 220–256 行、manifest 写入约 262–267 行；[renderer.cpp](../../../LostOdysseyRecomp/gpu/renderer.cpp) 的发现调用；[video.cpp](../../../LostOdysseyRecomp/gpu/video.cpp) 的进度显示。行号仅对应本次读到的版本。
 
 ## 优先二：实际场景的 TAA 与缩放收益
 
@@ -177,7 +177,7 @@ Standard／High 当前仅为双线性／双三次空间重采样，guest 内部�
 4. 区分分支未生效、场景覆盖不足、历史频繁失效和算法收益不足，再决定修复。配置成功、GPU dispatch、像素差分或放大差分图都不能代替可感知收益；完成后由主代理审阅并请用户复查该场景。
 5. 性能窗口关闭截图／readback／PCM等会扰动时序的采集，画质证据与帧耗时证据分别记录；保留可用空间 AA 回退和基线。
 
-源码入口：[renderer.cpp](../../LostOdysseyRecomp/gpu/renderer.cpp) 的场景选取、jitter、Resolve 和有限日志；[temporal_scene.h](../../LostOdysseyRecomp/gpu/temporal_scene.h)、[temporal_history.h](../../LostOdysseyRecomp/gpu/temporal_history.h)、[temporal_aa.cpp](../../LostOdysseyRecomp/gpu/temporal_aa.cpp)；[presentation.cpp](../../LostOdysseyRecomp/gpu/presentation.cpp) 的空间质量与合成；[video.cpp](../../LostOdysseyRecomp/gpu/video.cpp) 的 `DrawComposited` 最终输出。
+源码入口：[renderer.cpp](../../../LostOdysseyRecomp/gpu/renderer.cpp) 的场景选取、jitter、Resolve 和有限日志；[temporal_scene.h](../../../LostOdysseyRecomp/gpu/temporal_scene.h)、[temporal_history.h](../../../LostOdysseyRecomp/gpu/temporal_history.h)、[temporal_aa.cpp](../../../LostOdysseyRecomp/gpu/temporal_aa.cpp)；[presentation.cpp](../../../LostOdysseyRecomp/gpu/presentation.cpp) 的空间质量与合成；[video.cpp](../../../LostOdysseyRecomp/gpu/video.cpp) 的 `DrawComposited` 最终输出。
 
 ## 已有证据与范围边界
 
@@ -185,4 +185,4 @@ Standard／High 当前仅为双线性／双三次空间重采样，guest 内部�
 - TAA v7：本地 `out/v0.4.0-temporal/integrated-user-taa-v7/{validation.md,audit.json}`，64 组静止／移动记录、55 reuse／9 reset、95 次处理与最终 skip；不是用户当前场景或全场景质量证明。文字证据见 `out/v0.4.0-text/clarity-delivery-v7.md`。
 - 60 FPS：移动、对白／音频、菜单和营地验证已完成；营地约 29 秒为 59.798 FPS。最终 Ring 长按约 7 秒观察为 59.962 FPS，核心计时一致；未测精准释放／Perfect，不比较不同敌人数／HP 的整场伤害或时长。见 `out/v0.4.0-fps/battle-v7-validation.md`，不宣称全游戏锁 60。
 - 120 FPS 可延期，不阻塞交付。[DLSS/FSR 可行性研究](temporal-upscaling-feasibility.md) 已保留官方契约与当前深度／相机／jitter 证据；供应商后端、真实对象 MV、曝光／色彩空间仍是后续工程，不能宣称已支持 DLSS/FSR。
-- 按 [测试选择说明](../../tools/tests/README.md) 只运行受改动影响的检查，不因文档交接重跑已通过的全部测试。每轮记录实际程序／源码身份，保留失败与回退条件，按需同步已验证结果和用户验收。
+- 按 [测试选择说明](../../../tools/tests/README.md) 只运行受改动影响的检查，不因文档交接重跑已通过的全部测试。每轮记录实际程序／源码身份，保留失败与回退条件，按需同步已验证结果和用户验收。

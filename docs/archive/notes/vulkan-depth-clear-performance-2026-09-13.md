@@ -1,6 +1,6 @@
 # Vulkan depth-clear performance — 2026-09-13
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 The Vulkan depth-clear path was optimized after 720 EDRAM tile rectangles were shown to be exactly coalescible into one rectangle. `gpu/depth_clear_layout.h` now provides a conservative coalescing helper, used by the Vulkan renderer. The D3D12 mapping output is unchanged, and holes and uncleared regions remain preserved. The same diagnostic candidate also applies texture-hash avalanche mixing, caches captured-shader identities, skips redundant Plume rebinding for the same framebuffer, and uses an immutable 32-slot descriptor cache per `GpuSlot` with one 24-byte push. The two-slot/fence contract is retained.
 

@@ -1,6 +1,6 @@
 # Lost Odyssey Recomp v0.6.0 — This one means a lot to me
 
-> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../ROADMAP.md) and [STATUS](../STATUS.md) for delivered scope and remaining work.
+> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../../ROADMAP.md) and [STATUS](../../STATUS.md) for delivered scope and remaining work.
 
 Hey r/recomps! When I posted v0.5.0, I finally had a moment to write something other than a crash report. I may have spoken too soon. I've spent an unreasonable amount of time since then chasing bugs, comparing frames, staring at logs, and trying to make this game run better on hardware that wasn't on my desk.
 

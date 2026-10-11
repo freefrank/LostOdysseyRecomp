@@ -1,6 +1,6 @@
 # MV audit repair on the geometric replay baseline
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Runtime base: `c605eb4d4126d93d6033c8cb510d232218f98d1b` (mv).
 Audit supplied by the user: `mv-review-9d7b778.md`.

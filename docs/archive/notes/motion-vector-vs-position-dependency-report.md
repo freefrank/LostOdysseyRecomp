@@ -1,6 +1,6 @@
 # Motion Vector Vertex Shader Position Dependency Analysis (M1 Report)
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 Date: 2026-09-18
 Dataset Source: `LostOdysseyRecomp-build-inputs/feedback` (Triage Ledger, Shader Reviews, Microcode)

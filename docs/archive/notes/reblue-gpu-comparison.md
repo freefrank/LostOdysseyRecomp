@@ -1,6 +1,6 @@
 # ReBlue vs Lost Odyssey GPU 对照 — 2026-09-11
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 对照对象：[zolaware/reblue](https://github.com/zolaware/reblue)（Blue Dragon，`main`）与当前 Lost Odyssey `renderer.cpp` / `video.cpp`。两边都走 [plume](https://github.com/zolaware/reblue)。这不是性能验收，也不是 60 fps 声明。
 

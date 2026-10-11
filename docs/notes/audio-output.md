@@ -8,7 +8,7 @@
 
 `LO_AUDIO_DIAGNOSTICS=1` 可启用每个XMA上下文的解码、跳过、写入、错误与显式游标更新计数；SDL队列日志同时记录丢弃和提交错误。私有音频与录音只保留在本地ignored的out目录。
 
-当前汇总见[成果报告](../WORK_REPORT_2026-09-05.md)和[状态总表](../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
+当前汇总见[成果报告](../archive/WORK_REPORT_2026-09-05.md)和[状态总表](../STATUS.md)。下文按实验时间保留证据，早期未完成状态不代表最新结果。
 
 `apu/xma.cpp` 从交替输入缓冲中的2048字节包组装压缩帧，调用 XMAFRAMES 解码器，将512样本解码结果转成客体需要的大端交错 int16，按128样本子帧写入输出环。`apu/audio.cpp` 将游戏最终提交的6声道 planar 大端 float 下混成48kHz双声道 PCM，通过 SDL 队列输出。设备缓冲有上限，回调追赶有界，非有限值归零。
 
@@ -90,7 +90,7 @@ F15118B4新副本7860已实际读入同一营地（shot1710），20秒采样camp
 
 只读保留out/xma-command-camp-01/dialogue-bitstreams的34个去重输入缓冲及contexts.json（20秒/0.2秒采样、最多64文件），均本地忽略的私有诊断样本；另xma-bitstreams仅抓到残留219包循环音，不能冒充失败对白样本。下一步可离线对比包边界/跨buffer解析。当前SwapInputBuffer把offset设32，参考设0且从包头取首帧偏移，是否导致本例尚未验证，未改代码。
 
-随后7860在约556秒查询823CF430空读退出，故未取得切图后shot6。现场input8/shots6未完成、audio2完成；不自动重启，不把截图超时当挂起。详细寄存器见third-map-hang.md。无提交。
+随后7860在约556秒查询823CF430空读退出，故未取得切图后shot6。现场input8/shots6未完成、audio2完成；不自动重启，不把截图超时当挂起。详细寄存器见[third-map-hang.md](../archive/notes/third-map-hang.md)。无提交。
 
 ## 2160帧离线解码与失败帧取证（2026-09-05）
 

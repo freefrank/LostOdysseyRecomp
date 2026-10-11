@@ -41,7 +41,7 @@ $origPlayerSaves = Get-ChildItem $playerSave -Recurse -File -ErrorAction Silentl
     [pscustomobject]@{ Path = $_.FullName; Length = $_.Length; LastWriteTimeUtc = $_.LastWriteTimeUtc.ToString('o') }
 }
 
-# Proven Continue load from encounter-animation.md, plus extra A for Last Saved Game.
+# Proven Continue load from docs/archive/notes/encounter-animation.md, plus extra A for Last Saved Game.
 # Do not send Down: that opens 千年之梦. Last saved is user01 (second slot, city).
 $env:LO_BACKGROUND = '1'
 $env:LO_DEBUG_LOG = '1'

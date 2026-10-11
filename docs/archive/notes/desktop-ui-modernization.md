@@ -1,6 +1,6 @@
 # Desktop UI modernization
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record covers the additional installer, updater and Debug Menu work targeting v0.5.0. Intermediate 0.4.xx versions remain internal. Public v0.4.2 packages and historical test binaries retain their original identities.
 

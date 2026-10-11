@@ -12,7 +12,7 @@
 读取。两者本应是同一块物理内存，旧实现却让 CPU 永远读不到 GPU 更新的结果。
 CPU 因而把角色标记为不可见，跳过材质 pass，只留下深度/后处理形成的剪影。
 
-此前 `gpu.md` 中“遮挡查询已排除”的结论失效：调整 `LO_ZPD_MODE` 只改变 A 区写入，
+此前 [`gpu.md`](../archive/notes/gpu.md) 中“遮挡查询已排除”的结论失效：调整 `LO_ZPD_MODE` 只改变 A 区写入，
 对独立的 C 区读值没有影响；draw 数不变不能排除遮挡查询。
 
 ## 逆向证据
@@ -69,7 +69,7 @@ API 对照：[MapViewOfFile3](https://learn.microsoft.com/en-us/windows/win32/ap
 覆盖 A→C、C→A 清零、E 的一页偏移、虚拟内存隔离、跨页及物理区末端、
 CPU 初始化/GPU 写回/CPU 读回的查询往返，以及释放后重新分配。
 
-正常游戏复跑使用 `handoff.md` 的自动按键序列，记录在 `out/render-alias-fixed/`。
+正常游戏复跑使用 [`handoff.md`](../archive/notes/handoff.md) 的自动按键序列，记录在 `out/render-alias-fixed/`。
 运行时不设置遮挡禁用、ZPD 覆盖、强制颜色/深度调试开关。
 
 

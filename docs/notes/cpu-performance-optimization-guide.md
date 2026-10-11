@@ -15,15 +15,15 @@
 
 配套记录：
 
-- [Card A city measurement（2026-09-14；published v0.5.11，无耗尽资源）](cpu-card-a-city-2026-09-14.md)
-- [Card B city measurement（2026-09-14；published v0.5.11，B1/B2/B3 不实施）](cpu-card-b-city-2026-09-14.md)
-- [Card C prepare gate（2026-09-14；published v0.5.11，不实施 Parallel Prepare）](cpu-card-c-prepare-gate-2026-09-14.md)
-- [Card D 3C6T city measurement（2026-09-14；published v0.5.11，默认不钉核）](cpu-card-d-3c6t-city-2026-09-14.md)
-- [CPU 重编译深度诊断（2026-09-13；历史诊断）](cpu-recomp-deep-2026-09-13.md)
-- [性能分析完整报告（2026-09-11；v0.5.4 诊断）](perf-complete-analysis.md)
-- [GPU 环缓冲实测对比（2026-09-11；诊断，非验收）](perf-gpu-ring-compare.md)
-- [Vulkan depth-clear performance（2026-09-13；已发布到 v0.5.9）](vulkan-depth-clear-performance-2026-09-13.md)
-- 未进 notes 索引、但仍是有效历史证据：[CPU live profile（2026-09-13；`EqualSampleBlock64`）](cpu-live-profile-2026-09-13.md)
+- [Card A city measurement（2026-09-14；published v0.5.11，无耗尽资源）](../archive/notes/cpu-card-a-city-2026-09-14.md)
+- [Card B city measurement（2026-09-14；published v0.5.11，B1/B2/B3 不实施）](../archive/notes/cpu-card-b-city-2026-09-14.md)
+- [Card C prepare gate（2026-09-14；published v0.5.11，不实施 Parallel Prepare）](../archive/notes/cpu-card-c-prepare-gate-2026-09-14.md)
+- [Card D 3C6T city measurement（2026-09-14；published v0.5.11，默认不钉核）](../archive/notes/cpu-card-d-3c6t-city-2026-09-14.md)
+- [CPU 重编译深度诊断（2026-09-13；历史诊断）](../archive/notes/cpu-recomp-deep-2026-09-13.md)
+- [性能分析完整报告（2026-09-11；v0.5.4 诊断）](../archive/notes/perf-complete-analysis.md)
+- [GPU 环缓冲实测对比（2026-09-11；诊断，非验收）](../archive/notes/perf-gpu-ring-compare.md)
+- [Vulkan depth-clear performance（2026-09-13；已发布到 v0.5.9）](../archive/notes/vulkan-depth-clear-performance-2026-09-13.md)
+- 未进 notes 索引、但仍是有效历史证据：[CPU live profile（2026-09-13；`EqualSampleBlock64`）](../archive/notes/cpu-live-profile-2026-09-13.md)
 
 证据分级（全文通用）：
 
@@ -149,26 +149,26 @@ D3D12 的 fence wait 是 `WaitForSingleObjectEx(..., INFINITE)`；Vulkan 是 `vk
 | 两槽 command/descriptor ring | 已在当前代码 | `kGpuSlots = 2`；`Flush` 不等待 |
 | Descriptor 默认上限 1800/2048 | 已在当前代码 | `render_batch_policy.h` |
 | Dummy 3D/cube bank | 已在当前代码 | unique 2D 才消耗 limit |
-| `EqualSampleBlock64` | 已发布到 v0.5.8 | `geometry_prepare.h` SSE2 4×16；[cpu-live-profile](cpu-live-profile-2026-09-13.md) |
+| `EqualSampleBlock64` | 已发布到 v0.5.8 | `geometry_prepare.h` SSE2 4×16；[cpu-live-profile](../archive/notes/cpu-live-profile-2026-09-13.md) |
 | Texture-key avalanche mixing | 已发布到 v0.5.9 | `gpu/texture_key.h`：`>>16 * 0x7FEB352D >>15 * 0x846CA68B >>16` |
-| Shader identity cache、Plume bind suppress、per-slot descriptor reuse | 已随 v0.5.9 候选发布 | [vulkan-depth-clear](vulkan-depth-clear-performance-2026-09-13.md) |
+| Shader identity cache、Plume bind suppress、per-slot descriptor reuse | 已随 v0.5.9 候选发布 | [vulkan-depth-clear](../archive/notes/vulkan-depth-clear-performance-2026-09-13.md) |
 | `poll_wait` 自适应退避 | 已在当前代码 | 仅 `Query` / `SharedValue` / `GpuPoll`；32 次后 yield；GpuPoll 上限 50 µs |
 | Query `getenv` / `LO_QUERY_TRACE` 缓存 | 已随 v0.5.8 | 同上 live profile 后续提交 |
 
 ### 3.2 历史测量（禁止当当前基线）
 
-**v0.5.4 城市 1280×720**（[perf-complete-analysis.md](perf-complete-analysis.md)，已发布包）：
+**v0.5.4 城市 1280×720**（[perf-complete-analysis.md](../archive/notes/perf-complete-analysis.md)，已发布包）：
 
 - 约 31–44 fps，1800–2300 draws，`draw_ms` 21.19，`fence_wait` 15.40 ms **嵌在 `tDraw` 里**。
 - 当时源码：`Flush` 提交后立刻等 fence。该片段已过期。
 - 标题画面约 60 fps、114 draws、2 batches、`fence_wait` 4.34 ms。
 
-**两槽诊断、非验收**（[perf-gpu-ring-compare.md](perf-gpu-ring-compare.md)，同城市场景 vs v0.5.4）：
+**两槽诊断、非验收**（[perf-gpu-ring-compare.md](../archive/notes/perf-gpu-ring-compare.md)，同城市场景 vs v0.5.4）：
 
 - RelWithDebInfo、两槽、limit=1800：FPS 57.7，batches 2.00，`descriptor_splits` 0，`fence_wait` 1.67 ms（范围 0.001–11.72）。
 - 这是诊断对照，不是验收，也不是当前 `cpu-perf` 二进制的基线。
 
-**source-0.5.8 WPR**（[cpu-recomp-deep-2026-09-13.md](cpu-recomp-deep-2026-09-13.md)，commit `6e6f11cf`，PID 38988，4K internal / 1920 window / AA3 / D3D12 / 8060S，包约 40W）：
+**source-0.5.8 WPR**（[cpu-recomp-deep-2026-09-13.md](../archive/notes/cpu-recomp-deep-2026-09-13.md)，commit `6e6f11cf`，PID 38988，4K internal / 1920 window / AA3 / D3D12 / 8060S，包约 40W）：
 
 - 心跳 31.9121 FPS，2284–2302 draws。
 - Render TID 占 41.86% samples；guest render 24.0%，几乎全在 `sub_824856A0`（其中 79.93% 在 `FSceneRenderer::Render`）。
@@ -176,14 +176,14 @@ D3D12 的 fence wait 是 `WaitForSingleObjectEx(..., INFINITE)`；Vulkan 是 `vk
 - Texture cache 快照 386 keys、33 buckets、最长链 84；hash hotspot 约 2.93% render self。证据目录 `out/cpu-recomp-deep-20260913/`。
 - **链长 84 发生在 avalanche mixing 发布之前。** v0.5.9 之后不得再把「修复哈希」写成未做工作；剩余问题是：**当前包是否仍有长链、lookup 是否仍占可测 CPU。**
 
-**`EqualSampleBlock64` live**（[cpu-live-profile-2026-09-13.md](cpu-live-profile-2026-09-13.md)；隔离 9.45–14.99×；固定 user00 40W 4K）：
+**`EqualSampleBlock64` live**（[cpu-live-profile-2026-09-13.md](../archive/notes/cpu-live-profile-2026-09-13.md)；隔离 9.45–14.99×；固定 user00 40W 4K）：
 
 - 均值 FPS 46.787 → 47.074（+0.61%）。
 - vertex-match 2.279 → 0.488 ms。
 - GPU queue 仍约 20.7 ms，所以局部 CPU 变快 **没有** 把 4K 送到 60。
 - 同一候选 1080p 均值 59.981。已发布到 v0.5.8。
 
-**寄存器 SIMD 否决**（[vulkan-depth-clear-performance-2026-09-13.md](vulkan-depth-clear-performance-2026-09-13.md)）：
+**寄存器 SIMD 否决**（[vulkan-depth-clear-performance-2026-09-13.md](../archive/notes/vulkan-depth-clear-performance-2026-09-13.md)）：
 
 - const 路径 1.531 → 2.157 ms，FPS 42.72，已回退。
 - 4K Vulkan 60W user01 静态：depth-clear coalesce 把均值 FPS 从 7.496 拉到 43.476——这是 **GPU** 收益，不能算进 CPU 多线程故事。
@@ -247,7 +247,7 @@ Amdahl 警告：城市场景的历史主因是提交路径上的串行等待，�
 **问题与证据**  
 v0.5.4 城市 `fence_wait` 15.40 ms 来自「`Flush` 立刻等」。当前 `Flush` 已不等，两槽 + 1800/2048 limit 的诊断曾把同城市场景 `fence_wait` 降到 1.67 ms 均值，但范围仍到 11.72 ms，且那不是验收、也不是 v0.5.11 / `cpu-perf` 基线。
 
-**当前测量（事实，2026-09-14）**：published v0.5.11 Hidden 1280×720 D3D12 AA3 60-cap 城市 `user01`，1836 city frames。`fence_wait_ms` 均值 0.0007、max 0.1371（0 帧 >1 ms）；`nested_flush_ms` 全 0；descriptor / upload / arena splits 全 0（D3D12 limit 1800）；`gpu_batches` 均值 1.0005；GPU queue 均值 0.8115 ms、max 1.5575（0 帧 >16.67 ms）。耗尽资源类 = null。历史 15.40 ms 与两槽诊断 1.67 ms **不得**替换本基线。详见 [Card A city measurement](cpu-card-a-city-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：published v0.5.11 Hidden 1280×720 D3D12 AA3 60-cap 城市 `user01`，1836 city frames。`fence_wait_ms` 均值 0.0007、max 0.1371（0 帧 >1 ms）；`nested_flush_ms` 全 0；descriptor / upload / arena splits 全 0（D3D12 limit 1800）；`gpu_batches` 均值 1.0005；GPU queue 均值 0.8115 ms、max 1.5575（0 帧 >16.67 ms）。耗尽资源类 = null。历史 15.40 ms 与两槽诊断 1.67 ms **不得**替换本基线。详见 [Card A city measurement](../archive/notes/cpu-card-a-city-2026-09-14.md)。
 
 **代码入口**  
 `LostOdysseyRecomp/gpu/renderer.cpp`：`Flush`、`RecycleSlot`、`Begin`、`DrawImpl`、`Upload`。  
@@ -302,7 +302,7 @@ source-0.5.8：`memcmp` 占 Render **self samples** 的 7.0612%，不是整帧 7
 **回退**  
 保留 `memcmp` 路径为 fallback；寄存器 SIMD 的否决仍然有效。
 
-**当前测量（事实，2026-09-14）**：同一 published v0.5.11 城市包加 `LO_VERTEX_TIMING=1`，1846 city frames。`match_ms` 均值 0.1535（阶段和 0.3616 的 42%）。`LO_VERTEX_TIMING` 是 vertex-cache 墙钟，**不是** `memcmp` 长度直方图。直方图仍缺。详见 [Card B city measurement](cpu-card-b-city-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：同一 published v0.5.11 城市包加 `LO_VERTEX_TIMING=1`，1846 city frames。`match_ms` 均值 0.1535（阶段和 0.3616 的 42%）。`LO_VERTEX_TIMING` 是 vertex-cache 墙钟，**不是** `memcmp` 长度直方图。直方图仍缺。详见 [Card B city measurement](../archive/notes/cpu-card-b-city-2026-09-14.md)。
 
 **未决条件**  
 当前包的长度直方图与调用点占比。没有直方图不得扩 SIMD。本轮 **不实施**。
@@ -332,7 +332,7 @@ Key 相等语义不变；并发查找若存在，必须仍是现有锁/无锁约
 **回退**  
 保持现有 avalanche。
 
-**当前测量（事实，2026-09-14）**：城市 `shader_lookup_ms` 均值 0.051、`pipeline_lookup_ms` 0.03；vertex cache `rehashes` 合计 0（131072 buckets）。evictions 是 vertex-cache 容量周转，不是 texture hash chain。没有 texture 链长快照。lookup 在 avalanche 后不热。详见 [Card B city measurement](cpu-card-b-city-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：城市 `shader_lookup_ms` 均值 0.051、`pipeline_lookup_ms` 0.03；vertex cache `rehashes` 合计 0（131072 buckets）。evictions 是 vertex-cache 容量周转，不是 texture hash chain。没有 texture 链长快照。lookup 在 avalanche 后不热。详见 [Card B city measurement](../archive/notes/cpu-card-b-city-2026-09-14.md)。
 
 **未决条件**  
 v0.5.9+ 的 texture cache 链长快照。没有快照且 lookup 不热则 **不实施**、不要再写一种 mix。
@@ -362,7 +362,7 @@ guest 可见的 query/shared value 语义不变；yield 不得变成「结果尚
 **回退**  
 保持 32 / 50 µs。
 
-**当前测量（事实，2026-09-14）**：本次城市跑未设 `LO_QUERY_TRACE`，也没有新的 guest spin 证据。保持 32 / 50 µs。详见 [Card B city measurement](cpu-card-b-city-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：本次城市跑未设 `LO_QUERY_TRACE`，也没有新的 guest spin 证据。保持 32 / 50 µs。详见 [Card B city measurement](../archive/notes/cpu-card-b-city-2026-09-14.md)。
 
 **未决条件**  
 新的 guest spin 调用点证据。没有就不做。本轮 **不实施**。
@@ -396,7 +396,7 @@ Game + Render + GPU worker + 音频已经占满或接近 3C6T。新 worker 默�
 **回退**  
 编译期或运行时开关回到串行 prepare；默认关。
 
-**当前测量（事实，2026-09-14）**：复用 Card B 城市日志，无新城市跑。启动 shader bundle 2248 ms（设备模块 56 ms），pipeline prepare 21 ms / 4 workers / 222 recipes。城市场景 per-frame `copy_ms` 0.0091、`shader_lookup_ms` 0.051、`pipeline_lookup_ms` 0.03，小于排队/复制开销。新 Parallel Prepare 缺快照/所有权/join/取消/串行回退。详见 [Card C prepare gate](cpu-card-c-prepare-gate-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：复用 Card B 城市日志，无新城市跑。启动 shader bundle 2248 ms（设备模块 56 ms），pipeline prepare 21 ms / 4 workers / 222 recipes。城市场景 per-frame `copy_ms` 0.0091、`shader_lookup_ms` 0.051、`pipeline_lookup_ms` 0.03，小于排队/复制开销。新 Parallel Prepare 缺快照/所有权/join/取消/串行回退。详见 [Card C prepare gate](../archive/notes/cpu-card-c-prepare-gate-2026-09-14.md)。
 
 **未决条件**  
 独立任务尺寸、输入稳定性、与已有异步工作的叠加。全是 gate。本轮 **不实施** 新 Parallel Prepare；不要再加第三套准备池。Card D 仍默认关。
@@ -428,7 +428,7 @@ Game + Render + GPU worker + 音频已经占满或接近 3C6T。新 worker 默�
 **回退**  
 默认关；开关关即恢复 OS 调度。
 
-**当前测量（事实，2026-09-14）**：published v0.5.11 Hidden 1280×720 D3D12 城市，进程 affinity `0x3F`（9800X3D 核 0–2 / 逻辑 0–5），1370 city frames。`fence_wait` 均值 0.0008、`gpu_queue` 0.816、`draw_ms` 3.805 / p95 4.556 / max 13.65，`over_budget=0%`，splits 全 0。冷启动 bundle 缺失时 prepare 仍按 `hardware_concurrency=16` 要 15 个 worker。UnleashedRecomp 的 `KeSetAffinityThread` 同为 stub，无 host pinning。详见 [Card D 3C6T city measurement](cpu-card-d-3c6t-city-2026-09-14.md)。
+**当前测量（事实，2026-09-14）**：published v0.5.11 Hidden 1280×720 D3D12 城市，进程 affinity `0x3F`（9800X3D 核 0–2 / 逻辑 0–5），1370 city frames。`fence_wait` 均值 0.0008、`gpu_queue` 0.816、`draw_ms` 3.805 / p95 4.556 / max 13.65，`over_budget=0%`，splits 全 0。冷启动 bundle 缺失时 prepare 仍按 `hardware_concurrency=16` 要 15 个 worker。UnleashedRecomp 的 `KeSetAffinityThread` 同为 stub，无 host pinning。详见 [Card D 3C6T city measurement](../archive/notes/cpu-card-d-3c6t-city-2026-09-14.md)。
 
 **未决条件**  
 本机拓扑可读；3C6T 作用于整个进程的信封已测。默认 pinning 仍不实施。这不是 Steam Deck、15 W、4C8T 或 1080p60@15W。
@@ -496,11 +496,11 @@ Agent 运行时测试须后台、默认静音、不抢前台。需要前台交�
 
 ## 9. 给下一位实施者的起步清单
 
-1. **先做卡片 A 的测量**，不要加线程。用当前要优化的二进制（写明是 `cpu-perf` 本地构建还是已发布 v0.5.11 包）在固定城市场景打开 `LO_RENDER_TIMING` / `LO_GPU_STATS`，记录每帧 `Flush` 次数、`fence_wait`、`descriptor_splits`、GPU queue。2026-09-14 已对 **published v0.5.11** 城市包完成一次测量，见 [Card A city measurement](cpu-card-a-city-2026-09-14.md)。
-2. 若 `fence_wait` 已接近诊断对照里的低个位数毫秒且 `descriptor_splits = 0`：把「再加 slot / 再抬 limit」标为低优先级，转卡片 B 的当前 profile。Card A 测量满足该条件（`fence_wait` 均值 0.0007 ms，splits 全 0）。Card B 当前 profile 已记录：B1 仍缺长度直方图故不扩 SIMD；B2 lookup 不热且无 texture 链长快照；B3 无新 guest spin。见 [Card B city measurement](cpu-card-b-city-2026-09-14.md)。
+1. **先做卡片 A 的测量**，不要加线程。用当前要优化的二进制（写明是 `cpu-perf` 本地构建还是已发布 v0.5.11 包）在固定城市场景打开 `LO_RENDER_TIMING` / `LO_GPU_STATS`，记录每帧 `Flush` 次数、`fence_wait`、`descriptor_splits`、GPU queue。2026-09-14 已对 **published v0.5.11** 城市包完成一次测量，见 [Card A city measurement](../archive/notes/cpu-card-a-city-2026-09-14.md)。
+2. 若 `fence_wait` 已接近诊断对照里的低个位数毫秒且 `descriptor_splits = 0`：把「再加 slot / 再抬 limit」标为低优先级，转卡片 B 的当前 profile。Card A 测量满足该条件（`fence_wait` 均值 0.0007 ms，splits 全 0）。Card B 当前 profile 已记录：B1 仍缺长度直方图故不扩 SIMD；B2 lookup 不热且无 texture 链长快照；B3 无新 guest spin。见 [Card B city measurement](../archive/notes/cpu-card-b-city-2026-09-14.md)。
 3. 若仍有中途 `Flush`：指出耗尽的是 descriptor、upload 还是 arena，再单独提案。禁止笼统「多缓冲」。
 4. 任何并行准备：先写数据契约（快照、所有权、join、取消），再写代码。默认关。3C6T 下最多再占 1 条硬件线程。
-5. Affinity 保持实验、默认关。进程级 3C6T 城市信封已测，见 [Card D](cpu-card-d-3c6t-city-2026-09-14.md)；不要把 pinning 写进 `KeSetAffinityThread`。修 stub 返回值若是正确性问题，单独提交，不和性能混。这不是 Steam Deck / 15 W 验收。
+5. Affinity 保持实验、默认关。进程级 3C6T 城市信封已测，见 [Card D](../archive/notes/cpu-card-d-3c6t-city-2026-09-14.md)；不要把 pinning 写进 `KeSetAffinityThread`。修 stub 返回值若是正确性问题，单独提交，不和性能混。这不是 Steam Deck / 15 W 验收。
 6. 没有新的授权不要改源版本，不要把本指南写进 Release notes。
 
 **第一项工作就是测量，不是实现。**

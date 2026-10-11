@@ -1,8 +1,8 @@
 # FSR 超分与 DLSS 帧生成阶段性交接文档（P0 阶段）
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。 Gate 1 后于 2026-09-27 获维护者验收，已知 SDK 同步报告保留为待办；下文 NOT PASSED 仅为当时结论。见[Gate 1 记录](gate1-host-repair-20260927.md)。
 
-> 本文保留 OpenCode 停止时的历史快照。后续 2026-09-24 Codex 检查点见[阶段性交接](fsr-dlss-fg-codex-handoff.zh-CN.md)；以下旧基线和未启动状态不代表当前进度，现行状态见[路线图](../ROADMAP.md)。
+> 本文保留 OpenCode 停止时的历史快照。后续 2026-09-24 Codex 检查点见[阶段性交接](fsr-dlss-fg-codex-handoff.zh-CN.md)；以下旧基线和未启动状态不代表当前进度，现行状态见[路线图](../../ROADMAP.md)。
 
 ## 1. 任务状态与基线定义
 

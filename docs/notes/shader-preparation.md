@@ -73,7 +73,7 @@ v0.3.0 已发布 CPX／XEX 发现与已记录管线准备；以下定位优化�
 
 整合 `build-v1` 的原生 720p 启动也记录 20,686 来源、52 个裸文件索引／0 裸扫描、10,060 CPX 索引命中／0 回退、20,339 重复包和 9,781,918,469 资源读取字节，发现耗时 34,132 ms。此时 DXIL 首次编译仍在进行；该记录验证扫描器接入实际启动，不是总启动或画质验收。
 
-证据位于原工作区 `out/v0.4.0-followup/cpx/`：`validation.md/json`、`source-comparison.json`、四份 cold／warm 日志、两组来源摘要及 `fixtures-final.log`。计时后只修正了进度单位、失败校验读取计数及 fixture 的全扫描开关；最终 fixture 重新通过，成功计时路径不变，未重复基准。可选生成器 [generate_cpx_shader_index.py](../../tools/generate_cpx_shader_index.py) 仅在显式运行时读取调用者提供的游戏资源；正常构建使用已检入的头文件。更多同场景画质和启动整合验证见[后续交接](handoff-v0.4.0-followup.md)。
+证据位于原工作区 `out/v0.4.0-followup/cpx/`：`validation.md/json`、`source-comparison.json`、四份 cold／warm 日志、两组来源摘要及 `fixtures-final.log`。计时后只修正了进度单位、失败校验读取计数及 fixture 的全扫描开关；最终 fixture 重新通过，成功计时路径不变，未重复基准。可选生成器 [generate_cpx_shader_index.py](../../tools/generate_cpx_shader_index.py) 仅在显式运行时读取调用者提供的游戏资源；正常构建使用已检入的头文件。更多同场景画质和启动整合验证见[后续交接](../archive/notes/handoff-v0.4.0-followup.md)。
 
 ## 多线程预编译
 

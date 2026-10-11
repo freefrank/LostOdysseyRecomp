@@ -1,6 +1,6 @@
 # Live v0.5.7 CPU and 4K profiling — 2026-09-13
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This record covers diagnosis, two local CPU implementations and limited runtime comparisons; it does not establish stable whole-game performance or player acceptance.
 

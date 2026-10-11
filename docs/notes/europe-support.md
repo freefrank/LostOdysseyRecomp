@@ -43,7 +43,7 @@ Both editions ran the current package EXE (SHA256 `3aae46b8d171cec4f977733a5a5f2
 
 Both editions retain the same two known precompilation failures, `ps_78af7d75d932c582` and `vs_291187f5ef8ba74a`; these are not new extraction omissions. This covers source equivalence and a bounded Map2 scene, not the original reported battle, chapter transitions, complete language/audio coverage, whole-game compatibility or new player acceptance.
 
-The edition validation report (historical local path: `out/v0.4.0-followup/edition-validation/REPORT.md`) summarizes the results. Evidence is under `out/v0.4.0-followup/edition-validation/`: `scanner/{layout-audit.json,comparison.json}`, `runtime-summary.json` and `{asia-runtime,usa-europe-runtime}/{result.json,loaded-libraries.json,scene.png}`. The package remains ZIP SHA256 `79308a1508edc459360d8b0791329e719cd5bb75a100ab57a61fab5f23059cef`; no source, package or publication state changed. See the [current shader-discovery contract](shader-preparation.md) and [follow-up handoff](handoff-v0.4.0-followup.md).
+The edition validation report (historical local path: `out/v0.4.0-followup/edition-validation/REPORT.md`) summarizes the results. Evidence is under `out/v0.4.0-followup/edition-validation/`: `scanner/{layout-audit.json,comparison.json}`, `runtime-summary.json` and `{asia-runtime,usa-europe-runtime}/{result.json,loaded-libraries.json,scene.png}`. The package remains ZIP SHA256 `79308a1508edc459360d8b0791329e719cd5bb75a100ab57a61fab5f23059cef`; no source, package or publication state changed. See the [current shader-discovery contract](shader-preparation.md) and [follow-up handoff](../archive/notes/handoff-v0.4.0-followup.md).
 
 ## Compatibility evidence
 

@@ -1,11 +1,11 @@
 # Full-Game Motion Vector：持续开发交接与验收计划
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 日期：2026-09-18  
 目标仓库：`freefrank/LostOdysseyRecomp`；目标分支：`mv`  
 本次核对的代码基线：`f8130e947455f06b377d36ad3f4596c17bc5ec7b`  
-前一份交接：`docs/notes/full-game-motion-vector-next-step-handoff.md`
+前一份交接：`docs/archive/notes/full-game-motion-vector-next-step-handoff.md`
 
 > 给执行agent：先修构建、历史生命周期和未初始化MV读取，再实现真正的GPU previous-position replay。不要继续用CPU相机重投影替代物体MV交付。本文件补充并修正前一份交接；冲突处以本文件和重新核实的代码证据为准。
 

@@ -2,7 +2,7 @@
 
 The macOS measurements and completed statements below are historical notes from
 the MikeRavenelle fork at [`b7951cd`](https://github.com/MikeRavenelle/LostOdysseyRecomp/tree/b7951cd5aa0830b5342aeb3efa835f878e227796).
-They are not M1 Max re-tests for this integration. See [development status](STATUS.md)
+They are not M1 Max re-tests for this integration. See [development status](../STATUS.md)
 for the current build and validation boundary.
 
 Project-wide list, not only macOS. Ranked by expected gain against risk. Every item
@@ -120,7 +120,7 @@ depth-borrowing experiment on Metal was.
 - Argument buffer reuse across draws with identical bindings.
 - MetalFX Temporal behind the existing upscaler interface (spatial is done). Design
   and measured gain (720p -> 1440p: ~50 FPS vs 33 native in Numara):
-  [METALFX_TEMPORAL_DESIGN.md](METALFX_TEMPORAL_DESIGN.md).
+  [METALFX_TEMPORAL_DESIGN.md](../METALFX_TEMPORAL_DESIGN.md).
 
 ## Frame pacing and audio (all platforms)
 

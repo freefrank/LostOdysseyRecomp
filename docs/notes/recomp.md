@@ -102,7 +102,7 @@ VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若
 （0x04）。`bdzlr`（BO=0x12）/`bdnzlr`（BO=0x10）因此被当成无条件返回，函数在那里截止，后续指令被切成独立函数。
 本镜像里命中的是 CRT `memset`（0x82B7BC40）的字节尾部 `stb; bdzlr; stb; bdzlr; stb; blr`：长度 %4 为 2 或 3 时
 少写 1~2 个字节。表现为 `USkeletalMeshComponent::SkelControlIndex` 63 项只有 61 项被填成 255，进战斗场景
-越界崩溃（见 kernel.md）。修正为 `(BO & 0x14) != 0x14`，同时把该分支里 `SearchBlock(lBase)` 的相对偏移改成绝对
+越界崩溃（见 [kernel.md](../archive/notes/kernel.md)）。修正为 `(BO & 0x14) != 0x14`，同时把该分支里 `SearchBlock(lBase)` 的相对偏移改成绝对
 地址（原来永远查不到，重复扫描）。修正在 `tools/patches/XenonRecomp-lostodyssey.patch`（XenonAnalyse/function.cpp）。
 重跑后函数数减 2（0x82B7BCD0/0x82B7BCD8 并回 memset），无其他变化；`baseline_func_mapping.txt` 中已删掉这两行。
 XenonRecomp 只重写内容变化的文件，但函数数变化会让 175 号之后的分文件全部重新编号、重新编译。

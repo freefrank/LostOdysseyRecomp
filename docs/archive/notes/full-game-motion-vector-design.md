@@ -1,10 +1,10 @@
 # Full-Game Motion Vector Architecture & Design (Phase 1 & 2)
 
-> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../ROADMAP.md) and [STATUS](../STATUS.md) for delivered scope and remaining work.
+> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../../ROADMAP.md) and [STATUS](../../STATUS.md) for delivered scope and remaining work.
 
 **Date:** 2026-09-18  
 **Scope:** Host Motion-Vector (MV) Representation, Pipeline Architecture, and Contract Definition  
-**Prerequisite:** `docs/notes/full-game-motion-vector-audit.md`  
+**Prerequisite:** `docs/archive/notes/full-game-motion-vector-audit.md`  
 **Reference Handoff:** `Lost Odyssey Recomp — Full-Game Motion Vector Development Handoff.md`
 
 ---

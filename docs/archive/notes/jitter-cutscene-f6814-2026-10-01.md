@@ -1,6 +1,6 @@
 # Cutscene depth and floor jitter — 2026-10-01
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 The user reported a new flicker in a cutscene on v0.7.25 (Vulkan, 3840x2160, DLAA requested) and took an F1 capture, `render-17908971077376209-f6813.zip`. The cutscene was paused for the capture, so frames 6814 and 6815 are identical and show the paused image, not the flicker itself. The scene has a large gear-like ring in front and glowing circles on the floor. Earlier in the same run, the runtime suspect log reported both shaders below at frame 6181: `e9b8dd7e7c5a3425` as `depth_writer_after_jittered_geometry` (draw 90, depth write) and `d31e2122a3b51434` as `after_jittered_geometry` (draw 282). Their camera companion was the jittered `52e4405f97159d2f`, with the same world and the same camera.
 

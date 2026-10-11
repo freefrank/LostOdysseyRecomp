@@ -1,6 +1,6 @@
 # Native Vulkan DLSS Color Qualification Plan & Implementation Specification
 
-> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../ROADMAP.md) and [STATUS](../STATUS.md) for delivered scope and remaining work.
+> **Historical proposal or draft.** Targets and commands below record the planning checkpoint, not a current execution request. Check [ROADMAP](../../ROADMAP.md) and [STATUS](../../STATUS.md) for delivered scope and remaining work.
 
 Date: 2026-09-21
 Status: **Implemented qualification path; focused boundary evidence passed; broad visual acceptance pending**

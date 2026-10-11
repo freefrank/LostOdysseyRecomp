@@ -1,6 +1,6 @@
 # Full-Game Motion Vector — Next Development Handoff
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 **Target branch:** `mv`  
 **Current base commit:** `7002f9ca711d1998cc43349900f23f2ca19dbdea`  

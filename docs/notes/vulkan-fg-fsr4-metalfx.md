@@ -162,7 +162,7 @@ DLSS uses the existing `LO_ENABLE_STREAMLINE_FG=ON`, official
 [`LoStreamline.cmake`](../../cmake/LoStreamline.cmake). Select `dlss` and request
 2–6; `slDLSSGGetState().numFramesToGenerateMax` remains authoritative. DLSS keeps
 its immediate-presentation requirement and the historical SDK validation caveat
-in [the earlier acceptance record](gate1-host-repair-20260927.md).
+in [the earlier acceptance record](../archive/notes/gate1-host-repair-20260927.md).
 
 For Linux, the missing work is a native version of the FFX swapchain/pacer's
 threads, events, critical sections, QPC timing and waiting, or an independently

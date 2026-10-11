@@ -1,6 +1,6 @@
 # CPU recompilation deep-dive — 2026-09-13
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 This note records a bounded diagnosis of the user's report that the recent CPU optimization still does not sustain 60 FPS. It does not establish that the static recompilation approach is the cause, and it does not record an optimization, build, test, player acceptance or release.
 

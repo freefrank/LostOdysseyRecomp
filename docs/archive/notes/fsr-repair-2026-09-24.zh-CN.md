@@ -1,6 +1,6 @@
 # FSR分支修复：录制恢复、设备丢失与Vulkan内存选择
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。
 
 > [!NOTE]
 > **2026-09-24 状态说明**：本篇记录为 FSR 分支独立修复时的阶段性验证记录。后续该分支修复已随提交 `6eef30d257f2e14ce30a546217574a0dc74fad69` 合并至 `main` 并包含于公开正式发布的 [v0.6.15](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.6.15)（Release CI [36044604844](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/36044604844)）。用户已验收实测的 Windows 画面与 Linux 运行验证；P2 全场景完整画质验收依然独立且保持 In Progress。

@@ -11,7 +11,7 @@
 | Determine what is implemented, validated, accepted or published | [Status ledger](STATUS.md) |
 | Read delivered changes | [Changelog](../CHANGELOG.md) |
 | Find outstanding work | [Roadmap](ROADMAP.md) / [简体中文](ROADMAP.zh-CN.md), with the [Maintainer Project](https://github.com/users/freefrank/projects/3) |
-| Find a subsystem investigation | [Complete notes index](notes/README.md), grouped by topic and document role |
+| Find a subsystem investigation | [Notes index](notes/README.md), grouped by topic and document role; superseded notes are in the [archive](archive/README.md) |
 | See every cutscene played on three machines | [Cutscene tour](CUTSCENE_TOUR.md) / [过场巡游](CUTSCENE_TOUR.zh-CN.md) |
 | Find development, analysis or test commands | [Tool catalog](../tools/README.md) / [Test catalog](../tools/tests/README.md) |
 | Understand diagnostics and consent | [Privacy](../PRIVACY.md) / [隐私说明](../PRIVACY.zh-CN.md) |
@@ -23,11 +23,11 @@
 
 Guides describe maintained procedures. Research notes explain mechanisms and their evidence. Dated experiments, handoffs, audits and release drafts retain their original results and a visible historical label. A historical “current”, “unreleased”, failed gate, PID or next-step instruction refers to its checkpoint. Follow the linked current entry point before resuming it. Unfinished research is not automatically accepted or cancelled merely because it is old.
 
-Keep established paths and anchors when practical. If a document is superseded, add its successor and preserve the original evidence; if moved, retain a short redirect and repair incoming relative links. Avoid duplicating changing version or task status throughout indexes. Source commits and stable identifiers are better references than moving line numbers. Local `out/` evidence is not shipped with the repository; label unavailable paths explicitly instead of presenting them as working download links. Do not index generated `out/` content.
+Keep established paths and anchors when practical. If a document is superseded, add its successor and preserve the original evidence. A document that is outdated (a finished handoff or progress log, a fixed-bug timeline, a past release plan, a one-off measurement a later one replaced) moves to [`docs/archive/`](archive/README.md) with `git mv`: notes keep their file name under `archive/notes/`, root documents go to `archive/`. Repair every incoming relative link and path mention in the same change, leave no redirect stub, and add a row to the archive index. Avoid duplicating changing version or task status throughout indexes. Source commits and stable identifiers are better references than moving line numbers. Local `out/` evidence is not shipped with the repository; label unavailable paths explicitly instead of presenting them as working download links. Do not index generated `out/` content.
 
 The main README is English and links to the synchronized Chinese README. Existing language pairs remain paired; most engineering notes are Chinese. Third-party and skill-submodule documentation remains maintained upstream. Follow any workspace or session `AGENTS.md` instructions and the versioned [engineering principles](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md).
 
-Reusable investigation methods and constraints may also be summarized in Basic Memory, with source paths, dates and applicability limits. Search for existing notes before creating another entity. Repository documents retain technical evidence and current project state; the private knowledge base is not a release ledger. The [2026-09-30 documentation review](audits/documentation-2026-09-30.md) records this normalization and its knowledge-base handoff.
+Reusable investigation methods and constraints may also be summarized in Basic Memory, with source paths, dates and applicability limits. Search for existing notes before creating another entity. Repository documents retain technical evidence and current project state; the private knowledge base is not a release ledger. The [2026-09-30 documentation review](archive/audits/documentation-2026-09-30.md) records this normalization and its knowledge-base handoff.
 
 ## Engineering and delivery references
 
@@ -66,18 +66,17 @@ Use the [tool catalog](../tools/README.md) to choose a tool and check its side e
 | Focused fixtures | [Test catalog](../tools/tests/README.md), [Controller atlas](../tools/tests/controller_atlas/README.md) |
 | Packaging | [Release tools](../tools/release/README.md), [AppImage baseline](../packaging/linux/APPIMAGE_COMPATIBILITY.md) |
 
-## Historical records and compatibility links
+## Historical records
 
 | Record | Role |
 |---|---|
-| [Archive index](archive/README.md) | Superseded status, roadmap, release and investigation snapshots |
-| [Root handoff](../HANDOFF.md) | 2026-09-22 DLSS and diagnostic checkpoint |
-| [Debug menu requirements](debug-menu-requirements.md) | Original requirements and dated implementation evidence |
-| [Menu boundary fixes](MENU_FIX_VALIDATION.md) | Baseline-specific repair validation |
-| [Menu/shader audit](MENU_SHADER_PREBUILD_AUDIT.md) | 2026-09-16 audit |
-| [0.6.0 prerelease audit](audits/0.6.0-prerelease.md) | 2026-09-18 repairs and evidence limits |
+| [Archive index](archive/README.md) | Superseded status, roadmap, release, handoff and investigation snapshots, including the archived research notes |
+| [Debug menu requirements](archive/debug-menu-requirements.md) | Original requirements and dated implementation evidence |
+| [Menu boundary fixes](archive/MENU_FIX_VALIDATION.md) | Baseline-specific repair validation |
+| [Menu/shader audit](archive/MENU_SHADER_PREBUILD_AUDIT.md) | 2026-09-16 audit |
+| [0.6.0 prerelease audit](archive/audits/0.6.0-prerelease.md) | 2026-09-18 repairs and evidence limits |
 | [Initial Project import](project-management/import-audit.md) | 2026-09-08 import receipt |
 | [Backlog coverage](project-management/backlog-coverage.md) / [History coverage](project-management/history-coverage.md) | Initial source inventory, not live task counts |
-| [v0.1](RELEASE-v0.1.md), [v0.2](RELEASE-v0.2.md), [v0.5.0](RELEASE-v0.5.0.md), [2026-09-05 report](WORK_REPORT_2026-09-05.md) | Preserved redirects to historical records |
+| [v0.1](archive/RELEASE-v0.1-historical.md), [v0.2](archive/RELEASE-v0.2-historical.md), [v0.5.0](archive/RELEASE-v0.5.0-preparation.md), [2026-09-05 report](archive/WORK_REPORT_2026-09-05.md) | Release preparation and the dated work report, preserved in the archive |
 
-Every first-party research note is listed in the [notes index](notes/README.md). Historical status remains attached to the evidence it originally described.
+Research notes that remain current are listed in the [notes index](notes/README.md); outdated ones are in the [archive index](archive/README.md). Historical status remains attached to the evidence it originally described.

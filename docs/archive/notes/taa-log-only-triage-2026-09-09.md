@@ -1,6 +1,6 @@
 # 从日志与 render state 定位 TAA 顶点路径遗漏
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。 下文 `out/...` 为历史本地证据路径；这些文件当前不在工作树，也不随仓库分发。
+> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../../STATUS.md)和[路线图](../../ROADMAP.md)。 下文 `out/...` 为历史本地证据路径；这些文件当前不在工作树，也不随仓库分发。
 
 2026-09-09：用户接受本次 Ghost Town 二号档同场景修复。候选仍为 **0.5.0**，EXE SHA256 为 `1c9911a3ad6dc91acc5ac1a2cffd7503031b12a81b82b19dd526ce28345ca87a`。Sol 在实际场景取得六张间隔的 presented-frame 截图，覆盖约 11.37 秒，样本内未见闪烁；这不是连续录像。其他场景仍属回归覆盖。以下先保留实现前的修复复盘；本轮新增日志功能及其验证边界见文末。
 
@@ -25,7 +25,7 @@
 
 这里要区分普通 `shader-*.jsonl` 和 opt-in shader/state 摘要。前者默认主要记录 shader 创建、缓存和编译；详细 temporal draw trace 有开关、32 帧范围和已知 VS 筛选。后者包含 `slot/candidates/flags/rejection`，更适合发现未知路径。普通 shader log 没有异常记录，不能解释为覆盖完整。
 
-当前字段来自 [renderer.cpp](../../LostOdysseyRecomp/gpu/renderer.cpp) 和 [temporal_jitter.h](../../LostOdysseyRecomp/gpu/temporal_jitter.h)：
+当前字段来自 [renderer.cpp](../../../LostOdysseyRecomp/gpu/renderer.cpp) 和 [temporal_jitter.h](../../../LostOdysseyRecomp/gpu/temporal_jitter.h)：
 
 | 字段 | 当前含义 | 分析方式 |
 |---|---|---|
@@ -94,7 +94,7 @@ AND candidates != 0
 - capture 2813–2815 复核（历史本地路径：`out/v0.5.0/taa-capture-followup/REPORT.md`）；逐 draw 数据：`out/v0.5.0/taa-capture-followup/frame-01-f2813.json` 至 `frame-03-f2815.json`
 - 精确 c7 补丁与上传优先级产物（历史本地路径：`out/v0.5.0/performance-fix/shader-priority-0.5.0/REPORT.md`）
 - 二号档实景观察（历史本地路径：`out/v0.5.0/slot2-sol-check/REPORT.md`）
-- [采集协议与边界](../../tools/taa-collector/README.md)、[已支持位置分类](../../LostOdysseyRecomp/gpu/temporal_scene.h)
+- [采集协议与边界](../../../tools/taa-collector/README.md)、[已支持位置分类](../../../LostOdysseyRecomp/gpu/temporal_scene.h)
 
 `out/` 中的原始诊断产物只在维护者工作区保留，不随仓库公开。文末列出本轮已部署的字段及验证边界。
 

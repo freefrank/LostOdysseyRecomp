@@ -1,13 +1,13 @@
-> **历史归档 / Historical snapshot — 2026-09-04.** 保留当时的调查和旧假设，不代表当前状态。先读[当前状态](../../STATUS.md)和[接手入口](../../notes/handoff.md)。
+> **历史归档 / Historical snapshot — 2026-09-04.** 保留当时的调查和旧假设，不代表当前状态。先读[当前状态](../../STATUS.md)和[接手入口](../notes/handoff.md)。
 
 # 接手入口（2026-09-04）
 
 ## 当前状态
 
-后台攻略推进新修复：宽printf资源名称语言后缀、82B146A8遗漏switch，两项联合回归已正常完成戒指战斗并进入峡谷，见 [戒指调查](../../notes/battle-ring-resource.md) 与 [攻略测试](../../notes/walkthrough-testing.md)。F1人物传送已实现，后台位移/记录点返回/恢复行走与菜单禁用已验证，见 [传送说明](../../notes/debug-teleport.md)。Gorge保存/读回尚未完成。
+后台攻略推进新修复：宽printf资源名称语言后缀、82B146A8遗漏switch，两项联合回归已正常完成戒指战斗并进入峡谷，见 [戒指调查](../notes/battle-ring-resource.md) 与 [攻略测试](../notes/walkthrough-testing.md)。F1人物传送已实现，后台位移/记录点返回/恢复行走与菜单禁用已验证，见 [传送说明](../../notes/debug-teleport.md)。Gorge保存/读回尚未完成。
 
 
-用户确认 debug 判胜可跳过战斗、修复后手动存档成功；独立进程已从存档副本进入地图，见 [存档调查](../../notes/save-storage.md)。后续遇敌的主角 T 姿势与攻击停滞已修复：正常开场 82B003EC 将持久资源 11→0，debug 判胜补齐此转换；0x139 对遗留存档做限定恢复。独立副本已自然完成战斗并覆盖保存。敌人地图姿态和光影闪烁仍待查，见 [遇敌调查](../../notes/encounter-animation.md)。用户正在使用电脑，只允许后台运行及进程内测试输入，不使用前台窗口或系统键鼠。
+用户确认 debug 判胜可跳过战斗、修复后手动存档成功；独立进程已从存档副本进入地图，见 [存档调查](../../notes/save-storage.md)。后续遇敌的主角 T 姿势与攻击停滞已修复：正常开场 82B003EC 将持久资源 11→0，debug 判胜补齐此转换；0x139 对遗留存档做限定恢复。独立副本已自然完成战斗并覆盖保存。敌人地图姿态和光影闪烁仍待查，见 [遇敌调查](../notes/encounter-animation.md)。用户正在使用电脑，只允许后台运行及进程内测试输入，不使用前台窗口或系统键鼠。
 
 Windows D3D12 已验证标题、菜单、开场战斗、攻击目标选择及攻击后镜头切换。
 最新续修已通过首场战斗后的实时演出并进入重型坦克战斗，见 [战后白屏修复](../../notes/post-battle-whiteout.md)。
@@ -17,10 +17,10 @@ Windows D3D12 已验证标题、菜单、开场战斗、攻击目标选择及攻
 |---|---|---|
 | 标题动态背景纯黑 | 小尺寸纹理 level 0 位于 packed mip 尾部，上传忽略块偏移 | [标题背景](../../notes/title-packed-mips.md) |
 | 角色黑色剪影 | A/C 物理地址未共享，客体读不到 GPU 遮挡结果；E 别名偏移一页 | [物理内存别名](../../notes/physical-alias-rendering.md) |
-| 角色网格破面 | 16 位索引 DMA 起点被错误按 4 字节对齐 | [几何与后期](../../notes/rendering-index-and-resolve.md) |
-| 后期轮廓偏移 | 428×242 的纹理按 448×242 行距资源采样 | [几何与后期](../../notes/rendering-index-and-resolve.md) |
-| 材质颜色偏差 | 缺失纹理 gamma、fetch swizzle 和 resolve R/B 配套解释；补齐 ALU 并行读语义 | [着色器与纹理](../../notes/rendering-index-and-resolve.md) |
-| 金属高光缺失 | stencil 状态未接通、plume 参考值丢失、D24 清理端点溢出 | [光影](../../notes/lighting-stencil-depth-clear.md) |
+| 角色网格破面 | 16 位索引 DMA 起点被错误按 4 字节对齐 | [几何与后期](../notes/rendering-index-and-resolve.md) |
+| 后期轮廓偏移 | 428×242 的纹理按 448×242 行距资源采样 | [几何与后期](../notes/rendering-index-and-resolve.md) |
+| 材质颜色偏差 | 缺失纹理 gamma、fetch swizzle 和 resolve R/B 配套解释；补齐 ALU 并行读语义 | [着色器与纹理](../notes/rendering-index-and-resolve.md) |
+| 金属高光缺失 | stencil 状态未接通、plume 参考值丢失、D24 清理端点溢出 | [光影](../notes/lighting-stencil-depth-clear.md) |
 | 战后演出整屏白色 | 场景恢复后以另一格式继续叠加光照，draw 前缺少 EDRAM 内容转换 | [战后白屏](../../notes/post-battle-whiteout.md) |
 
 Shader cache 版本为 v19。保持正常深度、客体遮挡开关及景深，没有用曝光或强制颜色写掩码补偿。
@@ -30,7 +30,7 @@ GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结�
 
 - [构建、回归测试与实机复现](../../notes/rendering-validation.md)
 - [依赖补丁应用方式](../../../tools/patches/README.md)
-- [Xenia 对照条件和原始观察](../../notes/xenia-render-comparison.md)
+- [Xenia 对照条件和原始观察](../notes/xenia-render-comparison.md)
 - 本地最新证据：`out/render-light-depthpack/shot_2400.png`、`shot_3000.png`。
 - 本地对照页：`out/xenia-comparison/comparison-lighting.html`。
 - 最新战后演出证据：`out/cg-white-transfer/`；对照页 `out/xenia-comparison/comparison-cg.html`。
@@ -39,7 +39,7 @@ GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结�
 
 ## 下一步
 
-主角火焰受击在 Xenia 中也有 glitch（用户已确认），不能把该效果当作正确基线；需要独立取证或原机参考。攻击力 debug menu 已登记在 [需求说明](../../debug-menu-requirements.md)，尚未实现。
+主角火焰受击在 Xenia 中也有 glitch（用户已确认），不能把该效果当作正确基线；需要独立取证或原机参考。攻击力 debug menu 已登记在 [需求说明](../debug-menu-requirements.md)，尚未实现。
 
 1. 继续以 Xenia 同场景对照检查粒子、光晕、阴影边缘和后处理，保留本轮基线，每次只改一个变量。EDRAM 转换现在默认 draw + resolve；read 是历史错误行为对照。
 2. 验证重型坦克战斗结束、更后续场景及存档；目前未验证通关。
@@ -65,7 +65,7 @@ GPU 遮挡计数仍是已有的近似实现，不能当作真实硬件查询结�
 75 次 mode 4 draw 中有 74 次关闭颜色写入，不能把它们称为 75 次角色颜色绘制。
 随后追踪客体提交条件，确认 GPU 写 A 别名、GetData 读 C 别名才是黑色剪影根因。
 
-[gpu.md](../../notes/gpu.md) 按时间保留早期分析，其中“遮挡查询已排除”等判断已经被后续证据推翻。
+[gpu.md](../notes/gpu.md) 按时间保留早期分析，其中“遮挡查询已排除”等判断已经被后续证据推翻。
 以本页和各专项笔记中的最终验证为准，不再重复禁用遮挡或强开 mask 的实验。
 项目逆向技能入口为 `tools/reverse-skill/README_AI.md`；Ghidra 导出脚本为 `tools/ghidra/ExportFunctions.java`。
 

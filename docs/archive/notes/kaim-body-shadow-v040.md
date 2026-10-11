@@ -1,10 +1,10 @@
 # Kaim body-shadow flicker: v0.4.0 investigation
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 ## Current clarification — 2026-09-08
 
-This independent RX 9060 XT capture investigation remains suspended, with no reproduced local root cause or reporter acceptance. The [current closures of Issues #3–#7](../STATUS.md#live-issue-reconciliation) concern separate save, battle-freeze, startup and Council reports; they do not establish a fix for this body-shadow capture or the separate Map 13 report. The dated investigation below retains its original evidence and limits.
+This independent RX 9060 XT capture investigation remains suspended, with no reproduced local root cause or reporter acceptance. The [current closures of Issues #3–#7](../../STATUS.md#live-issue-reconciliation) concern separate save, battle-freeze, startup and Council reports; they do not establish a fix for this body-shadow capture or the separate Map 13 report. The dated investigation below retains its original evidence and limits.
 
 ## Status — 2026-09-07
 
