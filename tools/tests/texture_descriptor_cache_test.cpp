@@ -49,6 +49,29 @@ int main() {
     cache.Clear();
     cache.Clear();
     Check(cache.Acquire(key, create, reused) != current && !reused && allocations == 6);
+    {
+        // Growth past the initial table keeps every key of the interval, and
+        // Clear() forgets them all at once.
+        using Big = gpu::texture_descriptors::BatchCache<int, int, 32>;
+        Big big;
+        static int many[700];
+        int setStore[2100]{};
+        unsigned made = 0;
+        auto make = [&]() { return &setStore[made++]; };
+        auto keyOf = [&](int i) { Big::Key k{}; k.fill(&textures[0]); k[i % 32] = &many[i]; k[(i * 7 + 3) % 32] = &many[(i * 13) % 700]; return k; };
+        int* firstSets[700];
+        for (int i = 0; i < 700; ++i) {
+            firstSets[i] = big.Acquire(keyOf(i), make, reused);
+            Check(!reused || (i > 0 && firstSets[i] == firstSets[i - 1]));
+        }
+        const unsigned afterInsert = made;
+        for (int i = 699; i >= 0; --i)
+            Check(big.Acquire(keyOf(i), make, reused) == firstSets[i] && reused);
+        Check(made == afterInsert);
+        big.Clear();
+        for (int i = 0; i < 700; ++i) Check(big.Acquire(keyOf(i), make, reused) != firstSets[i] && !reused);
+        Check(made == 2 * afterInsert);
+    }
     // A reused pooled set rewrites only bindings it may still hold plus the new
     // key's non-dummy bindings, and then matches the key in every binding.
     using namespace gpu::texture_descriptors;
