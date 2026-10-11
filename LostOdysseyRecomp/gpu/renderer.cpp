@@ -2180,6 +2180,7 @@ namespace gpu::renderer
             ConstantBankSnapshot constantSnapshot[2];
             uint64_t constantSnapshotGeneration[2]{UINT64_MAX, UINT64_MAX};
             uint64_t constantSnapshotVersion[2]{};
+            uint64_t constantMmioEpoch[2]{}; // sync period of the last zero-register MMIO check
             uint32_t drawConstants[2][256 * 4]{};
             bool drawConstantsModified[2]{true, true};
 
@@ -8816,7 +8817,12 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         const uint64_t generation = g_commandProcessor.ConstantGeneration(bank);
                         auto& snapshot = constantSnapshot[bank];
                         const bool refresh = generation != constantSnapshotGeneration[bank];
-                        uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot);
+                        // A direct guest MMIO store reaches draws only across a sync
+                        // point, so the zero-register fallback is read once per period.
+                        const uint64_t epoch = g_commandProcessor.SyncEpoch();
+                        const bool checkMmio = constantMmioEpoch[bank] != epoch;
+                        constantMmioEpoch[bank] = epoch;
+                        uint64_t changedBlocks = g_commandProcessor.UpdateConstantSnapshot(bank, snapshot, checkMmio);
                         constantSnapshotGeneration[bank] = generation;
                         if (refresh || changedBlocks) ++constantSnapshotVersion[bank];
                         if (verifyConstants) {

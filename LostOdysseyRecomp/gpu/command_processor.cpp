@@ -598,14 +598,14 @@ namespace gpu
             std::span<uint32_t>(destination, count), mmio);
     }
 
-    uint64_t CommandProcessor::UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot)
+    uint64_t CommandProcessor::UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot, bool checkMmio)
     {
         bank &= 1;
         const uint32_t first = kAluConstantBase + bank * kAluConstantBankSize;
         const uint64_t dirty = m_constantDirty[bank].load(std::memory_order_relaxed)
             ? m_constantDirty[bank].exchange(0, std::memory_order_acquire) : 0;
         return UpdateConstantBankSnapshot(snapshot, m_registers.data() + first,
-            static_cast<const uint32_t*>(g_memory.Translate(MMIO_BASE + first * 4)), dirty);
+            static_cast<const uint32_t*>(g_memory.Translate(MMIO_BASE + first * 4)), dirty, checkMmio);
     }
 
     void CommandProcessor::MmioWrite32(uint32_t address, uint32_t value)

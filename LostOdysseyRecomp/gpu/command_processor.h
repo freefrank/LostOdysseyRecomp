@@ -75,9 +75,9 @@ namespace gpu
         // Same values as ordered ReadRegister calls, without a call per word.
         void ReadRegisters(uint32_t first, uint32_t count, uint32_t* destination);
         // Bring a renderer copy of a constant bank up to date: blocks command writes
-        // changed since the last update, then zero-register words whose direct
-        // MMIO store changed. Returns the 16-word blocks re-read or changed.
-        uint64_t UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot);
+        // changed since the last update, then, with checkMmio, zero-register words
+        // whose direct MMIO store changed. Returns the 16-word blocks re-read or changed.
+        uint64_t UpdateConstantSnapshot(uint32_t bank, ConstantBankSnapshot& snapshot, bool checkMmio);
         // ALU constant banks (0: vertex 0x4000-0x43FF, 1: pixel 0x4400-0x47FF). The
         // generation changes whenever command packets change a value in the bank.
         // Direct MMIO stores are checked separately at zero-register fallback words.
