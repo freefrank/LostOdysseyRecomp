@@ -250,11 +250,9 @@ namespace gpu::renderer
         // the guest, which has allocated the slot again by then.
         std::mutex g_occlusionOwnerMutex;
         std::unordered_map<uint32_t, std::deque<uint64_t>> g_occlusionOwners;
-        // Policy::History: measured (owner, samples) for the guest hooks, and
-        // a request from them to complete finished batches without waiting.
+        // Policy::History: measured (owner, samples) for the guest hooks.
         std::atomic<bool> g_occlusionHistory{false};
         std::vector<std::pair<uint64_t, uint32_t>> g_occlusionCompleted;
-        std::atomic<bool> g_occlusionPoll{false};
 
         // ---- register indices ---------------------------------------------
         constexpr uint32_t REG_RB_SURFACE_INFO = 0x2000;
@@ -4370,9 +4368,6 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     }
                     const auto begin = occlusion.Begin(address, owner);
                     WriteOcclusionRecords({&begin, 1});
-                    // History reads never wait: finish what the GPU has done.
-                    if (occlusionPolicy == gpu::occlusion::Policy::History && (++occlusionPollTick & 15) == 0)
-                        PollOcclusionSlots();
                 }
                 else if (const auto end = occlusion.End(address)) WriteOcclusionRecords({&*end, 1});
                 PublishOcclusionAwaited();
@@ -4559,20 +4554,6 @@ void main()
                 for (auto& s : gpuSlots) s.occlusionUsed = 0;
                 WriteOcclusionRecords(occlusion.AbandonAll());
                 PublishOcclusionAwaited();
-            }
-
-            // Policy::History: complete every submitted slot whose fence has
-            // signalled, without waiting. RecycleSlot otherwise runs only when
-            // the slot is needed again, two frames later.
-            uint32_t occlusionPollTick = 0;
-            void PollOcclusionSlots()
-            {
-                for (uint32_t i = 0; i < kGpuSlots; ++i) {
-                    if (listOpen && i == gpuSlot) continue;
-                    auto& s = gpuSlots[i];
-                    if (!s.submitted || !s.occlusionUsed || !video::GpuFenceSignaled(s.fence.get())) continue;
-                    if (!RecycleSlot(i)) return;
-                }
             }
 
             // A guest waits in GetData for the record in `slot`. Unless it is
@@ -13949,12 +13930,8 @@ void main()
 
     void ServiceOcclusionQueries()
     {
-        if (!g_renderer) return;
-        if (g_occlusionWait.exchange(false, std::memory_order_acq_rel))
+        if (g_renderer && g_occlusionWait.exchange(false, std::memory_order_acq_rel))
             g_renderer->ResolveOcclusionQueries(g_occlusionWaitSlot.load(std::memory_order_relaxed));
-        else if (g_occlusionPoll.exchange(false, std::memory_order_acq_rel) ||
-            g_occlusionHistory.load(std::memory_order_relaxed))
-            g_renderer->PollOcclusionSlots();
     }
 
     bool OcclusionHistoryEnabled() { return g_occlusionHistory.load(std::memory_order_acquire); }
@@ -13964,11 +13941,6 @@ void main()
         std::lock_guard lock(g_occlusionOwnerMutex);
         out.insert(out.end(), g_occlusionCompleted.begin(), g_occlusionCompleted.end());
         g_occlusionCompleted.clear();
-    }
-
-    void RequestOcclusionPoll()
-    {
-        if (!g_occlusionPoll.exchange(true, std::memory_order_acq_rel)) g_commandProcessor.Wake();
     }
 
     void FinalizeDebugCapture(bool ok);
@@ -14907,7 +14879,6 @@ void main()
     void ServiceOcclusionQueries() {}
     bool OcclusionHistoryEnabled() { return false; }
     void TakeOcclusionCompletions(std::vector<std::pair<uint64_t, uint32_t>>&) {}
-    void RequestOcclusionPoll() {}
     bool DrainForFrameGenerationReconfigure() { return true; }
     void Flush() {}
     void PreparePresent(uint32_t) {}

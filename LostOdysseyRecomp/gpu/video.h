@@ -62,9 +62,6 @@ namespace gpu::video
     // Caller must own a fence attached to a successful submission. Failure
     // never authorizes retirement, descriptor reuse or CPU readback.
     bool WaitForGpuFence(plume::RenderCommandFence* fence);
-    // True when a fence attached to a submission has signalled. Never waits;
-    // false on failure or where it cannot tell (Metal).
-    bool GpuFenceSignaled(plume::RenderCommandFence* fence);
     // Shutdown only: device loss authorizes disposal, not successful completion.
     // An unprovable drain terminates without running native resource destructors.
     void DrainGpuForShutdown();

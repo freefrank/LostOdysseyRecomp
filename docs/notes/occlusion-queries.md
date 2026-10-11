@@ -200,8 +200,12 @@ Strict adds the GPU to it. History removes the read from the frame:
 - Each allocation gets its own owner (`HistoryOwner`), the command processor
   takes owners per record slot in order (`NoteOcclusionQueryOwner`), and the
   tracker hands every measured count back with its owner, also for a slot the
-  guest has reissued since. The command processor completes batches whose fence
-  has signalled without waiting (`PollOcclusionSlots`).
+  guest has reissued since. The counts reach the hooks when the command
+  processor reuses the batch's GPU slot (`RecycleSlot`), as Fast's do. Nothing
+  polls fences for them earlier: with Turnip on Android's KGSL kernel driver
+  `vkGetFenceStatus` waits for the fence (KGSL reads a zero timeout as no
+  timeout), so such a poll made the command processor wait for the GPU in every
+  frame (Uhra on the TB321FU: 22.7 FPS against 54.0 with Adaptive).
 - The sun flare still allocates and reads its query in the same frame and
   keeps its Fast answer. A guest waiting in `GetData` now names the record it
   waits for, and the command processor only waits for the GPU when that record

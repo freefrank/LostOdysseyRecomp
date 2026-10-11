@@ -46,7 +46,6 @@ constexpr uint32_t kViewMatrix = 64;               // FViewInfo: 4x4 view matrix
 // 40% for about 2% more draws.
 gpu::occlusion::HistoryAnswers g_answers{4};
 bool g_inMainRender = false;
-bool g_pollRequested = false;
 std::unordered_map<uint32_t, std::array<float, 16>> g_lastView; // view state -> last view matrix
 std::vector<std::pair<uint64_t, uint32_t>> g_completed;
 
@@ -87,10 +86,6 @@ bool occlusion_history::Read(PPCContext& ctx, uint8_t* base)
     const int32_t result = ctx.r3.s32;
     ctx.r3 = r3; ctx.r4 = r4; ctx.r5 = r5; ctx.r6 = r6; ctx.lr = lrSaved;
     const bool ready = result != 1 && result >= 0;
-    if (!ready && !g_pollRequested) {
-        g_pollRequested = true;
-        gpu::renderer::RequestOcclusionPoll();
-    }
     const uint32_t answer = g_answers.Read(primitive ? gpu::occlusion::HistoryAnswers::Kind::Primitive
                                                      : gpu::occlusion::HistoryAnswers::Kind::Shadow,
         key, query, g_inMainRender, ready, ready ? PPC_LOAD_U32(out) : 0);
@@ -110,7 +105,6 @@ PPC_FUNC(sub_823BAB50)
     const bool main = uint32_t(ctx.lr) == kMainSceneRender;
     if (main) {
         g_answers.BeginFrame();
-        g_pollRequested = false;
         if (g_answers.Frame() % 600 == 0) LogStats(base);
         // With the flag the game restarts its query pool only in a scene pass
         // that tests occlusion (after reading last frame's queries, 823C0A20),

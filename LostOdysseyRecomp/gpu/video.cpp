@@ -1490,25 +1490,6 @@ namespace gpu::video
         if (result != VK_SUCCESS) StopGpuWork(int32_t(result));
         return result == VK_SUCCESS;
     }
-    bool GpuFenceSignaled(plume::RenderCommandFence* fence) {
-        auto* queueHolder = ActiveSubmissionQueue();
-        if (!queueHolder || !fence) return false;
-#if LO_PLATFORM_MACOS
-        if (g_metal) return false;
-#endif
-        if (!g_vulkan) {
-#ifdef _WIN32
-            auto* native = static_cast<plume::D3D12CommandFence*>(fence);
-            if (!native->d3d || native->fenceValue == 0) return false;
-            const UINT64 completed = native->d3d->GetCompletedValue();
-            return completed != UINT64_MAX && completed >= native->fenceValue - 1;
-#else
-            return false;
-#endif
-        }
-        auto* queue = static_cast<plume::VulkanCommandQueue*>(queueHolder);
-        return vkGetFenceStatus(queue->device->vk, static_cast<plume::VulkanCommandFence*>(fence)->vk) == VK_SUCCESS;
-    }
     bool WaitForGpuFence(plume::RenderCommandFence* fence) {
         auto* queueHolder = ActiveSubmissionQueue();
         if (!queueHolder || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }

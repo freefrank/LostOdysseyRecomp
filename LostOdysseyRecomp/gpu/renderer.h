@@ -83,9 +83,6 @@ namespace gpu::renderer
     // Policy::History: the (owner, guest samples) measured since the last call.
     // Guest thread.
     void TakeOcclusionCompletions(std::vector<std::pair<uint64_t, uint32_t>>& out);
-    // Policy::History: ask the command processor to complete the batches the
-    // GPU has finished, without waiting for the others. Any thread.
-    void RequestOcclusionPoll();
 
     // Called on XE_SWAP before the frontbuffer is presented: finishes all work.
     void Flush();
