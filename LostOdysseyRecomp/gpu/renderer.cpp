@@ -731,6 +731,9 @@ namespace gpu::renderer
             uint32_t rectListSkipped = 0;
 
             std::unordered_map<uint64_t, Shader> shaders[2];
+            // GetShader's last valid hit per stage; ClearShaders() forgets them.
+            struct LastShader { uint64_t hash = 0; Shader* entry = nullptr; } lastShader[2];
+            void ClearShaders() { shaders[0].clear(); shaders[1].clear(); lastShader[0] = lastShader[1] = {}; }
             // Keyed by the normalized pipeline key. sceneSerial: the scene in which
             // the pipeline was last drawn was recorded in its recipe.
             // origin/drawn: LO_RECORD_TIMING first-use attribution only.
@@ -6249,7 +6252,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                             entry.valid = entry.shader != nullptr;
                             if (!entry.valid) throw std::runtime_error("cached shader device module creation failed");
                             ++modules;
-                        }, [&] { pendingModules.clear(); deferredModules = 0; shaders[0].clear(); shaders[1].clear(); }, [] {},
+                        }, [&] { pendingModules.clear(); deferredModules = 0; ClearShaders(); }, [] {},
                         [] { CheckPreparationCancel(); }, [](uint32_t done, uint32_t total) {
                             video::SetShaderPreparationProgress(done, total, video::PreparationStage::CachedShaders,
                                 video::PreparationUnit::Shaders);
@@ -6269,7 +6272,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         ResetTimers();
                         return;
                     } catch (const std::exception& e) {
-                        shaders[0].clear(); shaders[1].clear();
+                        ClearShaders();
                         if (video::ShaderPreparationSkipped()) throw xenos::preparation::Cancelled{};
                         LOG_INFO("renderer: startup bundle fallback: {}", e.what());
                     }
@@ -6646,6 +6649,11 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
             {
                 if (debugShaderSources && !debugCaptureDir.empty())
                     debugShaderSources->Observe(!pixel, hash, words, count, frame);
+                // Consecutive draws usually keep a stage's shader. Map nodes keep
+                // their address; only ClearShaders() removes entries.
+                auto& last = lastShader[pixel ? 1 : 0];
+                if (last.entry && last.hash == hash && last.entry->valid && debugCaptureDir.empty())
+                    return last.entry;
                 auto& cache = shaders[pixel ? 1 : 0];
                 auto it = cache.find(hash);
                 if (it == cache.end()) {
@@ -6659,7 +6667,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
                         it->second.info.hlsl = xenos::TranslateShader(swapped.data(), count, pixel).hlsl;
                     }
-                    return it->second.valid ? &it->second : nullptr;
+                    last = {hash, &it->second};
+                    return &it->second;
                 }
 
                 Shader& entry = cache[hash];
