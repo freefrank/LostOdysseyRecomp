@@ -4980,7 +4980,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
 
             uint64_t ActualSamplerKey(uint32_t index) const
             {
-                const auto version = samplerState.Current();
+                const auto& version = samplerState.Current();
                 return version ? version->Key(index) : sampling::DefaultKey;
             }
 
@@ -10561,7 +10561,7 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                         << ",\"exp_bias\":\"unknown\"}}\n";
                 }
                 recordProbe.Enter(record_timing::Phase::Pipeline);
-                const auto samplerVersion = samplerState.Current();
+                const auto& samplerVersion = samplerState.Current();
                 if (!samplerVersion) return;
                 const auto versionsBefore = Gpu().samplerVersions.size();
                 sampling::Retain(Gpu().samplerVersions, samplerVersion);

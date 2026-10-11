@@ -62,7 +62,10 @@ public:
         }
     };
     using Lease = std::shared_ptr<const Version>;
-    Lease Current() const { return current_; }
+    // A reference, not a copy: copying the lease per draw and per bound texture
+    // cost two atomic reference-count updates each. Callers that keep a version
+    // past the next Select/Reconfigure must copy it (Retain does).
+    const Lease& Current() const { return current_; }
     uint32_t Level() const { return current_ ? current_->level : 0; }
     void EnableDiagnostics(bool enabled) { diagnosticsEnabled_ = enabled; }
     Diagnostics TakeDiagnostics() { auto result = diagnostics_; diagnostics_ = {}; return result; }
