@@ -28,6 +28,9 @@ void PreferPerformanceCores(bool guestMain = false);
 // Render thread, once per guest swap: LO_FRAME_STATS=<seconds> logs frame
 // interval percentiles and per-frame thread CPU time (Android only).
 void OnRenderFrame();
+// Audio producer thread, once at its start: Android's audio thread priority,
+// so a busy, thermally capped CPU still runs it on time. No-op elsewhere.
+void RaiseAudioThreadPriority();
 
 // Sleeps until deadline with sub-millisecond wakeup accuracy. macOS applies
 // timer coalescing to ordinary threads, which wakes 18 ms sleeps about 5 ms

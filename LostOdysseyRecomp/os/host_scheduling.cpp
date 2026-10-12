@@ -18,6 +18,7 @@
 #include <mutex>
 #include <ctime>
 #include <sched.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <vector>
 #endif
@@ -175,12 +176,23 @@ void OnRenderFrame()
     if (stats.seconds > 0)
         stats.Frame();
 }
+
+void RaiseAudioThreadPriority()
+{
+    // ANDROID_PRIORITY_AUDIO; an app may raise its own threads this far.
+    if (setpriority(PRIO_PROCESS, gettid(), -16) != 0)
+        LOG_WARNING("audio thread priority: setpriority failed, errno {}", errno);
+}
 #else
 void PreferPerformanceCores(bool)
 {
 }
 
 void OnRenderFrame()
+{
+}
+
+void RaiseAudioThreadPriority()
 {
 }
 #endif
