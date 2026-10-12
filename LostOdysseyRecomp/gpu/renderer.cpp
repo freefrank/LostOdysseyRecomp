@@ -797,9 +797,20 @@ namespace gpu::renderer
             // Keyed by the normalized pipeline key. sceneSerial: the scene in which
             // the pipeline was last drawn was recorded in its recipe.
             // origin/drawn: LO_RECORD_TIMING first-use attribution only.
+            // Vulkan texture-info specialization: pipelines of the same key whose
+            // texture-info specialization constants hold the words a draw binds (the
+            // driver folds the decode). The generic pipeline is always the one bound
+            // until a variant is built in the background; at most kMaxSpecVariants.
+            struct SpecVariant {
+                gpu::pipeline_cache::TexInfo info;
+                std::unique_ptr<RenderPipeline> pipeline; // null while building or failed
+            };
+            static constexpr size_t kMaxSpecVariants = gpu::pipeline_cache::kMaxTexInfo;
             struct PipelineSlot {
                 std::unique_ptr<RenderPipeline> pipeline; uint32_t sceneSerial = 0;
                 record_timing::Origin origin = record_timing::Origin::Unknown; bool drawn = false;
+                bool specSeeded = false; // recipe words queued
+                std::vector<SpecVariant> variants;
             };
             std::unordered_map<PipelineKey, PipelineSlot, PipelineKeyHash> pipelines;
             // GetPipeline's last hit. Slots are never erased or replaced, and
@@ -826,7 +837,10 @@ namespace gpu::renderer
             // Known recipes: the player's learned file plus the shipped corpus, with
             // the scenes they were drawn in. Learned entries are saved. Written on the
             // render thread under pipelineRecipeMutex (the exit flush reads it).
-            struct RecipeEntry { gpu::pipeline_cache::Scenes scenes; bool learned = false; };
+            struct RecipeEntry {
+                gpu::pipeline_cache::Scenes scenes; bool learned = false;
+                std::vector<gpu::pipeline_cache::TexInfo> texinfo; // words it was drawn with (Vulkan)
+            };
             std::unordered_map<PipelineKey, RecipeEntry, PipelineKeyHash> knownRecipes;
             size_t learnedRecipes = 0, corpusRecipes = 0;
             std::unordered_set<PipelineKey, PipelineKeyHash> preparedPipelineKeys, usedPreparedPipelineKeys;
@@ -873,10 +887,11 @@ namespace gpu::renderer
                 enum State : int { Queued, Running, Done, Taken };
                 // Priority order. Draw: a skipped draw needs it. Scene: a scene that is
                 // loading. Sibling: shares a shader with a draw-time miss. Startup: the
-                // startup set, built in the background.
-                enum Kind : uint8_t { Draw, Scene, Sibling, Startup };
+                // startup set, built in the background. Specialise: a texture-info
+                // variant of a built pipeline (never in prefetchJobs).
+                enum Kind : uint8_t { Draw, Scene, Sibling, Startup, Specialise };
                 // The capped worker group a running job counts against.
-                enum Slot : uint8_t { NoSlot, DrawSlot, StartupSlot };
+                enum Slot : uint8_t { NoSlot, DrawSlot, StartupSlot, SpecialiseSlot };
                 std::atomic<int> state{Queued};
                 Kind kind = Scene; // changed under the pool mutex
                 Slot slot = NoSlot; // under the pool mutex
@@ -897,6 +912,9 @@ namespace gpu::renderer
                 Shader* vs = nullptr;
                 Shader* ps = nullptr;
                 std::shared_ptr<PrefetchJob> needVs, needPs;
+                // Specialise job: the words and the constants desc points at.
+                gpu::pipeline_cache::TexInfo texInfo;
+                std::vector<RenderSpecConstant> specConstants;
             };
             static bool DrawTimeJob(PrefetchJob::Kind kind) { return kind == PrefetchJob::Draw || kind == PrefetchJob::Sibling; }
             // Worker-made modules whose hash got another module first; a build may
@@ -938,21 +956,30 @@ namespace gpu::renderer
             // parts instead of compiling the whole pipeline. A background thread builds
             // the parts for the shaders of known recipes (libraryPrecompile below).
             bool fastLinkPipelines = false;
+            // Texture-info specialization (Vulkan; LO_TEXINFO_SPEC=0 turns it off).
+            bool texInfoSpecialization = false;
+            struct SpecStats {
+                uint64_t textured = 0, specialised = 0; // draws since the last log
+                uint64_t queued = 0, built = 0, failed = 0; // variants since start
+                double logAt = 0;
+            } specStats;
+            std::atomic<uint64_t> specCompileNs{0};
             struct PrefetchPool {
                 std::mutex mutex;
                 std::condition_variable wake, finished;
                 // One queue per job kind; siblings newest miss first. Entries that were
                 // taken over, dropped or moved to another queue stay until a worker skips them.
-                std::deque<std::shared_ptr<PrefetchJob>> draw, scene, siblings, startup;
+                std::deque<std::shared_ptr<PrefetchJob>> draw, scene, siblings, startup, specialise;
                 size_t runningSmall = 0, smallCap = 1; // draw and sibling jobs
                 size_t runningStartup = 0, startupCap = 1;
+                size_t runningSpecialise = 0, specialiseCap = 1;
                 // Finished jobs for the render thread to harvest.
                 std::vector<std::shared_ptr<PrefetchJob>> finishedJobs;
                 std::vector<std::thread> workers;
                 bool stop = false;
                 ~PrefetchPool()
                 {
-                    { std::lock_guard lock(mutex); stop = true; draw.clear(); scene.clear(); siblings.clear(); startup.clear(); }
+                    { std::lock_guard lock(mutex); stop = true; draw.clear(); scene.clear(); siblings.clear(); startup.clear(); specialise.clear(); }
                     wake.notify_all();
                     for (auto& worker : workers) worker.join();
                 }
@@ -2426,6 +2453,7 @@ namespace gpu::renderer
                 queue = video::GetQueue();
                 vulkan = video::UsesSpirv();
                 nativeVulkan = video::IsVulkan();
+                texInfoSpecialization = nativeVulkan && !(getenv("LO_TEXINFO_SPEC") && std::string_view(getenv("LO_TEXINFO_SPEC")) == "0");
 #if defined(LO_GPU_PLUME)
                 dlssController = video::GetDlssController();
 #if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
@@ -5514,13 +5542,24 @@ void main()
                 const auto corpus = corpusPath.empty() ? gpu::pipeline_cache::LoadResult{} : LoadRecipes(corpusPath, true);
                 {
                     std::lock_guard lock(pipelineRecipeMutex);
+                    const auto mergeWords = [](RecipeEntry& entry, const gpu::pipeline_cache::Record& record) {
+                        for (const auto& info : record.texinfo)
+                            if (entry.texinfo.size() < gpu::pipeline_cache::kMaxTexInfo &&
+                                std::find(entry.texinfo.begin(), entry.texinfo.end(), info) == entry.texinfo.end())
+                                entry.texinfo.push_back(info);
+                    };
                     for (const auto& record : learned.records) {
                         auto& entry = knownRecipes[record.key];
                         entry.scenes.Merge(record.scenes);
                         entry.learned = true;
+                        mergeWords(entry, record);
                     }
                     learnedRecipes = learned.records.size();
-                    for (const auto& record : corpus.records) knownRecipes[record.key].scenes.Merge(record.scenes);
+                    for (const auto& record : corpus.records) {
+                        auto& entry = knownRecipes[record.key];
+                        entry.scenes.Merge(record.scenes);
+                        mergeWords(entry, record);
+                    }
                     corpusRecipes = corpus.records.size();
                 }
                 // An older file version is rewritten at the next save.
@@ -5811,7 +5850,7 @@ void main()
                 std::vector<gpu::pipeline_cache::Record> records;
                 records.reserve(learnedRecipes);
                 for (const auto& [key, entry] : knownRecipes)
-                    if (entry.learned) records.push_back({ key, entry.scenes });
+                    if (entry.learned) records.push_back({ key, entry.scenes, entry.texinfo });
                 return records;
             }
 
@@ -6034,6 +6073,7 @@ void main()
                         if (job->kind == PrefetchJob::Draw) prefetchPool.draw.push_back(job);
                         else if (job->kind == PrefetchJob::Scene) prefetchPool.scene.push_back(job);
                         else if (job->kind == PrefetchJob::Startup) prefetchPool.startup.push_back(job);
+                        else if (job->kind == PrefetchJob::Specialise) prefetchPool.specialise.push_back(job);
                     }
                     auto& siblings = prefetchPool.siblings;
                     while (siblings.size() > kMaxSiblings) {
@@ -6129,6 +6169,10 @@ void main()
                 prefetchPool.startupCap = video::IsMetal() ? prefetchPool.smallCap : std::max<size_t>(1, count - 1);
                 if (const char* value = getenv("LO_PIPELINE_STARTUP_WORKERS"))
                     prefetchPool.startupCap = std::clamp<size_t>(strtoul(value, nullptr, 10), 1, count);
+                // Specialised variants only replace pipelines that already work: one
+                // worker, so they never crowd out scene and draw-time jobs.
+                if (const char* value = getenv("LO_TEXINFO_SPEC_WORKERS"))
+                    prefetchPool.specialiseCap = std::clamp<size_t>(strtoul(value, nullptr, 10), 1, count);
                 for (size_t i = 0; i < count; ++i)
                     prefetchPool.workers.emplace_back([this] { PrefetchWorker(); });
                 LOG_INFO("renderer: pipeline workers: {}, {} for draw-time jobs, {} for startup preparation; siblings {}, skipped draws {}", count,
@@ -6142,22 +6186,24 @@ void main()
             std::shared_ptr<PrefetchJob> NextPrefetchJob()
             {
                 auto& pool = prefetchPool;
-                for (auto* queue : { &pool.draw, &pool.scene, &pool.siblings, &pool.startup }) {
+                for (auto* queue : { &pool.draw, &pool.scene, &pool.siblings, &pool.startup, &pool.specialise }) {
                     while (!queue->empty()) {
                         const auto& front = queue->front();
                         const auto kind = front->kind;
                         // A job moved to another queue (for a skipped draw, a loading scene)
                         // runs from there.
                         const auto* home = kind == PrefetchJob::Draw ? &pool.draw : kind == PrefetchJob::Scene ? &pool.scene :
-                            kind == PrefetchJob::Sibling ? &pool.siblings : &pool.startup;
+                            kind == PrefetchJob::Sibling ? &pool.siblings : kind == PrefetchJob::Specialise ? &pool.specialise : &pool.startup;
                         if (front->state != PrefetchJob::Queued || home != queue) {
                             queue->pop_front();
                             continue;
                         }
                         const auto slot = DrawTimeJob(kind) ? PrefetchJob::DrawSlot :
-                            kind == PrefetchJob::Startup ? PrefetchJob::StartupSlot : PrefetchJob::NoSlot;
+                            kind == PrefetchJob::Startup ? PrefetchJob::StartupSlot :
+                            kind == PrefetchJob::Specialise ? PrefetchJob::SpecialiseSlot : PrefetchJob::NoSlot;
                         if (slot == PrefetchJob::DrawSlot && pool.runningSmall >= pool.smallCap) break;
                         if (slot == PrefetchJob::StartupSlot && pool.runningStartup >= pool.startupCap) break;
+                        if (slot == PrefetchJob::SpecialiseSlot && pool.runningSpecialise >= pool.specialiseCap) break;
                         auto job = std::move(queue->front());
                         queue->pop_front();
                         int expected = PrefetchJob::Queued;
@@ -6165,6 +6211,7 @@ void main()
                         job->slot = slot;
                         if (slot == PrefetchJob::DrawSlot) ++pool.runningSmall;
                         if (slot == PrefetchJob::StartupSlot) ++pool.runningStartup;
+                        if (slot == PrefetchJob::SpecialiseSlot) ++pool.runningSpecialise;
                         return job;
                     }
                 }
@@ -6189,8 +6236,11 @@ void main()
                     if (job->shader) {
                         LoadShaderJob(*job, pack);
                     } else if (!job->needVs && !job->needPs) {
+                        const auto started = std::chrono::steady_clock::now();
                         try { job->pipeline = device->createGraphicsPipeline(job->desc); }
                         catch (const std::exception& e) { LOG_WARNING("renderer: scene prefetch: {}", e.what()); }
+                        if (job->kind == PrefetchJob::Specialise)
+                            specCompileNs += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count());
                     } else if ((!job->needVs || NeedShaderJob(*job->needVs, pack)) && (!job->needPs || NeedShaderJob(*job->needPs, pack))) {
                         // MakeLoadingJob made no job for a rect-list recipe without its VS variant.
                         try {
@@ -6232,6 +6282,7 @@ void main()
                     prefetchPool.finishedJobs.push_back(job.shared_from_this());
                     if (job.slot == PrefetchJob::DrawSlot) --prefetchPool.runningSmall;
                     if (job.slot == PrefetchJob::StartupSlot) --prefetchPool.runningStartup;
+                    if (job.slot == PrefetchJob::SpecialiseSlot) --prefetchPool.runningSpecialise;
                     freed = std::exchange(job.slot, PrefetchJob::NoSlot) != PrefetchJob::NoSlot;
                 }
                 prefetchPool.finished.notify_all();
@@ -6310,20 +6361,25 @@ void main()
                         }
                         continue;
                     }
+                    if (job.kind == PrefetchJob::Specialise) {
+                        FinishSpecialisation(job);
+                        continue;
+                    }
                     const auto it = prefetchJobs.find(job.key);
                     if (it == prefetchJobs.end() || it->second != done) continue;
                     for (const auto* need : { &job.needVs, &job.needPs })
                         if (*need) PublishShaderJob(**need);
                     if (!job.pipeline) failedPrefetch.insert(job.key);
-                    else if (pipelines.try_emplace(job.key, PipelineSlot{ std::move(job.pipeline), 0,
+                    else if (const auto [slot, added] = pipelines.try_emplace(job.key, PipelineSlot{ std::move(job.pipeline), 0,
                                  job.kind == PrefetchJob::Scene ? record_timing::Origin::ScenePrefetch :
                                  job.kind == PrefetchJob::Sibling ? record_timing::Origin::Sibling :
-                                 job.kind == PrefetchJob::Startup ? record_timing::Origin::Prebuilt : record_timing::Origin::DrawJob }).second) {
+                                 job.kind == PrefetchJob::Startup ? record_timing::Origin::Prebuilt : record_timing::Origin::DrawJob }); added) {
                         if (job.kind == PrefetchJob::Sibling) {
                             ++workerStats.built;
                             if (pipelineMissVerbose) unusedSiblings.insert(job.key);
                         }
                         if (job.batch && job.batch->startup) preparedPipelineKeys.insert(job.key);
+                        SeedSpecialisations(slot->second, job.key, nullptr, nullptr);
                     }
                     prefetchJobs.erase(it);
                 }
@@ -8617,6 +8673,125 @@ void main()
                 lastPipelineKey = key;
                 lastPipelineSlot = &slot;
                 return slot.pipeline.get();
+            }
+
+            // ---- texture-info specialization (Vulkan) --------------------------------
+            static uint32_t TextureSlotMask(const Shader* vs, const Shader* ps)
+            {
+                return (vs ? vs->info.textureSlotMask : 0u) | (ps ? ps->info.textureSlotMask : 0u);
+            }
+
+            // Render thread: builds the variant of slot (key) for info on a worker.
+            void QueueSpecialisation(PipelineSlot& slot, const PipelineKey& key, Shader* vs, Shader* ps,
+                const gpu::pipeline_cache::TexInfo& info)
+            {
+                if (slot.variants.size() >= kMaxSpecVariants || !info.Valid() || info.mask != TextureSlotMask(vs, ps)) return;
+                for (const auto& variant : slot.variants)
+                    if (variant.info == info) return;
+                slot.variants.push_back({ info, nullptr });
+                auto job = std::make_shared<PrefetchJob>();
+                job->key = key;
+                job->kind = PrefetchJob::Specialise;
+                job->texInfo = info;
+                for (uint32_t m = info.mask; m; m &= m - 1) {
+                    const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
+                    job->specConstants.emplace_back(fetchSlot, info.words[fetchSlot]);
+                }
+                job->desc = DescribeForCreation(key, vs, ps, false, false);
+                job->desc.cacheKey = 0; // the D3D12 library and Metal archive name the generic pipeline
+                job->desc.specConstants = job->specConstants.data();
+                job->desc.specConstantsCount = uint32_t(job->specConstants.size());
+                ++specStats.queued;
+                QueuePrefetchJobs({ job });
+            }
+
+            // Render thread: the recorded words of a newly built pipeline's recipe go
+            // to the workers. Shaders are looked up when the caller has none.
+            void SeedSpecialisations(PipelineSlot& slot, const PipelineKey& key, Shader* vs, Shader* ps)
+            {
+                if (!texInfoSpecialization || std::exchange(slot.specSeeded, true)) return;
+                const auto recipe = knownRecipes.find(key);
+                if (recipe == knownRecipes.end() || recipe->second.texinfo.empty()) return;
+                if ((!vs || (key.ps && !ps)) && FindRecipeShaders(key, vs, ps, nullptr) != RecipeShaderState::Ready) return;
+                for (const auto& info : recipe->second.texinfo) QueueSpecialisation(slot, key, vs, ps, info);
+            }
+
+            // Render thread: a finished variant job into its slot.
+            void FinishSpecialisation(PrefetchJob& job)
+            {
+                const auto slot = pipelines.find(job.key);
+                if (slot == pipelines.end()) return;
+                for (auto& variant : slot->second.variants)
+                    if (variant.info == job.texInfo && !variant.pipeline) {
+                        variant.pipeline = std::move(job.pipeline);
+                        ++(variant.pipeline ? specStats.built : specStats.failed);
+                        return;
+                    }
+            }
+
+            // Render thread: a draw's words for a recipe, saved with the learned file.
+            void NoteRecipeTexInfo(const PipelineKey& key, const gpu::pipeline_cache::TexInfo& info)
+            {
+                if (!pipelineCacheEnabled) return;
+                const auto it = knownRecipes.find(key);
+                if (it == knownRecipes.end() || !it->second.learned) return;
+                auto& list = it->second.texinfo;
+                if (list.size() >= gpu::pipeline_cache::kMaxTexInfo || std::find(list.begin(), list.end(), info) != list.end()) return;
+                std::lock_guard lock(pipelineRecipeMutex);
+                list.push_back(info);
+                pipelineRecipesDirty = true;
+            }
+
+            // Render thread, at the draw's bind: the specialised variant of the generic
+            // pipeline GetPipeline just returned, when one is built for the words the
+            // draw binds; otherwise the generic one, and an unseen tuple is queued.
+            RenderPipeline* SpecialisedPipeline(Shader* vs, Shader* ps, RenderPipeline* generic, const uint32_t* words)
+            {
+                const uint32_t mask = TextureSlotMask(vs, ps);
+                PipelineSlot* slot = lastPipelineSlot;
+                // A pipeline this draw made has no slot hit yet: its next draw seeds it.
+                if (!mask || !slot || slot->pipeline.get() != generic) return generic;
+                ++specStats.textured;
+                for (const auto& variant : slot->variants) {
+                    if (variant.info.mask != mask) continue;
+                    bool same = true;
+                    for (uint32_t m = mask; m && same; m &= m - 1) {
+                        const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
+                        same = variant.info.words[fetchSlot] == words[fetchSlot];
+                    }
+                    if (!same) continue;
+                    if (!variant.pipeline) return generic; // building, or failed
+                    ++specStats.specialised;
+                    return variant.pipeline.get();
+                }
+                SeedSpecialisations(*slot, lastPipelineKey, vs, ps);
+                if (slot->variants.size() >= kMaxSpecVariants) return generic;
+                gpu::pipeline_cache::TexInfo info;
+                info.mask = mask;
+                for (uint32_t m = mask; m; m &= m - 1) {
+                    const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
+                    info.words[fetchSlot] = words[fetchSlot];
+                }
+                QueueSpecialisation(*slot, lastPipelineKey, vs, ps, info);
+                NoteRecipeTexInfo(lastPipelineKey, info);
+                return generic;
+            }
+
+            // Once a frame: specialised share of the textured draws, and the variants
+            // built in the background, every 10 s while it changes.
+            void ReportSpecialisation()
+            {
+                if (!texInfoSpecialization) return;
+                const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                if (now < specStats.logAt) return;
+                specStats.logAt = now + 10.0;
+                if (!specStats.textured && !specStats.queued) return;
+                LOG_INFO("renderer: texinfo spec frame={} {} textured_draws={} specialised={:.1f}% variants queued={} built={} failed={} building={} compile_ms={:.0f}",
+                    frame, SceneLabel(), specStats.textured,
+                    specStats.textured ? 100.0 * double(specStats.specialised) / double(specStats.textured) : 0.0,
+                    specStats.queued, specStats.built, specStats.failed,
+                    specStats.queued - specStats.built - specStats.failed, double(specCompileNs.load()) / 1e6);
+                specStats.textured = specStats.specialised = 0;
             }
 
             RenderPipeline* GetPipeline(const PipelineKey& drawKey, Shader* vs, Shader* ps, RenderFormat, RenderFormat, bool mayDefer = false)
@@ -11153,6 +11328,7 @@ void main()
                 // A draw that an occlusion query will measure binds its counting
                 // variant here instead, so a run of query boxes keeps one binding;
                 // OcclusionQueryForDraw takes the counter at the draw.
+                if (texInfoSpecialization) pipeline = SpecialisedPipeline(vs, ps, pipeline, shared.textureInfo);
                 RenderPipeline* countingPipeline = OcclusionCountingPending() ? CountingPipeline(key, vs, ps) : nullptr;
                 commandList->setPipeline(countingPipeline ? countingPipeline : pipeline);
                 if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, pipeline);
@@ -14644,6 +14820,7 @@ void main()
                 page.closed = true;
             }
             g_renderer->ReportPipelineMisses();
+            g_renderer->ReportSpecialisation();
             g_renderer->UpdateSceneTag();
             g_renderer->HarvestPrefetch();
             g_renderer->UpdateStartupPreparation();
