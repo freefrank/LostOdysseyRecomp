@@ -5287,7 +5287,7 @@ void main()
             // Runs the queue on the target's own framebuffer, which stays bound.
             void RunPendingClears(HostTexture& tex)
             {
-                const auto ops = tex.pendingClear.Take();
+                auto ops = tex.pendingClear.Take();
                 const bool depthTarget = IsDepthTarget(tex);
                 const auto layout = depthTarget ? RenderTextureLayout::DEPTH_WRITE : RenderTextureLayout::COLOR_WRITE;
                 if (tex.layout != layout) {
@@ -5296,6 +5296,14 @@ void main()
                 }
                 commandList->setFramebuffer(FramebufferFor(depthTarget ? nullptr : &tex, depthTarget ? &tex : nullptr));
                 ReplayClears(tex, ops);
+                tex.pendingClear.Recycle(std::move(ops));
+            }
+
+            void ReplayPendingClears(HostTexture& tex)
+            {
+                auto ops = tex.pendingClear.Take();
+                ReplayClears(tex, ops);
+                tex.pendingClear.Recycle(std::move(ops));
             }
 
             // Binds colour/depth (either may be null) for a pass and starts it
@@ -5311,8 +5319,8 @@ void main()
                         RunPendingClears(*tex);
                 RenderFramebuffer* framebuffer = GetFramebuffer(color, depth);
                 commandList->setFramebuffer(framebuffer);
-                if (color && !color->pendingClear.Empty()) ReplayClears(*color, color->pendingClear.Take());
-                if (depth && !depth->pendingClear.Empty()) ReplayClears(*depth, depth->pendingClear.Take());
+                if (color && !color->pendingClear.Empty()) ReplayPendingClears(*color);
+                if (depth && !depth->pendingClear.Empty()) ReplayPendingClears(*depth);
                 return framebuffer;
             }
 
@@ -8574,11 +8582,14 @@ void main()
             struct DepthClearMap { DepthClearMapKey key{}; std::vector<pending_clear::Rect> rects; bool valid = false; };
             std::array<DepthClearMap, 16> depthClearMaps{};
             size_t depthClearMapNext = 0;
-            std::vector<pending_clear::Rect> MappedDepthClear(const DepthClearMapKey& key, const HostTexture& target)
+            std::vector<DepthClearRect> depthClearScratch;
+            // Valid until the next call.
+            const std::vector<pending_clear::Rect>& MappedDepthClear(const DepthClearMapKey& key, const HostTexture& target)
             {
                 for (const auto& map : depthClearMaps)
                     if (map.valid && map.key == key) return map.rects;
-                auto mapped = MapDepthClear(key.srcPitch, key.srcMsaa, key.area, key.dstPitch, key.dstHeight, key.dstMsaa);
+                auto& mapped = depthClearScratch;
+                MapDepthClear(mapped, key.srcPitch, key.srcMsaa, key.area, key.dstPitch, key.dstHeight, key.dstMsaa);
                 if (key.coalesce) CoalesceDepthClearRects(mapped);
                 auto& map = depthClearMaps[depthClearMapNext];
                 depthClearMapNext = (depthClearMapNext + 1) % depthClearMaps.size();
@@ -13113,14 +13124,16 @@ void main()
                         {
                             const DepthClearRect sourceRect{int32_t(std::ceil(minX)), int32_t(std::ceil(minY)),
                                 int32_t(std::ceil(maxX)), int32_t(std::ceil(maxY))};
-                            std::vector<pending_clear::Rect> clearRects = MappedDepthClear({pitch, (surfaceInfo >> 16) & 3,
+                            const auto& mapped = MappedDepthClear({pitch, (surfaceInfo >> 16) & 3,
                                 k.pitch, target->guestHeight, target->depthMsaa, target->resolutionSize.width,
                                 target->resolutionSize.height, vulkan, sourceRect}, *target);
-                            const size_t regions = clearRects.size();
+                            const size_t regions = mapped.size();
                             // An empty rectangle list would mean the whole texture,
                             // so an empty mapping is skipped.
-                            if (!clearRects.empty())
+                            if (!mapped.empty())
                             {
+                                auto clearRects = target->pendingClear.SpareRects();
+                                clearRects.assign(mapped.begin(), mapped.end());
                                 FlushMotionReplayQueue();
                                 QueueClear(*target, pending_clear::DepthOp(true, false, rectZ, 0, std::move(clearRects)));
                             }

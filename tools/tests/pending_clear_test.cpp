@@ -70,6 +70,23 @@ void QueueRules()
     assert(r.FitsPass(16, 8, 16, 6) && !r.FitsPass(16, 8, 16, 4));
     auto taken = r.Take();
     assert(taken.size() == 1 && r.Empty());
+
+    // Storage handed back after a run serves later clears; the rules hold.
+    Queue s;
+    s.Record(DepthOp(true, false, 1.0f, 0, {{0, 0, 4, 4}, {4, 0, 8, 4}}), 16, 8);
+    auto ran = s.Take();
+    s.Recycle(std::move(ran));
+    assert(s.Empty());
+    auto spare = s.SpareRects();
+    assert(spare.empty() && spare.capacity() >= 2);
+    spare.assign({{0, 0, 2, 2}});
+    s.Record(DepthOp(true, false, 0.5f, 0, std::move(spare)), 16, 8);
+    s.Record(DepthOp(true, false, 0.5f, 0, {{2, 0, 4, 2}}), 16, 8);
+    assert(s.Size() == 1 && s.Ops()[0].rects.size() == 2 && s.Ops()[0].rects[1].left == 2);
+    assert(s.SpareRects().capacity() >= 1); // the merged clear's list
+    assert(s.SpareRects().capacity() == 0);
+    s.Record(DepthOp(true, false, 0.25f, 0, {{0, 0, 16, 8}}), 16, 8);
+    assert(s.Size() == 1 && s.Ops()[0].Whole() && s.Ops()[0].depth == 0.25f);
     std::puts("PASS: queue rules (whole replaces, order kept, merge, aspects, -0, fit)");
 }
 
