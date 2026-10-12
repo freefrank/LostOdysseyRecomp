@@ -24,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Music no longer stays stuck on the previous area's track after several item fanfares; it used to recover only after a battle or a restart (#375).
 - Android: fewer stutters once the device gets hot; the game's threads no longer run on the slow cores.
 - Android: the game's own code runs a little faster.
+- Android: the importer lists SD cards and USB drives, so disc images stored there can be imported. Tapping a disc image now scans its folder.
 
 ### 简体中文
 
@@ -43,6 +44,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 道具获得的音效响过几次之后，音乐不再卡在上一个区域的曲子上；以前要打一场仗或重启才恢复（#375）。
 - Android：设备发热后卡顿更少，游戏线程不再跑到慢核上。
 - Android：游戏本身的代码运行稍快一些。
+- Android：导入器能列出 SD 卡和 U 盘，放在上面的光盘镜像可以导入了。点一下光盘镜像就会扫描它所在的文件夹。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
