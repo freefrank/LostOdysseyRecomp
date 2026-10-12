@@ -328,6 +328,7 @@ int main(int argc, char* argv[])
 #endif
     // macOS counterpart: opt out of App Nap and timer coalescing.
     os::scheduling::BeginLatencyCriticalActivity();
+    os::scheduling::StartThreadPlacement();
 
     for (int i = 1; i < argc; i++)
     {

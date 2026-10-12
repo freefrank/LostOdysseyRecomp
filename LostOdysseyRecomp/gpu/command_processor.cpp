@@ -16,6 +16,7 @@
 #include <kernel/function.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
+#include <os/host_scheduling.h>
 #include <os/shader_log.h>
 #include <chrono>
 #include <kernel/io/file_system.h>
@@ -1023,6 +1024,7 @@ namespace gpu
             ++m_counter;
             uint32_t swaps = ++g_swapCount;
             g_presentedSwaps = swaps;
+            os::scheduling::OnRenderFrame();
             // Optional progress log with the last game file the title opened.
             if (g_gpuStats && (swaps % 60) == 1)
             {

@@ -19,6 +19,15 @@ namespace os::scheduling
 // opts out of App Nap. Call once, early in main().
 void BeginLatencyCriticalActivity();
 
+// Android thread placement experiment, off unless its environment variables
+// are set: LO_THREAD_AFFINITY="render=0x60,main=0xFC,guest=0xFC,other=0x03"
+// (CPU masks by thread role, applied by a 1 s /proc/self/task scan),
+// LO_ADPF=1 (performance hint session for the render and guest main threads),
+// LO_FRAME_STATS=1 (frame interval and per-frame thread CPU summary every 10 s).
+void StartThreadPlacement();
+// Render thread, once per guest swap.
+void OnRenderFrame();
+
 // Sleeps until deadline with sub-millisecond wakeup accuracy. macOS applies
 // timer coalescing to ordinary threads, which wakes 18 ms sleeps about 5 ms
 // late (worse than a whole audio period). A time-constraint (real-time) policy
