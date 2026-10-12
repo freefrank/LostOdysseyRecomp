@@ -21,6 +21,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Black shapes no longer flicker on the sea around Saman and the Experimental Staff (#424).
 - Vulkan: less GPU time per frame, for a higher frame rate where the GPU sets the limit, for example on Steam Deck and Android.
 - The shader packs change; the first start after updating offers to download the new packs.
+- Music no longer stays stuck on the previous area's track after several item fanfares; it used to recover only after a battle or a restart (#375).
 - Android: fewer stutters once the device gets hot; the game's threads no longer run on the slow cores.
 
 ### 简体中文
@@ -38,6 +39,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Saman 和 Experimental Staff 一带的海面不再闪烁黑色色块（#424）。
 - Vulkan：每帧 GPU 时间更少，在 GPU 决定帧率的设备上（例如 Steam Deck 和 Android）帧率更高。
 - 着色器包随之更新，更新后首次启动会提示下载新的着色器包。
+- 道具获得的音效响过几次之后，音乐不再卡在上一个区域的曲子上；以前要打一场仗或重启才恢复（#375）。
 - Android：设备发热后卡顿更少，游戏线程不再跑到慢核上。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
