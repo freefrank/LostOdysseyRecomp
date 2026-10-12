@@ -13,7 +13,7 @@
 
 namespace xenos::cache {
 // Shared by the runtime and offline compiler. Bump for translation changes.
-inline constexpr unsigned Version = 27;
+inline constexpr unsigned Version = 28;
 using Backend = gpu::backend::Backend;
 enum class Format { Dxil, Spirv, Dxbc };
 struct Identity {

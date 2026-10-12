@@ -155,7 +155,10 @@ float XeGammaToLinear(float gamma)
 
 float4 XeDecodeTexture(float4 value, uint info)
 {
+#ifndef __spirv__
+    // SPIR-V gets the R/B swap of a resolved texture from its image view.
     if (info & (1u << 20)) value = value.bgra;
+#endif
     // Signed float formats already arrive signed from the host resource.
     // Gamma and unsigned-bias operate on source channels, before swizzling.
     [unroll] for (uint i = 0; i < 4; ++i)
@@ -173,13 +176,96 @@ float4 XeDecodeTexture(float4 value, uint info)
     return result;
 }
 
+#ifdef __spirv__
+// Specialization constant N is fetch slot N's texture-info word. The default
+// 0xFFFFFFFF is never a real word (they have 21 bits) and reads the shared
+// block, so one module serves the generic and the specialised pipelines.
+[[vk::constant_id(0)]] const uint xeTextureInfoSpec0 = 0xFFFFFFFFu;
+[[vk::constant_id(1)]] const uint xeTextureInfoSpec1 = 0xFFFFFFFFu;
+[[vk::constant_id(2)]] const uint xeTextureInfoSpec2 = 0xFFFFFFFFu;
+[[vk::constant_id(3)]] const uint xeTextureInfoSpec3 = 0xFFFFFFFFu;
+[[vk::constant_id(4)]] const uint xeTextureInfoSpec4 = 0xFFFFFFFFu;
+[[vk::constant_id(5)]] const uint xeTextureInfoSpec5 = 0xFFFFFFFFu;
+[[vk::constant_id(6)]] const uint xeTextureInfoSpec6 = 0xFFFFFFFFu;
+[[vk::constant_id(7)]] const uint xeTextureInfoSpec7 = 0xFFFFFFFFu;
+[[vk::constant_id(8)]] const uint xeTextureInfoSpec8 = 0xFFFFFFFFu;
+[[vk::constant_id(9)]] const uint xeTextureInfoSpec9 = 0xFFFFFFFFu;
+[[vk::constant_id(10)]] const uint xeTextureInfoSpec10 = 0xFFFFFFFFu;
+[[vk::constant_id(11)]] const uint xeTextureInfoSpec11 = 0xFFFFFFFFu;
+[[vk::constant_id(12)]] const uint xeTextureInfoSpec12 = 0xFFFFFFFFu;
+[[vk::constant_id(13)]] const uint xeTextureInfoSpec13 = 0xFFFFFFFFu;
+[[vk::constant_id(14)]] const uint xeTextureInfoSpec14 = 0xFFFFFFFFu;
+[[vk::constant_id(15)]] const uint xeTextureInfoSpec15 = 0xFFFFFFFFu;
+[[vk::constant_id(16)]] const uint xeTextureInfoSpec16 = 0xFFFFFFFFu;
+[[vk::constant_id(17)]] const uint xeTextureInfoSpec17 = 0xFFFFFFFFu;
+[[vk::constant_id(18)]] const uint xeTextureInfoSpec18 = 0xFFFFFFFFu;
+[[vk::constant_id(19)]] const uint xeTextureInfoSpec19 = 0xFFFFFFFFu;
+[[vk::constant_id(20)]] const uint xeTextureInfoSpec20 = 0xFFFFFFFFu;
+[[vk::constant_id(21)]] const uint xeTextureInfoSpec21 = 0xFFFFFFFFu;
+[[vk::constant_id(22)]] const uint xeTextureInfoSpec22 = 0xFFFFFFFFu;
+[[vk::constant_id(23)]] const uint xeTextureInfoSpec23 = 0xFFFFFFFFu;
+[[vk::constant_id(24)]] const uint xeTextureInfoSpec24 = 0xFFFFFFFFu;
+[[vk::constant_id(25)]] const uint xeTextureInfoSpec25 = 0xFFFFFFFFu;
+[[vk::constant_id(26)]] const uint xeTextureInfoSpec26 = 0xFFFFFFFFu;
+[[vk::constant_id(27)]] const uint xeTextureInfoSpec27 = 0xFFFFFFFFu;
+[[vk::constant_id(28)]] const uint xeTextureInfoSpec28 = 0xFFFFFFFFu;
+[[vk::constant_id(29)]] const uint xeTextureInfoSpec29 = 0xFFFFFFFFu;
+[[vk::constant_id(30)]] const uint xeTextureInfoSpec30 = 0xFFFFFFFFu;
+[[vk::constant_id(31)]] const uint xeTextureInfoSpec31 = 0xFFFFFFFFu;
+
+uint XeTextureInfoSpec(uint slot)
+{
+    switch (slot)
+    {
+    case 0u: return xeTextureInfoSpec0;
+    case 1u: return xeTextureInfoSpec1;
+    case 2u: return xeTextureInfoSpec2;
+    case 3u: return xeTextureInfoSpec3;
+    case 4u: return xeTextureInfoSpec4;
+    case 5u: return xeTextureInfoSpec5;
+    case 6u: return xeTextureInfoSpec6;
+    case 7u: return xeTextureInfoSpec7;
+    case 8u: return xeTextureInfoSpec8;
+    case 9u: return xeTextureInfoSpec9;
+    case 10u: return xeTextureInfoSpec10;
+    case 11u: return xeTextureInfoSpec11;
+    case 12u: return xeTextureInfoSpec12;
+    case 13u: return xeTextureInfoSpec13;
+    case 14u: return xeTextureInfoSpec14;
+    case 15u: return xeTextureInfoSpec15;
+    case 16u: return xeTextureInfoSpec16;
+    case 17u: return xeTextureInfoSpec17;
+    case 18u: return xeTextureInfoSpec18;
+    case 19u: return xeTextureInfoSpec19;
+    case 20u: return xeTextureInfoSpec20;
+    case 21u: return xeTextureInfoSpec21;
+    case 22u: return xeTextureInfoSpec22;
+    case 23u: return xeTextureInfoSpec23;
+    case 24u: return xeTextureInfoSpec24;
+    case 25u: return xeTextureInfoSpec25;
+    case 26u: return xeTextureInfoSpec26;
+    case 27u: return xeTextureInfoSpec27;
+    case 28u: return xeTextureInfoSpec28;
+    case 29u: return xeTextureInfoSpec29;
+    case 30u: return xeTextureInfoSpec30;
+    case 31u: return xeTextureInfoSpec31;
+    }
+    return 0xFFFFFFFFu;
+}
+#endif
+
 float4 XeTextureResult(float4 value, uint slot)
 {
     )HLSL" XE_POINTER_GUARD R"HLSL(
-    return XeDecodeTexture(value, vk::RawBufferLoad<uint>(xeShared(768 + slot * 4)));
+    uint info = vk::RawBufferLoad<uint>(xeShared(768 + slot * 4));
 #else
-    return XeDecodeTexture(value, xeTextureInfo[slot >> 2][slot & 3]);
+    uint info = xeTextureInfo[slot >> 2][slot & 3];
 #endif
+#ifdef __spirv__
+    const uint specialised = XeTextureInfoSpec(slot);
+    if (specialised != 0xFFFFFFFFu) info = specialised;
+#endif
+    return XeDecodeTexture(value, info);
 }
 
 bool XeBool(uint index)
