@@ -425,6 +425,24 @@ namespace gpu::renderer
             }
         }
 
+        // A texture-info word with the R/B swap of a resolved texture folded in:
+        // the decode swaps before applying the per-channel signs and the swizzle,
+        // so exchanging the signs of channels 0 and 2 and swizzle selectors 0 and 2
+        // gives the same result from the unswapped texel. Metal uses it (the SPIR-V
+        // decode no longer swaps; Vulkan binds an R/B-swapped view instead).
+        constexpr uint32_t FoldRedBlueSwap(uint32_t info)
+        {
+            const uint32_t sign = info & 0xFFu;
+            uint32_t out = (info & ~0xFFFFFu) | (sign & 0xCCu) | ((sign & 0x03u) << 4) | ((sign >> 4) & 0x03u);
+            for (uint32_t j = 0; j < 4; ++j) {
+                const uint32_t component = (info >> (8 + j * 3)) & 7u;
+                out |= (component == 0 ? 2u : component == 2 ? 0u : component) << (8 + j * 3);
+            }
+            return out;
+        }
+        static_assert(FoldRedBlueSwap(0x60a00u) == 0x68800u && FoldRedBlueSwap(0x68803u) == 0x60a30u &&
+            FoldRedBlueSwap(FoldRedBlueSwap(0xb683cu)) == 0xb683cu);
+
         struct HostTexture
         {
             uint64_t allocationSerial = 0; // Render-target identity, never a recycled host pointer.
@@ -5082,10 +5100,38 @@ void main()
                 return pool[used++].get();
             }
 
-            RenderDescriptorSet* AcquireTextureSet(int which, const TextureSetCache::Key& textures, uint32_t activeSlots)
+            // A texture pointer with bit 0 set in a set key stands for the texture's
+            // R/B-swapped view (Vulkan), so swapped and plain sets never alias.
+            static RenderTexture* TagRedBlueSwap(RenderTexture* texture)
+            {
+                return reinterpret_cast<RenderTexture*>(reinterpret_cast<uintptr_t>(texture) | 1u);
+            }
+            static void WriteTextureBinding(RenderDescriptorSet* set, uint32_t slot, RenderTexture* texture)
+            {
+                const auto bits = reinterpret_cast<uintptr_t>(texture);
+                if (!(bits & 1u)) {
+                    set->setTexture(slot, texture, RenderTextureLayout::SHADER_READ);
+                    return;
+                }
+                auto* plain = reinterpret_cast<RenderTexture*>(bits & ~uintptr_t(1));
+                const RenderTextureView* view = plain->getRedBlueSwapView();
+                if (!view) {
+                    static bool logged = false;
+                    if (!std::exchange(logged, true)) LOG_ERROR("renderer: R/B-swapped texture view unavailable; binding the plain view");
+                }
+                set->setTexture(slot, plain, RenderTextureLayout::SHADER_READ, view);
+            }
+
+            RenderDescriptorSet* AcquireTextureSet(int which, const TextureSetCache::Key& textures, uint32_t activeSlots, uint32_t swapSlots = 0)
             {
                 if (activeSlots == 0)
                     return staticDummySets[which - 1].get();
+                if (swapSlots &= activeSlots) {
+                    TextureSetCache::Key tagged = textures;
+                    for (; swapSlots; swapSlots &= swapSlots - 1)
+                        tagged[std::countr_zero(swapSlots)] = TagRedBlueSwap(tagged[std::countr_zero(swapSlots)]);
+                    return AcquireTextureSet(which, tagged, activeSlots);
+                }
                 // Complete immutable sets are reusable on both backends. The
                 // cache and pool belong to the same completed-fence interval.
                 const bool reuse = descriptorReuse;
@@ -5094,7 +5140,7 @@ void main()
                         auto* set = AcquireSet(which, false);
                         for (uint32_t slot = 0; slot < kTextureSlots; ++slot)
                             if ((activeSlots >> slot) & 1)
-                                set->setTexture(slot, textures[slot], RenderTextureLayout::SHADER_READ);
+                                WriteTextureBinding(set, slot, textures[slot]);
                         return set;
                     }
                     // A reused set must equal the key in every binding. Rewrite only
@@ -5111,7 +5157,7 @@ void main()
                     const HostTexture& dummy = which == 1 ? dummyTexture2D : which == 2 ? dummyTexture3D : dummyTextureCube;
                     bindings[used] = texture_descriptors::RewriteBindings(bindings[used], textures, dummy.texture.get(),
                         [&](uint32_t slot, RenderTexture* texture) {
-                            set->setTexture(slot, texture, RenderTextureLayout::SHADER_READ);
+                            WriteTextureBinding(set, slot, texture);
                         });
                     ++used;
                     return set;
@@ -9764,6 +9810,10 @@ void main()
                 RenderDescriptorSet* set0 = staticSet0.get();
                 TextureSetCache::Key textureBindings[3];
                 uint32_t activeTextureSlots[3] = {};
+                // Fetch slots whose texture is a resolve with RB_COPY_DEST_SWAP: Vulkan
+                // binds the texture's R/B-swapped view there (every bank, like the
+                // shared texture-info word the swap used to live in).
+                uint32_t textureSwapSlots = 0;
                 textureBindings[0].fill(dummyTexture2D.texture.get());
                 textureBindings[1].fill(dummyTexture3D.texture.get());
                 textureBindings[2].fill(dummyTextureCube.texture.get());
@@ -9986,6 +10036,7 @@ void main()
                             textureBindings[bank][slot] = dummy->texture.get();
                             shared.samplerIndex[slot] = 0;
                             shared.textureInfo[slot] = 0x68800u;
+                            textureSwapSlots &= ~(1u << slot);
                             if (selectedBinding) {
                                 *selectedBinding = {};
                                 DescribeBindingTexture(&*selectedBinding, *dummy, binding::TextureKind::Dummy);
@@ -10557,9 +10608,15 @@ void main()
                         shared.textureSize[slot] = tex->guestWidth | (tex->guestHeight << 16);
                         // GPU resolves retain canonical RGBA for presentation.
                         // Recreate COPY_DEST_SWAP at the guest texture-read boundary,
-                        // before applying that fetch's source signs and swizzle.
-                        if (ResolvedSurface* rs = FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F))
-                            if (rs->swapRedBlue) shared.textureInfo[slot] |= 1u << 20;
+                        // before applying that fetch's source signs and swizzle:
+                        // Vulkan through an R/B-swapped image view, Metal by folding
+                        // the swap into the word, D3D12 in the shader (bit 20).
+                        textureSwapSlots &= ~(1u << slot);
+                        if (ResolvedSurface* rs = FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F); rs && rs->swapRedBlue) {
+                            if (nativeVulkan) textureSwapSlots |= 1u << slot;
+                            else if (vulkan) shared.textureInfo[slot] = FoldRedBlueSwap(shared.textureInfo[slot]);
+                            else shared.textureInfo[slot] |= 1u << 20;
+                        }
                         uint64_t samplerKey = ((d3 >> 19) & 3) | (((d3 >> 21) & 3) << 2) | (((d3 >> 23) & 3) << 4)
                             | (((fetch[0] >> 10) & 7) << 6) | (((fetch[0] >> 13) & 7) << 9) | (((fetch[0] >> 16) & 7) << 12);
                         // The area-filtered guest grid still needs continuous
@@ -10722,9 +10779,9 @@ void main()
                 RenderDescriptorSet *set1, *set2, *set3;
                 {
                     ScopedTimer timer{ tSets, cpuTimingEnabled };
-                    set1 = AcquireTextureSet(1, textureBindings[0], activeTextureSlots[0]);
-                    set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1]);
-                    set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2]);
+                    set1 = AcquireTextureSet(1, textureBindings[0], activeTextureSlots[0], textureSwapSlots);
+                    set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1], textureSwapSlots);
+                    set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2], textureSwapSlots);
                 }
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
@@ -11942,9 +11999,9 @@ void main()
                                 Gpu().fsrAlphaBridgeUses.push_back(input.fetch.mask);
                                 maskBindings[0][slot] = input.fetch.mask->texture.get();
                             }
-                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0]);
-                            auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1]);
-                            auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2]);
+                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0], textureSwapSlots);
+                            auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1], textureSwapSlots);
+                            auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2], textureSwapSlots);
                             const RenderBufferReference maskConstants[3] = {
                                 {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
                             RenderDescriptorSet* maskSets[] = {set0, maskSet1, maskSet2,

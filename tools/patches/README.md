@@ -53,6 +53,8 @@ Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它
 
 2026-09-29 D3D12 冗余状态过滤：D3D12 命令列表在管线与已绑定的相同时跳过 `SetPipelineState`，单个 viewport 或 scissor 与已绑定值逐位相同时跳过 `RSSetViewports`、`RSSetScissorRects`，再次绑定同一个 framebuffer 对象（按每个对象的创建序号识别）时跳过 `OMSetRenderTargets`；`invalidateCachedNativeState()` 会清除这些记录，命令列表开始录制以及 DLSS、插帧、FSR 和 `video.cpp` 的原生路径都已调用它。新补丁在固定 HEAD `d890ac8` 的临时干净 worktree 上依次应用原补丁和该过滤后生成，另一个干净 worktree 应用新补丁后的 index tree 与之相同，只有 `plume_d3d12.cpp`、`plume_d3d12.h` 两段变化。Vulkan 不受影响。
 
+2026-10-11 R/B 交换视图：`RenderTexture::getRedBlueSwapView()` 返回红蓝通道互换的整张纹理视图（Vulkan 组件映射 B,G,R,A），首次使用时创建，随纹理一起销毁；其他后端返回空。渲染器用它在 Vulkan 上重现解析纹理的 `COPY_DEST_SWAP`，不再由着色器交换。新补丁在固定 HEAD `d890ac8` 的干净 worktree 上应用 lostodyssey 后生成，sdl3、android、macos 补丁仍可依次叠加。
+
 2026-10-10 Vulkan 管线去重：同一个 render pass 里（或开始前刚绑定后）再次绑定同一个图形管线时跳过 `vkCmdBindPipeline` 和链接管线的动态状态重发，与 D3D12 的 `SetPipelineState` 过滤对应。结束 render pass、`begin()`、`setDepthBias()` 和 `invalidateExternalCommandState()` 都会清除记录；render pass 之外总是绑定，所以绕过 plume 直接重置的命令缓冲也安全。`LO_VK_REBIND_PIPELINE=1` 恢复每次绑定。新补丁在固定 HEAD `d890ac8` 的干净 worktree 上依次应用 lostodyssey、sdl3、android 后，8 个文件按 LF 规范化与本地依赖源码一致，`plume-macos.patch` 仍可叠加。
 
 2026-10-01 Vulkan 插帧：补丁新增 `enableFrameInterpolationFeatures` 开关。只有打开时，Plume 才启用 FidelityFX 插帧依赖的 timeline semaphore、float16/int8、16-bit storage 和 subgroup size control 扩展及对应 feature；普通设备与 Streamline 路径的扩展列表不变。队列族加入 `reserve`/`release`（分配与释放加锁，预留队列不再分给虚拟队列，`createCommandQueue` 在无可用队列时返回空），`externalSwapchainSynchronization` 让替换 WSI 自行同步 present，`destroySwapchainBeforeResize` 让 resize 先销毁旧 swapchain 再创建新的，`resize()` 也会检查 `vkDeviceWaitIdle` 的结果。新补丁在固定 HEAD `d890ac8` 的临时干净 worktree 上重放，7 个文件按 LF 规范化后与本地依赖源码一致。
