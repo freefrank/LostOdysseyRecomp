@@ -27,7 +27,7 @@
 
 ## Windows 快速开始
 
-需要 Windows x64 和支持 AVX 的 CPU。默认使用 Direct3D 12，也可以在设置中改用 Vulkan。
+需要 Windows x64 和支持 AVX 的 CPU。默认使用 Vulkan，也可以在设置中改用 Direct3D 12。
 
 1. 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载 `LostOdysseyRecomp-windows-x64-v0.9.32.zip`。
 2. 把整个 ZIP 解压到可写目录，不要放在 `Program Files` 下。

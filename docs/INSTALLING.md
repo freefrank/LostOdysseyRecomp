@@ -27,7 +27,7 @@ Download the package for your platform, import the game from your own discs, and
 
 ## Windows quick start
 
-You need Windows x64 and a CPU with AVX. The game uses Direct3D 12 by default; Vulkan can be chosen in the settings.
+You need Windows x64 and a CPU with AVX. The game uses Vulkan by default; Direct3D 12 can be chosen in the settings.
 
 1. Download `LostOdysseyRecomp-windows-x64-v0.9.32.zip` from the [latest release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest).
 2. Extract the whole ZIP to a writable folder outside `Program Files`.

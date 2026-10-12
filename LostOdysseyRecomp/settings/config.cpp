@@ -102,11 +102,7 @@ Config Validate(Config value)
     if (value.audioOutput > AudioOutputMatrix)
         value.audioOutput = AudioOutputStereo;
     if (!gpu::backend::Known(value.graphicsBackend))
-#ifdef _WIN32
-        value.graphicsBackend = GraphicsBackend::D3D12;
-#else
         value.graphicsBackend = GraphicsBackend::Vulkan;
-#endif
 #if LO_PLATFORM_MACOS
     value.graphicsBackend = GraphicsBackend::Metal; // The only macOS backend.
 #elif !defined(_WIN32)

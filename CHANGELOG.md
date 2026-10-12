@@ -9,10 +9,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 ### English
 
 - New app icon.
+- Vulkan is now the default renderer on Windows too. Existing settings keep their renderer.
 
 ### 简体中文
 
 - 新的应用图标。
+- Windows 版也默认使用 Vulkan。已有设置保留原来的渲染器。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
