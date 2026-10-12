@@ -19,7 +19,7 @@ from portable_shader_pack_payload import stage_shader_pack_license
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "io.github.freefrank.LostOdysseyRecomp"
-ICON = ROOT / "packaging/linux/io.github.freefrank.LostOdysseyRecomp.png"
+ICON = ROOT / "assets/lost-odyssey-recomp.png"
 MINIMUM_MACOS = "15.0"
 
 
@@ -44,14 +44,12 @@ def asset_tag(version, requested, release):
 
 
 def make_icns(png, destination, temporary):
-    """Build an .icns from the 256 px PNG with sips and iconutil (both ship with macOS)."""
+    """Build an .icns from the 1024 px PNG with sips and iconutil (both ship with macOS)."""
     iconset = Path(temporary) / "LostOdysseyRecomp.iconset"
     iconset.mkdir()
-    for size in (16, 32, 128, 256):
+    for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             pixels = size * scale
-            if pixels > 256:
-                continue
             suffix = "" if scale == 1 else "@2x"
             subprocess.run(["sips", "-z", str(pixels), str(pixels), str(png),
                             "--out", str(iconset / f"icon_{size}x{size}{suffix}.png")],

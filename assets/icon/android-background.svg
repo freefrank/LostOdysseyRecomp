@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+<linearGradient id="rimHi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0c2"/><stop offset=".45" stop-color="#c8963f"/><stop offset="1" stop-color="#4a3010"/></linearGradient>
+<linearGradient id="rimLo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a3c14"/><stop offset=".55" stop-color="#a7782f"/><stop offset="1" stop-color="#f2d38c"/></linearGradient>
+<linearGradient id="band" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7dc98"/><stop offset=".22" stop-color="#c99843"/><stop offset=".45" stop-color="#8a5f22"/><stop offset=".62" stop-color="#d0a24e"/><stop offset=".82" stop-color="#9a6b28"/><stop offset="1" stop-color="#e3bf72"/></linearGradient>
+<radialGradient id="enamel" cx="46%" cy="40%" r="62%"><stop offset="0" stop-color="#3b78c2"/><stop offset=".55" stop-color="#1b4277"/><stop offset="1" stop-color="#0a1a33"/></radialGradient>
+<radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#1f3a63"/><stop offset="1" stop-color="#08111f"/></radialGradient>
+<linearGradient id="steel" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset=".42" stop-color="#e2e6ee"/><stop offset=".52" stop-color="#b8bfcc"/><stop offset="1" stop-color="#6c7380"/></linearGradient>
+<linearGradient id="goldH" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe6ad"/><stop offset=".45" stop-color="#d4a54c"/><stop offset="1" stop-color="#7a521c"/></linearGradient>
+<radialGradient id="goldBall" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#fff3c8"/><stop offset=".45" stop-color="#d9aa4f"/><stop offset="1" stop-color="#6e4816"/></radialGradient>
+<radialGradient id="gemBlue" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#c9ecff"/><stop offset=".35" stop-color="#3f9be6"/><stop offset="1" stop-color="#0a2f63"/></radialGradient>
+<radialGradient id="gemRed" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#ffd0cc"/><stop offset=".4" stop-color="#d23a3a"/><stop offset="1" stop-color="#5a0d12"/></radialGradient>
+<linearGradient id="leather" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2a170a"/><stop offset=".45" stop-color="#5c3818"/><stop offset="1" stop-color="#1e1007"/></linearGradient>
+<radialGradient id="gloss" cx="50%" cy="0%" r="100%"><stop offset="0" stop-color="#ffffff" stop-opacity=".22"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+<filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  .9 0 0 0 -.25" result="a"/><feComposite in="a" in2="SourceGraphic" operator="in"/></filter>
+<filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="12"/></filter>
+<filter id="softer" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+<clipPath id="enamelClip"><circle cx="512" cy="512" r="282"/></clipPath>
+<clipPath id="gripClip"><rect x="492" y="676" width="40" height="110" rx="9"/></clipPath>
+</defs><rect width="1024" height="1024" fill="url(#bg)"/><circle cx="170" cy="230" r="4" fill="#ffffff" opacity=".35"/><circle cx="860" cy="260" r="5" fill="#ffffff" opacity=".35"/><circle cx="220" cy="850" r="3" fill="#ffffff" opacity=".35"/><circle cx="820" cy="820" r="4" fill="#ffffff" opacity=".35"/><circle cx="120" cy="560" r="3" fill="#ffffff" opacity=".35"/><circle cx="900" cy="560" r="3" fill="#ffffff" opacity=".35"/></svg>

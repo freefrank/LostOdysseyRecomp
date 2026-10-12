@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive launcher icon: the repository medallion (assets/lost-odyssey-recomp.ico)
-     on a dark background; the PNG mipmaps are the pre-26 fallback. -->
+<!-- Adaptive launcher icon from assets/icon (build_icons.py): the medallion on a dark blue
+     background, plus a one-colour layer for themed icons; the ic_launcher PNGs are the pre-26 fallback. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
+    <background android:drawable="@mipmap/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
 </adaptive-icon>
