@@ -19,13 +19,14 @@ namespace os::scheduling
 // opts out of App Nap. Call once, early in main().
 void BeginLatencyCriticalActivity();
 
-// Android thread placement experiment, off unless its environment variables
-// are set: LO_THREAD_AFFINITY="render=0x60,main=0xFC,guest=0xFC,other=0x03"
-// (CPU masks by thread role, applied by a 1 s /proc/self/task scan),
-// LO_ADPF=1 (performance hint session for the render and guest main threads),
-// LO_FRAME_STATS=1 (frame interval and per-frame thread CPU summary every 10 s).
-void StartThreadPlacement();
-// Render thread, once per guest swap.
+// Android: restricts the calling game thread (guest threads and the render
+// thread) to the performance cores, so the scheduler stops parking it on the
+// efficiency cores, where these threads run at less than half the speed.
+// No-op elsewhere, on devices without efficiency cores, or with
+// LO_PERFORMANCE_CORES=0. guestMain marks the thread LO_FRAME_STATS reports.
+void PreferPerformanceCores(bool guestMain = false);
+// Render thread, once per guest swap: LO_FRAME_STATS=<seconds> logs frame
+// interval percentiles and per-frame thread CPU time (Android only).
 void OnRenderFrame();
 
 // Sleeps until deadline with sub-millisecond wakeup accuracy. macOS applies

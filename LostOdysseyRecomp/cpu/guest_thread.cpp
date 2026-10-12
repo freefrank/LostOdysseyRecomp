@@ -5,6 +5,7 @@
 #include <kernel/function.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
+#include <os/host_scheduling.h>
 #include <host_ui/host_ui.h>
 #include <cstdio>
 #include "ppc_context.h"
@@ -67,6 +68,7 @@ static void GuestThreadFunc(std::shared_ptr<GuestThreadHandle::Control> state)
     char name[16];
     std::snprintf(name, sizeof(name), "Guest %x", state->params.function);
     os::SetCurrentThreadName(name);
+    os::scheduling::PreferPerformanceCores();
     state->suspended.wait(true);
     GuestThread::Start(state->params);
     state->completion.Set();

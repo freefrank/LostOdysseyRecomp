@@ -158,6 +158,7 @@ static int RunGuest(uint32_t entry)
 
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
+    os::scheduling::PreferPerformanceCores(true);
     GuestThread::Start({ entry, 0, 0 });
 
     LOG_INFO("guest main thread returned");
@@ -328,7 +329,6 @@ int main(int argc, char* argv[])
 #endif
     // macOS counterpart: opt out of App Nap and timer coalescing.
     os::scheduling::BeginLatencyCriticalActivity();
-    os::scheduling::StartThreadPlacement();
 
     for (int i = 1; i < argc; i++)
     {

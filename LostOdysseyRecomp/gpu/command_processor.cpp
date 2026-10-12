@@ -642,6 +642,7 @@ namespace gpu
     void CommandProcessor::WorkerMain()
     {
         os::SetCurrentThreadName("GPU CmdProc");
+        os::scheduling::PreferPerformanceCores();
         const bool timingEnabled = frame_timing::Enabled();
         auto idleStart = std::chrono::steady_clock::time_point{};
         bool timingIdle = false;
