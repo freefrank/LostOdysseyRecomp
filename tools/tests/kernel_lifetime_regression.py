@@ -37,6 +37,7 @@ def main():
 #include <thread>
 using namespace std::chrono_literals;
 struct KernelObject { virtual ~KernelObject()=default; virtual kernel::wait::Target* WaitTarget(){return nullptr;} };
+namespace os::scheduling { inline void PreferPerformanceCores(bool=false) {} }
 '''+structs+r'''
 static std::atomic<bool> releaseGuest{false};
 struct GuestThread {
