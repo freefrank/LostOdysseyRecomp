@@ -38,7 +38,7 @@ Issue、发布记录和全部 Project 条目于 2026-09-30 通过 GitHub 复核�
 - [x] **PlayStation 按键提示：**宿主与游戏内面键、肩键、Start/Back 提示已验收并随 v0.7.0 发布。
 - [x] **Mod API v1 与 Wiki：**`457ba24`／PR #68 已交付清单解析、禁用与回退、重载、LOTEX1/PNG 工具、原生菜单图集与字体替换及 Mod 指南。Windows/Linux Mod API 与 Wiki CI 已通过。任意游戏纹理／模型替换和真实 MO2 验收不属于此已完成范围。
 - [x] **IME、闲置光标与手柄改进：**已随 v0.6.19 发布，旧 IME“未开始”条目已关闭。更广设备组合仍属回归覆盖。
-- [x] **PortForge 清单：**`9abda30` 已提供 Windows/Linux 清单，Issue #37 已关闭，本地记录现与 Project 的 Done 一致。
+- [x] **PortForge 清单：**`9abda30` 已提供 Windows/Linux 清单，每次发版随之更新。
 - [x] **Issue 自动分析：**已部署 Issue-opened 与 `@codex` 回复，并核实[真实公开回复](https://github.com/freefrank/LostOdysseyRecomp/issues/21#issuecomment-5669773986)。后续缺陷修复和回复质量改进单独跟踪。
 - [x] **音频跟踪项 #54/#55：**Issue 与 Project 均已关闭。此处记录维护者关闭状态，不将 PR #66 的诊断改动当作所有语言／缺失台词问题的修复证明；历史反馈仍保存在条目证据中。更新（2026-10-06）：英文版本中 CG 音轨变成日语的原因已由 PR #242 修复并随 v0.8.37 发布；#54 保持关闭，尚无报告者确认该修复。
 - [x] **维护者已完成的 Project 记录：**两个 shader 翻译失败、纯资源 PSO 预备和临时主角伤害控制已在远端标为 Done。旧 Delivery 字段及证据不能独立证明发布版本或新增运行时验收。本地路线图遵循维护者完成状态，不再将这些记录列为当前 Todo。

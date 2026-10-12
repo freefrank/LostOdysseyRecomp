@@ -2875,19 +2875,6 @@
         "Source key": "issue-49-physical-pixel-window-coords"
       }
     },
-    "issue-37-portforge-integration": {
-      "id": "PVTI_lAHOAAsUY84Biy1azg8rhLU",
-      "fields": {
-        "Kind": "Feature",
-        "Area": "Updates and packaging",
-        "Status": "Done",
-        "Delivery": "Released",
-        "Start date": "2026-09-15",
-        "Evidence": "PortForge Windows/Linux manifest committed in 9abda30 and included in v0.6.20. Live Issue #37 is CLOSED and Project Status is already Done (read back 2026-09-26). No additional launcher hardware coverage inferred.",
-        "Source key": "issue-37-portforge-integration",
-        "Release": "v0.6.20"
-      }
-    },
     "issue-54-japanese-cutscene-language": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8rhNE",
       "fields": {

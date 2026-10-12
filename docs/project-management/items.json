@@ -5794,27 +5794,6 @@
       "record_type": "issue"
     },
     {
-      "key": "issue-37-portforge-integration",
-      "title": "Add to PortForge?",
-      "body": "<!-- lo-project:issue-37-portforge-integration -->\n\n## Current reconciliation — 2026-09-26\n\nPortForge Windows/Linux manifest committed in 9abda30 and included in v0.6.20. Live Issue #37 is CLOSED and Project Status is already Done (read back 2026-09-26). No additional launcher hardware coverage inferred.\n\n## Historical scope and evidence (current state above supersedes old status wording)\n\nIssue #37 proposes launcher integration via PortForge `.forge.json` manifest.\n\n## Status and scope\n\n- User explicitly authorized implementation. Parallel librarian and explorer tasks are currently auditing external `.forge.json` manifest contracts and local repository paths.\n- Status is in-progress investigation and adaptation preparation; no code or acceptance yet.\n- Native Linux AppImage packages are already independently published and supported in release assets.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/37\n",
-      "issue_url": "https://github.com/freefrank/LostOdysseyRecomp/issues/37",
-      "fields": {
-        "Kind": "Feature",
-        "Area": "Updates and packaging",
-        "Status": "Done",
-        "Delivery": "Released",
-        "Release": "v0.6.20",
-        "Start date": "2026-09-15",
-        "Target date": null,
-        "Evidence": "PortForge Windows/Linux manifest committed in 9abda30 and included in v0.6.20. Live Issue #37 is CLOSED and Project Status is already Done (read back 2026-09-26). No additional launcher hardware coverage inferred."
-      },
-      "source_refs": [
-        "https://github.com/freefrank/LostOdysseyRecomp/issues/37"
-      ],
-      "source_lines": [],
-      "record_type": "issue"
-    },
-    {
       "key": "issue-54-japanese-cutscene-language",
       "title": "[Bug] USA/Europe English: one cutscene after the second boss plays in Japanese, reverts at the Cages scene",
       "body": "<!-- lo-project:issue-54-japanese-cutscene-language -->\n\n## Current reconciliation — 2026-09-26\n\nLive Issue #54 is CLOSED and the maintainer Project Status is Done (2026-09-26 readback). Respect tracker closure. PR #66/ab24e0b adds late XMA diagnostics, not a proven cutscene-language root-cause repair; prior Disc 3 CGI language reports remain historical evidence, with no new reporter acceptance inferred.\n\n## Update — 2026-10-06\n\nThe Japanese CGI track in English builds was caused by an upper-case voice code returned by the host language hook (found with Issue #220). PR #242 fixed it and shipped in v0.8.37; the check was a unit fixture and a voice-id trace, with no listening test and no reporter confirmation. The Issue stays closed.\n\n## Historical scope and evidence (current state above supersedes old status wording)\n\nOpen Issue #54 reports cutscenes playing in Japanese during English USA/Europe playthrough.\n\n## Status and verification boundary\n\n- Invalid voice-menu selection handling fix was packaged in v0.6.3 with optional language tracing.\n- Retained open: recent player feedback indicates cutscene language still reverts to Japanese on Disc 3 and other scenes, beyond the initial voice menu selection fix.\n- Under active monitoring.\n\n## Sources\n\n- https://github.com/freefrank/LostOdysseyRecomp/issues/54\n",
