@@ -2,6 +2,27 @@
 
 These pages describe the mod system on the main branch: mod format v1 and v2 (mod folders with their own overlay files). The newest release may not include the latest changes.
 
+## 4x HD texture pack
+
+About 15,400 of the game's textures, upscaled 4x. Windows only, like all mods; it needs v0.9.22 or later. The download is 16.4 GB in four parts and unpacks to 33 GB.
+
+1. Open the [download page](https://fuckingfast.net/qgrm5ikgre7z) and download all five files into one folder: `LostOdysseyRecomp-HD-Textures-4x-v1.0.7z.001` to `.004`, and `SHA256SUMS.txt`.
+2. Optional: check the downloads. Open PowerShell in that folder and run `Get-FileHash *.7z.* -Algorithm SHA256`. Each hash must match the line for that file in `SHA256SUMS.txt`.
+3. Install [7-Zip](https://www.7-zip.org/) if you don't have it.
+4. Right-click `LostOdysseyRecomp-HD-Textures-4x-v1.0.7z.001` and choose **7-Zip → Extract files...**. As the destination, pick your game folder: the folder that contains `LostOdysseyRecomp.exe`. 7-Zip reads the other three parts by itself.
+5. Check that the game folder now contains `mods\hd-textures-4x\mod.ini`.
+6. Start the game. Settings → System → Mods lists **4x HD Texture Pack**, turned on.
+
+After step 5 you can delete the four `.7z` files.
+
+| Problem | Fix |
+| --- | --- |
+| 7-Zip reports a missing volume or an unexpected end of archive. | One part is missing or incomplete. Download all four parts into the same folder, then check them with step 2. |
+| The textures look unchanged. | The folder must be `mods\hd-textures-4x\` directly next to `LostOdysseyRecomp.exe`, not `mods\mods\...`. Check that the pack is on in Settings → System → Mods, then restart the game. |
+| Short stutters when entering an area for the first time. | The game reads the new textures from disk as they are needed. Keep the game folder on an SSD. |
+
+To remove the pack, delete `mods\hd-textures-4x\`, or turn it off in Settings → System → Mods.
+
 ## What works today
 
 | Resource or feature | Status |
