@@ -8569,7 +8569,8 @@ void main()
             // its EDRAM tiles as physical rectangles: MapDepthClear, the coalescing
             // sorts (Vulkan) and the scaling to the target's resolution. The result
             // depends only on these inputs, and the title repeats the same clears
-            // every frame, so recent mappings are kept.
+            // every frame, so the mappings are kept: about a hundred distinct ones
+            // per frame in Uhra. The bound only stops growth.
             struct DepthClearMapKey {
                 uint32_t srcPitch, srcMsaa, dstPitch, dstHeight, dstMsaa, scaleWidth, scaleHeight;
                 bool coalesce;
@@ -8580,27 +8581,33 @@ void main()
                         area.left == o.area.left && area.top == o.area.top && area.right == o.area.right && area.bottom == o.area.bottom;
                 }
             };
-            struct DepthClearMap { DepthClearMapKey key{}; std::vector<pending_clear::Rect> rects; bool valid = false; };
-            std::array<DepthClearMap, 16> depthClearMaps{};
-            size_t depthClearMapNext = 0;
+            struct DepthClearMapKeyHash {
+                size_t operator()(const DepthClearMapKey& k) const noexcept {
+                    uint64_t hash = 0xcbf29ce484222325ull;
+                    for (const uint64_t v : {uint64_t(k.srcPitch) | uint64_t(k.srcMsaa) << 32, uint64_t(k.dstPitch) | uint64_t(k.dstHeight) << 32,
+                        uint64_t(k.dstMsaa) | uint64_t(k.coalesce) << 32, uint64_t(k.scaleWidth) | uint64_t(k.scaleHeight) << 32,
+                        uint64_t(uint32_t(k.area.left)) | uint64_t(uint32_t(k.area.top)) << 32,
+                        uint64_t(uint32_t(k.area.right)) | uint64_t(uint32_t(k.area.bottom)) << 32})
+                        hash = (hash ^ v) * 0x100000001b3ull;
+                    return size_t(hash ^ (hash >> 32));
+                }
+            };
+            static constexpr size_t kDepthClearMaps = 1024;
+            std::unordered_map<DepthClearMapKey, std::vector<pending_clear::Rect>, DepthClearMapKeyHash> depthClearMaps;
             std::vector<DepthClearRect> depthClearScratch;
             // Valid until the next call.
             const std::vector<pending_clear::Rect>& MappedDepthClear(const DepthClearMapKey& key, const HostTexture& target)
             {
-                for (const auto& map : depthClearMaps)
-                    if (map.valid && map.key == key) return map.rects;
+                if (const auto it = depthClearMaps.find(key); it != depthClearMaps.end()) return it->second;
                 auto& mapped = depthClearScratch;
                 MapDepthClear(mapped, key.srcPitch, key.srcMsaa, key.area, key.dstPitch, key.dstHeight, key.dstMsaa);
                 if (key.coalesce) CoalesceDepthClearRects(mapped);
-                auto& map = depthClearMaps[depthClearMapNext];
-                depthClearMapNext = (depthClearMapNext + 1) % depthClearMaps.size();
-                map.key = key;
-                map.rects.clear();
-                map.rects.reserve(mapped.size());
-                for (const auto& r : mapped) map.rects.push_back({int32_t(target.ScaleX(uint32_t(r.left))), int32_t(target.ScaleY(uint32_t(r.top))),
+                if (depthClearMaps.size() >= kDepthClearMaps) depthClearMaps.clear();
+                auto& rects = depthClearMaps[key];
+                rects.reserve(mapped.size());
+                for (const auto& r : mapped) rects.push_back({int32_t(target.ScaleX(uint32_t(r.left))), int32_t(target.ScaleY(uint32_t(r.top))),
                     int32_t(target.ScaleX(uint32_t(r.right))), int32_t(target.ScaleY(uint32_t(r.bottom)))});
-                map.valid = true;
-                return map.rects;
+                return rects;
             }
 
             // InvalidateRange's compact copy of every cached texture's key: a resolve
