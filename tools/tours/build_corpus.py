@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the scene-tagged pipeline corpus (recipe file v2) from recipe tour outputs.
+"""Build the scene-tagged pipeline corpus (recipe file v3) from recipe tour outputs.
 
   python tools/tours/build_corpus.py --out DIR [--map DIR...] [--cutscene FILE...]
                                      [--battle DIR...] [--stage DIR...]
@@ -89,11 +89,11 @@ def main():
     # Rect-list recipes need the rect-list VS variant, which the renderer makes at
     # the first such draw; startup preparation counts the untagged/"many" ones as
     # missing shaders and never builds them, so they are dropped.
-    version, recipes = pr.load(str(corpus))
+    version, recipes, tex = pr.load_full(str(corpus))
     keep = {k: s for k, s in recipes.items()
             if not (struct.unpack_from("<12I", k, 16)[4] == 8 and (not s or s == [pr.MANY]))}
     print(f"dropped {len(recipes) - len(keep)} startup rect-list recipes")
-    pr.write(str(corpus), version, keep)
+    pr.write(str(corpus), version, keep, tex)
     print("corpus:", stats(corpus)[1])
     data = corpus.read_bytes()
     print("sha256", hashlib.sha256(data).hexdigest(), "size", len(data))

@@ -22,7 +22,7 @@ Status against main 16a83cb8 (2026-10-07): neither patch passes `git apply --che
 
 ## Corpus builder
 
-`build_corpus.py` merges the tour outputs into `pipelines_corpus.bin` (recipe file v2 with scene tags) using [`tools/pipeline_recipes.py`](../pipeline_recipes.py):
+`build_corpus.py` merges the tour outputs into `pipelines_corpus.bin` (recipe file v3: scene tags and texture-info words) using [`tools/pipeline_recipes.py`](../pipeline_recipes.py):
 
 ```sh
 python tools/tours/build_corpus.py --out DIR --map SCENES... --cutscene FILE... --battle SCENES... --stage SCENES...

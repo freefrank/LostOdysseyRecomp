@@ -6543,9 +6543,9 @@ void main()
                         auto recipes = LoadRecipes(RecipePath(), false).records;
                         if (const auto corpus = CorpusPath(); !corpus.empty())
                             for (const auto& record : LoadRecipes(corpus, true).records) recipes.push_back(record);
-                        for (const auto& [key, scenes] : recipes) {
-                            wantedModules[0].insert(key.vs);
-                            if (key.ps) wantedModules[1].insert(key.ps);
+                        for (const auto& record : recipes) {
+                            wantedModules[0].insert(record.key.vs);
+                            if (record.key.ps) wantedModules[1].insert(record.key.ps);
                         }
                     }
                     uint32_t deferredModules = 0;

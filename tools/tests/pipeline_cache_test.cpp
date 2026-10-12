@@ -282,6 +282,40 @@ int main(int argc, char** argv)
         loaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
         Check(loaded.status == cache::Status::Loaded && loaded.records.size() == 2 && loaded.duplicates == 1, "read deduplication");
 
+        // File version 3: texture-info words round-trip, merge per key in order,
+        // and any damaged byte of the section is rejected.
+        {
+            const fs::path texPath = root / "texinfo.bin";
+            cache::TexInfo a, b;
+            a.mask = 0x5; a.words[0] = 0x6883f; a.words[2] = 0x60a00;
+            b.mask = 0x80000000u; b.words[31] = 0x68800;
+            const std::vector<cache::Record> tuples{ { key, {}, { a } }, { second, {}, {} }, { key, {}, { b, a } } };
+            Check(cache::Write(texPath, tuples, shaderVersion, recipeVersion, ValidateEnums).ok, "texture-info write");
+            const auto texOriginal = Read(texPath);
+            Check(texOriginal.size() == cache::kHeaderBytes + 2 * cache::kRecordBytes + (8 + 8) + (8 + 4), "texture-info framing");
+            auto texLoaded = cache::Load(texPath, shaderVersion, recipeVersion, ValidateEnums);
+            Check(texLoaded.status == cache::Status::Loaded && texLoaded.records.size() == 2 &&
+                texLoaded.records[0].texinfo == std::vector<cache::TexInfo>{ a, b } && texLoaded.records[1].texinfo.empty(),
+                "texture-info round trip");
+            auto outside = a;
+            outside.words[1] = 1; // a word outside the mask
+            const cache::Record outsideRecord{ key, {}, { outside } };
+            Check(!cache::Write(texPath, { &outsideRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok && Read(texPath) == texOriginal,
+                "texture-info outside its mask rejected");
+            auto wide = a;
+            wide.words[0] = 1u << 20; // the swap bit never reaches a recipe
+            const cache::Record wideRecord{ key, {}, { wide } };
+            Check(!cache::Write(texPath, { &wideRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok, "texture-info over 20 bits rejected");
+            for (size_t i = cache::kHeaderBytes + 2 * cache::kRecordBytes; i < texOriginal.size(); ++i)
+            {
+                auto damaged = texOriginal;
+                damaged[i] ^= 0x80;
+                RawWrite(badPath, damaged);
+                texLoaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
+                Check(texLoaded.status != cache::Status::Loaded && texLoaded.records.empty(), "texture-info corruption rejected");
+            }
+        }
+
         const cache::Validator throwing = [](const cache::Key&) -> bool { throw std::runtime_error("fixture failure"); };
         Check(!cache::Write(path, records, shaderVersion, recipeVersion, throwing).ok && Read(path) == original,
             "validator exception preserves destination");

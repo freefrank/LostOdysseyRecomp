@@ -50,9 +50,9 @@ RENDERERS = {
     "d3d12": ("portable_dx12", ".lospd", "dxil"),
 }
 MAGIC = {b"LOSPVPK1": "spirv", b"LOSPDPK1": "dxil"}
-# updater/shader_pack_index.h: CorpusRenderer, CorpusContract = SHA-256("lo-pipeline-recipes-v2").
+# updater/shader_pack_index.h: CorpusRenderer, CorpusContract = SHA-256("lo-pipeline-recipes-v3").
 CORPUS_RENDERER = "pipeline-corpus"
-CORPUS_CONTRACT = hashlib.sha256(b"lo-pipeline-recipes-v2").hexdigest()
+CORPUS_CONTRACT = hashlib.sha256(b"lo-pipeline-recipes-v3").hexdigest()
 NOTES = (
     "Precompiled shaders that the game downloads at startup, one file per renderer "
     "and shader contract. index.json lists them. Version releases no longer include "
@@ -70,17 +70,17 @@ def read_header(path: Path) -> tuple[str, str]:
 
 
 def check_corpus(path: Path) -> None:
-    """A recipe file of version 2 (gpu/pipeline_cache.h) with an intact header."""
+    """A recipe file of version 3 (gpu/pipeline_cache.h) with an intact header."""
     data = path.read_bytes()
     fnv = 0xCBF29CE484222325
     for byte in data[:40]:
         fnv = ((fnv ^ byte) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
     if len(data) < 48 or data[:8] != b"LOPSO001" or int.from_bytes(data[40:48], "little") != fnv:
         raise SystemExit(f"{path}: not a pipeline recipe file")
-    version, _, _, record, count = (int.from_bytes(data[o:o + 4], "little") for o in range(8, 28, 4))
-    if version != 2 or len(data) != 48 + record * count:
-        raise SystemExit(f"{path}: not a version 2 recipe file")
-    print(f"{CORPUS_RENDERER}: {count} recipes")
+    version, _, _, record, count, texinfo = (int.from_bytes(data[o:o + 4], "little") for o in range(8, 32, 4))
+    if version != 3 or len(data) != 48 + record * count + texinfo:
+        raise SystemExit(f"{path}: not a version 3 recipe file")
+    print(f"{CORPUS_RENDERER}: {count} recipes, {texinfo} bytes of texture-info words")
 
 
 def sha256_file(path: Path) -> str:

@@ -81,21 +81,54 @@ namespace gpu::pipeline_cache
             return changed;
         }
     };
+    // Texture-info words a recipe was drawn with (Vulkan specialization): the
+    // word of every fetch slot in mask, 0 elsewhere. Words have 20 bits.
+    inline constexpr size_t kTexInfoSlots = 32;
+    inline constexpr size_t kMaxTexInfo = 4; // per recipe
+    struct TexInfo
+    {
+        uint32_t mask = 0;
+        std::array<uint32_t, kTexInfoSlots> words{};
+        bool operator==(const TexInfo&) const = default;
+        bool Valid() const noexcept
+        {
+            if (!mask) return false;
+            for (size_t slot = 0; slot < kTexInfoSlots; ++slot)
+                if (((mask >> slot) & 1) ? (words[slot] >> 20) != 0 : words[slot] != 0) return false;
+            return true;
+        }
+    };
     struct Record
     {
         Key key;
         Scenes scenes;
+        std::vector<TexInfo> texinfo;
         bool operator==(const Record&) const = default;
+        // Returns whether the list changed. Keeps at most kMaxTexInfo, first come.
+        bool AddTexInfo(const TexInfo& info)
+        {
+            if (texinfo.size() >= kMaxTexInfo || std::find(texinfo.begin(), texinfo.end(), info) != texinfo.end()) return false;
+            texinfo.push_back(info);
+            return true;
+        }
+        void Merge(const Record& other)
+        {
+            scenes.Merge(other.scenes);
+            for (const auto& info : other.texinfo) AddTexInfo(info);
+        }
     };
 
     inline constexpr size_t kMaxRecords = 16384;
     inline constexpr size_t kKeyBytes = 64;
     inline constexpr size_t kSceneBytes = kSceneSlots * 4;
     // File version 1 records hold the key and its checksum; version 2 adds the scenes.
+    // Version 3 appends texture-info words after the records: per entry the record
+    // index, the slot mask and the masked slots' words (header word 28: their bytes).
     inline constexpr size_t kRecordBytesV1 = kKeyBytes + 8;
     inline constexpr size_t kRecordBytes = kKeyBytes + kSceneBytes + 8;
     inline constexpr size_t kHeaderBytes = 48;
-    inline constexpr uint32_t kFileVersion = 2;
+    inline constexpr size_t kMaxTexInfoBytes = kMaxRecords * kMaxTexInfo * (8 + 4 * kTexInfoSlots);
+    inline constexpr uint32_t kFileVersion = 3;
     // Load(): accept any translator version (a shipped corpus outlives it).
     inline constexpr uint32_t kAnyShaderVersion = 0;
     using Validator = std::function<bool(const Key&)>;
@@ -331,7 +364,8 @@ namespace gpu::pipeline_cache
         size_t duplicates = 0;
     };
 
-    // Reads file version 1 (keys only) and 2 (keys and scenes). Recipe versions
+    // Reads file version 1 (keys only), 2 (keys and scenes) and 3 (and texture-info
+    // words). Recipe versions
     // from oldestRecipeVersion up to recipeVersion are accepted; keys of an older
     // one are normalized (version 1 keys predate Normalize). shaderVersion may be
     // kAnyShaderVersion. Duplicate keys merge their scenes.
@@ -349,7 +383,7 @@ namespace gpu::pipeline_cache
                 return ec ? fail(Status::IoError, ec.message()) : LoadResult{ Status::Missing, {}, {}, 0, false };
             const auto size = std::filesystem::file_size(path, ec);
             if (ec) return fail(Status::IoError, ec.message());
-            if (size < kHeaderBytes || size > kHeaderBytes + kMaxRecords * kRecordBytes)
+            if (size < kHeaderBytes || size > kHeaderBytes + kMaxRecords * kRecordBytes + kMaxTexInfoBytes)
                 return fail(Status::Invalid, "invalid recipe file length");
             std::vector<uint8_t> bytes(static_cast<size_t>(size));
             std::ifstream input(path, std::ios::binary);
@@ -364,16 +398,17 @@ namespace gpu::pipeline_cache
             const uint32_t fileVersion = detail::Read32(bytes.data() + 8);
             const uint32_t fileRecipeVersion = detail::Read32(bytes.data() + 16);
             const uint32_t oldest = oldestRecipeVersion ? std::min(oldestRecipeVersion, recipeVersion) : recipeVersion;
-            if ((fileVersion != 1 && fileVersion != kFileVersion) ||
+            if (fileVersion < 1 || fileVersion > kFileVersion ||
                 (shaderVersion != kAnyShaderVersion && detail::Read32(bytes.data() + 12) != shaderVersion) ||
                 fileRecipeVersion < oldest || fileRecipeVersion > recipeVersion)
                 return fail(Status::Incompatible, "recipe cache version mismatch");
             const size_t recordBytes = fileVersion == 1 ? kRecordBytesV1 : kRecordBytes;
             const size_t checkedBytes = recordBytes - 8;
             const uint32_t count = detail::Read32(bytes.data() + 24);
+            const uint32_t texInfoBytes = detail::Read32(bytes.data() + 28);
             if (detail::Read32(bytes.data() + 20) != recordBytes ||
-                detail::Read32(bytes.data() + 28) != 0 || count > kMaxRecords ||
-                bytes.size() != kHeaderBytes + size_t(count) * recordBytes)
+                (fileVersion < 3 && texInfoBytes != 0) || texInfoBytes > kMaxTexInfoBytes || (texInfoBytes & 3) ||
+                count > kMaxRecords || bytes.size() != kHeaderBytes + size_t(count) * recordBytes + texInfoBytes)
                 return fail(Status::Invalid, "invalid recipe record framing");
             if (detail::Read64(bytes.data() + 32) != detail::Hash(std::span(bytes).subspan(kHeaderBytes)))
                 return fail(Status::Invalid, "recipe payload checksum mismatch");
@@ -383,6 +418,7 @@ namespace gpu::pipeline_cache
             result.records.reserve(count);
             std::unordered_map<Key, size_t, KeyHash> seen;
             seen.reserve(count);
+            std::vector<size_t> merged(count); // file record -> result record
             for (size_t i = 0; i < count; ++i)
             {
                 const uint8_t* record = bytes.data() + kHeaderBytes + i * recordBytes;
@@ -396,12 +432,30 @@ namespace gpu::pipeline_cache
                         entry.scenes.tags[slot] = detail::Read32(record + kKeyBytes + 4 * slot);
                 if (normalize) entry.key = Normalize(entry.key);
                 const auto [found, inserted] = seen.try_emplace(entry.key, result.records.size());
+                merged[i] = found->second;
                 if (inserted) result.records.push_back(entry);
                 else
                 {
                     result.records[found->second].scenes.Merge(entry.scenes);
                     ++result.duplicates;
                 }
+            }
+            const uint8_t* texInfo = bytes.data() + kHeaderBytes + size_t(count) * recordBytes;
+            for (size_t offset = 0; offset < texInfoBytes;)
+            {
+                if (texInfoBytes - offset < 8) return fail(Status::Invalid, "truncated texture-info entry");
+                const uint32_t index = detail::Read32(texInfo + offset), mask = detail::Read32(texInfo + offset + 4);
+                const size_t words = size_t(std::popcount(mask));
+                if (index >= count || !mask || texInfoBytes - offset - 8 < words * 4)
+                    return fail(Status::Invalid, "invalid texture-info entry");
+                TexInfo info;
+                info.mask = mask;
+                size_t next = offset + 8;
+                for (uint32_t m = mask; m; m &= m - 1, next += 4)
+                    info.words[std::countr_zero(m)] = detail::Read32(texInfo + next);
+                if (!info.Valid()) return fail(Status::Invalid, "invalid texture-info word");
+                result.records[merged[index]].AddTexInfo(info);
+                offset = next;
             }
             return result;
         }
@@ -411,7 +465,7 @@ namespace gpu::pipeline_cache
         }
     }
 
-    // Writes file version 2. Duplicate keys merge their scenes.
+    // Writes file version 3. Duplicate keys merge their scenes and texture-info words.
     inline WriteResult Write(const std::filesystem::path& path, std::span<const Record> records,
                              uint32_t shaderVersion, uint32_t recipeVersion,
                              const Validator& validate = {})
@@ -430,16 +484,20 @@ namespace gpu::pipeline_cache
             seen.reserve(records.size());
             for (const Record& record : records)
             {
-                if (!IsValid(record.key) || (validate && !validate(record.key)))
+                if (!IsValid(record.key) || (validate && !validate(record.key)) ||
+                    !std::all_of(record.texinfo.begin(), record.texinfo.end(), [](const TexInfo& info) { return info.Valid(); }))
                 {
                     result.error = "recipe contains unsupported state";
                     return result;
                 }
                 const auto [found, inserted] = seen.try_emplace(record.key, unique.size());
-                if (inserted) unique.push_back(record);
-                else { unique[found->second].scenes.Merge(record.scenes); ++result.duplicates; }
+                if (inserted) { unique.push_back({ record.key, {}, {} }); unique.back().Merge(record); }
+                else { unique[found->second].Merge(record); ++result.duplicates; }
             }
-            std::vector<uint8_t> bytes(kHeaderBytes + unique.size() * kRecordBytes, 0);
+            size_t texInfoBytes = 0;
+            for (const Record& record : unique)
+                for (const TexInfo& info : record.texinfo) texInfoBytes += 8 + 4 * size_t(std::popcount(info.mask));
+            std::vector<uint8_t> bytes(kHeaderBytes + unique.size() * kRecordBytes + texInfoBytes, 0);
             for (size_t i = 0; i < unique.size(); ++i)
             {
                 uint8_t* out = bytes.data() + kHeaderBytes + i * kRecordBytes;
@@ -449,12 +507,23 @@ namespace gpu::pipeline_cache
                     detail::Put32(out + kKeyBytes + 4 * slot, unique[i].scenes.tags[slot]);
                 detail::Put64(out + kKeyBytes + kSceneBytes, detail::Hash({ out, kKeyBytes + kSceneBytes }));
             }
+            uint8_t* texInfo = bytes.data() + kHeaderBytes + unique.size() * kRecordBytes;
+            for (size_t i = 0; i < unique.size(); ++i)
+                for (const TexInfo& info : unique[i].texinfo)
+                {
+                    detail::Put32(texInfo, static_cast<uint32_t>(i));
+                    detail::Put32(texInfo + 4, info.mask);
+                    texInfo += 8;
+                    for (uint32_t m = info.mask; m; m &= m - 1, texInfo += 4)
+                        detail::Put32(texInfo, info.words[std::countr_zero(m)]);
+                }
             std::copy(detail::kMagic.begin(), detail::kMagic.end(), bytes.begin());
             detail::Put32(bytes.data() + 8, kFileVersion);
             detail::Put32(bytes.data() + 12, shaderVersion);
             detail::Put32(bytes.data() + 16, recipeVersion);
             detail::Put32(bytes.data() + 20, static_cast<uint32_t>(kRecordBytes));
             detail::Put32(bytes.data() + 24, static_cast<uint32_t>(unique.size()));
+            detail::Put32(bytes.data() + 28, static_cast<uint32_t>(texInfoBytes));
             detail::Put64(bytes.data() + 32, detail::Hash(std::span(bytes).subspan(kHeaderBytes)));
             detail::Put64(bytes.data() + 40, detail::Hash(std::span(bytes).first(40)));
 

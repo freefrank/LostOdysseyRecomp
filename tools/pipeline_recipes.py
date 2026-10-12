@@ -3,16 +3,17 @@
 
 Usage:
   python tools/pipeline_recipes.py info FILE...
-  python tools/pipeline_recipes.py merge OUT IN[@SCENE]...   # union; scenes merge
+  python tools/pipeline_recipes.py merge OUT IN[@SCENE]...   # union; scenes and texture-info words merge
   python tools/pipeline_recipes.py subtract OUT A B     # recipes of A whose keys are not in B
   python tools/pipeline_recipes.py strip OUT IN         # drop scene tags
 
-Reads file versions 1 and 2 (gpu/pipeline_cache.h). Keys of recipe version 1
+Reads file versions 1, 2 and 3 (gpu/pipeline_cache.h). Keys of recipe version 1
 are normalized like gpu::pipeline_cache::Normalize; output is always file
-version 2, recipe version 2, with the first input's translator version. A
+version 3, recipe version 2, with the first input's translator version. A
 shipped corpus (shaders/pipelines_corpus.bin) is a merge of learned files.
 IN@SCENE adds a scene to every recipe of that input (map:ID or battle:ID),
-for files recorded by builds without scene tags.
+for files recorded by builds without scene tags. Version 3 adds the texture-info
+words recipes were drawn with (Vulkan specialization): at most four per recipe.
 """
 import struct
 import sys
@@ -23,7 +24,9 @@ KEY = 64
 SLOTS = 8
 RECORD_V1 = KEY + 8
 RECORD_V2 = KEY + SLOTS * 4 + 8
+FILE_VERSION = 3
 RECIPE_VERSION = 2
+MAX_TEXINFO = 4
 MANY = 0xFFFFFFFF
 NO_SCENE = 0xF0000000
 NO_BLEND = 0x00010001
@@ -71,24 +74,42 @@ def normalize(key):
                        ref_back, bias, slope)
 
 
-def load(path):
-    """Returns (translator version, {key bytes: [scene tags]}) in file order."""
+def load_full(path):
+    """Returns (translator version, {key bytes: [scene tags]}, {key bytes: [(mask, words...)]}) in file order."""
     data = open(path, "rb").read()
     if data[:8] != MAGIC or struct.unpack_from("<Q", data, 40)[0] != fnv(data[:40]):
         raise SystemExit(f"{path}: not a recipe file")
-    file_version, shader_version, recipe_version, record, count = struct.unpack_from("<5I", data, 8)
-    if file_version not in (1, 2) or record != (RECORD_V1 if file_version == 1 else RECORD_V2):
+    file_version, shader_version, recipe_version, record, count, tex_bytes = struct.unpack_from("<6I", data, 8)
+    if file_version not in (1, 2, 3) or record != (RECORD_V1 if file_version == 1 else RECORD_V2):
         raise SystemExit(f"{path}: unsupported file version {file_version}")
-    if recipe_version > RECIPE_VERSION or len(data) != HEADER + count * record:
+    if file_version < 3 and tex_bytes:
+        raise SystemExit(f"{path}: texture-info words in a version {file_version} file")
+    if recipe_version > RECIPE_VERSION or len(data) != HEADER + count * record + tex_bytes:
         raise SystemExit(f"{path}: unsupported recipe version {recipe_version} or bad length")
-    recipes = {}
+    recipes, tex, order = {}, {}, []
     for i in range(count):
         raw = data[HEADER + i * record: HEADER + (i + 1) * record]
         if struct.unpack_from("<Q", raw, record - 8)[0] != fnv(raw[:record - 8]):
             raise SystemExit(f"{path}: record {i} checksum mismatch")
         key = raw[:KEY] if recipe_version >= RECIPE_VERSION else normalize(raw[:KEY])
-        tags = [t for t in struct.unpack_from(f"<{SLOTS}I", raw, KEY) if t] if file_version == 2 else []
+        tags = [t for t in struct.unpack_from(f"<{SLOTS}I", raw, KEY) if t] if file_version >= 2 else []
         add_scenes(recipes.setdefault(key, []), tags)
+        order.append(key)
+    offset = HEADER + count * record
+    end = offset + tex_bytes
+    while offset < end:
+        index, mask = struct.unpack_from("<2I", data, offset)
+        words = struct.unpack_from(f"<{bin(mask).count('1')}I", data, offset + 8)
+        if index >= count or not mask or any(w >> 20 for w in words):
+            raise SystemExit(f"{path}: invalid texture-info entry at byte {offset}")
+        add_texinfo(tex.setdefault(order[index], []), (mask,) + tuple(words))
+        offset += 8 + 4 * len(words)
+    return shader_version, recipes, tex
+
+
+def load(path):
+    """Returns (translator version, {key bytes: [scene tags]}) in file order."""
+    shader_version, recipes, _ = load_full(path)
     return shader_version, recipes
 
 
@@ -102,19 +123,31 @@ def add_scenes(scenes, tags):
             scenes.append(tag)
 
 
-def write(path, shader_version, recipes):
+def add_texinfo(entries, entry):
+    if entry not in entries and len(entries) < MAX_TEXINFO:
+        entries.append(entry)
+
+
+def write(path, shader_version, recipes, tex=None):
+    tex = tex or {}
     body = bytearray()
     for key, scenes in recipes.items():
         record = key + struct.pack(f"<{SLOTS}I", *(scenes + [0] * (SLOTS - len(scenes))))
         body += record + struct.pack("<Q", fnv(record))
+    section = bytearray()
+    for index, key in enumerate(recipes):
+        for mask, *words in tex.get(key, []):
+            section += struct.pack(f"<2I{len(words)}I", index, mask, *words)
+    body += section
     header = bytearray(HEADER)
     header[:8] = MAGIC
-    struct.pack_into("<6I", header, 8, 2, shader_version, RECIPE_VERSION, RECORD_V2, len(recipes), 0)
+    struct.pack_into("<6I", header, 8, FILE_VERSION, shader_version, RECIPE_VERSION, RECORD_V2, len(recipes), len(section))
     struct.pack_into("<Q", header, 32, fnv(body))
     struct.pack_into("<Q", header, 40, fnv(header[:40]))
     with open(path, "wb") as out:
         out.write(header + body)
-    print(f"{path}: {len(recipes)} recipes")
+    tuples = sum(len(tex.get(key, [])) for key in recipes)
+    print(f"{path}: {len(recipes)} recipes, {tuples} texture-info tuples")
 
 
 def scene_name(tag):
@@ -127,14 +160,16 @@ def scene_name(tag):
 
 def info(paths):
     for path in paths:
-        shader_version, recipes = load(path)
+        shader_version, recipes, tex = load_full(path)
         per_scene = {}
         for scenes in recipes.values():
             for tag in scenes:
                 per_scene[tag] = per_scene.get(tag, 0) + 1
         untagged = sum(1 for scenes in recipes.values() if not scenes)
+        tuples = sum(len(v) for v in tex.values())
         print(f"{path}: {len(recipes)} recipes, translator {shader_version}, {untagged} untagged, "
-              f"{per_scene.get(MANY, 0)} in more than {SLOTS} scenes, {len([t for t in per_scene if t != MANY])} scenes")
+              f"{per_scene.get(MANY, 0)} in more than {SLOTS} scenes, {len([t for t in per_scene if t != MANY])} scenes, "
+              f"{tuples} texture-info tuples on {len(tex)} recipes")
         for tag, count in sorted(per_scene.items(), key=lambda item: -item[1])[:40]:
             print(f"  {scene_name(tag):<16} {count}")
 
@@ -146,22 +181,25 @@ def main(argv):
     if command == "info" and args:
         info(args)
     elif command == "merge" and len(args) >= 2:
-        merged, version = {}, None
+        merged, merged_tex, version = {}, {}, None
         for spec in args[1:]:
             path, _, scene = spec.rpartition("@") if "@" in spec else (spec, "", "")
             extra = [parse_scene(scene)] if scene else []
-            shader_version, recipes = load(path)
+            shader_version, recipes, tex = load_full(path)
             version = version or shader_version
             for key, scenes in recipes.items():
                 add_scenes(merged.setdefault(key, []), scenes + extra)
-        write(args[0], version, merged)
+            for key, entries in tex.items():
+                for entry in entries:
+                    add_texinfo(merged_tex.setdefault(key, []), entry)
+        write(args[0], version, merged, merged_tex)
     elif command == "subtract" and len(args) == 3:
-        version, a = load(args[1])
+        version, a, a_tex = load_full(args[1])
         _, b = load(args[2])
-        write(args[0], version, {key: scenes for key, scenes in a.items() if key not in b})
+        write(args[0], version, {key: scenes for key, scenes in a.items() if key not in b}, a_tex)
     elif command == "strip" and len(args) == 2:
-        version, recipes = load(args[1])
-        write(args[0], version, {key: [] for key in recipes})
+        version, recipes, tex = load_full(args[1])
+        write(args[0], version, {key: [] for key in recipes}, tex)
     else:
         raise SystemExit(__doc__)
 

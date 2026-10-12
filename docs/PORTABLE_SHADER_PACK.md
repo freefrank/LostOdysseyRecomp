@@ -48,19 +48,19 @@ Packs are assets of the `shader-packs` GitHub prerelease, named `<file stem>-<fi
 
 ### Pipeline recipe corpus
 
-The same release carries the pipeline recipe corpus (`pipelines_corpus.bin`, file version 2 of `gpu/pipeline_cache.h`): the pipelines the automated map, cutscene and battle tours recorded, tagged by scene, which the renderer prebuilds or prefetches while a scene loads ([P3 notes](notes/pipeline-first-use-stalls.md)). The index lists it like a pack:
+The same release carries the pipeline recipe corpus (`pipelines_corpus.bin`, file version 3 of `gpu/pipeline_cache.h`): the pipelines the automated map, cutscene and battle tours recorded, tagged by scene, which the renderer prebuilds or prefetches while a scene loads ([P3 notes](notes/pipeline-first-use-stalls.md)). The index lists it like a pack:
 
 ```json
 {
   "renderer": "pipeline-corpus",
-  "contract": "1d7f0a17386480c1fcfa5e912f7fb8db7359c5ceb6e8957b9b1045628233fec2",
-  "file": "pipelines_corpus-80afef9497d4bb14.bin",
+  "contract": "7b65a94de79b2d9d93be1e9662ed9133c157fcaba98c02f8693cb77316756a7b",
+  "file": "pipelines_corpus-<first 16 digits of sha256>.bin",
   "size": 409184,
-  "sha256": "80afef9497d4bb14b600c91693d48e9f876fcb6f00c546f44f634b377fac24dc"
+  "sha256": "<64 hex digits>"
 }
 ```
 
-The contract is the SHA-256 of `lo-pipeline-recipes-v2`; a new recipe format gets a new string and its own entry. The file name carries the first 16 digits of the file's SHA-256. Runtimes before the corpus skip the entry as an unknown renderer and still find their packs.
+The contract is the SHA-256 of `lo-pipeline-recipes-v3` (recipe file version 3, which adds the texture-info words recipes were drawn with; runtimes before it read `lo-pipeline-recipes-v2`, whose entry stays in the index); a new recipe format gets a new string and its own entry. The file name carries the first 16 digits of the file's SHA-256. Runtimes before the corpus skip the entry as an unknown renderer and still find their packs.
 
 After the pack check the runtime starts a thread for it (`updater/pipeline_corpus_download.cpp`) and goes on at once:
 
