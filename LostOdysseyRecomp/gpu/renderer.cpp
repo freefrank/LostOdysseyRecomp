@@ -6178,10 +6178,12 @@ void main()
                 prefetchPool.startupCap = video::IsMetal() ? prefetchPool.smallCap : std::max<size_t>(1, count - 1);
                 if (const char* value = getenv("LO_PIPELINE_STARTUP_WORKERS"))
                     prefetchPool.startupCap = std::clamp<size_t>(strtoul(value, nullptr, 10), 1, count);
-                // Specialised variants only replace pipelines that already work: one
-                // worker, so they never crowd out scene and draw-time jobs.
+                // Texture-info variants share the startup budget, so one worker stays free
+                // for scene and draw-time jobs. Within it, variants draws asked for go before
+                // startup jobs; seeded ones run at most specialiseCap at a time.
                 if (const char* value = getenv("LO_TEXINFO_SPEC_WORKERS"))
-                    prefetchPool.specialiseCap = std::clamp<size_t>(strtoul(value, nullptr, 10), 1, count);
+                    prefetchPool.specialiseCap = strtoul(value, nullptr, 10);
+                prefetchPool.specialiseCap = std::clamp<size_t>(prefetchPool.specialiseCap, 1, prefetchPool.startupCap);
                 for (size_t i = 0; i < count; ++i)
                     prefetchPool.workers.emplace_back([this] { PrefetchWorker(); });
                 LOG_INFO("renderer: pipeline workers: {}, {} for draw-time jobs, {} for startup preparation; siblings {}, skipped draws {}", count,
@@ -6195,8 +6197,8 @@ void main()
             std::shared_ptr<PrefetchJob> NextPrefetchJob()
             {
                 auto& pool = prefetchPool;
-                // Variants draws asked for go before the startup set and may use its share of
-                // the workers; seeded variants run on the specialise share only.
+                // Startup jobs and texture-info variants share startupCap. Variants draws asked
+                // for come before startup jobs; seeded variants come last.
                 for (auto* queue : { &pool.draw, &pool.scene, &pool.siblings, &pool.specialise, &pool.startup, &pool.seeded }) {
                     while (!queue->empty()) {
                         const auto& front = queue->front();
@@ -6214,9 +6216,10 @@ void main()
                             kind == PrefetchJob::Startup ? PrefetchJob::StartupSlot :
                             kind == PrefetchJob::Specialise ? PrefetchJob::SpecialiseSlot : PrefetchJob::NoSlot;
                         if (slot == PrefetchJob::DrawSlot && pool.runningSmall >= pool.smallCap) break;
-                        if (slot == PrefetchJob::StartupSlot && pool.runningStartup >= pool.startupCap) break;
-                        if (slot == PrefetchJob::SpecialiseSlot && pool.runningSpecialise >=
-                            (queue == &pool.specialise ? pool.specialiseCap + pool.startupCap : pool.specialiseCap)) break;
+                        const bool backgroundFull = pool.runningStartup + pool.runningSpecialise >= pool.startupCap;
+                        if (slot == PrefetchJob::StartupSlot && backgroundFull) break;
+                        if (slot == PrefetchJob::SpecialiseSlot && (backgroundFull ||
+                            (queue == &pool.seeded && pool.runningSpecialise >= pool.specialiseCap))) break;
                         auto job = std::move(queue->front());
                         queue->pop_front();
                         int expected = PrefetchJob::Queued;
