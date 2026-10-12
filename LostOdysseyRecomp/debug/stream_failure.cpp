@@ -1,6 +1,8 @@
 #include <stdafx.h>
-#include <atomic>
+#include <chrono>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <os/logger.h>
 
 // #375 diagnostics: when a stream (field or battle BGM, event audio, jingles)
@@ -76,8 +78,21 @@ PPC_FUNC(sub_82B5F610)
         reason = "stream open failed";
     if (!reason)
         return;
-    static std::atomic<uint32_t> reports{ 0 };
-    if (reports++ < 64)
-        LOG_WARNING("stream start failed ({}): type={} handle={:#x} {}; slots:{}", reason, type, handle,
-            GuestString(base, path, 200), DescribeSlots(base, system));
+    // A caller may retry a failed start every frame: report each reason and
+    // path again only after 10 s, so later failures still reach the log.
+    const std::string name = GuestString(base, path, 200);
+    const auto now = std::chrono::steady_clock::now();
+    {
+        static std::mutex mutex;
+        static std::unordered_map<std::string, std::chrono::steady_clock::time_point> reported;
+        std::lock_guard lock(mutex);
+        if (reported.size() > 256)
+            reported.clear();
+        const auto [it, added] = reported.try_emplace(std::string(reason) + '|' + name, now);
+        if (!added && now - it->second < std::chrono::seconds(10))
+            return;
+        it->second = now;
+    }
+    LOG_WARNING("stream start failed ({}): type={} handle={:#x} {}; slots:{}", reason, type, handle, name,
+        DescribeSlots(base, system));
 }
