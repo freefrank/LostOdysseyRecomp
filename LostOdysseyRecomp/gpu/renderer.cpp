@@ -1091,11 +1091,13 @@ namespace gpu::renderer
                 out.otherPipelines = r.recordOtherPipelineCreates;
                 out.otherPipelineMs = r.recordOtherPipelineMs;
             }
-            // Origin and first use of the game-state pipeline bound by this draw.
-            void NoteRecordPipeline(record_timing::DrawSample& sample, const PipelineKey& drawKey, const RenderPipeline* bound)
+            // Origin and first use of the game-state pipeline of this draw (generic: the
+            // slot's pipeline, also when a texture-info variant of it is bound).
+            void NoteRecordPipeline(record_timing::DrawSample& sample, const PipelineKey& drawKey, const RenderPipeline* generic,
+                const RenderPipeline* bound)
             {
                 const auto it = pipelines.find(gpu::pipeline_cache::Normalize(drawKey));
-                if (it != pipelines.end() && it->second.pipeline.get() == bound) {
+                if (it != pipelines.end() && it->second.pipeline.get() == generic) {
                     sample.pipelineKnown = true;
                     sample.origin = it->second.origin;
                     sample.firstUse = !it->second.drawn;
@@ -11371,10 +11373,11 @@ void main()
                 // A draw that an occlusion query will measure binds its counting
                 // variant here instead, so a run of query boxes keeps one binding;
                 // OcclusionQueryForDraw takes the counter at the draw.
+                RenderPipeline* const genericPipeline = pipeline;
                 if (texInfoSpecialization) pipeline = SpecialisedPipeline(vs, ps, pipeline, shared.textureInfo);
                 RenderPipeline* countingPipeline = OcclusionCountingPending() ? CountingPipeline(key, vs, ps) : nullptr;
                 commandList->setPipeline(countingPipeline ? countingPipeline : pipeline);
-                if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, pipeline);
+                if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, genericPipeline, pipeline);
                 // The command list keeps the constant for later rebinds of this
                 // pipeline, e.g. after the motion-vector replay.
                 if (UsesBlendConstant(key.blend))
