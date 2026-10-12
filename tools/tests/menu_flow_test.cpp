@@ -77,6 +77,12 @@ namespace settings::mods_page { bool MenuFlowOpenFolder(const std::filesystem::p
 #undef __imp__sub_828710A0
 #undef __imp__sub_82889E50
 
+// System → Shader bundle records the request instead of writing the marker file.
+namespace updater::shader_pack {
+int menuFlowRedownloads = 0;
+bool RequestRedownload() { ++menuFlowRedownloads; return true; }
+}
+
 namespace gpu::video {
 FrameGenerationStatus menuFlowFgStatus{};
 FrameGenerationStatus GetFrameGenerationStatus() { return menuFlowFgStatus; }
@@ -1765,7 +1771,7 @@ int main(int argc, char** argv)
                     settings::snapshot.rows[settings::SystemImportRow].value == L"Open" &&
                     settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" &&
                     settings::graphics_menu::IsAction(3, settings::SystemImportRow),
-                    "gamepad reaches the importer action on System, just before Save settings");
+                    "gamepad reaches the importer action on System, before Shader bundle and Save settings");
             settings::pending = 8; Tick(base);
             Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
             settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) * 43 + 20), false);
@@ -1822,6 +1828,41 @@ int main(int argc, char** argv)
             Require(!settings::restart::Requested() && !settings::importPrompt,
                     "idle ticks do not create a second import request");
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
+        }
+        // System → Shader bundle: cancel-first dialog, then one redownload request.
+        {
+            settings::tab = 3;
+            settings::row = settings::SystemImportRow;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemShaderBundleRow &&
+                    settings::snapshot.rows[settings::SystemShaderBundleRow].name == L"Shader bundle" &&
+                    settings::snapshot.rows[settings::SystemShaderBundleRow].value == L"Download again" &&
+                    settings::graphics_menu::IsAction(3, settings::SystemShaderBundleRow),
+                    "the Shader bundle action follows Import discs & DLC on System");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::shaderBundlePrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Download again", L"Cancel"},
+                    "confirm opens a cancel-first dialog");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderBundlePrompt && updater::shader_pack::menuFlowRedownloads == 0 &&
+                    !settings::restart::Requested(), "confirm on the default Cancel requests nothing");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderBundlePrompt && updater::shader_pack::menuFlowRedownloads == 1,
+                    "Download again records one redownload request");
+#ifdef _WIN32
+            Require(settings::restart::Requested() && !settings::restart::InstallRequested() &&
+                    settings::snapshot.help == L"Restarting to download the shader bundle…",
+                    "Windows restarts the game for the download");
+            settings::restart::Cancel();
+#else
+            Require(!settings::restart::Requested() &&
+                    settings::snapshot.help == L"Restart the game to download the shader bundle again.",
+                    "other platforms ask for a manual restart");
+#endif
+            settings::pending = 0; Tick(base);
+            std::puts("PASS shader bundle action: cancel-first dialog, one redownload request, restart on Windows");
         }
         // System → Mods over a real mods folder and mod-list.ini through the mod API.
         {

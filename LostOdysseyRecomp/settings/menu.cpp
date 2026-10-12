@@ -18,6 +18,7 @@
 #include <stdafx.h>
 #include "language_trace.h"
 #include <apu/audio.h>
+#include <updater/shader_pack_download.h>
 #include <hid/hid.h>
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
@@ -114,6 +115,8 @@ bool mainMenuRequested = false;
 bool importPrompt = false;
 int importChoice = 1;
 bool importLaunchPending = false;
+bool shaderBundlePrompt = false;
+int shaderBundleChoice = 1;
 // Mods page (System → Mods). The mods are listed when it opens; the order and
 // switches stay unsaved until Save. modsSaved is the order saved in this run,
 // applied at the next start; reopening the page shows it.
@@ -1227,6 +1230,7 @@ void Publish(uint8_t *base, uint32_t config)
             logUpload, {}, 0});
         addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
+        addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -1274,6 +1278,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 3 && row == SystemShaderBundleRow)
+        next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
+                       L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
         next.help = Tr(L"Spoken dialogue in cutscenes, set apart from Sound effects. Voices in battle follow Sound effects. Applies from the next scene.",
                        L"過場動畫中的對白音量，與音效音量分開。戰鬥中的語音仍跟隨音效音量。從下一個場景起套用。");
@@ -1587,6 +1594,19 @@ void Publish(uint8_t *base, uint32_t config)
                                 L"關閉遊戲並開啟匯入器嗎？尚未儲存的進度將會遺失。");
         next.dialogChoices = {Tr(L"Open importer", L"開啟匯入器"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = importChoice;
+    }
+    if (shaderBundlePrompt)
+    {
+        next.dialogTitle = Tr(L"Shader bundle", L"著色器包");
+#ifdef _WIN32
+        next.dialogMessage = Tr(L"Restart the game and download the shader bundle again? Unsaved progress will be lost.",
+                                L"重新啟動遊戲並重新下載著色器包嗎？尚未儲存的進度將會遺失。");
+#else
+        next.dialogMessage = Tr(L"Download the shader bundle again the next time the game starts?",
+                                L"下次啟動時重新下載著色器包嗎？");
+#endif
+        next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = shaderBundleChoice;
     }
     if (modsDiscardPrompt)
     {
@@ -2076,6 +2096,7 @@ PPC_FUNC(sub_822F19B0)
         mainMenuPrompt = false;
         importPrompt = false;
         importLaunchPending = false;
+        shaderBundlePrompt = false;
         modsOpen = false;
         modsDiscardPrompt = false;
         restartForMods = false;
@@ -2310,6 +2331,35 @@ PPC_FUNC(sub_822F19B0)
                 restart::RequestInstall();
                 importLaunchPending = true;
                 status = Tr(L"Closing game and opening importer…", L"正在關閉遊戲並開啟匯入器……");
+            }
+        }
+        Publish(base, config);
+        return;
+    }
+    if (shaderBundlePrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            shaderBundleChoice = std::min(selected, 1);
+        if (input & 3) shaderBundleChoice = 1 - shaderBundleChoice;
+        if (input & 0x2000) shaderBundleChoice = 1;
+        if (input & 0x3000)
+        {
+            shaderBundlePrompt = false;
+            if (shaderBundleChoice == 0)
+            {
+                if (!updater::shader_pack::RequestRedownload())
+                    status = Tr(L"Could not save the request. Check that the game folder is writable.",
+                                L"無法儲存請求。請確認遊戲資料夾可寫入。");
+                else
+                {
+#ifdef _WIN32
+                    restart::Request();
+                    status = Tr(L"Restarting to download the shader bundle…", L"正在重新啟動以下載著色器包……");
+#else
+                    status = Tr(L"Restart the game to download the shader bundle again.",
+                                L"重新啟動遊戲後會重新下載著色器包。");
+#endif
+                }
             }
         }
         Publish(base, config);
@@ -3121,6 +3171,12 @@ PPC_FUNC(sub_822F19B0)
     {
         importPrompt = true;
         importChoice = 1;
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
+    {
+        shaderBundlePrompt = true;
+        shaderBundleChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::HdrPeak) &&

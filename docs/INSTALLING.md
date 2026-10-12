@@ -166,6 +166,8 @@ The first time you start the game with a renderer, it offers to download precomp
 
 After an update that changes the shaders, the first start offers the download again. Offline, the game compiles the shaders without asking. Later launches reuse them.
 
+To download them again, for example after skipping, choose **Settings → System → Shader bundle**. On Windows the game restarts and downloads them; on other platforms the download starts the next time you open the game.
+
 ## File locations
 
 | Package | Locations |

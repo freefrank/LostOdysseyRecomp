@@ -88,13 +88,13 @@ void PointerDrag(float x, float y, bool held);
 // - Tabs: 0 Gameplay (retail game options, controller options, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, TAA
-//   shader collection, Mods, Import discs & DLC, Save).
+//   shader collection, Mods, Import discs & DLC, Shader bundle, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller rows (button prompts, vibration,
 //   future ones) go to Gameplay, not Audio.
 // - Actions come last on their tab: Restore / Quit to Main Menu on Gameplay,
-//   Brightness / Save on Graphics, Mods / Import / Save on System.
+//   Brightness / Save on Graphics, Mods / Import / Shader bundle / Save on System.
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls.
 // - Graphics order: display -> resolution and shadows -> anti-aliasing,
@@ -129,8 +129,9 @@ inline constexpr int SystemDebugLogRow = 3;
 inline constexpr int SystemCollectionRow = 4;
 inline constexpr int SystemModsRow = 5; // opens the Mods page
 inline constexpr int SystemImportRow = 6;
-inline constexpr int SystemSaveRow = 7;
-inline constexpr int SystemRowCount = 8;
+inline constexpr int SystemShaderBundleRow = 7; // downloads the shader bundle again on the next start
+inline constexpr int SystemSaveRow = 8;
+inline constexpr int SystemRowCount = 9;
 static_assert(GamePromptRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.

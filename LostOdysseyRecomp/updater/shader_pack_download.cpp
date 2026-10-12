@@ -84,6 +84,7 @@ struct Session
     bool accepted = false;
     bool skipped = false;
     bool cancelled = false;
+    bool keepsInstalled = false; // a redownload failed beside a working pack
     std::string failure;
     std::string label;
     uint64_t total = 0;
@@ -401,8 +402,9 @@ void Render(Session &session, host_ui::Rasterizer &r)
     {
         r.DrawString(112, 140, zh ? "着色器包没有装好。" : "The shader bundle could not be installed.", white, 1.2f);
         const int y = DrawWrapped(r, 112, 196, 1056, session.failure, muted);
-        DrawWrapped(r, 112, y + 8, 1056, zh ? "游戏会改为在本机编译着色器。"
-            : "The game will compile its shaders on this device instead.", muted);
+        DrawWrapped(r, 112, y + 8, 1056, session.keepsInstalled
+            ? (zh ? "游戏继续使用已经装好的着色器包。" : "The game keeps using the shader bundle it already has.")
+            : (zh ? "游戏会改为在本机编译着色器。" : "The game will compile its shaders on this device instead."), muted);
         host_ui::DrawButton(r, 1022, 618, 140, 46, zh ? L"继续 (A)" : L"Continue (A)", true);
         break;
     }
@@ -437,6 +439,7 @@ std::string PrepareAtStartup(const StartupRequest &request)
     }
     const auto contractHex = xenos::resources::Sha256Hex(contract);
     const auto shortContract = contractHex.substr(0, 16);
+    bool present = false;
     for (const auto &path : pack::CandidatePaths(*flavor))
     {
         std::error_code error;
@@ -444,7 +447,9 @@ std::string PrepareAtStartup(const StartupRequest &request)
         try
         {
             pack::Reader reader(path, contract, pack::FormatOf(*flavor));
-            return name + " pack present: " + PathUtf8(path);
+            if (!request.redownload) return name + " pack present: " + PathUtf8(path);
+            present = true;
+            break;
         }
         catch (const std::exception &)
         {
@@ -453,20 +458,25 @@ std::string PrepareAtStartup(const StartupRequest &request)
     }
 
     const bool automatic = choice == "1";
+    // A requested redownload starts without the offer, like automatic mode, but
+    // still shows a failure.
+    const bool unasked = automatic || request.redownload;
     if (!automatic && std::getenv("LO_BACKGROUND")) return name + " pack missing; not offered in a background run";
     const auto directory = pack::InstallDirectory();
     const auto declineRecord = directory / "declined-downloads.txt";
-    if (!automatic && Declined(declineRecord, contractHex))
+    if (!unasked && Declined(declineRecord, contractHex))
         return name + " pack missing; the download was skipped earlier for contract " + shortContract;
 
+    // A redownload that does not finish leaves the installed pack in place.
+    const auto missing = name + (present ? " pack kept, not downloaded again; " : " pack missing; ");
     const auto indexUrl = IndexUrl(std::getenv("LO_SHADER_PACK_INDEX_URL"));
     std::string body, error;
     if (!ReadResponse(indexUrl, MaxIndexBytes, body, error))
-        return name + " pack missing; index unavailable: " + error;
+        return missing + "index unavailable: " + error;
     const auto entries = ParseIndex(body, error);
-    if (!entries) return name + " pack missing; " + error;
+    if (!entries) return missing + error;
     const auto *entry = Select(*entries, name, contractHex);
-    if (!entry) return name + " pack missing; none published for contract " + shortContract;
+    if (!entry) return missing + "none published for contract " + shortContract;
 
     Job job;
     job.flavor = *flavor;
@@ -478,6 +488,7 @@ std::string PrepareAtStartup(const StartupRequest &request)
     session.chinese = request.uiLanguage == 4;
     session.label = std::string(pack::FlavorLabel(*flavor));
     session.total = entry->size;
+    session.keepsInstalled = present;
     InstallResult result;
     std::thread worker;
     const auto start = [&] {
@@ -493,8 +504,8 @@ std::string PrepareAtStartup(const StartupRequest &request)
 
     PromptWindow window;
     const bool visible = !std::getenv("LO_BACKGROUND") && window.Open();
-    if (!visible && !automatic) return name + " pack missing; no window to offer the download";
-    if (automatic)
+    if (!visible && !unasked) return name + " pack missing; no window to offer the download";
+    if (unasked)
     {
         session.accepted = true;
         session.phase = Phase::Downloading;
@@ -503,7 +514,7 @@ std::string PrepareAtStartup(const StartupRequest &request)
     if (visible)
     {
         host_ui::Rasterizer rasterizer(window.Pixels());
-        bool started = automatic;
+        bool started = unasked;
 #if defined(__ANDROID__)
         // Ignore a button still held from before the window opened.
         uint16_t touchButtons = hid::android_touch::Snapshot().buttons;
@@ -546,9 +557,31 @@ std::string PrepareAtStartup(const StartupRequest &request)
         return name + " pack missing; skipped by the player for contract " + shortContract;
     }
     if (!session.accepted) return name + " pack missing; the offer was closed";
-    if (result.cancelled) return name + " pack missing; download cancelled";
-    if (!result.failure.empty()) return name + " pack missing; download failed: " + result.failure;
-    return name + " pack installed: " + PathUtf8(directory / pack::FileNameOf(*flavor)) + " (" +
+    if (result.cancelled) return missing + "download cancelled";
+    if (!result.failure.empty()) return missing + "download failed: " + result.failure;
+    return name + (request.redownload ? " pack downloaded again: " : " pack installed: ") +
+           PathUtf8(directory / pack::FileNameOf(*flavor)) + " (" +
            std::to_string(entry->size) + " bytes, contract " + shortContract + ")";
+}
+
+namespace
+{
+std::filesystem::path RedownloadMarker() { return pack::InstallDirectory() / "redownload-requested.txt"; }
+}
+
+bool RequestRedownload()
+{
+    std::error_code error;
+    std::filesystem::create_directories(RedownloadMarker().parent_path(), error);
+    std::ofstream marker(RedownloadMarker(), std::ios::trunc);
+    marker << "1\n";
+    marker.close();
+    return !marker.fail();
+}
+
+bool TakeRedownloadRequest()
+{
+    std::error_code error;
+    return std::filesystem::remove(RedownloadMarker(), error);
 }
 }

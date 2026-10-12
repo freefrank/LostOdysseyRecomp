@@ -581,9 +581,11 @@ int main(int argc, char* argv[])
         packRequest.configuredBackend = settings::GetConfig().graphicsBackend;
         packRequest.uiLanguage = settings::GetConfig().uiLanguage;
         packRequest.unboundXex = XexLoader::UnboundIdentityPrefix();
+        packRequest.redownload = updater::shader_pack::TakeRedownloadRequest();
+        if (packRequest.redownload) LOG_INFO("shader pack: redownload requested from Settings");
         LOG_INFO("shader pack: {}", updater::shader_pack::PrepareAtStartup(packRequest));
         // The pipeline recipe corpus comes from the same index, on its own thread.
-        updater::shader_pack::StartCorpusDownload(settings::GetConfig().automaticUpdates);
+        updater::shader_pack::StartCorpusDownload(settings::GetConfig().automaticUpdates, packRequest.redownload);
     }
 
     // Exercise the same renderer preparation as ordinary startup, without

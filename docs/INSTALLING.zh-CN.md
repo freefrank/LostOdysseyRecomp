@@ -168,6 +168,8 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 更新后如果着色器有变化，第一次启动会再次提示下载。离线时游戏不会询问，直接在本机编译。之后的启动会复用编译好的着色器。
 
+想重新下载（比如之前选了跳过），选择**设置 → 系统 → 着色器包**（Settings → System → Shader bundle）。Windows 上游戏会重启并下载；其他平台在下次打开游戏时开始下载。
+
 <a id="file-locations"></a>
 
 ## 文件位置
