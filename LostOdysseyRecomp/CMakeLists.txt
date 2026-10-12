@@ -139,6 +139,9 @@ if(ANDROID)
     add_library(LostOdysseyRecomp SHARED ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
     set_target_properties(LostOdysseyRecomp PROPERTIES OUTPUT_NAME main)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,-z,max-page-size=16384")
+    # Calls between the library's own functions (the translated guest code
+    # calls itself constantly) bind directly instead of going through the PLT.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,-Bsymbolic-functions")
     # libadrenotools: optional custom Vulkan driver (Mesa Turnip) loading on
     # Qualcomm devices, selected at runtime with LO_VK_CUSTOM_DRIVER.
     if(EXISTS "${CMAKE_SOURCE_DIR}/thirdparty/libadrenotools/CMakeLists.txt")
