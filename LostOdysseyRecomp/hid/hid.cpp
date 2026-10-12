@@ -207,7 +207,7 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
         if (!SDL_GamepadConnected(controller)) continue;
         ObserveController(controller);
         auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
-        const auto type = SDL_GetGamepadType(controller);
+        const auto type = hid::face_buttons::LabelType(controller);
         auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
 
         if (btn(SDL_GAMEPAD_BUTTON_DPAD_UP)) buttons |= XAMINPUT_GAMEPAD_DPAD_UP;
@@ -341,7 +341,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             if (!SDL_GamepadConnected(controller)) continue;
             ObserveController(controller);
             auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
-            const auto type = SDL_GetGamepadType(controller);
+            const auto type = hid::face_buttons::LabelType(controller);
             auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
             auto axis = [&](SDL_GamepadAxis a) { return SDL_GetGamepadAxis(controller, a); };
 

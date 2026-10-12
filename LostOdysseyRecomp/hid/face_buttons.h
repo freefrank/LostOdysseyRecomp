@@ -19,10 +19,20 @@ inline SDL_GamepadButton ByLabel(SDL_GamepadType type, SDL_GamepadButton button)
     }
 }
 
+// The type whose letters ByLabel follows. A Steam Input gamepad reports the
+// real pad's type, but Steam has already applied its own Nintendo button
+// layout setting, so it keeps its Xbox positions as SDL2 did (#454).
+inline SDL_GamepadType LabelType(SDL_Gamepad* gamepad)
+{
+    return SDL_GetGamepadSteamHandle(gamepad) ? SDL_GAMEPAD_TYPE_STANDARD : SDL_GetGamepadType(gamepad);
+}
+
 // The Xbox-position meaning of a button event.
 inline SDL_GamepadButton FromEvent(const SDL_GamepadButtonEvent& event)
 {
-    return ByLabel(SDL_GetGamepadTypeForID(event.which), SDL_GamepadButton(event.button));
+    SDL_Gamepad* gamepad = SDL_GetGamepadFromID(event.which);
+    return ByLabel(gamepad ? LabelType(gamepad) : SDL_GetGamepadTypeForID(event.which),
+        SDL_GamepadButton(event.button));
 }
 
 // Rewrites a gamepad button event in place to its Xbox-position meaning.

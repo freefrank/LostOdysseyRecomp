@@ -10,11 +10,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 - New app icon.
 - Vulkan is now the default renderer on Windows too. Existing settings keep their renderer.
+- Nintendo-layout controllers used through Steam Input follow Steam's button layout setting again instead of having A/B and X/Y swapped.
 
 ### 简体中文
 
 - 新的应用图标。
 - Windows 版也默认使用 Vulkan。已有设置保留原来的渲染器。
+- 通过 Steam Input 使用的任天堂布局手柄重新按 Steam 的按键布局设置工作，A/B 和 X/Y 不再对调。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
