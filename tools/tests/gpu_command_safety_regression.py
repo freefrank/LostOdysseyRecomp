@@ -89,7 +89,7 @@ static uint32_t GpuSwap(uint32_t value, uint32_t endian) { return endian == 2 ? 
 static struct { uint32_t constantWrites = 0; } g_frame;
 static std::vector<std::pair<uint32_t, uint32_t>> writes;
 static std::vector<uint32_t> shaderWords;
-static void CaptureShader(uint32_t, const uint32_t* words, uint32_t count) {
+static void CaptureShader(uint32_t, const uint32_t* words, uint32_t count, bool) {
     // A wrapped inline shader uses an owned temporary image instead of guest
     // storage; its bounded lifetime is checked by ASan during the copy below.
     shaderWords.clear();
