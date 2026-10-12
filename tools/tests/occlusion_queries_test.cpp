@@ -155,6 +155,36 @@ int main()
         Check(writes.size() == 1 && Result(second.record, writes[0].record) == kUnmeasuredSamples, "abandoned batch reads visible");
     }
     {
+        // Part lists of unmeasured, abandoned and finished queries are reused
+        // empty, also with thousands of queries in flight.
+        Tracker tracker(Mode::Strict);
+        tracker.Begin(0x5020);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({1, 0, 1.0});
+        tracker.DrawSeen();
+        Check(tracker.End(0x5000).has_value(), "unmeasured query answered at once");
+        tracker.Begin(0x5020);
+        tracker.DrawSeen();
+        tracker.DrawMeasured({1, 1, 1.0});
+        tracker.Begin(0x5060); // the previous BEGIN never ends
+        Check(tracker.End(0x5040).has_value() && !tracker.HasPending(), "query without draws answered at once");
+        for (uint64_t round = 2; round < 5; ++round) {
+            constexpr uint32_t kQueries = 3000;
+            std::vector<Write> begins(kQueries);
+            std::vector<uint64_t> results(kQueries);
+            for (uint32_t i = 0; i < kQueries; ++i) {
+                Check(!Issue(tracker, 0x100000 + i * kSlotBytes, round, i, begins[i]), "in-flight query waits");
+                results[i] = i + round;
+            }
+            const auto writes = tracker.Complete(round, results);
+            Check(writes.size() == kQueries, "every in-flight query completes");
+            bool exact = true;
+            for (uint32_t i = 0; i < kQueries; ++i)
+                exact &= writes[i].address == 0x100000 + i * kSlotBytes && Result(begins[i].record, writes[i].record) == i + round;
+            Check(exact, "reused part lists carry no earlier parts");
+        }
+    }
+    {
         // Strict: a query whose draws span two submissions waits for both.
         Tracker tracker(Mode::Strict);
         const Write begin = tracker.Begin(0x7020);
