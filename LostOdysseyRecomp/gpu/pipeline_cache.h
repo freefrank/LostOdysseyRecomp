@@ -82,19 +82,23 @@ namespace gpu::pipeline_cache
         }
     };
     // Texture-info words a recipe was drawn with (Vulkan specialization): the
-    // word of every fetch slot in mask, 0 elsewhere. Words have 20 bits.
+    // words of the fetch slots in mask, in slot order, 0 after them. Words have
+    // 20 bits. A mask of more than kTexInfoWords slots is not kept (the files
+    // allow all kTexInfoSlots; such entries are skipped on load).
     inline constexpr size_t kTexInfoSlots = 32;
+    inline constexpr size_t kTexInfoWords = 16;
     inline constexpr size_t kMaxTexInfo = 4; // per recipe
     struct TexInfo
     {
         uint32_t mask = 0;
-        std::array<uint32_t, kTexInfoSlots> words{};
+        std::array<uint32_t, kTexInfoWords> words{};
         bool operator==(const TexInfo&) const = default;
         bool Valid() const noexcept
         {
-            if (!mask) return false;
-            for (size_t slot = 0; slot < kTexInfoSlots; ++slot)
-                if (((mask >> slot) & 1) ? (words[slot] >> 20) != 0 : words[slot] != 0) return false;
+            const size_t count = size_t(std::popcount(mask));
+            if (!count || count > kTexInfoWords) return false;
+            for (size_t i = 0; i < kTexInfoWords; ++i)
+                if (i < count ? (words[i] >> 20) != 0 : words[i] != 0) return false;
             return true;
         }
     };
@@ -448,13 +452,16 @@ namespace gpu::pipeline_cache
                 const size_t words = size_t(std::popcount(mask));
                 if (index >= count || !mask || texInfoBytes - offset - 8 < words * 4)
                     return fail(Status::Invalid, "invalid texture-info entry");
-                TexInfo info;
-                info.mask = mask;
-                size_t next = offset + 8;
-                for (uint32_t m = mask; m; m &= m - 1, next += 4)
-                    info.words[std::countr_zero(m)] = detail::Read32(texInfo + next);
-                if (!info.Valid()) return fail(Status::Invalid, "invalid texture-info word");
-                result.records[merged[index]].AddTexInfo(info);
+                const size_t next = offset + 8 + words * 4;
+                if (words <= kTexInfoWords)
+                {
+                    TexInfo info;
+                    info.mask = mask;
+                    for (size_t i = 0; i < words; ++i)
+                        info.words[i] = detail::Read32(texInfo + offset + 8 + 4 * i);
+                    if (!info.Valid()) return fail(Status::Invalid, "invalid texture-info word");
+                    result.records[merged[index]].AddTexInfo(info);
+                }
                 offset = next;
             }
             return result;
@@ -514,8 +521,8 @@ namespace gpu::pipeline_cache
                     detail::Put32(texInfo, static_cast<uint32_t>(i));
                     detail::Put32(texInfo + 4, info.mask);
                     texInfo += 8;
-                    for (uint32_t m = info.mask; m; m &= m - 1, texInfo += 4)
-                        detail::Put32(texInfo, info.words[std::countr_zero(m)]);
+                    for (int i = 0; i < std::popcount(info.mask); ++i, texInfo += 4)
+                        detail::Put32(texInfo, info.words[i]);
                 }
             std::copy(detail::kMagic.begin(), detail::kMagic.end(), bytes.begin());
             detail::Put32(bytes.data() + 8, kFileVersion);

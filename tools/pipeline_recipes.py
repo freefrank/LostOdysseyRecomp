@@ -13,7 +13,8 @@ version 3, recipe version 2, with the first input's translator version. A
 shipped corpus (shaders/pipelines_corpus.bin) is a merge of learned files.
 IN@SCENE adds a scene to every recipe of that input (map:ID or battle:ID),
 for files recorded by builds without scene tags. Version 3 adds the texture-info
-words recipes were drawn with (Vulkan specialization): at most four per recipe.
+words recipes were drawn with (Vulkan specialization): at most four per recipe,
+each of at most 16 slots (the runtime skips wider ones).
 """
 import struct
 import sys
@@ -27,6 +28,7 @@ RECORD_V2 = KEY + SLOTS * 4 + 8
 FILE_VERSION = 3
 RECIPE_VERSION = 2
 MAX_TEXINFO = 4
+TEXINFO_WORDS = 16  # gpu::pipeline_cache::kTexInfoWords: wider entries are skipped
 MANY = 0xFFFFFFFF
 NO_SCENE = 0xF0000000
 NO_BLEND = 0x00010001
@@ -102,7 +104,8 @@ def load_full(path):
         words = struct.unpack_from(f"<{bin(mask).count('1')}I", data, offset + 8)
         if index >= count or not mask or any(w >> 20 for w in words):
             raise SystemExit(f"{path}: invalid texture-info entry at byte {offset}")
-        add_texinfo(tex.setdefault(order[index], []), (mask,) + tuple(words))
+        if len(words) <= TEXINFO_WORDS:
+            add_texinfo(tex.setdefault(order[index], []), (mask,) + tuple(words))
         offset += 8 + 4 * len(words)
     return shader_version, recipes, tex
 

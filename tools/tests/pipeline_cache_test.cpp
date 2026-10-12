@@ -287,8 +287,8 @@ int main(int argc, char** argv)
         {
             const fs::path texPath = root / "texinfo.bin";
             cache::TexInfo a, b;
-            a.mask = 0x5; a.words[0] = 0x6883f; a.words[2] = 0x60a00;
-            b.mask = 0x80000000u; b.words[31] = 0x68800;
+            a.mask = 0x5; a.words[0] = 0x6883f; a.words[1] = 0x60a00; // slots 0 and 2
+            b.mask = 0x80000000u; b.words[0] = 0x68800;
             const std::vector<cache::Record> tuples{ { key, {}, { a } }, { second, {}, {} }, { key, {}, { b, a } } };
             Check(cache::Write(texPath, tuples, shaderVersion, recipeVersion, ValidateEnums).ok, "texture-info write");
             const auto texOriginal = Read(texPath);
@@ -298,7 +298,7 @@ int main(int argc, char** argv)
                 texLoaded.records[0].texinfo == std::vector<cache::TexInfo>{ a, b } && texLoaded.records[1].texinfo.empty(),
                 "texture-info round trip");
             auto outside = a;
-            outside.words[1] = 1; // a word outside the mask
+            outside.words[2] = 1; // a word past the mask's slots
             const cache::Record outsideRecord{ key, {}, { outside } };
             Check(!cache::Write(texPath, { &outsideRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok && Read(texPath) == texOriginal,
                 "texture-info outside its mask rejected");
@@ -306,6 +306,26 @@ int main(int argc, char** argv)
             wide.words[0] = 1u << 20; // the swap bit never reaches a recipe
             const cache::Record wideRecord{ key, {}, { wide } };
             Check(!cache::Write(texPath, { &wideRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok, "texture-info over 20 bits rejected");
+            cache::TexInfo many;
+            many.mask = (1u << (cache::kTexInfoWords + 1)) - 1; // more slots than a TexInfo keeps
+            const cache::Record manyRecord{ key, {}, { many } };
+            Check(!cache::Write(texPath, { &manyRecord, 1 }, shaderVersion, recipeVersion, ValidateEnums).ok, "texture-info over kTexInfoWords slots not written");
+            {
+                // The format allows all 32 slots: a wider entry loads as skipped.
+                auto wider = texOriginal;
+                const uint32_t mask = (1u << (cache::kTexInfoWords + 1)) - 1;
+                const size_t at = wider.size();
+                wider.resize(at + 8 + 4 * (cache::kTexInfoWords + 1), 0);
+                cache::detail::Put32(wider.data() + at, 1); // the second record
+                cache::detail::Put32(wider.data() + at + 4, mask);
+                cache::detail::Put32(wider.data() + 28, uint32_t(wider.size() - cache::kHeaderBytes - 2 * cache::kRecordBytes));
+                PayloadChecksum(wider);
+                RawWrite(badPath, wider);
+                texLoaded = cache::Load(badPath, shaderVersion, recipeVersion, ValidateEnums);
+                Check(texLoaded.status == cache::Status::Loaded && texLoaded.records.size() == 2 &&
+                    texLoaded.records[0].texinfo == std::vector<cache::TexInfo>{ a, b } && texLoaded.records[1].texinfo.empty(),
+                    "texture-info wider than kTexInfoWords skipped on load");
+            }
             for (size_t i = cache::kHeaderBytes + 2 * cache::kRecordBytes; i < texOriginal.size(); ++i)
             {
                 auto damaged = texOriginal;

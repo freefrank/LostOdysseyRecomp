@@ -8731,10 +8731,9 @@ void main()
                 job->kind = PrefetchJob::Specialise;
                 job->seed = seed;
                 job->texInfo = info;
-                for (uint32_t m = info.mask; m; m &= m - 1) {
-                    const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
-                    job->specConstants.emplace_back(fetchSlot, info.words[fetchSlot]);
-                }
+                size_t word = 0;
+                for (uint32_t m = info.mask; m; m &= m - 1)
+                    job->specConstants.emplace_back(uint32_t(std::countr_zero(m)), info.words[word++]);
                 job->desc = DescribeForCreation(key, vs, ps, false, false);
                 job->desc.cacheKey = 0; // the D3D12 library and Metal archive name the generic pipeline
                 job->desc.specConstants = job->specConstants.data();
@@ -8791,15 +8790,16 @@ void main()
                 const uint32_t mask = TextureSlotMask(vs, ps);
                 PipelineSlot* slot = lastPipelineSlot;
                 // A pipeline this draw made has no slot hit yet: its next draw seeds it.
-                if (!mask || !slot || slot->pipeline.get() != generic) return generic;
+                // Pipelines fetching from more than kTexInfoWords slots stay generic.
+                if (!mask || !slot || slot->pipeline.get() != generic ||
+                    size_t(std::popcount(mask)) > gpu::pipeline_cache::kTexInfoWords) return generic;
                 ++specStats.textured;
                 for (auto& variant : slot->variants) {
                     if (variant.info.mask != mask) continue;
                     bool same = true;
-                    for (uint32_t m = mask; m && same; m &= m - 1) {
-                        const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
-                        same = variant.info.words[fetchSlot] == words[fetchSlot];
-                    }
+                    size_t word = 0;
+                    for (uint32_t m = mask; m && same; m &= m - 1)
+                        same = variant.info.words[word++] == words[std::countr_zero(m)];
                     if (!same) continue;
                     if (!variant.pipeline) { // building, or failed
                         PromoteSpecialisation(variant);
@@ -8812,10 +8812,9 @@ void main()
                 if (slot->variants.size() >= kMaxSpecVariants) return generic;
                 gpu::pipeline_cache::TexInfo info;
                 info.mask = mask;
-                for (uint32_t m = mask; m; m &= m - 1) {
-                    const uint32_t fetchSlot = uint32_t(std::countr_zero(m));
-                    info.words[fetchSlot] = words[fetchSlot];
-                }
+                size_t word = 0;
+                for (uint32_t m = mask; m; m &= m - 1)
+                    info.words[word++] = words[std::countr_zero(m)];
                 QueueSpecialisation(*slot, lastPipelineKey, vs, ps, info, false);
                 NoteRecipeTexInfo(lastPipelineKey, info);
                 return generic;
