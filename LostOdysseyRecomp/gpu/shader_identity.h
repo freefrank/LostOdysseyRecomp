@@ -127,8 +127,7 @@ namespace gpu::shader_identity
         // it is done with it: a fence or memory write, an interrupt, a swap or
         // the read-pointer writeback, each of which ends the epoch. Only a guest
         // write racing the GPU could change the bytes within an epoch, and it
-        // is seen at the next one: the premise of the vertex and index source
-        // checks (Renderer::SourceMatches). LoadImmediate keeps comparing.
+        // is seen at the next one. LoadImmediate keeps comparing.
         bool Load(const uint32_t* source, uint32_t count, uint64_t epoch = 0)
         {
             if (!count || count > 0x10000) return false;
