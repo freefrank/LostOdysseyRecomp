@@ -3,9 +3,13 @@ package io.github.freefrank.lostodyssey;
 import android.content.Context;
 import android.media.MediaScannerConnection;
 import android.os.Build;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -15,6 +19,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Runtime logs in {@code Android/data/<package>/files/logs/}, which a player
@@ -36,6 +42,11 @@ final class PlayerLogs {
     private static final Pattern LOG_FILE = Pattern.compile(
         "runtime-\\d+\\.log|shader-\\d+\\.jsonl|native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt|README\\.txt");
     private static final Pattern JAVA_CRASH = Pattern.compile("java-crash-(\\d+)\\.txt");
+    private static final Pattern RUNTIME_LOG = Pattern.compile("runtime-(\\d+)\\.log");
+    private static final Pattern EXPORTED = Pattern.compile(
+        "native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt");
+    /** Runtime logs in an export: this run and the two before it, for a crash in the last one. */
+    static final int RUNTIME_LOGS_EXPORTED = 3;
 
     private PlayerLogs() {}
 
@@ -80,6 +91,70 @@ final class PlayerLogs {
         } catch (NumberFormatException e) {
             return Long.MAX_VALUE;
         }
+    }
+
+    /**
+     * The files a log export holds: the newest runtime logs, native stderr and the
+     * Java crash reports. Shader logs stay out; they are large and rarely needed.
+     */
+    static List<File> exportable(File directory) {
+        File[] files = directory.listFiles();
+        List<File> runtime = new ArrayList<>();
+        List<File> result = new ArrayList<>();
+        if (files == null) return result;
+        for (File file : files) {
+            if (!file.isFile()) continue;
+            if (RUNTIME_LOG.matcher(file.getName()).matches()) runtime.add(file);
+            else if (EXPORTED.matcher(file.getName()).matches()) result.add(file);
+        }
+        Collections.sort(runtime, (a, b) -> Long.compare(runtimeStamp(b), runtimeStamp(a)));
+        result.addAll(runtime.subList(0, Math.min(RUNTIME_LOGS_EXPORTED, runtime.size())));
+        Collections.sort(result, (a, b) -> a.getName().compareTo(b.getName()));
+        return result;
+    }
+
+    private static long runtimeStamp(File log) {
+        Matcher matcher = RUNTIME_LOG.matcher(log.getName());
+        try {
+            return matcher.matches() ? Long.parseLong(matcher.group(1)) : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Writes {@code files} and a device.txt naming the phone and app to one ZIP.
+     * The running game flushes every log line, so its current log is complete
+     * up to the export.
+     */
+    static void exportZip(List<File> files, String device, OutputStream output) throws IOException {
+        ZipOutputStream zip = new ZipOutputStream(output);
+        zip.putNextEntry(new ZipEntry("logs/device.txt"));
+        zip.write((device + "\n").getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+        byte[] buffer = new byte[1 << 16];
+        for (File file : files) {
+            zip.putNextEntry(new ZipEntry("logs/" + file.getName()));
+            try (InputStream input = new FileInputStream(file)) {
+                for (int n; (n = input.read(buffer)) > 0; ) zip.write(buffer, 0, n);
+            }
+            zip.closeEntry();
+        }
+        zip.finish();
+        zip.flush();
+    }
+
+    /** Whether settings.ini turns on Settings -> System -> Debug log (info lines in the runtime log). */
+    static boolean debugLogEnabled(Context context) {
+        File settings = new File(new File(context.getFilesDir(), "config"), "settings.ini");
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(settings), StandardCharsets.UTF_8))) {
+            for (String line; (line = reader.readLine()) != null; )
+                if (line.trim().equals("debug_log=1")) return true;
+        } catch (IOException ignored) {
+            // No settings yet: the default is off.
+        }
+        return false;
     }
 
     /** Creates the folder and README, then shows every log file to a PC over USB. */

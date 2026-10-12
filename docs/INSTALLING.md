@@ -140,10 +140,10 @@ Touch controls appear over the game. **CTRL** opens their size, opacity and layo
 With **Automatic updates** on, the app checks for a new version at startup and offers the APK download. Install the new APK over the old one; saves and settings stay. If you installed an APK you built yourself, uninstall it first. Uninstalling the app deletes your saves and the game data in `Android/data`.
 
 <a id="android-saves"></a>
-**Saves** stay inside the app, where file managers cannot reach them. **CTRL → Saves** exports every slot to one ZIP file you choose, for example in Download, and imports a ZIP of save folders: one exported here or from a PC, a ZIP of Xenia's `userNN` folders, or the download from the [RGH save converter](#console-saves). Export your saves before uninstalling the app.
+**Saves** stay inside the app, where file managers cannot reach them. **CTRL → Saves and logs** exports every slot to one ZIP file you choose, for example in Download, and imports a ZIP of save folders: one exported here or from a PC, a ZIP of Xenia's `userNN` folders, or the download from the [RGH save converter](#console-saves). Export your saves before uninstalling the app.
 
 <a id="android-logs"></a>
-**Logs** are in `Android/data/io.github.freefrank.lostodyssey/files/logs/`: `runtime-*.log`, `native-stderr.log` and, if the app itself failed, `java-crash-*.txt`. If the game crashes or stays black, open the app once more, then copy these files to a PC over USB and attach them to your report. With adb, `adb logcat -s LostOdyssey` shows the same lines live.
+**Logs** for a bug report: turn on **Settings → System → Debug log**, play until the problem happens, then choose **CTRL → Saves and logs → Export logs…** and save the ZIP, for example in Download. It holds the logs of the last three runs, `native-stderr.log` and, if the app itself failed, `java-crash-*.txt`. If the game crashed or stayed black, open the app once more and export from the CTRL menu. The same files are in `Android/data/io.github.freefrank.lostodyssey/files/logs/` for a PC over USB. With adb, `adb logcat -s LostOdyssey` shows the same lines live.
 
 Only one tablet has been tested so far.
 
@@ -176,7 +176,7 @@ To download them again, for example after skipping, choose **Settings → System
 | Linux AppImage | Saves, profiles, cache and games: `~/.local/share/lost-odyssey-recomp/`. Settings: `~/.config/lost-odyssey-recomp/`. Logs: `~/.local/state/lost-odyssey-recomp/logs/`. |
 | Linux Flatpak | Under `~/.var/app/io.github.freefrank.LostOdysseyRecomp/`: saves, profiles, cache and games in `data/` (`/var/data` inside the sandbox); settings in `config/lost-odyssey-recomp/`; logs in `.local/state/lost-odyssey-recomp/logs/`. |
 | macOS | Saves, profiles, cache, games and settings: `~/Library/Application Support/LostOdysseyRecomp/`. Logs: `~/Library/Logs/LostOdysseyRecomp/logs/`. |
-| Android | Game: `Android/data/io.github.freefrank.lostodyssey/files/game/` (or the folder chosen on the **Game folder** page). Logs: `Android/data/io.github.freefrank.lostodyssey/files/logs/`. Saves and settings stay inside the app; **CTRL → Saves** exports and imports saves. |
+| Android | Game: `Android/data/io.github.freefrank.lostodyssey/files/game/` (or the folder chosen on the **Game folder** page). Logs: `Android/data/io.github.freefrank.lostodyssey/files/logs/`. Saves and settings stay inside the app; **CTRL → Saves and logs** exports and imports saves. |
 
 Render captures go to `captures/` and mods to `mods/`: beside the program for the Windows ZIP, otherwise captures in the settings folder and mods in the data folder. Downloaded shaders go to `shaders/` in the same place as mods. To manage mods with Mod Organizer 2, see [Mod Organizer 2](wiki/Mod-Organizer-2.md).
 
@@ -186,7 +186,7 @@ On Linux, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` move the AppIm
 
 ## Importing saves from Xenia or an Xbox 360
 
-Each save slot is a folder in `save/`, for example `save/user00/save.bin`; see [file locations](#file-locations) for where `save/` is. Close the game and back up `save/` first. The copied saves then appear in the game's load list. On Android, import a ZIP of the save folders with **CTRL → Saves** instead ([details](#android-saves)).
+Each save slot is a folder in `save/`, for example `save/user00/save.bin`; see [file locations](#file-locations) for where `save/` is. Close the game and back up `save/` first. The copied saves then appear in the game's load list. On Android, import a ZIP of the save folders with **CTRL → Saves and logs** instead ([details](#android-saves)).
 
 <a id="xenia-saves"></a>
 

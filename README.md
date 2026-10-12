@@ -58,8 +58,8 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 - **Qualcomm devices:** the **GPU driver** page opens before the first start. Download a Turnip driver there.
 - **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout.
 - **Updates:** a new APK installs over the old one and keeps your saves.
-- **Saves:** **CTRL → Saves** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter.
-- **Logs:** they are in `Android/data/io.github.freefrank.lostodyssey/files/logs/` ([how to get them](docs/INSTALLING.md#android-logs)).
+- **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter.
+- **Logs:** **CTRL → Saves and logs → Export logs** saves them to a ZIP for a bug report ([details](docs/INSTALLING.md#android-logs)).
 
 [Step-by-step guide](docs/INSTALLING.md#android).
 

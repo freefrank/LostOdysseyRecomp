@@ -3,6 +3,7 @@ package io.github.freefrank.lostodyssey;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -26,14 +27,17 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Saves page (CTRL dialog): the saves live in the app's private storage, which
- * players cannot open, so they are exported to and imported from a ZIP file
- * through the system file picker. That needs no storage permission.
+ * Saves and logs page (CTRL dialog): the saves live in the app's private storage,
+ * which players cannot open, so they are exported to and imported from a ZIP file
+ * through the system file picker. That needs no storage permission. The runtime
+ * logs, which newer Android versions also hide from file managers, export the
+ * same way for bug reports.
  */
 public final class SaveTransferActivity extends Activity {
     static final String EXTRA_FROM_GAME = "from_game";
     private static final int REQUEST_EXPORT = 1;
     private static final int REQUEST_IMPORT = 2;
+    private static final int REQUEST_EXPORT_LOGS = 3;
 
     private boolean fromGame;
     private boolean busy;
@@ -103,7 +107,7 @@ public final class SaveTransferActivity extends Activity {
 
     private void render() {
         page.removeAllViews();
-        page.addView(text("Saves", 24f, true));
+        page.addView(text("Saves and logs", 24f, true));
 
         List<File> slots = SaveTransfer.listSlots(saveRoot());
         if (slots.isEmpty()) {
@@ -132,6 +136,15 @@ public final class SaveTransferActivity extends Activity {
         importButton.setEnabled(!busy);
         page.addView(importButton);
 
+        page.addView(text("Logs", 18f, true));
+        page.addView(dim(PlayerLogs.debugLogEnabled(this)
+            ? "Saves the logs of this run and the two before it to one ZIP file. Attach it to a bug report."
+            : "Debug log is off, so the logs hold only warnings and errors. For a full log, turn on "
+                + "Settings → System → Debug log, play until the problem happens, then export."));
+        Button logs = button("Export logs…", v -> startLogExport());
+        logs.setEnabled(!busy && !PlayerLogs.exportable(PlayerLogs.directory(this)).isEmpty());
+        page.addView(logs);
+
         page.addView(button(fromGame ? "Back to game" : "Back", v -> finish()));
     }
 
@@ -155,6 +168,37 @@ public final class SaveTransferActivity extends Activity {
                 SaveTransfer.exportZip(slots, output);
             }
             return () -> Toast.makeText(this, "Exported " + slots.size() + " saves", Toast.LENGTH_LONG).show();
+        }, "Export failed");
+    }
+
+    // Logs --------------------------------------------------------------------
+
+    private void startLogExport() {
+        String name = "LostOdyssey-logs-"
+            + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".zip";
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/zip")
+            .putExtra(Intent.EXTRA_TITLE, name);
+        launch(intent, REQUEST_EXPORT_LOGS);
+    }
+
+    private void exportLogs(Uri uri) {
+        List<File> files = PlayerLogs.exportable(PlayerLogs.directory(this));
+        String version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            version = "?";
+        }
+        String device = PlayerLogs.deviceDescription() + "\napp=" + version
+            + "\ndebug_log=" + (PlayerLogs.debugLogEnabled(this) ? "on" : "off");
+        runInBackground(() -> {
+            try (OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
+                if (output == null) throw new IOException("cannot open the file");
+                PlayerLogs.exportZip(files, device, output);
+            }
+            return () -> Toast.makeText(this, "Exported " + files.size() + " log files", Toast.LENGTH_LONG).show();
         }, "Export failed");
     }
 
@@ -254,6 +298,7 @@ public final class SaveTransferActivity extends Activity {
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         if (requestCode == REQUEST_EXPORT) export(data.getData());
         else if (requestCode == REQUEST_IMPORT) read(data.getData());
+        else if (requestCode == REQUEST_EXPORT_LOGS) exportLogs(data.getData());
     }
 
     private interface Work { Runnable run() throws IOException; }

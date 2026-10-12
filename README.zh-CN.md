@@ -58,8 +58,8 @@
 - **高通设备：** 首次启动前会打开 **GPU driver** 页面，在那里下载 Turnip 驱动。
 - **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。
 - **更新：** 新 APK 直接覆盖安装，存档保留。
-- **存档：** **CTRL → Saves** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。
-- **日志：** 在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`（[获取方法](docs/INSTALLING.zh-CN.md#android-logs)）。
+- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。
+- **日志：** **CTRL → Saves and logs → Export logs** 可以把日志导出成 ZIP，用于反馈问题（[详见](docs/INSTALLING.zh-CN.md#android-logs)）。
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
 

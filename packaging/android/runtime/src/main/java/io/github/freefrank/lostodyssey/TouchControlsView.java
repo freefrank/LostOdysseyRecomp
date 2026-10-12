@@ -437,7 +437,7 @@ final class TouchControlsView extends View {
             content.addView(driverButton);
         }
         Button savesButton = new Button(activity);
-        savesButton.setText("Saves: export / import …");
+        savesButton.setText("Saves and logs: export / import …");
         savesButton.setAllCaps(false);
         content.addView(savesButton);
         Button folderButton = new Button(activity);

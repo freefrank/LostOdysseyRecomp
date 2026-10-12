@@ -140,10 +140,10 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 开启 **Automatic updates（自动更新）** 时，应用启动会检查新版本并提供 APK 下载。新 APK 直接覆盖安装，存档和设置保留。如果装过自己构建的 APK，需要先卸载。卸载应用会删除存档和 `Android/data` 里的游戏数据。
 
 <a id="android-saves"></a>
-**存档**保存在应用内部，文件管理器访问不到。**CTRL → Saves** 可以把所有存档位导出成一个 ZIP，保存到你选的位置（例如 Download），也可以导入包含存档文件夹的 ZIP：这里或电脑上导出的、打包 Xenia `userNN` 文件夹得到的，或者 [RGH 存档转换器](#console-saves)下载的 ZIP。卸载应用前请先导出存档。
+**存档**保存在应用内部，文件管理器访问不到。**CTRL → Saves and logs** 可以把所有存档位导出成一个 ZIP，保存到你选的位置（例如 Download），也可以导入包含存档文件夹的 ZIP：这里或电脑上导出的、打包 Xenia `userNN` 文件夹得到的，或者 [RGH 存档转换器](#console-saves)下载的 ZIP。卸载应用前请先导出存档。
 
 <a id="android-logs"></a>
-**日志**在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`：`runtime-*.log`、`native-stderr.log`，应用本身出错时还有 `java-crash-*.txt`。游戏闪退或一直黑屏时，先再打开一次应用，然后用 USB 把这些文件复制到电脑，附到报告里。使用 adb 时，`adb logcat -s LostOdyssey` 可以实时看到同样的内容。
+**日志**用于反馈问题：先在**设置 → 系统**打开“调试日志”，玩到问题出现，然后选择 **CTRL → Saves and logs → Export logs…**，把 ZIP 保存到例如 Download。ZIP 里有最近三次运行的日志、`native-stderr.log`，应用本身出错时还有 `java-crash-*.txt`。游戏闪退或一直黑屏时，再打开一次应用，从 CTRL 菜单导出。这些文件也在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`，可以用 USB 复制到电脑。使用 adb 时，`adb logcat -s LostOdyssey` 可以实时看到同样的内容。
 
 目前只在一台平板上测试过。
 
@@ -180,7 +180,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 | Linux AppImage | 存档、个人配置、缓存和游戏：`~/.local/share/lost-odyssey-recomp/`。设置：`~/.config/lost-odyssey-recomp/`。日志：`~/.local/state/lost-odyssey-recomp/logs/`。 |
 | Linux Flatpak | 在 `~/.var/app/io.github.freefrank.LostOdysseyRecomp/` 下：存档、个人配置、缓存和游戏在 `data/`（沙盒内为 `/var/data`）；设置在 `config/lost-odyssey-recomp/`；日志在 `.local/state/lost-odyssey-recomp/logs/`。 |
 | macOS | 存档、个人配置、缓存、游戏和设置：`~/Library/Application Support/LostOdysseyRecomp/`。日志：`~/Library/Logs/LostOdysseyRecomp/logs/`。 |
-| Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves** 导出和导入存档。 |
+| Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves and logs** 导出和导入存档。 |
 
 渲染捕获保存在 `captures/`，Mod 放在 `mods/`：Windows ZIP 都在程序旁边；其他安装包的捕获在设置目录，Mod 在数据目录。下载的着色器放在 `shaders/`，位置和 Mod 相同。用 Mod Organizer 2 管理 Mod 见 [Mod Organizer 2](wiki/Mod-Organizer-2.md)。
 
@@ -190,7 +190,7 @@ Linux 上可以用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME` 和 `XDG_STATE_HOME` 改�
 
 ## 导入 Xenia 或 Xbox 360 存档
 
-每个存档位是 `save/` 里的一个文件夹，例如 `save/user00/save.bin`；`save/` 的位置见[文件位置](#file-locations)。先关闭游戏并备份 `save/`。复制进去的存档会出现在游戏的读档列表里。Android 上改用 **CTRL → Saves** 导入包含存档文件夹的 ZIP（[详见](#android-saves)）。
+每个存档位是 `save/` 里的一个文件夹，例如 `save/user00/save.bin`；`save/` 的位置见[文件位置](#file-locations)。先关闭游戏并备份 `save/`。复制进去的存档会出现在游戏的读档列表里。Android 上改用 **CTRL → Saves and logs** 导入包含存档文件夹的 ZIP（[详见](#android-saves)）。
 
 <a id="xenia-saves"></a>
 

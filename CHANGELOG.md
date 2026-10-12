@@ -12,6 +12,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Vulkan is now the default renderer on Windows too. Existing settings keep their renderer.
 - Settings → System → Shader bundle downloads the shader bundle again.
 - Nintendo-layout controllers used through Steam Input follow Steam's button layout setting again instead of having A/B and X/Y swapped.
+- Android: CTRL → Saves and logs exports the logs to a ZIP for bug reports.
 
 ### 简体中文
 
@@ -19,6 +20,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows 版也默认使用 Vulkan。已有设置保留原来的渲染器。
 - 设置 → 系统 → 着色器包可以重新下载着色器包。
 - 通过 Steam Input 使用的任天堂布局手柄重新按 Steam 的按键布局设置工作，A/B 和 X/Y 不再对调。
+- Android：CTRL → Saves and logs 可以把日志导出成 ZIP，用于反馈问题。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
