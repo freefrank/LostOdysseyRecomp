@@ -1,11 +1,17 @@
 package io.github.freefrank.lostodyssey;
 
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
+import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -14,7 +20,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Where the user's game data lives: {@code Android/data/<package>/files/game/}
@@ -204,6 +213,77 @@ final class GameStorage {
             if (parent != null) return parent;
         }
         return null;
+    }
+
+    // Importer sources ----------------------------------------------------------
+
+    /** The system file picker's provider for the internal storage, SD cards and USB drives. */
+    static final String EXTERNAL_STORAGE_DOCUMENTS = "com.android.externalstorage.documents";
+
+    /**
+     * The file behind a document from the system file picker, or null when it has
+     * no path the native importer can open (cloud storage). The internal storage,
+     * SD cards and USB drives name files by volume and path; the Downloads and media
+     * views mostly by their MediaStore row.
+     */
+    static File pathForDocument(Context context, Uri uri) {
+        String id;
+        try {
+            id = DocumentsContract.getDocumentId(uri);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        String authority = uri.getAuthority();
+        if (EXTERNAL_STORAGE_DOCUMENTS.equals(authority))
+            return pathForTreeDocumentId(id, Environment.getExternalStorageDirectory());
+        if (!"com.android.providers.downloads.documents".equals(authority)
+                && !"com.android.providers.media.documents".equals(authority)) return null;
+        if (id.startsWith("raw:")) return new File(id.substring(4));
+        // Downloads "msf:<id>" and media "document:<id>" (or image:, video:, audio:) are
+        // MediaStore rows; a bare number is a download without a path here.
+        int colon = id.indexOf(':');
+        if (colon < 0) return null;
+        long row;
+        try {
+            row = Long.parseLong(id.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        Uri file = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), row);
+        try (Cursor cursor = context.getContentResolver().query(file,
+                new String[] { MediaStore.MediaColumns.DATA }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && cursor.getString(0) != null)
+                return new File(cursor.getString(0));
+        } catch (RuntimeException ignored) {
+            // No such row or no access: the caller asks for another location.
+        }
+        return null;
+    }
+
+    /**
+     * What the importer scans for the files picked in the system file picker. A
+     * disc image brings the other disc images in its folder, so picking one disc is
+     * enough; default.xex stands for its extracted disc folder and a GOD data file
+     * for its .data folder; anything else is scanned as it is.
+     */
+    static List<File> importSources(List<File> picked) {
+        Set<File> sources = new LinkedHashSet<>();
+        for (File file : picked) {
+            File folder = file.getParentFile();
+            String name = file.getName().toLowerCase(Locale.ROOT);
+            if (folder != null && (name.equals("default.xex")
+                    || folder.getName().toLowerCase(Locale.ROOT).endsWith(".data"))) {
+                sources.add(folder);
+                continue;
+            }
+            sources.add(file);
+            if (folder == null || !name.endsWith(".iso")) continue;
+            File[] images = folder.listFiles((dir, sibling) -> sibling.toLowerCase(Locale.ROOT).endsWith(".iso"));
+            if (images == null) continue;
+            Arrays.sort(images);
+            for (File image : images) if (image.isFile()) sources.add(image);
+        }
+        return new ArrayList<>(sources);
     }
 
     /**

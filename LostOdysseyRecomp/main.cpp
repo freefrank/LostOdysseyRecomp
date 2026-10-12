@@ -230,6 +230,7 @@ int main(int argc, char* argv[])
 #endif
     bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false, requestedInstall=false;
     std::optional<std::filesystem::path> explicitGamePath;
+    std::vector<std::filesystem::path> installSources;
     for(int i=1;i<argc;++i) {
         if (strcmp(argv[i], "--game") == 0)
         {
@@ -241,6 +242,9 @@ int main(int argc, char* argv[])
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
         prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
         requestedInstall |= strcmp(argv[i],"--install")==0;
+        // Disc images picked in Android's file picker; the importer scans them at once.
+        if (strcmp(argv[i], "--install-source") == 0 && i + 1 < argc)
+            installSources.push_back(std::filesystem::u8path(argv[i + 1]));
         // Mod Organizer 2 cannot set environment variables for the game, so
         // its executable arguments carry the mod mode instead.
         if (strcmp(argv[i], "--mods-mode") == 0 && i + 1 < argc)
@@ -460,7 +464,7 @@ int main(int argc, char* argv[])
 
     if (requestedInstall)
     {
-        const auto result = install::RunHost(executableDirectory, &gameRoot, true);
+        const auto result = install::RunHost(executableDirectory, &gameRoot, true, installSources);
         const bool installed = result == install::HostResult::Installed || result == install::HostResult::AlreadyPresent;
 #if LO_PLATFORM_ANDROID
         // The game folder page starts the importer; a finished import goes

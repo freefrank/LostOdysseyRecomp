@@ -52,6 +52,25 @@ public class GameStorageTest {
     }
 
     @Test
+    public void aPickedDiscImageBringsTheOtherImagesInItsFolder() throws IOException {
+        File folder = temporary.newFolder("Download");
+        File disc1 = new File(folder, "Lost Odyssey (Disc 1).iso");
+        File disc2 = new File(folder, "Lost Odyssey (Disc 2).ISO");
+        for (File file : Arrays.asList(disc1, disc2, new File(folder, "notes.txt"))) assertTrue(file.createNewFile());
+        assertTrue(new File(folder, "folder.iso").mkdir());
+        assertEquals(Arrays.asList(disc2, disc1), GameStorage.importSources(Collections.singletonList(disc2)));
+    }
+
+    @Test
+    public void extractedAndGodPicksScanTheirFolder() throws IOException {
+        File disc = temporary.newFolder("game", "disc1");
+        File data = temporary.newFolder("4D5307FA", "00007000", "ABCDEF.data");
+        File other = new File(temporary.getRoot(), "package");
+        assertEquals(Arrays.asList(disc, data, other), GameStorage.importSources(Arrays.asList(
+            new File(disc, "default.xex"), new File(data, "Data0000"), other)));
+    }
+
+    @Test
     public void fallsBackToPrivateStorageWithoutVolumes() {
         File fallback = temporary.getRoot();
         assertEquals(new File(fallback, "game/disc1"), GameStorage.selectDisc1(null, Collections.emptyList(), fallback));

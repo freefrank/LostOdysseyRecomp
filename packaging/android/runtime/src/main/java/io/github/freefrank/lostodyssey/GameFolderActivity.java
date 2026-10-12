@@ -21,6 +21,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -33,13 +35,15 @@ import java.util.Objects;
  *
  * It opens instead of the game when no {@code disc1/default.xex} is found,
  * and from the CTRL dialog while playing; changing the folder then restarts.
- * "Import disc images" starts the runtime's own importer, which reads ISOs or
- * extracted discs from shared storage and writes the game folder.
+ * "Import disc images" picks a disc image in the system file picker and
+ * starts the runtime's own importer on it, which reads ISOs or extracted
+ * discs from shared storage and writes the game folder.
  */
 public final class GameFolderActivity extends Activity {
     static final String EXTRA_FROM_GAME = "from_game";
     private static final int REQUEST_PICK_FOLDER = 1;
     private static final int REQUEST_STORAGE_PERMISSION = 2;
+    private static final int REQUEST_PICK_DISCS = 3;
 
     private boolean fromGame;
     private File originalCustom;
@@ -84,7 +88,7 @@ public final class GameFolderActivity extends Activity {
             Pending pending = afterPermission;
             afterPermission = Pending.NONE;
             if (pending == Pending.PICK) pickFolder();
-            else { startImport(); return; }
+            else pickDiscImages();
         }
         render();
     }
@@ -171,22 +175,27 @@ public final class GameFolderActivity extends Activity {
         page.addView(actions);
 
         page.addView(text("Import", 18f, true));
-        page.addView(dim("Import the game on this device from disc images (.iso) or extracted "
-            + "discs, for example in Download or on an SD card. The importer writes to "
-            + GameStorage.importRoot(this).getAbsolutePath() + " unless you pick another "
-            + "destination; the four discs need about 20 GB. Needs \"All files access\"."));
+        page.addView(dim("Import the game on this device from disc images (.iso), for example in "
+            + "Download, on an SD card or a USB drive. Pick one disc image; the other discs in "
+            + "the same folder are found with it. For extracted discs pick default.xex. The "
+            + "importer writes to " + GameStorage.importRoot(this).getAbsolutePath() + " unless "
+            + "you pick another destination; the four discs need about 20 GB. Needs \"All files "
+            + "access\"."));
         page.addView(button("Import disc images…", v -> {
-            if (canReadSharedStorage()) startImport();
+            if (canReadSharedStorage()) pickDiscImages();
             else askForStorage(Pending.IMPORT);
         }));
 
         page.addView(primaryButton(found));
     }
 
-    private void startImport() {
+    private void startImport(List<File> sources) {
+        String[] paths = new String[sources.size()];
+        for (int i = 0; i < paths.length; ++i) paths[i] = sources.get(i).getAbsolutePath();
         Runnable launch = () -> {
             Intent intent = new Intent(this, RuntimeActivity.class);
             intent.putExtra(RuntimeActivity.EXTRA_IMPORT, true);
+            intent.putExtra(RuntimeActivity.EXTRA_IMPORT_SOURCES, paths);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             // The native runtime runs once per process; a game in progress ends here.
@@ -284,9 +293,55 @@ public final class GameFolderActivity extends Activity {
         }
     }
 
+    /**
+     * The file picker, not the folder picker: Android 11+ does not let the folder
+     * picker choose Download or the root of an SD card, where disc images usually are.
+     */
+    private void pickDiscImages() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            // Device storage names files by path; the Downloads view may not.
+            .putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUri(
+                GameStorage.EXTERNAL_STORAGE_DOCUMENTS, "primary:" + Environment.DIRECTORY_DOWNLOADS));
+        try {
+            startActivityForResult(intent, REQUEST_PICK_DISCS);
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void discImagesPicked(Intent data) {
+        List<Uri> uris = new ArrayList<>();
+        if (data.getClipData() != null) {
+            for (int i = 0; i < data.getClipData().getItemCount(); ++i) uris.add(data.getClipData().getItemAt(i).getUri());
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        List<File> picked = new ArrayList<>();
+        for (Uri uri : uris) {
+            File file = GameStorage.pathForDocument(this, uri);
+            if (file == null || !file.isFile()) {
+                new AlertDialog.Builder(this).setTitle("Cannot open this file")
+                    .setMessage("The importer reads files from the internal storage, an SD card or a "
+                        + "USB drive. Open the disc image from there in the picker's menu, not from "
+                        + "cloud storage or Recent.")
+                    .setPositiveButton("OK", null).show();
+                return;
+            }
+            picked.add(file);
+        }
+        if (!picked.isEmpty()) startImport(GameStorage.importSources(picked));
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_PICK_DISCS) {
+            if (resultCode == RESULT_OK && data != null) discImagesPicked(data);
+            return;
+        }
         if (requestCode != REQUEST_PICK_FOLDER || resultCode != RESULT_OK || data == null
                 || data.getData() == null) return;
         String documentId;
