@@ -748,6 +748,7 @@ namespace gpu::renderer
             uint8_t* arenaMapped = nullptr;
             using VertexEntry = geometry_prepare::VertexEntry;
             std::vector<uint32_t> indexScratch, primitiveScratch;
+            std::vector<RenderTargetKey> clearViewScratch; // other views of a clear rectangle's tiles
             geometry_prepare::VertexCache vertexCache;
             geometry_prepare::IndexCache indexCache;
             uint64_t indexCacheHits = 0, indexCacheMisses = 0;
@@ -13109,7 +13110,8 @@ void main()
                         commandList->setFramebuffer(framebuffer);
                     }
 
-                    std::vector<RenderTargetKey> others;
+                    auto& others = clearViewScratch;
+                    others.clear();
                     for (auto& [k, tex] : renderTargets)
                     {
                         if (!tex || k.pitch == pitch) continue;
