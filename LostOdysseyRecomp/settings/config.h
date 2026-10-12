@@ -8,6 +8,7 @@
 #include "gpu/backend_selection.h"
 #include "gpu/upscaling_plan.h"
 #include "../../shared/frame_generation/core.h"
+#include "hid/input_map.h"
 namespace settings
 {
 // Persisted 2 (the removed exclusive fullscreen) loads as Borderless.
@@ -157,6 +158,10 @@ struct Config
     uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     uint32_t vibrationPercent = 100; // Controller rumble strength; 0 Off, 100 retail. Applied live.
     uint32_t buttonPrompts = 0; // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation. Applied live.
+    // Gameplay → Controls: the controller button and the key for each Xbox 360
+    // input (hid/input_map.h). Applied live.
+    hid::input_map::ControllerMap controllerMap = hid::input_map::DefaultController;
+    hid::input_map::KeyboardMap keyboardMap = hid::input_map::DefaultKeyboard;
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
     bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.

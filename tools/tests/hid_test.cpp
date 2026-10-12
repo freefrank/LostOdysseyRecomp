@@ -14,6 +14,7 @@ std::atomic<uint32_t> g_presentedSwaps{0};
 namespace
 {
 std::atomic<uint32_t> g_settingsFilterCalls{0};
+std::atomic<uint16_t> g_defaultButtons{0};
 std::atomic<bool> g_overlayVisible{false};
 std::mutex g_overlayStubMutex;
 std::condition_variable g_overlayStubCv;
@@ -22,9 +23,10 @@ bool g_overlayEntered = false;
 }
 namespace settings
 {
-bool FilterInput(uint16_t&, int16_t, int16_t)
+bool FilterInput(uint16_t&, int16_t, int16_t, uint16_t defaultButtons)
 {
     ++g_settingsFilterCalls;
+    g_defaultButtons = defaultButtons;
     return false;
 }
 }
@@ -160,6 +162,76 @@ int main()
     Check(sample().bRightTrigger == 255, "keyboard trigger");
     hid::ClearKeyboardState();
     Check(sample().bRightTrigger == 0, "focus loss releases keyboard");
+
+    // Settings → Gameplay → Controls layouts (input_map.h), applied after the
+    // face-button normalisation. The defaults are the identity: every check
+    // above ran on them.
+    {
+        namespace map = hid::input_map;
+        constexpr uint16_t A = XAMINPUT_GAMEPAD_A, B = XAMINPUT_GAMEPAD_B, Y = XAMINPUT_GAMEPAD_Y;
+        for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
+            Check(map::SourceNames[button] == SDL_GetGamepadStringForButton(SDL_GamepadButton(button)),
+                  "settings.ini button names are SDL's mapping names");
+        Check(map::SourceNames[map::LeftTriggerSource] == SDL_GetGamepadStringForAxis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER) &&
+              map::SourceNames[map::RightTriggerSource] == SDL_GetGamepadStringForAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER),
+              "settings.ini trigger names are SDL's mapping names");
+        for (int input = 0; input < map::ControllerInputCount; ++input)
+            Check(map::InputNames[input] == map::SourceNames[map::DefaultController[input]], "each input is named after its default button");
+        Check(hid::KeyName(SDL_SCANCODE_Z) == "Z", "key names come from SDL");
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_NORTH, 1);
+        auto identity = sample();
+        Check((identity.wButtons & Y) && g_defaultButtons.load() == identity.wButtons, "the default layout is the identity");
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_NORTH, 0);
+        // A on B's button swaps A and B.
+        auto layout = map::DefaultController;
+        map::Assign(layout, map::A, map::Source(SDL_GAMEPAD_BUTTON_EAST));
+        Check(layout[map::B] == SDL_GAMEPAD_BUTTON_SOUTH, "binding B's button to A gives B the A button");
+        hid::SetInputMaps(layout, map::DefaultKeyboard);
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
+        auto swapped = sample();
+        Check((swapped.wButtons & (A | B)) == B, "after the swap the A button gives B");
+        Check((g_defaultButtons.load() & (A | B)) == A, "the Controls page still gets A from it");
+        Check(hid::PressedSources() == 1u << SDL_GAMEPAD_BUTTON_SOUTH, "a capture sees the normalised button");
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 0);
+        SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 1);
+        Check((sample().wButtons & (A | B)) == A, "and the B button gives A, on every controller");
+        SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 0);
+        // A trigger as a button presses past half way; a button as a trigger pulls fully.
+        map::Assign(layout, map::Y, map::LeftTriggerSource);
+        Check(layout[map::LeftTrigger] == SDL_GAMEPAD_BUTTON_NORTH, "LT takes Y's button");
+        hid::SetInputMaps(layout, map::DefaultKeyboard);
+        SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, -20000); // below half way
+        auto light = sample();
+        Check(!(light.wButtons & Y) && light.bLeftTrigger == 0 && hid::PressedSources() == 0, "a light pull is not Y and moves no LT");
+        SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 32767);
+        auto pulled = sample();
+        Check((pulled.wButtons & Y) && pulled.bLeftTrigger == 0, "a full pull is Y");
+        Check(hid::PressedSources() == 1u << map::LeftTriggerSource, "a pulled trigger is a capture source");
+        SDL_SetJoystickVirtualAxis(a, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, -32768);
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_NORTH, 1);
+        Check(sample().bLeftTrigger == 255, "the Y button pulls LT fully");
+        SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_NORTH, 0);
+        // Keyboard: A on Space leaves Z free in the game; the Controls page keeps Z.
+        auto keys = map::DefaultKeyboard;
+        map::Assign(keys, map::A, uint16_t(SDL_SCANCODE_SPACE));
+        hid::SetInputMaps(map::DefaultController, keys);
+        hid::HandleKeyboardEvent(SDL_SCANCODE_SPACE, true);
+        Check((sample().wButtons & A) && !(g_defaultButtons.load() & A), "Space gives A in the game only");
+        hid::HandleKeyboardEvent(SDL_SCANCODE_SPACE, false);
+        hid::HandleKeyboardEvent(SDL_SCANCODE_Z, true);
+        Check(!(sample().wButtons & A) && (g_defaultButtons.load() & A), "Z gives A on the Controls page only");
+        hid::HandleKeyboardEvent(SDL_SCANCODE_Z, false);
+        // A stick key moved to another key moves the stick from there.
+        map::Assign(keys, map::StickUp, uint16_t(SDL_SCANCODE_W));
+        Check(keys[map::RightShoulder] == SDL_SCANCODE_I, "RB takes I");
+        hid::SetInputMaps(map::DefaultController, keys);
+        hid::HandleKeyboardEvent(SDL_SCANCODE_W, true);
+        auto stick = sample();
+        Check(stick.sThumbLY == 32767 && !(stick.wButtons & XAMINPUT_GAMEPAD_RIGHT_SHOULDER), "W moves the stick up");
+        hid::ClearKeyboardState();
+        hid::SetInputMaps(map::DefaultController, map::DefaultKeyboard);
+        sample();
+    }
 
 #if LO_PLATFORM_ANDROID
     SDL_SetJoystickVirtualButton(a, SDL_GAMEPAD_BUTTON_SOUTH, 1);
@@ -314,6 +386,6 @@ int main()
     hid::SetVibrationStrength(100);
     SDL_DetachVirtualJoystick(rumblePad);
     SDL_Quit();
-    puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger; rumble strength");
+    puts("PASS: SDL PS types, PS/nonPS active device, keyboard, hotplug, four face mappings; virtual input merger; Controls layouts; rumble strength");
     return 0;
 }

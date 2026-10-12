@@ -128,6 +128,27 @@ int modsFocus = 0;
 bool modsDiscardPrompt = false;
 int modsDiscardChoice = 1;
 bool restartForMods = false;
+// Controls page (Gameplay → Controls). The layouts stay unsaved until Save;
+// Button prompts and Vibration save at once, as they did on the tab. The page
+// navigates with the default layouts (FilterInput), so a layout that leaves a
+// button out of reach can always be undone here.
+namespace input_map = hid::input_map;
+std::atomic<bool> controlsOpen{false};
+input_map::ControllerMap controlsController = input_map::DefaultController, controlsControllerStart = input_map::DefaultController;
+input_map::KeyboardMap controlsKeyboard = input_map::DefaultKeyboard, controlsKeyboardStart = input_map::DefaultKeyboard;
+int controlsFocus = ControlsPromptRow;
+bool controlsDiscardPrompt = false;
+int controlsDiscardChoice = 1;
+// A capture on a layout row (captureRow, -1 for none). A controller capture
+// arms once every button is up and takes the next press; a keyboard capture
+// takes the next key from CaptureKey on the video thread. Escape cancels
+// either; both give up after ControlsCaptureSeconds.
+int captureRow = -1;
+bool captureArmed = false;
+std::chrono::steady_clock::time_point captureDeadline;
+std::atomic<int> captureMode{0}; // 0 none, 1 controller, 2 keyboard
+std::atomic<int> capturedKey{-1};
+std::atomic<bool> captureEscape{false};
 Config restartAfter;
 int tab = 0, row = 0;
 bool bypass = false, sawModal = false;
@@ -474,6 +495,136 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
     if (info.active && info.manifestEntries)
         where += L"     " + (Tr(L"mod.ini entries: ", L"mod.ini 項目：") + std::to_wstring(info.manifestEntries));
     return {help, where};
+}
+static_assert(ControlsControllerFirst == ControlsControllerTitle + 1 &&
+              ControlsKeyboardTitle == ControlsControllerFirst + input_map::ControllerInputCount &&
+              ControlsKeyboardFirst == ControlsKeyboardTitle + 1 &&
+              ControlsRestoreRow == ControlsKeyboardFirst + input_map::KeyboardInputCount &&
+              ControlsSaveRow == ControlsRestoreRow + 1 && ControlsRowCount == ControlsSaveRow + 1);
+bool ControlsTitle(int r) { return r == ControlsControllerTitle || r == ControlsKeyboardTitle; }
+// The Xbox 360 input of a layout row, or -1; keyboard tells which layout.
+int ControlsInput(int r, bool &keyboard)
+{
+    keyboard = r >= ControlsKeyboardFirst;
+    if (r >= ControlsControllerFirst && r < ControlsControllerFirst + input_map::ControllerInputCount)
+        return r - ControlsControllerFirst;
+    if (r >= ControlsKeyboardFirst && r < ControlsKeyboardFirst + input_map::KeyboardInputCount)
+        return r - ControlsKeyboardFirst;
+    return -1;
+}
+// The Xbox 360 name of an input. Letters and shoulder names become the
+// PlayStation glyphs with those prompts (menu_render.cpp).
+std::wstring InputLabel(int input)
+{
+    switch (input)
+    {
+    case input_map::A: return L"A";
+    case input_map::B: return L"B";
+    case input_map::X: return L"X";
+    case input_map::Y: return L"Y";
+    case input_map::LeftShoulder: return L"LB";
+    case input_map::RightShoulder: return L"RB";
+    case input_map::LeftTrigger: return L"LT";
+    case input_map::RightTrigger: return L"RT";
+    case input_map::Back: return L"Back";
+    case input_map::Start: return L"Start";
+    case input_map::LeftThumb: return Tr(L"Left stick click", L"左搖桿按下");
+    case input_map::RightThumb: return Tr(L"Right stick click", L"右搖桿按下");
+    case input_map::DpadUp: return Tr(L"D-pad up", L"方向鍵上");
+    case input_map::DpadDown: return Tr(L"D-pad down", L"方向鍵下");
+    case input_map::DpadLeft: return Tr(L"D-pad left", L"方向鍵左");
+    case input_map::DpadRight: return Tr(L"D-pad right", L"方向鍵右");
+    case input_map::StickUp: return Tr(L"Left stick up", L"左搖桿上");
+    case input_map::StickDown: return Tr(L"Left stick down", L"左搖桿下");
+    case input_map::StickLeft: return Tr(L"Left stick left", L"左搖桿左");
+    case input_map::StickRight: return Tr(L"Left stick right", L"左搖桿右");
+    }
+    return L"?";
+}
+// A controller source by the Xbox 360 name of its default input; the extra
+// buttons some controllers have by their own names.
+std::wstring SourceLabel(input_map::Source source)
+{
+    for (int i = 0; i < input_map::ControllerInputCount; ++i)
+        if (input_map::DefaultController[i] == source) return InputLabel(i);
+    if (source >= 16 && source <= 19) return Tr(L"Paddle", L"背鍵") + std::wstring(L" ") + std::to_wstring(source - 15);
+    if (source == 20) return Tr(L"Touchpad", L"觸控板");
+    if (source == 15) return Tr(L"Extra button", L"額外按鍵") + std::wstring(L" 1");
+    if (source >= 21 && source <= 25) return Tr(L"Extra button", L"額外按鍵") + std::wstring(L" ") + std::to_wstring(source - 19);
+    return L"Guide";
+}
+std::wstring KeyLabel(uint16_t scancode)
+{
+    return scancode == input_map::NoKey ? std::wstring(Tr(L"None", L"無")) : Widen(hid::KeyName(scancode));
+}
+void EndCapture()
+{
+    captureMode = 0;
+    captureRow = -1;
+    captureArmed = false;
+    capturedKey = -1;
+    captureEscape = false;
+}
+void BeginCapture(int r, bool keyboard)
+{
+    captureRow = r;
+    captureArmed = false;
+    capturedKey = -1;
+    captureEscape = false;
+    captureDeadline = MenuNow() + std::chrono::seconds(ControlsCaptureSeconds);
+    captureMode = keyboard ? 2 : 1;
+    status.clear();
+}
+void OpenControlsPage()
+{
+    const auto saved = GetConfig();
+    controlsController = controlsControllerStart = saved.controllerMap;
+    controlsKeyboard = controlsKeyboardStart = saved.keyboardMap;
+    controlsFocus = ControlsPromptRow;
+    controlsDiscardPrompt = false;
+    EndCapture();
+    status.clear();
+    controlsOpen = true;
+    LOG_INFO("settings: controls page opened");
+}
+void CloseControlsPage()
+{
+    EndCapture();
+    controlsOpen = false;
+    controlsDiscardPrompt = false;
+    status.clear();
+}
+// Help for the focused Controls page row (line 1); line 2 says the page keeps
+// the default layouts.
+std::pair<std::wstring, std::wstring> ControlsHelp()
+{
+    std::wstring page = Tr(L"This page always uses the default buttons and keys.", L"此頁面始終使用預設按鍵。");
+    bool keyboard = false;
+    const int input = ControlsInput(controlsFocus, keyboard);
+    if (captureRow >= 0)
+        return {captureMode.load() == 2 ? Tr(L"Press a key. Esc cancels.", L"按下鍵盤按鍵。按 Esc 取消。")
+                                        : Tr(L"Press a button on any controller. Esc on the keyboard cancels.",
+                                             L"在任一控制器上按下按鍵。按鍵盤 Esc 取消。"),
+                page};
+    if (controlsFocus == ControlsPromptRow)
+        return {Tr(L"Which button icons the game shows. Auto follows the controller you use.",
+                   L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。"),
+                page};
+    if (controlsFocus == ControlsVibrationRow)
+        return {Tr(L"Controller vibration strength. Min turns it off. Applies immediately.",
+                   L"控制器震動強度。調到最小即關閉。立即套用。"),
+                page};
+    if (controlsFocus == ControlsRestoreRow)
+        return {Tr(L"Puts every button and key back to the default. Save to keep it.", L"將所有按鍵恢復為預設。儲存後保留。"), page};
+    if (controlsFocus == ControlsSaveRow)
+        return {Tr(L"Saves the buttons and keys. They apply at once.", L"儲存按鍵配置，立即套用。"), page};
+    if (input >= 0)
+        return {keyboard ? Tr(L"Confirm, then press the key for this input. A key already in use swaps places.",
+                              L"確認後，按下要用於此項的鍵盤按鍵。已使用的按鍵會互換。")
+                         : Tr(L"Confirm, then press the controller button for this input. A button already in use swaps places.",
+                              L"確認後，按下要用於此項的控制器按鍵。已使用的按鍵會互換。"),
+                page};
+    return {{}, page};
 }
 // Menu choice 0 is Automatic; choice i names[i - 1]. A saved name that is not
 // listed stays as the last choice, so the row shows the saved value.
@@ -928,7 +1079,7 @@ void Publish(uint8_t *base, uint32_t config)
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
-    next.row = modsOpen ? modsFocus : row;
+    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : row;
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -985,6 +1136,48 @@ void Publish(uint8_t *base, uint32_t config)
         next.reorder = focused >= 0 && mods_page::IsMod(modsEntries[size_t(focused)]) &&
                        modsEntries[size_t(focused)].info.apiVersion != 0 && mods_page::ModCount(modsEntries) > 1;
     }
+    else if (controlsOpen)
+    {
+        next.pageTitle = Tr(L"Controls", L"按鍵設定");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"B: change     Start: save     A: back", L"B：變更     Start：儲存     A：返回")
+            : Tr(L"A: change     Start: save     B: back", L"A：變更     Start：儲存     B：返回");
+        next.rows.resize(size_t(ControlsRowCount));
+        next.rows[ControlsPromptRow] = makeChoices(L"Button prompts", L"按鍵提示",
+            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"}, std::min(edit.buttonPrompts, 2u));
+        next.rows[ControlsVibrationRow] = {Tr(L"Vibration", L"震動"), std::to_wstring(edit.vibrationPercent) + L"%", true, {}, 0,
+                                           int(std::min(edit.vibrationPercent, 100u))};
+        auto title = [&](const wchar_t *en, const wchar_t *zh) {
+            Row header{Tr(en, zh), {}, false, {}, 0};
+            header.header = true;
+            return header;
+        };
+        next.rows[ControlsControllerTitle] = title(L"Controller", L"控制器");
+        next.rows[ControlsKeyboardTitle] = title(L"Keyboard", L"鍵盤");
+        // The row being captured counts down in place of its binding.
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(captureDeadline - MenuNow()).count();
+        const auto seconds = std::to_wstring(std::max<long long>(0, (left + 999) / 1000));
+        auto binding = [&](int r, std::wstring value, bool literal) {
+            bool keyboard = false;
+            const int input = ControlsInput(r, keyboard);
+            if (r == captureRow)
+            {
+                value = std::wstring(keyboard ? Tr(L"Press a key…", L"請按下鍵盤按鍵…") : Tr(L"Press a button…", L"請按下按鍵…")) +
+                        L" (" + seconds + L")";
+                literal = false;
+            }
+            Row mapping{InputLabel(input), value, true, {value}, 0};
+            mapping.literal = literal;
+            next.rows[size_t(r)] = std::move(mapping);
+        };
+        for (int i = 0; i < input_map::ControllerInputCount; ++i)
+            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false);
+        for (int i = 0; i < input_map::KeyboardInputCount; ++i)
+            binding(ControlsKeyboardFirst + i, KeyLabel(controlsKeyboard[size_t(i)]),
+                    controlsKeyboard[size_t(i)] != input_map::NoKey);
+        next.rows[ControlsRestoreRow] = makeChoices(L"Restore default buttons", L"恢復預設按鍵", {Tr(L"Restore", L"恢復")}, 0);
+        next.rows[ControlsSaveRow] = makeChoices(L"Save controls", L"儲存按鍵設定", {Tr(L"Save", L"儲存")}, 0);
+    }
     else if (tab == 0)
     {
         addChoices(L"Text speed", L"文字速度", {Tr(L"Fast", L"快"), Tr(L"Normal", L"正常"),
@@ -1002,9 +1195,7 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Confirmation button", L"確認按鍵", {L"A / B", L"B / A"},
                    (flags & 0x02000000) ? 1 : 0);
         next.rows.back().controllerButtons = true;
-        addChoices(L"Button prompts", L"按鍵提示", {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"},
-                   std::min(edit.buttonPrompts, 2u));
-        addSlider(L"Vibration", L"震動", edit.vibrationPercent);
+        addAction(L"Controls", L"按鍵設定", Tr(L"Open", L"開啟"));
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
         for (int i = 0; i < GameRowCount; ++i)
@@ -1237,7 +1428,7 @@ void Publish(uint8_t *base, uint32_t config)
     // so returning to a long list restores its position.
     if (tab >= 0 && tab < MenuTabCount)
     {
-        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0;
+        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0;
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
@@ -1245,7 +1436,7 @@ void Publish(uint8_t *base, uint32_t config)
             if (int(i) <= next.row) visibleFocus = visibleCount;
             ++visibleCount;
         }
-        int &scroll = modsOpen ? modsScroll : scrollByTab[tab];
+        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : scrollByTab[tab];
         scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
         if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
@@ -1257,18 +1448,15 @@ void Publish(uint8_t *base, uint32_t config)
     if (status.empty() && (flags & 0x02000000))
         next.help = Tr(L"LB / RB: category     D-pad: select / change     B: confirm     A: back",
                        L"LB / RB：分類     方向鍵：選擇 / 調整     B：確認     A：返回");
-    if (tab == 0 && row == GameVibrationRow)
-        next.help = Tr(L"Controller vibration strength. Min turns it off. Applies immediately.",
-                       L"控制器震動強度。調到最小即關閉。立即套用。");
+    if (tab == 0 && row == GameControlsRow)
+        next.help = Tr(L"Button prompts, vibration, and the controller and keyboard buttons.",
+                       L"按鍵提示、震動，以及控制器與鍵盤的按鍵配置。");
     if (tab == 3 && row == SystemGameLanguageRow)
         next.help = !edit.gameLanguagePack.empty()
             ? Tr(L"A language pack from the mods folder. Voices and the rest stay in the language it is based on. Takes effect after restarting.",
                  L"來自 mods 資料夾的語言包。語音等其餘內容沿用它所基於的語言。重新啟動後生效。")
             : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                  L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
-    if (tab == 0 && row == GamePromptRow)
-        next.help = Tr(L"Which button icons the game shows. Auto follows the controller you use.",
-                       L"遊戲顯示的按鍵圖示。自動會跟隨你使用的控制器。");
     if (tab == 3 && row == SystemDebugLogRow)
         next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
                        L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
@@ -1535,11 +1723,12 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         }
     }
-    std::pair<std::wstring, std::wstring> modsHelp;
-    if (modsOpen)
+    // A page's help: line 1 for the focused row, line 2 in place of the notice.
+    std::pair<std::wstring, std::wstring> pageHelp;
+    if (modsOpen || controlsOpen)
     {
-        modsHelp = ModsHelp(modsRows);
-        next.help = modsHelp.first;
+        pageHelp = modsOpen ? ModsHelp(modsRows) : ControlsHelp();
+        next.help = pageHelp.first;
     }
     if (!status.empty()) next.help = status;
     if (restartPrompt)
@@ -1608,12 +1797,13 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = shaderBundleChoice;
     }
-    if (modsDiscardPrompt)
+    if (modsDiscardPrompt || controlsDiscardPrompt)
     {
         next.dialogTitle = Tr(L"Unsaved changes", L"尚未儲存的變更");
-        next.dialogMessage = Tr(L"Leave without saving the mod list?", L"不儲存 Mod 清單就離開嗎？");
+        next.dialogMessage = modsDiscardPrompt ? Tr(L"Leave without saving the mod list?", L"不儲存 Mod 清單就離開嗎？")
+                                               : Tr(L"Leave without saving the controls?", L"不儲存按鍵設定就離開嗎？");
         next.dialogChoices = {Tr(L"Discard changes", L"捨棄變更"), Tr(L"Cancel", L"取消")};
-        next.dialogSelection = modsDiscardChoice;
+        next.dialogSelection = modsDiscardPrompt ? modsDiscardChoice : controlsDiscardChoice;
     }
     if (displayConfirm)
     {
@@ -1645,7 +1835,7 @@ void Publish(uint8_t *base, uint32_t config)
         : tab == 2 ? (row == int(GraphicsRow::FrameGeneration) ||
         row == int(GraphicsRow::FrameGenerationMultiplier) ? FgNotice() : DlssNotice()) : std::wstring{};
 #endif
-    if (modsOpen) next.notice = std::move(modsHelp.second);
+    if (modsOpen || controlsOpen) next.notice = std::move(pageHelp.second);
     std::lock_guard lock(snapshotMutex);
     // Presentation may have published availability while this snapshot was built.
     next.calibration.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
@@ -1746,7 +1936,8 @@ bool CalibrationKey(uint32_t key)
         return true;
     }
     // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
-    const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load()) && (key == 13 || key == 27)) ||
+    // On the Controls page Enter confirms like A, so it starts a capture.
+    const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load() || controlsOpen.load()) && (key == 13 || key == 27)) ||
                                (modsOpen.load() && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
@@ -1780,7 +1971,28 @@ void PointerDrag(float x, float y, bool held)
     }
     calibrationDragNits.store(int(CalibrationSliderValue(x, paperWhite)));
 }
-bool FilterInput(uint16_t &buttons, int16_t x, int16_t y)
+bool CaptureKey(uint32_t scancode, bool repeat)
+{
+    const int mode = captureMode.load();
+    if (!mode || !active.load())
+        return false;
+    if (scancode == input_map::EscapeKey)
+    {
+        if (!repeat) captureEscape = true;
+        return true;
+    }
+    if (mode != 2)
+        return false;
+    // A keyboard capture takes every key; a held key repeating (the one that
+    // started the capture) is not a press. F1 stays with the debug menu.
+    if (!repeat && input_map::BindableKey(scancode))
+    {
+        int none = -1;
+        capturedKey.compare_exchange_strong(none, int(scancode));
+    }
+    return true;
+}
+bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButtons)
 {
     // A held Back must not become a fresh press in the parent menu. Consume
     // the neutral poll as well so its edge detector sees the release first.
@@ -1811,6 +2023,16 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y)
     }
     if (!active.load())
         return false;
+    // The Controls page runs on the default layouts. Switching between the
+    // two waits for a release, so a held button is not a fresh press.
+    static bool defaultLayout = false;
+    if (const bool page = controlsOpen.load(); page != defaultLayout)
+    {
+        defaultLayout = page;
+        waitForRelease = true;
+    }
+    if (defaultLayout)
+        buttons = defaultButtons;
     if (swapConfirm.load())
         buttons = (buttons & ~0x3000) | ((buttons & 0x1000) << 1) | ((buttons & 0x2000) >> 1);
     if (x < -16000)
@@ -1931,7 +2153,7 @@ void PointerClick(float x, float y, bool reverse)
             break;
         }
     }
-    if (hit >= snapshot.rows.size())
+    if (hit >= snapshot.rows.size() || snapshot.rows[hit].header)
         return;
     if (x >= 1026)
     {
@@ -1943,8 +2165,12 @@ void PointerClick(float x, float y, bool reverse)
     }
     mouseRow = int(hit);
     if (listPage) {
-        // A switches a mod or runs an action; a right click switches too.
-        if (x >= 386 && snapshot.rows[hit].enabled) mouseAction = reverse ? 4 : 0x1000;
+        // Controls: Button prompts and Vibration step like on a tab.
+        if (controlsOpen.load() && (hit == size_t(ControlsPromptRow) || hit == size_t(ControlsVibrationRow))) {
+            if (x >= 386) mouseAction = reverse ? 4 : 8;
+        }
+        // A switches a mod, captures a button or runs an action; a right click switches too.
+        else if (x >= 386 && snapshot.rows[hit].enabled) mouseAction = reverse ? 4 : 0x1000;
     } else if (x >= 386 && snapshot.rows[hit].enabled) {
         const bool hdrLevel = snapshot.tab == 2 &&
             (hit == size_t(GraphicsRow::HdrPaperWhite) || hit == size_t(GraphicsRow::HdrPeak));
@@ -2101,6 +2327,9 @@ PPC_FUNC(sub_822F19B0)
         modsDiscardPrompt = false;
         restartForMods = false;
         modsEntries.clear();
+        controlsOpen = false;
+        controlsDiscardPrompt = false;
+        EndCapture();
         displayConfirm = displayReverting = false;
         displayConfirmOpen = false;
         {
@@ -2142,6 +2371,11 @@ PPC_FUNC(sub_822F19B0)
     if (int selected = mouseRow.exchange(-1); selected >= 0)
     {
         if (modsOpen) modsFocus = selected;
+        else if (controlsOpen)
+        {
+            // A capture keeps its row; a section title is never focused.
+            if (captureRow < 0 && selected < ControlsRowCount && !ControlsTitle(selected)) controlsFocus = selected;
+        }
         else row = selected;
         input |= 0x400;
     }
@@ -2161,6 +2395,9 @@ PPC_FUNC(sub_822F19B0)
         brightnessOpen = false;
         nrOpen = false;
         modsOpen = false;
+        controlsOpen = false;
+        controlsDiscardPrompt = false;
+        EndCapture();
         cancelPolls = 0;
         pending = 0;
         PPCContext apply = ctx;
@@ -2794,6 +3031,165 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if (controlsOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        if (captureRow >= 0)
+        {
+            // A capture takes no menu input: the next press binds, Escape
+            // cancels, and it gives up after ControlsCaptureSeconds.
+            mouseDialog = -1;
+            bool keyboard = false;
+            const int target = ControlsInput(captureRow, keyboard);
+            bool done = false;
+            int swapped = -1;
+            if (captureEscape.exchange(false))
+            {
+                status = Tr(L"Cancelled.", L"已取消。");
+                done = true;
+            }
+            else if (keyboard)
+            {
+                if (const int key = capturedKey.exchange(-1); key >= 0)
+                {
+                    swapped = input_map::BoundElsewhere(controlsKeyboard, target, uint16_t(key));
+                    input_map::Assign(controlsKeyboard, target, uint16_t(key));
+                    done = true;
+                }
+            }
+            else
+            {
+                // Wait for the press that started the capture to end.
+                const uint32_t held = hid::PressedSources() & input_map::BindableSources;
+                if (!captureArmed)
+                    captureArmed = held == 0;
+                else if (held)
+                {
+                    const auto source = input_map::Source(std::countr_zero(held));
+                    swapped = input_map::BoundElsewhere(controlsController, target, source);
+                    input_map::Assign(controlsController, target, source);
+                    done = true;
+                }
+            }
+            if (!done && MenuNow() >= captureDeadline)
+            {
+                status = keyboard ? Tr(L"No key pressed. Nothing changed.", L"未按下任何鍵，沒有變更。")
+                                  : Tr(L"No button pressed. Nothing changed.", L"未按下任何按鍵，沒有變更。");
+                done = true;
+            }
+            if (done)
+            {
+                if (swapped >= 0) status = Tr(L"Swapped with: ", L"已互換：") + InputLabel(swapped);
+                EndCapture();
+                // The captured button is still held: not a press on the page.
+                waitForRelease = true;
+            }
+            Publish(base, config);
+            return;
+        }
+        // B, Back (keyboard Backspace) and Escape leave the page; Enter confirms.
+        const bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        if (std::find(keys.begin(), keys.end(), 13u) != keys.end()) input |= 0x1000;
+        if (controlsDiscardPrompt)
+        {
+            if (int selected = mouseDialog.exchange(-1); selected >= 0) controlsDiscardChoice = std::min(selected, 1);
+            if (input & 3) controlsDiscardChoice = 1 - controlsDiscardChoice;
+            if (back) controlsDiscardPrompt = false;
+            else if (input & 0x1000)
+            {
+                controlsDiscardPrompt = false;
+                if (controlsDiscardChoice == 0) CloseControlsPage();
+            }
+            Publish(base, config);
+            return;
+        }
+        if (input & 0x331f) status.clear();
+        const auto step = [&](int direction) {
+            do controlsFocus = (controlsFocus + ControlsRowCount + direction) % ControlsRowCount;
+            while (ControlsTitle(controlsFocus));
+        };
+        if (input & 1) step(-1);
+        if (input & 2) step(1);
+        // Start goes to Save, and saves when pressed there.
+        if (input & 0x10)
+        {
+            if (controlsFocus == ControlsSaveRow) input |= 0x1000;
+            else
+            {
+                controlsFocus = ControlsSaveRow;
+                input &= ~0x1000;
+            }
+        }
+        const int delta = (input & 4) ? -1 : (input & 8) ? 1 : 0;
+        bool keyboard = false;
+        const int target = ControlsInput(controlsFocus, keyboard);
+        if (back) {}
+        else if (delta && controlsFocus == ControlsPromptRow)
+        {
+            // Host setting: applied and saved at once, like Vibration.
+            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 2u)) + 3 + delta) % 3);
+            edit.buttonPrompts = style;
+            Config saved = GetConfig();
+            saved.buttonPrompts = style;
+            if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            hid::SetPromptStyle(style);
+        }
+        else if (delta && controlsFocus == ControlsVibrationRow)
+        {
+            // Host setting: applied and saved at once, merged into the saved
+            // settings so unsaved Graphics edits stay unsaved. Min turns it off.
+            const auto strength = uint32_t(std::clamp(int(edit.vibrationPercent) + delta * 10, 0, 100));
+            if (strength != edit.vibrationPercent)
+            {
+                edit.vibrationPercent = strength;
+                Config saved = GetConfig();
+                saved.vibrationPercent = strength;
+                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+                hid::SetVibrationStrength(strength);
+                hid::PreviewVibration();
+            }
+        }
+        else if ((input & 0x1000) && target >= 0)
+            BeginCapture(controlsFocus, keyboard);
+        else if ((input & 0x1000) && controlsFocus == ControlsRestoreRow)
+        {
+            controlsController = input_map::DefaultController;
+            controlsKeyboard = input_map::DefaultKeyboard;
+            status = Tr(L"Default buttons restored. Save to keep them.", L"已恢復預設按鍵。儲存後保留。");
+        }
+        else if ((input & 0x1000) && controlsFocus == ControlsSaveRow)
+        {
+            // Merged into the saved settings, so unsaved Graphics edits stay unsaved.
+            Config saved = GetConfig();
+            saved.controllerMap = controlsController;
+            saved.keyboardMap = controlsKeyboard;
+            if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            else
+            {
+                hid::SetInputMaps(controlsController, controlsKeyboard);
+                controlsControllerStart = edit.controllerMap = controlsController;
+                controlsKeyboardStart = edit.keyboardMap = controlsKeyboard;
+                status = Tr(L"Controls saved.", L"按鍵設定已儲存。");
+                LOG_INFO("settings: controls saved: controller_map={} keyboard_map={}",
+                         input_map::FormatController(controlsController), input_map::FormatKeyboard(controlsKeyboard));
+            }
+        }
+        if (back)
+        {
+            if (controlsController != controlsControllerStart || controlsKeyboard != controlsKeyboardStart)
+            {
+                controlsDiscardPrompt = true;
+                controlsDiscardChoice = 1; // Cancel unless Discard is chosen
+            }
+            else CloseControlsPage();
+        }
+        Publish(base, config);
+        return;
+    }
     bool changed = false;
     if (input & 0x300)
     {
@@ -2839,32 +3235,7 @@ PPC_FUNC(sub_822F19B0)
     };
     if (delta)
     {
-        if (tab == 0 && row == GamePromptRow)
-        {
-            // Host setting: applied and saved at once, like Vibration.
-            const uint32_t style = cycle(std::min(edit.buttonPrompts, 2u), 3);
-            edit.buttonPrompts = style;
-            Config saved = GetConfig();
-            saved.buttonPrompts = style;
-            if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
-            hid::SetPromptStyle(style);
-        }
-        else if (tab == 0 && row == GameVibrationRow)
-        {
-            // Host setting: applied and saved at once, merged into the saved
-            // settings so unsaved Graphics edits stay unsaved. Min turns it off.
-            const auto strength = uint32_t(std::clamp(int(edit.vibrationPercent) + delta * 10, 0, 100));
-            if (strength != edit.vibrationPercent)
-            {
-                edit.vibrationPercent = strength;
-                Config saved = GetConfig();
-                saved.vibrationPercent = strength;
-                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
-                hid::SetVibrationStrength(strength);
-                hid::PreviewVibration();
-            }
-        }
-        else if (tab == 0 && row < GameRetailRowCount && !TitleModeHidden(0, row))
+        if (tab == 0 && row < GameRetailRowCount && !TitleModeHidden(0, row))
         {
             if (row == 0)
                 PPC_STORE_U32(config, cycle(PPC_LOAD_U32(config), 3));
@@ -3264,6 +3635,12 @@ PPC_FUNC(sub_822F19B0)
     if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemModsRow)
     {
         OpenModsPage();
+        Publish(base, config);
+        return;
+    }
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 0 && row == GameControlsRow)
+    {
+        OpenControlsPage();
         Publish(base, config);
         return;
     }

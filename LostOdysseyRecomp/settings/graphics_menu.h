@@ -91,7 +91,7 @@ inline uint32_t ShadowResolutionChoice(const Config& config)
 }
 inline bool IsAction(int tab, int row)
 {
-    return (tab == 0 && (row == GameRestoreRow || row == GameMainMenuRow)) ||
+    return (tab == 0 && (row == GameControlsRow || row == GameRestoreRow || row == GameMainMenuRow)) ||
            (tab == 2 && (row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
            (tab == 3 && (row == SystemModsRow || row == SystemImportRow || row == SystemShaderBundleRow ||
                          row == SystemSaveRow));

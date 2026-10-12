@@ -51,6 +51,8 @@ Config Validate(Config value)
     value.audioMatrixRear = std::clamp((value.audioMatrixRear + 5) / 10 * 10, 90u, 150u);
     value.voiceVolume = std::min(value.voiceVolume, 100u);
     if (value.buttonPrompts > 2) value.buttonPrompts = 0;
+    value.controllerMap = hid::input_map::ValidController(value.controllerMap);
+    value.keyboardMap = hid::input_map::ValidKeyboard(value.keyboardMap);
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
     value.hdrPeakNits = std::clamp(value.hdrPeakNits, 80u, 10000u);
     value.hdrPeakNits = std::max(value.hdrPeakNits, value.hdrPaperWhiteNits);
@@ -152,6 +154,15 @@ Config Read()
         {
             (name == "gpu_device" ? value.gpuDevice : name == "display_name" ? value.displayName : value.gameLanguagePack) =
                 TextValue(digits);
+            continue;
+        }
+        if (name == "controller_map" || name == "keyboard_map")
+        {
+            // "input:value" pairs; an invalid pair keeps that input's default.
+            std::string_view text = digits;
+            while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) text.remove_suffix(1);
+            if (name == "controller_map") value.controllerMap = hid::input_map::ParseController(text);
+            else value.keyboardMap = hid::input_map::ParseKeyboard(text);
             continue;
         }
         if (name == "display_brightness" || name == "dlss_nr_skin")
@@ -420,6 +431,8 @@ static bool WriteConfig(const Config &value)
            << "\nculling=" << value.cullingPercent
            << "\nvibration=" << value.vibrationPercent
            << "\nbutton_prompts=" << value.buttonPrompts
+           << "\ncontroller_map=" << hid::input_map::FormatController(value.controllerMap)
+           << "\nkeyboard_map=" << hid::input_map::FormatKeyboard(value.keyboardMap)
             << "\nupscaler=" << uint32_t(value.upscaler) << "\ndlss_quality=" << uint32_t(value.dlssQuality)
            << "\ndlss_model=" << value.dlssModel
            << "\nfsr_quality=" << uint32_t(value.fsrQuality)

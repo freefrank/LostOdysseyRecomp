@@ -463,8 +463,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
-                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13) {
-        const std::wstring value = promptText(source);
+                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true) {
+        const std::wstring value = prompts ? promptText(source) : source;
         if (current.assets && !value.empty())
         {
             const auto covers = [&](const menu_assets::Font &font) {
@@ -1001,6 +1001,15 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         const int y = rowTop + slot * rowHeight;
         if (y + rowHeight > 640) break;
         const bool focused = int(index) == current.row;
+        if (row.header)
+        {
+            // A section title: the name over a rule across both columns.
+            text(labelLeft + 4, y + 6, labelWidth, rowHeight - 8, row.name, 22, ink, true, 0, outline, 15);
+            if (!row.detail.empty())
+                text(choiceLeft + 8, y + 6, choiceWidth - 16, rowHeight - 8, row.detail, 18, muted, false, 0, outline, 13);
+            line(labelLeft, y + rowHeight - 3, choiceLeft + choiceWidth, y + rowHeight - 3, MakeColor(255, 173, 176, 177));
+            continue;
+        }
         if (current.tab == 2 && (index == size_t(GraphicsRow::AntiAliasing) ||
                                  index == size_t(GraphicsRow::AmbientOcclusion) ||
                                  index == size_t(GraphicsRow::FrameRate) ||
@@ -1127,7 +1136,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
             text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
                  !row.enabled ? disabled : currentChoice ? (focused ? selectedInk : ink) : muted,
-                 false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13);
+                 false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13, !row.literal);
         }
     }
 

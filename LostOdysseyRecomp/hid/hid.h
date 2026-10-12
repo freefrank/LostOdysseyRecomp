@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdint>
+#include <string>
+#include "input_map.h"
 
 namespace hid
 {
@@ -25,6 +28,16 @@ namespace hid
     // Short pulse at the strongest guest level and the current strength, so the
     // player can feel the setting. Skipped while the guest is rumbling.
     void PreviewVibration();
+    // Settings → Gameplay → Controls layouts (input_map.h), applied from the next poll.
+    void SetInputMaps(const input_map::ControllerMap& controller, const input_map::KeyboardMap& keyboard);
+    // Bit s for each input_map source held on any controller: a capture on the
+    // Controls page records the next one.
+    uint32_t PressedSources();
+    // The key's name in the current keyboard layout (SDL), for the Controls
+    // page. The thread that owns the SDL event loop refreshes the names at
+    // Init and on SDL_EVENT_KEYMAP_CHANGED.
+    std::string KeyName(uint32_t scancode);
+    void RefreshKeyNames();
 
     uint32_t GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState);
     uint32_t SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration);

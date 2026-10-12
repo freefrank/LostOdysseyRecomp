@@ -34,6 +34,12 @@ struct MenuRow
     // author). The choice cells then take the last ModsCellsWidth; with no
     // choices and no value the text has the whole column.
     std::wstring detail;
+    // A section title in a list page (Controls): the name over a rule, never
+    // focused.
+    bool header = false;
+    // The value is literal text, such as a key name: no PlayStation glyph
+    // takes the place of a letter.
+    bool literal = false;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot

@@ -120,11 +120,41 @@ bool settings::mods_page::MenuFlowOpenFolder(const std::filesystem::path& folder
     modsFolderOpened = folder;
     return true;
 }
+namespace {
+// Controls page: the sources held on the controllers, the layouts handed to hid.
+uint32_t heldSources = 0;
+hid::input_map::ControllerMap appliedController = hid::input_map::DefaultController;
+hid::input_map::KeyboardMap appliedKeyboard = hid::input_map::DefaultKeyboard;
+unsigned inputMapApplies = 0;
+}
 namespace hid {
 bool UsesPlayStationPrompts() { return false; }
 void SetVibrationStrength(uint32_t percent) { vibrationStrength = percent; }
 void SetPromptStyle(uint32_t style) { promptStyle = style; }
 void PreviewVibration() { ++vibrationPreviews; }
+void SetInputMaps(const input_map::ControllerMap& controller, const input_map::KeyboardMap& keyboard)
+{
+    appliedController = controller;
+    appliedKeyboard = keyboard;
+    ++inputMapApplies;
+}
+uint32_t PressedSources() { return heldSources; }
+// Without SDL: SDL's names for the default keys and Space, numbers otherwise.
+std::string KeyName(uint32_t scancode)
+{
+    if (scancode >= 4 && scancode <= 29) return std::string(1, char('A' + scancode - 4));
+    switch (scancode)
+    {
+    case 40: return "Return";
+    case 42: return "Backspace";
+    case 44: return "Space";
+    case 79: return "Right";
+    case 80: return "Left";
+    case 81: return "Down";
+    case 82: return "Up";
+    }
+    return "#" + std::to_string(scancode);
+}
 }
 namespace apu {
 Output menuFlowOutput = Output::Stereo;
@@ -156,7 +186,7 @@ void Require(bool condition, const char* message)
 void Poll(uint16_t buttons, bool consumed, int16_t x = 0, int16_t y = 0)
 {
     const auto original = buttons;
-    Require(settings::FilterInput(buttons, x, y) == consumed, "input ownership");
+    Require(settings::FilterInput(buttons, x, y, buttons) == consumed, "input ownership");
     Require(buttons == (consumed ? 0 : original), "filtered buttons");
 }
 void Tick(uint8_t* base)
@@ -1561,21 +1591,56 @@ int main(int argc, char** argv)
                     "left from Off wraps to 4x");
             std::puts("PASS DLSS neural rendering visibility and pass cycling");
         }
-        // Button prompts follow the seven retail Game settings. Right cycles
-        // Auto, Xbox, PlayStation, applies live and saves at once.
+        // Gameplay's host row is Controls, after the seven retail settings: it
+        // opens the Controls page with Button prompts and Vibration, the
+        // controller and keyboard layouts, Restore and Save. Button prompts
+        // cycles Auto, Xbox, PlayStation, applies live and saves at once.
         {
+            namespace map = hid::input_map;
+            // The retail Confirmation button stays A / B through the Controls tests.
+            const uint32_t retailFlags = PPC_LOAD_U32(ConfigData + 4);
+            PPC_STORE_U32(ConfigData + 4, retailFlags & ~0x02000000u);
             settings::tab = 0;
-            settings::row = settings::GamePromptRow;
+            settings::row = settings::GameControlsRow;
             settings::status.clear();
             currentConfig.buttonPrompts = diskConfig.buttonPrompts = 0;
             settings::edit = currentConfig;
             settings::edit.uiLanguage = 0;
+            settings::pending = 0; Tick(base);
+            const auto& rows = settings::snapshot.rows;
+            Require(settings::GameRowCount == 10 && rows.size() == size_t(settings::GameRowCount) &&
+                    rows[settings::GameControlsRow].name == L"Controls" && rows[settings::GameControlsRow].value == L"Open" &&
+                    rows[settings::GameRestoreRow].name == L"Restore game defaults" &&
+                    settings::graphics_menu::IsAction(0, settings::GameControlsRow) &&
+                    settings::snapshot.help == L"Button prompts, vibration, and the controller and keyboard buttons.",
+                    "Gameplay has ten rows: the retail settings, Controls, Restore and Quit");
+            settings::pending = 8; Tick(base);
+            Require(!settings::controlsOpen, "right does not open the Controls page");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::controlsOpen && settings::snapshot.pageTitle == L"Controls" &&
+                    settings::snapshot.row == settings::ControlsPromptRow && rows.size() == size_t(settings::ControlsRowCount) &&
+                    settings::snapshot.keyLegend == L"A: change     Start: save     B: back" &&
+                    settings::snapshot.notice == L"This page always uses the default buttons and keys.",
+                    "A on Controls opens the Controls page");
+            const int padA = settings::ControlsControllerFirst + map::A, keyA = settings::ControlsKeyboardFirst + map::A;
+            Require(rows[settings::ControlsPromptRow].name == L"Button prompts" && rows[settings::ControlsVibrationRow].name == L"Vibration" &&
+                    rows[settings::ControlsControllerTitle].header && rows[settings::ControlsControllerTitle].name == L"Controller" &&
+                    rows[settings::ControlsKeyboardTitle].header && rows[settings::ControlsKeyboardTitle].name == L"Keyboard" &&
+                    rows[padA].name == L"A" && rows[padA].value == L"A" && !rows[padA].literal &&
+                    rows[padA + map::LeftTrigger].name == L"LT" && rows[padA + map::LeftTrigger].value == L"LT" &&
+                    rows[padA + map::LeftThumb].name == L"Left stick click" &&
+                    rows[padA + map::DpadRight].name == L"D-pad right" && rows[padA + map::DpadRight].value == L"D-pad right" &&
+                    rows[keyA].name == L"A" && rows[keyA].value == L"Z" && rows[keyA].literal &&
+                    rows[keyA + map::X].value == L"A" && rows[keyA + map::Start].value == L"Return" &&
+                    rows[keyA + map::LeftThumb].value == L"None" && !rows[keyA + map::LeftThumb].literal &&
+                    rows[keyA + map::StickUp].name == L"Left stick up" && rows[keyA + map::StickUp].value == L"I" &&
+                    rows[settings::ControlsRestoreRow].name == L"Restore default buttons" &&
+                    rows[settings::ControlsSaveRow].name == L"Save controls" && rows[settings::ControlsSaveRow].value == L"Save",
+                    "the page lists each Xbox 360 input with its controller button, then with its key; a stick click has no key");
             const unsigned beforeSaves = saves;
             promptStyle = 0;
             settings::pending = 8; Tick(base);
-            Require(settings::snapshot.rows[settings::GamePromptRow].name == L"Button prompts" &&
-                    settings::snapshot.rows[settings::GamePromptRow].choices.size() == 3 &&
-                    settings::snapshot.rows[settings::GamePromptRow].selectedChoice == 1 &&
+            Require(rows[settings::ControlsPromptRow].choices.size() == 3 && rows[settings::ControlsPromptRow].selectedChoice == 1 &&
                     promptStyle == 1 && diskConfig.buttonPrompts == 1 && saves == beforeSaves + 1,
                     "Button prompts cycles to Xbox, applies live and saves");
             settings::pending = 8; Tick(base);
@@ -1583,24 +1648,24 @@ int main(int argc, char** argv)
             settings::pending = 8; Tick(base);
             Require(promptStyle == 0 && diskConfig.buttonPrompts == 0, "Button prompts wraps back to Auto");
             Require(settings::snapshot.help.find(L"Auto follows the controller") != std::wstring::npos, "Button prompts help");
-            std::puts("PASS Button prompts row");
+            PPC_STORE_U32(ConfigData + 4, retailFlags);
+            std::puts("PASS Gameplay Controls row opens the Controls page; its rows; Button prompts");
         }
-        // Vibration follows Button prompts on the Gameplay tab. It applies and saves
-        // at once, stays within 0-100 and never commits unsaved Graphics edits.
+        // Vibration follows Button prompts on the Controls page. It applies and
+        // saves at once, stays within 0-100 and never commits unsaved Graphics edits.
         {
-            settings::tab = 0;
-            settings::row = settings::GamePromptRow;
             settings::status.clear();
             currentConfig.vibrationPercent = diskConfig.vibrationPercent = 100;
             settings::edit = currentConfig;
             settings::edit.uiLanguage = 0;
             settings::edit.width = currentConfig.width == 2560 ? 1920 : 2560;
+            settings::controlsFocus = settings::ControlsPromptRow;
             const unsigned beforeSaves = saves, beforeApplies = applies, beforePreviews = vibrationPreviews;
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::GameVibrationRow && settings::snapshot.rows.size() == size_t(settings::GameRowCount) &&
-                    settings::snapshot.rows[settings::GameVibrationRow].name == L"Vibration" &&
-                    settings::snapshot.rows[settings::GameVibrationRow].sliderPercent == 100,
-                    "Vibration slider follows Button prompts on the Gameplay tab");
+            Require(settings::controlsOpen && settings::controlsFocus == settings::ControlsVibrationRow &&
+                    settings::snapshot.rows[settings::ControlsVibrationRow].name == L"Vibration" &&
+                    settings::snapshot.rows[settings::ControlsVibrationRow].sliderPercent == 100,
+                    "Vibration slider follows Button prompts on the Controls page");
             Require(settings::snapshot.help.find(L"Min turns it off") != std::wstring::npos, "Vibration help");
             settings::pending = 8; Tick(base);
             Require(settings::edit.vibrationPercent == 100 && saves == beforeSaves, "right at 100 clamps without saving");
@@ -1609,12 +1674,17 @@ int main(int argc, char** argv)
                     vibrationStrength == 90 && vibrationPreviews == beforePreviews + 1 && applies == beforeApplies,
                     "left lowers, saves, applies live and previews without a guest apply");
             Require(diskConfig.width != settings::edit.width, "vibration save leaves unsaved Graphics edits unsaved");
-            Require(settings::snapshot.rows[settings::GameVibrationRow].sliderPercent == 90, "slider follows the strength");
+            Require(settings::snapshot.rows[settings::ControlsVibrationRow].sliderPercent == 90, "slider follows the strength");
             settings::edit.vibrationPercent = currentConfig.vibrationPercent = 0;
             settings::pending = 4; Tick(base);
             Require(settings::edit.vibrationPercent == 0 && saves == beforeSaves + 1, "left at 0 does not wrap");
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::GameRestoreRow, "the game actions follow Vibration");
+            Require(settings::controlsFocus == settings::ControlsControllerFirst, "down skips the Controller title");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::controlsOpen && settings::tab == 0 && settings::row == settings::GameControlsRow,
+                    "B without changes returns to Gameplay's Controls row");
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::GameRestoreRow, "the game actions follow Controls");
             // Voice volume follows Sound effects: a host slider in the retail volume
             // steps, saved at once, with a guest apply so the game refreshes its gains.
             settings::tab = 1;
@@ -1669,6 +1739,269 @@ int main(int argc, char** argv)
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
+        }
+        // Controls page layouts. A, Enter or a click on a layout row starts a
+        // capture; the next press binds it, a button or key already in use
+        // swaps, Escape cancels, and 5 s without a press change nothing.
+        // Restore, Save (live, merged into the saved settings), the discard
+        // prompt, and the default layout the page itself runs on.
+        {
+            namespace map = hid::input_map;
+            const uint32_t retailFlags = PPC_LOAD_U32(ConfigData + 4);
+            PPC_STORE_U32(ConfigData + 4, retailFlags & ~0x02000000u);
+            settings::tab = 0;
+            settings::row = settings::GameControlsRow;
+            settings::status.clear();
+            settings::menuClockOffset = {};
+            currentConfig.controllerMap = diskConfig.controllerMap = map::DefaultController;
+            currentConfig.keyboardMap = diskConfig.keyboardMap = map::DefaultKeyboard;
+            settings::edit = currentConfig;
+            settings::edit.uiLanguage = 0;
+            settings::edit.width = currentConfig.width == 2560 ? 1920 : 2560; // an unsaved Graphics edit
+            heldSources = 0;
+            const unsigned beforeApplies = inputMapApplies;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::controlsOpen, "Controls page opens");
+            const auto& rows = settings::snapshot.rows;
+            const auto rowY = [&](int r) { return float(150 + (r - settings::snapshot.scroll) * 43 + 20); };
+            const int padA = settings::ControlsControllerFirst + map::A, padB = padA + map::B;
+            const int keyA = settings::ControlsKeyboardFirst + map::A, keyB = keyA + map::B;
+            const auto preview = [&](const char* name, bool playStation = false) {
+                auto shown = settings::snapshot;
+                shown.assets.reset();
+                shown.playStationPrompts = playStation;
+                std::vector<uint32_t> pixels;
+                Require(settings::RasterizeMenu(shown, 1280, 720, pixels), "Controls page preview");
+                const auto evidence = std::filesystem::current_path() / "out" / "controls-page-preview";
+                std::filesystem::create_directories(evidence);
+                WriteBmp(evidence / name, pixels);
+            };
+            preview("controls-page.bmp");
+
+            // A on a controller row: the A that started it is ignored until released.
+            settings::controlsFocus = padA;
+            heldSources = 1u << 0;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::captureRow == padA && settings::captureMode == 1 && rows[padA].value == L"Press a button… (5)" &&
+                    settings::snapshot.help == L"Press a button on any controller. Esc on the keyboard cancels.",
+                    "A starts a controller capture with a 5 s countdown");
+            preview("controls-capture.bmp");
+            Tick(base);
+            Require(settings::captureRow == padA && !settings::captureArmed, "the press that started the capture is not taken");
+            heldSources = 0; Tick(base);
+            Require(settings::captureArmed, "releasing it arms the capture");
+            settings::pending = 0x2000 | 1; Tick(base);
+            Require(settings::captureRow == padA && settings::controlsOpen && settings::controlsFocus == padA,
+                    "menu input does nothing during a capture");
+            heldSources = 1u << 1; Tick(base);
+            Require(settings::captureRow < 0 && settings::captureMode == 0 && settings::waitForRelease &&
+                    settings::controlsController[map::A] == 1 && settings::controlsController[map::B] == 0 &&
+                    rows[padA].value == L"B" && rows[padB].value == L"A" && settings::snapshot.help == L"Swapped with: B",
+                    "a button in use swaps: A takes B's button and B takes A's");
+            Require(diskConfig.controllerMap == map::DefaultController && inputMapApplies == beforeApplies,
+                    "a capture stays unsaved");
+            heldSources = 0;
+            settings::waitForRelease = false;
+            // A trigger past half way binds as well; Guide never does.
+            const int padLb = settings::ControlsControllerFirst + map::LeftShoulder;
+            settings::controlsFocus = padLb;
+            settings::pending = 0x1000; Tick(base); Tick(base);
+            heldSources = 1u << map::GuideSource; Tick(base);
+            Require(settings::captureRow == padLb, "Guide is not bound");
+            heldSources |= 1u << map::LeftTriggerSource; Tick(base);
+            Require(settings::controlsController[map::LeftShoulder] == map::LeftTriggerSource &&
+                    settings::controlsController[map::LeftTrigger] == 9 && rows[padLb].value == L"LT" &&
+                    rows[settings::ControlsControllerFirst + map::LeftTrigger].value == L"LB",
+                    "a pulled trigger binds and LT takes LB's button");
+            heldSources = 0;
+            settings::waitForRelease = false;
+            // Escape cancels a controller capture; other keys stay with the game.
+            const int padY = settings::ControlsControllerFirst + map::Y;
+            settings::controlsFocus = padY;
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::CaptureKey(29, false), "a controller capture leaves other keys alone");
+            Require(settings::CaptureKey(map::EscapeKey, false), "Escape belongs to the capture");
+            Tick(base);
+            Require(settings::captureRow < 0 && settings::controlsController[map::Y] == 3 && settings::snapshot.help == L"Cancelled.",
+                    "Escape cancels without a change");
+            Require(!settings::CaptureKey(map::EscapeKey, false), "without a capture no key is taken");
+            // Five seconds without a press change nothing.
+            const int padX = settings::ControlsControllerFirst + map::X;
+            settings::controlsFocus = padX;
+            settings::pending = 0x1000; Tick(base);
+            settings::menuClockOffset += std::chrono::milliseconds(4100); Tick(base);
+            Require(settings::captureRow == padX && rows[padX].value == L"Press a button… (1)", "the countdown runs");
+            settings::menuClockOffset += std::chrono::seconds(1); Tick(base);
+            Require(settings::captureRow < 0 && settings::controlsController[map::X] == 2 &&
+                    settings::snapshot.help == L"No button pressed. Nothing changed.", "the capture times out after 5 s");
+            settings::menuClockOffset = {};
+
+            // Keyboard: Enter starts a capture; repeats, F1 and the controller do not bind.
+            settings::controlsFocus = keyA;
+            Require(settings::CalibrationKey(13), "Enter belongs to the Controls page");
+            settings::pending = 0; Tick(base);
+            Require(settings::captureRow == keyA && settings::captureMode == 2 && rows[keyA].value == L"Press a key… (5)" &&
+                    settings::snapshot.help == L"Press a key. Esc cancels.", "Enter starts a keyboard capture");
+            preview("controls-capture-key.bmp");
+            Require(settings::CaptureKey(40, true), "a keyboard capture takes a repeating Enter"); Tick(base);
+            Require(settings::captureRow == keyA, "a repeat is not a press");
+            Require(settings::CaptureKey(map::F1Key, false), "a keyboard capture takes F1"); Tick(base);
+            Require(settings::captureRow == keyA, "F1 is not bound");
+            heldSources = 1u << 0; Tick(base); Tick(base);
+            Require(settings::captureRow == keyA, "a controller button does not bind a key");
+            heldSources = 0;
+            Require(settings::CaptureKey(27, false), "a keyboard capture takes X"); Tick(base);
+            Require(settings::captureRow < 0 && settings::controlsKeyboard[map::A] == 27 && settings::controlsKeyboard[map::B] == 29 &&
+                    rows[keyA].value == L"X" && rows[keyA].literal && rows[keyB].value == L"Z" &&
+                    settings::snapshot.help == L"Swapped with: B", "a key in use swaps");
+            // With PlayStation prompts the inputs show their glyphs; key names stay letters.
+            settings::controlsFocus = keyA + map::Y;
+            settings::pending = 0; Tick(base);
+            preview("controls-keys-playstation.bmp", true);
+            // A stick click has no key: a free key binds and no other key moves.
+            const int keyThumb = settings::ControlsKeyboardFirst + map::LeftThumb;
+            settings::controlsFocus = keyThumb;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::CaptureKey(44, false), "a keyboard capture takes Space"); Tick(base);
+            Require(settings::controlsKeyboard[map::LeftThumb] == 44 && rows[keyThumb].value == L"Space" &&
+                    settings::controlsKeyboard[map::A] == 27 && settings::snapshot.help.empty() == false &&
+                    settings::snapshot.help.find(L"Swapped") == std::wstring::npos, "a free key binds a stick click");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::CaptureKey(map::EscapeKey, false), "Escape belongs to a keyboard capture"); Tick(base);
+            Require(settings::captureRow < 0 && settings::controlsKeyboard[map::LeftThumb] == 44 &&
+                    settings::snapshot.help == L"Cancelled.", "Escape cancels a keyboard capture");
+            settings::pending = 0x1000; Tick(base);
+            settings::menuClockOffset += std::chrono::seconds(6); Tick(base);
+            Require(settings::captureRow < 0 && settings::controlsKeyboard[map::LeftThumb] == 44 &&
+                    settings::snapshot.help == L"No key pressed. Nothing changed.", "a keyboard capture times out too");
+            settings::menuClockOffset = {};
+
+            // Navigation steps over the section titles; Start goes to Save.
+            settings::controlsFocus = settings::ControlsKeyboardFirst;
+            settings::pending = 1; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsControllerFirst + map::DpadRight, "up skips the Keyboard title");
+            settings::pending = 2; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsKeyboardFirst, "down skips it too");
+            settings::controlsFocus = settings::ControlsSaveRow;
+            settings::pending = 2; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsPromptRow && settings::snapshot.scroll == 0, "down from Save wraps to the top");
+            settings::pending = 1; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsSaveRow &&
+                    settings::snapshot.scroll == settings::ControlsRowCount - settings::kMenuVisibleRows, "the page scrolls to Save");
+            preview("controls-page-end.bmp");
+            // Pointer: a title is not a row; a click on a layout row starts its capture.
+            settings::controlsFocus = settings::ControlsControllerFirst + map::DpadRight;
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.scroll == settings::controlsFocus, "the focused row tops the list");
+            settings::PointerClick(500, rowY(settings::ControlsKeyboardTitle), false); Tick(base);
+            Require(settings::controlsFocus == settings::ControlsControllerFirst + map::DpadRight && settings::captureRow < 0,
+                    "a click on a section title does nothing");
+            settings::PointerClick(700, rowY(keyB), false); Tick(base);
+            Require(settings::controlsFocus == keyB && settings::captureRow == keyB && settings::captureMode == 2,
+                    "a click on a key row starts its capture");
+            settings::PointerClick(700, rowY(keyA), false); Tick(base);
+            Require(settings::controlsFocus == keyB && settings::captureRow == keyB, "a click during a capture changes nothing");
+            settings::CaptureKey(map::EscapeKey, false); Tick(base);
+
+            // Leaving with changes asks first; Cancel is the default.
+            settings::pending = 0x2000; Tick(base);
+            Require(settings::controlsDiscardPrompt && settings::snapshot.dialogTitle == L"Unsaved changes" &&
+                    settings::snapshot.dialogMessage == L"Leave without saving the controls?" &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Discard changes", L"Cancel"} &&
+                    settings::snapshot.dialogSelection == 1, "B with unsaved changes asks before leaving");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::controlsDiscardPrompt && settings::controlsOpen && settings::controlsController[map::A] == 1,
+                    "Cancel keeps the page and the changes");
+            Require(settings::CalibrationKey(27), "Escape belongs to the Controls page"); Tick(base);
+            Require(settings::controlsDiscardPrompt, "Escape asks as well");
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::controlsOpen && settings::tab == 0 && settings::row == settings::GameControlsRow &&
+                    diskConfig.controllerMap == map::DefaultController && inputMapApplies == beforeApplies,
+                    "Discard leaves without saving");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::controlsOpen && settings::controlsController == map::DefaultController &&
+                    settings::snapshot.rows[padA].value == L"A", "reopened, the page shows the saved layout");
+
+            // Save: Start goes to Save, a second Start saves and applies at once.
+            settings::controlsFocus = padA;
+            settings::pending = 0x1000; Tick(base); Tick(base);
+            heldSources = 1u << 1; Tick(base);
+            heldSources = 0;
+            settings::controlsFocus = keyA;
+            settings::pending = 0x1000; Tick(base);
+            settings::CaptureKey(44, false); Tick(base);
+            const unsigned beforeSaves = saves;
+            settings::pending = 0x10; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsSaveRow && saves == beforeSaves, "Start moves to Save without saving");
+            settings::pending = 0x10; Tick(base);
+            Require(saves == beforeSaves + 1 && diskConfig.controllerMap[map::A] == 1 && diskConfig.controllerMap[map::B] == 0 &&
+                    diskConfig.keyboardMap[map::A] == 44 && appliedController == diskConfig.controllerMap &&
+                    appliedKeyboard == diskConfig.keyboardMap && inputMapApplies == beforeApplies + 1 &&
+                    settings::edit.controllerMap == diskConfig.controllerMap && settings::snapshot.help == L"Controls saved.",
+                    "Save writes both layouts and applies them at once");
+            Require(diskConfig.width != settings::edit.width, "Save leaves unsaved Graphics edits unsaved");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::controlsOpen && !settings::controlsDiscardPrompt, "after Save, B leaves without asking");
+            // Restore puts the defaults back, unsaved until Save.
+            settings::pending = 0x1000; Tick(base);
+            settings::controlsFocus = settings::ControlsRestoreRow;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::controlsController == map::DefaultController && settings::controlsKeyboard == map::DefaultKeyboard &&
+                    diskConfig.controllerMap[map::A] == 1 && settings::snapshot.help == L"Default buttons restored. Save to keep them.",
+                    "Restore puts the default layouts back without saving");
+            settings::pending = 0x1000 | 2; Tick(base);
+            Require(settings::controlsFocus == settings::ControlsSaveRow && diskConfig.controllerMap == map::DefaultController &&
+                    diskConfig.keyboardMap == map::DefaultKeyboard && appliedController == map::DefaultController,
+                    "A on Save saves the defaults");
+
+            // The page runs on the default layout: with A and B swapped, the
+            // button labelled A still confirms here, and the swap applies again
+            // after the page closes and every button is up.
+            {
+                settings::pending = 0;
+                uint16_t buttons = 0;
+                settings::FilterInput(buttons, 0, 0, 0);
+                buttons = 0;
+                settings::FilterInput(buttons, 0, 0, 0);
+                settings::pending = 0;
+                buttons = 0x2000; // the guest's B from the button labelled A
+                Require(settings::FilterInput(buttons, 0, 0, 0x1000) && buttons == 0, "the menu takes the input");
+                Require(settings::pending == 0x1000, "the Controls page sees the default A");
+                settings::pending = 0;
+                buttons = 0;
+                settings::FilterInput(buttons, 0, 0, 0);
+                settings::controlsOpen = false;
+                buttons = 0x2000;
+                settings::FilterInput(buttons, 0, 0, 0x1000);
+                Require(settings::pending == 0, "leaving the page waits for a release");
+                buttons = 0;
+                settings::FilterInput(buttons, 0, 0, 0);
+                buttons = 0x2000;
+                settings::FilterInput(buttons, 0, 0, 0x1000);
+                Require(settings::pending == 0x2000, "the rest of the menu uses the layout");
+                settings::pending = 0;
+                buttons = 0;
+                settings::FilterInput(buttons, 0, 0, 0);
+                settings::controlsOpen = true;
+                settings::FilterInput(buttons, 0, 0, 0);
+                settings::pending = 0;
+            }
+            // Translations.
+            for (const auto& [language, title, controller] : {std::tuple{1u, L"按鍵設定", L"控制器"}, std::tuple{2u, L"操作設定", L"コントローラー"},
+                                                              std::tuple{3u, L"조작 설정", L"컨트롤러"}, std::tuple{4u, L"按键设置", L"手柄"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.pageTitle == title && settings::snapshot.rows[settings::ControlsControllerTitle].name == controller,
+                        "translated Controls page");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::controlsOpen, "B leaves the Controls page");
+            settings::edit = currentConfig;
+            PPC_STORE_U32(ConfigData + 4, retailFlags);
+            std::puts("PASS Controls page: capture, swap, trigger, Guide, Escape, timeout, keyboard capture, titles, pointer, discard prompt, Save, Restore, default-layout navigation, translations");
         }
         // The host Settings game tab is reached from the retail System menu.
         // Only explicit dialog confirmation may request the guest title transition.
@@ -2044,24 +2377,23 @@ int main(int argc, char** argv)
             const uint32_t textSpeed = PPC_LOAD_U32(ConfigData), flags = PPC_LOAD_U32(ConfigData + 4);
             const unsigned beforeApplies = applies, beforeDefaults = defaultsCalls, beforeRequests = mainMenuRequests;
             settings::pending = 0; Tick(base);
-            Require(settings::row == settings::GamePromptRow, "title mode focuses the first visible Gameplay row");
+            Require(settings::row == settings::GameControlsRow, "title mode focuses the first visible Gameplay row");
             for (int r = 0; r < settings::GameRowCount; ++r)
-                Require(settings::snapshot.rows[size_t(r)].hidden ==
-                            (r != settings::GamePromptRow && r != settings::GameVibrationRow),
+                Require(settings::snapshot.rows[size_t(r)].hidden == (r != settings::GameControlsRow),
                         "title mode hides the retail options, Restore and Quit");
             settings::pending = 1; Tick(base);
-            Require(settings::row == settings::GameVibrationRow, "Up wraps past the hidden rows");
+            Require(settings::row == settings::GameControlsRow, "Up wraps past the hidden rows");
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::GamePromptRow, "Down wraps past the hidden rows");
-            settings::row = settings::GameVibrationRow;
+            Require(settings::row == settings::GameControlsRow, "Down wraps past the hidden rows");
+            settings::row = settings::GameRestoreRow;
             settings::PointerClick(100, 150 + 20, false); Tick(base);
-            Require(settings::row == settings::GamePromptRow, "the first list slot is Button prompts");
+            Require(settings::row == settings::GameControlsRow, "the first list slot is Controls");
             // A stale focus on a hidden row edits nothing and moves to a visible row.
             for (int r : {0, settings::GameRetailRowCount - 1, settings::GameRestoreRow, settings::GameMainMenuRow})
             {
                 settings::row = r;
                 settings::pending = 8; Tick(base);
-                Require(settings::row == settings::GamePromptRow, "focus leaves a hidden row");
+                Require(settings::row == settings::GameControlsRow, "focus leaves a hidden row");
                 settings::row = r;
                 settings::pending = 0x1000; Tick(base);
             }
@@ -2120,10 +2452,10 @@ int main(int argc, char** argv)
             Require(!settings::brightnessOpen && settings::active, "B leaves the brightness page");
             settings::pending = 0x100; Tick(base);
             settings::pending = 0x100; Tick(base);
-            Require(settings::tab == 0 && settings::row == settings::GamePromptRow, "back on Gameplay's first visible row");
+            Require(settings::tab == 0 && settings::row == settings::GameControlsRow, "back on Gameplay's first visible row");
             settings::pending = 0x200; Tick(base);
             settings::pending = 0x100; Tick(base);
-            Require(settings::tab == 0 && settings::row == settings::GamePromptRow, "a tab switch lands on a visible row");
+            Require(settings::tab == 0 && settings::row == settings::GameControlsRow, "a tab switch lands on a visible row");
             settings::pending = 0x2000; Tick(base);
             Require(settings::closing && !settings::active && applies == beforeApplies + 1,
                     "Back closes with the usual apply");
@@ -2131,7 +2463,7 @@ int main(int argc, char** argv)
             Poll(0, true); Poll(0, false);
             Require(PPC_LOAD_U32(Menu + 4) == 1 && !settings::titleEntry, "the idle task ends title mode");
             PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
-            Require(settings::active && settings::row == settings::GamePromptRow &&
+            Require(settings::active && settings::row == settings::GameControlsRow &&
                     std::none_of(settings::snapshot.rows.begin(), settings::snapshot.rows.end(),
                                  [](const settings::MenuRow& row) { return row.hidden; }) &&
                     mainMenuRequests == beforeRequests,
@@ -2451,6 +2783,54 @@ int main(int argc, char** argv)
             Require(settings::Read().displayIndex == 1 && settings::Read().displayName == "M27P20" &&
                     settings::Read().width == 1600 && settings::Read().gpuDevice == "GPU B" &&
                     settings::GetConfig().displayIndex == 1, "a player move saves only the display choice");
+            // Controls layouts: SDL mapping names for the controller, scancodes
+            // for the keys; a bad pair keeps that input's default.
+            {
+                namespace map = hid::input_map;
+                writeIni("button_prompts=1\n");
+                Require(settings::Read().controllerMap == map::DefaultController &&
+                        settings::Read().keyboardMap == map::DefaultKeyboard, "missing layouts read as the defaults");
+                settings::Config layout{};
+                map::Assign(layout.controllerMap, map::A, 1);
+                map::Assign(layout.controllerMap, map::X, 3);
+                map::Assign(layout.controllerMap, map::LeftShoulder, map::LeftTriggerSource);
+                map::Assign(layout.controllerMap, map::Back, 16);
+                map::Assign(layout.keyboardMap, map::A, 44);
+                map::Assign(layout.keyboardMap, map::RightThumb, 29);
+                Require(layout.controllerMap[map::B] == 0 && layout.controllerMap[map::LeftTrigger] == 9 &&
+                        layout.keyboardMap[map::RightThumb] == 29, "Assign swaps a bound value and takes a free one");
+                Require(settings::SaveConfig(layout), "layouts save");
+                const auto read = settings::Read();
+                Require(read.controllerMap == layout.controllerMap && read.keyboardMap == layout.keyboardMap &&
+                        settings::GetConfig().controllerMap == layout.controllerMap, "both layouts survive a real save/reload");
+                std::ifstream layoutIni("settings.ini");
+                const std::string text((std::istreambuf_iterator<char>(layoutIni)), std::istreambuf_iterator<char>());
+                layoutIni.close();
+                Require(text.find("\ncontroller_map=a:b,b:a,x:y,y:x,leftshoulder:lefttrigger,rightshoulder:rightshoulder,"
+                                  "lefttrigger:leftshoulder,righttrigger:righttrigger,back:paddle1,start:start,") != std::string::npos &&
+                        text.find("\nkeyboard_map=a:44,b:27,x:4,y:22,") != std::string::npos &&
+                        text.find(",leftstick:none,rightstick:29,") != std::string::npos,
+                        "INI writes the controller by SDL name and the keys by scancode");
+                writeIni("controller_map=a:b,b:bogus,x:x,nonsense,y:paddle1,start:guide\n"
+                         "keyboard_map=a:44,b:600,x:41,leftstick:29,rightstick:none,y:44,start:abc,dpup:58\n");
+                const auto partial = settings::Read();
+                auto controller = map::DefaultController;
+                controller[map::A] = 1;
+                controller[map::B] = 0;
+                controller[map::Y] = 16;
+                auto keys = map::DefaultKeyboard;
+                keys[map::A] = 44;
+                keys[map::LeftThumb] = 29;
+                Require(partial.controllerMap == controller,
+                        "bad controller pairs keep their defaults; a:b alone reads as a swap; Guide is never bound");
+                Require(partial.keyboardMap == keys,
+                        "bad key pairs keep their defaults: out of range, Escape, F1, text, a key used twice");
+                settings::Config repeated{};
+                repeated.controllerMap[map::Start] = repeated.controllerMap[map::A];
+                repeated.keyboardMap[map::B] = repeated.keyboardMap[map::A];
+                Require(settings::SaveConfig(repeated) && settings::Read().controllerMap == map::DefaultController &&
+                        settings::Read().keyboardMap == map::DefaultKeyboard, "a save never writes a button or key twice");
+            }
             std::puts("PASS FG settings.ini provider and multiplier validation, FSR normalization, and min/max save/reload");
             std::filesystem::current_path(originalDir);
             std::filesystem::remove_all(sandbox);

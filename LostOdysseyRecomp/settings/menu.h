@@ -85,18 +85,21 @@ BrightnessCalibration GetBrightnessCalibration();
 bool CalibrationKey(uint32_t key);
 void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
-// - Tabs: 0 Gameplay (retail game options, controller options, game actions),
+// - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, TAA
 //   shader collection, Mods, Import discs & DLC, Shader bundle, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
-// - Host rows are grouped by topic. Controller rows (button prompts, vibration,
-//   future ones) go to Gameplay, not Audio.
-// - Actions come last on their tab: Restore / Quit to Main Menu on Gameplay,
-//   Brightness / Save on Graphics, Mods / Import / Shader bundle / Save on System.
+// - Host rows are grouped by topic. Controller and keyboard settings (button
+//   prompts, vibration, button and key layouts, future ones) go on the
+//   Controls page, opened from Gameplay's Controls row; not on Audio.
+// - Actions come last on their tab: Controls / Restore / Quit to Main Menu on
+//   Gameplay, Brightness / Save on Graphics, Mods / Import / Shader bundle /
+//   Save on System.
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
-//   scroll; only Graphics scrolls.
+//   scroll; only Graphics scrolls. The pages opened from a row (Mods,
+//   Controls) may scroll.
 // - Graphics order: display -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
 //   frame generation -> effects -> frame rate -> HDR and brightness -> Save. A
@@ -108,11 +111,10 @@ void PointerDrag(float x, float y, bool held);
 inline constexpr int MenuTabCount = 4;
 // Gameplay tab (0).
 inline constexpr int GameRetailRowCount = 7;
-inline constexpr int GamePromptRow = 7;
-inline constexpr int GameVibrationRow = 8;
-inline constexpr int GameRestoreRow = 9;
-inline constexpr int GameMainMenuRow = 10;
-inline constexpr int GameRowCount = 11;
+inline constexpr int GameControlsRow = 7; // opens the Controls page
+inline constexpr int GameRestoreRow = 8;
+inline constexpr int GameMainMenuRow = 9;
+inline constexpr int GameRowCount = 10;
 // Audio tab (1).
 inline constexpr int AudioVoiceRow = 0;
 inline constexpr int AudioMusicRow = 1;
@@ -132,7 +134,7 @@ inline constexpr int SystemImportRow = 6;
 inline constexpr int SystemShaderBundleRow = 7; // downloads the shader bundle again on the next start
 inline constexpr int SystemSaveRow = 8;
 inline constexpr int SystemRowCount = 9;
-static_assert(GamePromptRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
+static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
 // Count is the tab length, not the on-screen viewport.
@@ -177,8 +179,29 @@ inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // the focused mod has move up / move down cells beside the value column.
 inline constexpr int ModsCellsWidth = 240;
 inline constexpr int ModsMoveLeft = 1112, ModsMoveWidth = 64, ModsMoveGap = 8;
+// Controls page (Gameplay → Controls): a list page. Button prompts and
+// Vibration, then a titled section per device with a row for each Xbox 360
+// input in hid/input_map.h order (the keyboard adds the left stick), then
+// Restore and Save. The section titles are never focused.
+inline constexpr int ControlsPromptRow = 0;
+inline constexpr int ControlsVibrationRow = 1;
+inline constexpr int ControlsControllerTitle = 2;
+inline constexpr int ControlsControllerFirst = 3;  // 16 rows: A .. D-pad right
+inline constexpr int ControlsKeyboardTitle = 19;
+inline constexpr int ControlsKeyboardFirst = 20;   // 20 rows: A .. left stick right
+inline constexpr int ControlsRestoreRow = 40;
+inline constexpr int ControlsSaveRow = 41;
+inline constexpr int ControlsRowCount = 42;
+// A capture waits this long for a button or key.
+inline constexpr int ControlsCaptureSeconds = 5;
 // Called by input polling before returning the guest-facing controller state.
-bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY);
+// defaultButtons is the same input on the default layouts, which the Controls
+// page uses.
+bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY, uint16_t defaultButtons);
+// Key presses (SDL scancodes) before shortcuts and game input. True when a
+// capture on the Controls page takes the key: Escape cancels a capture, a
+// keyboard capture takes every key.
+bool CaptureKey(uint32_t scancode, bool repeat);
 // Snapshot rendered on the presentation thread, never accessing guest memory.
 bool DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width = 1280, uint32_t height = 720);
 void PointerClick(float x, float y, bool reverse);

@@ -97,7 +97,9 @@ Controllers and the keyboard work together for player 1. If your controller is n
 | Left / right trigger | E / R |
 | Debug Menu | F1 |
 
-Press **Back** to zoom the minimap; hold it for about half a second to hide the minimap. For Ring actions, use the controller's **right trigger** or **R**. **Vibration** in Settings sets the rumble strength.
+These are the default keys. **Settings → Gameplay → Controls** changes the keys and the controller buttons, and sets the button prompts and the vibration strength.
+
+Press **Back** to zoom the minimap; hold it for about half a second to hide the minimap. For Ring actions, use the controller's **right trigger** or **R**.
 
 ## Debug menu
 

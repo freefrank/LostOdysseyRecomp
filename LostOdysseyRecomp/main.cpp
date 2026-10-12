@@ -155,6 +155,7 @@ static int RunGuest(uint32_t entry)
         hid::Init(); // otherwise the video thread initialises it
     hid::SetVibrationStrength(settings::GetConfig().vibrationPercent);
     hid::SetPromptStyle(settings::GetConfig().buttonPrompts);
+    hid::SetInputMaps(settings::GetConfig().controllerMap, settings::GetConfig().keyboardMap);
 
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");

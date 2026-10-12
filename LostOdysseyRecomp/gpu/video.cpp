@@ -3345,6 +3345,10 @@ namespace gpu::video
                 continue;
             }
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == state.consumedKey) continue;
+            // Settings → Controls: a capture takes the key before shortcuts and game input.
+            if (event.type == SDL_EVENT_KEY_DOWN && window_mode::TargetsGameWindow(event.key, SDL_GetWindowID(g_window)) &&
+                !debug_menu::IsOverlayVisible() && settings::CaptureKey(uint32_t(event.key.scancode), event.key.repeat))
+                continue;
             // Win+Shift+Left/Right: Windows moves windowed windows to the next
             // display; fullscreen is followed up after a moment if it did not move.
             if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
@@ -3455,6 +3459,8 @@ namespace gpu::video
             }
             if (event.type == SDL_EVENT_GAMEPAD_ADDED || event.type == SDL_EVENT_GAMEPAD_REMOVED)
                 hid::HandleControllerEvent(event.type, event.gdevice.which);
+            if (event.type == SDL_EVENT_KEYMAP_CHANGED)
+                hid::RefreshKeyNames(); // the Controls page names keys in the current layout
             if (event.type == SDL_EVENT_QUIT)
             {
                 RequestExit();

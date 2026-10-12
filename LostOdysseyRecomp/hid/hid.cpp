@@ -13,10 +13,28 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include "test_input_pulse.h"
 #include "controller_prompts.h"
 #include "face_buttons.h"
+#include "input_map.h"
 #include "android_touch.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
+
+namespace map = hid::input_map;
+static_assert(map::SourceCount == SDL_GAMEPAD_BUTTON_COUNT + 2 && map::GuideSource == SDL_GAMEPAD_BUTTON_GUIDE &&
+              map::DefaultController[map::A] == SDL_GAMEPAD_BUTTON_SOUTH &&
+              map::DefaultController[map::Start] == SDL_GAMEPAD_BUTTON_START &&
+              map::DefaultController[map::LeftShoulder] == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER &&
+              map::DefaultController[map::DpadRight] == SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+static_assert(map::DefaultKeyboard[map::A] == SDL_SCANCODE_Z && map::DefaultKeyboard[map::B] == SDL_SCANCODE_X &&
+              map::DefaultKeyboard[map::X] == SDL_SCANCODE_A && map::DefaultKeyboard[map::Y] == SDL_SCANCODE_S &&
+              map::DefaultKeyboard[map::LeftShoulder] == SDL_SCANCODE_Q && map::DefaultKeyboard[map::RightShoulder] == SDL_SCANCODE_W &&
+              map::DefaultKeyboard[map::LeftTrigger] == SDL_SCANCODE_E && map::DefaultKeyboard[map::RightTrigger] == SDL_SCANCODE_R &&
+              map::DefaultKeyboard[map::Back] == SDL_SCANCODE_BACKSPACE && map::DefaultKeyboard[map::Start] == SDL_SCANCODE_RETURN &&
+              map::DefaultKeyboard[map::DpadUp] == SDL_SCANCODE_UP && map::DefaultKeyboard[map::DpadDown] == SDL_SCANCODE_DOWN &&
+              map::DefaultKeyboard[map::DpadLeft] == SDL_SCANCODE_LEFT && map::DefaultKeyboard[map::DpadRight] == SDL_SCANCODE_RIGHT &&
+              map::DefaultKeyboard[map::StickUp] == SDL_SCANCODE_I && map::DefaultKeyboard[map::StickDown] == SDL_SCANCODE_K &&
+              map::DefaultKeyboard[map::StickLeft] == SDL_SCANCODE_J && map::DefaultKeyboard[map::StickRight] == SDL_SCANCODE_L &&
+              map::EscapeKey == SDL_SCANCODE_ESCAPE && map::F1Key == SDL_SCANCODE_F1 && map::ScancodeCount == SDL_SCANCODE_COUNT);
 
 namespace
 {
@@ -47,6 +65,40 @@ namespace
         g_promptController.Observe(SDL_GetJoystickID(SDL_GetGamepadJoystick(controller)), buttons, stick);
     }
     std::array<Uint8, SDL_SCANCODE_COUNT> g_keys{};
+    // Settings → Gameplay → Controls layouts. Guarded by g_hidMutex.
+    map::ControllerMap g_controllerMap = map::DefaultController;
+    map::KeyboardMap g_keyboardMap = map::DefaultKeyboard;
+
+    // One controller's sources (input_map.h): its buttons after face-button
+    // normalisation, and its triggers, which also press past half way.
+    struct Sources
+    {
+        uint32_t pressed = 0;
+        uint8_t leftTrigger = 0, rightTrigger = 0;
+    };
+    Sources ReadSources(SDL_Gamepad* controller)
+    {
+        Sources result;
+        const auto type = hid::face_buttons::LabelType(controller);
+        for (int b = SDL_GAMEPAD_BUTTON_SOUTH; b < SDL_GAMEPAD_BUTTON_COUNT; ++b)
+        {
+            const auto button = b <= SDL_GAMEPAD_BUTTON_NORTH ? hid::face_buttons::Physical(type, SDL_GamepadButton(b))
+                                                              : SDL_GamepadButton(b);
+            if (SDL_GetGamepadButton(controller, button)) result.pressed |= 1u << b;
+        }
+        const auto trigger = [&](SDL_GamepadAxis axis) {
+            return uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, axis))) >> 7);
+        };
+        result.leftTrigger = trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+        result.rightTrigger = trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+        if (result.leftTrigger >= map::TriggerPressed) result.pressed |= 1u << map::LeftTriggerSource;
+        if (result.rightTrigger >= map::TriggerPressed) result.pressed |= 1u << map::RightTriggerSource;
+        return result;
+    }
+    map::Pad ApplyController(const map::ControllerMap& layout, const Sources& sources)
+    {
+        return map::ApplyController(layout, sources.pressed, sources.leftTrigger, sources.rightTrigger);
+    }
     Mutex g_hidMutex;
     // Serializes host sampling/actions with the complete guest input transaction.
     // Lock order: logical input -> HID devices; never call menu code under g_hidMutex.
@@ -143,6 +195,7 @@ void hid::Init()
         return;
     }
     OpenControllers();
+    RefreshKeyNames();
 }
 
 static std::atomic<bool> g_externalPump{ false };
@@ -193,6 +246,50 @@ bool hid::UsesKeyboardPrompts()
 void hid::SetPromptStyle(uint32_t style) { g_promptStyle.store(style <= 2 ? style : 0, std::memory_order_relaxed); }
 bool hid::HasConnectedController() { return g_physicalControllerCount.load(std::memory_order_relaxed) != 0; }
 
+void hid::SetInputMaps(const input_map::ControllerMap& controller, const input_map::KeyboardMap& keyboard)
+{
+    std::lock_guard lock(g_hidMutex);
+    g_controllerMap = map::ValidController(controller);
+    g_keyboardMap = map::ValidKeyboard(keyboard);
+}
+
+uint32_t hid::PressedSources()
+{
+    std::lock_guard lock(g_hidMutex);
+    uint32_t pressed = 0;
+    for (auto* controller : g_controllers)
+        if (SDL_GamepadConnected(controller)) pressed |= ReadSources(controller).pressed;
+    return pressed;
+}
+
+// SDL's keyboard calls are not thread safe, so the thread that owns the event
+// loop names the keys and the menu reads the copy.
+static std::mutex g_keyNameMutex;
+static std::array<std::string, SDL_SCANCODE_COUNT> g_keyNames;
+
+void hid::RefreshKeyNames()
+{
+    std::array<std::string, SDL_SCANCODE_COUNT> names;
+    for (int scancode = 0; scancode < SDL_SCANCODE_COUNT; ++scancode)
+    {
+        const SDL_Keycode key = SDL_GetKeyFromScancode(SDL_Scancode(scancode), SDL_KMOD_NONE, false);
+        const char* name = key != SDLK_UNKNOWN ? SDL_GetKeyName(key) : nullptr;
+        if (!name || !*name) name = SDL_GetScancodeName(SDL_Scancode(scancode));
+        if (name) names[size_t(scancode)] = name;
+    }
+    std::lock_guard lock(g_keyNameMutex);
+    g_keyNames = std::move(names);
+}
+
+std::string hid::KeyName(uint32_t scancode)
+{
+    {
+        std::lock_guard lock(g_keyNameMutex);
+        if (scancode < g_keyNames.size() && !g_keyNames[scancode].empty()) return g_keyNames[scancode];
+    }
+    return "#" + std::to_string(scancode);
+}
+
 void hid::ClearKeyboardState()
 {
     std::lock_guard lock(g_hidMutex);
@@ -206,26 +303,10 @@ static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
     {
         if (!SDL_GamepadConnected(controller)) continue;
         ObserveController(controller);
-        auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
-        const auto type = hid::face_buttons::LabelType(controller);
-        auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
-
-        if (btn(SDL_GAMEPAD_BUTTON_DPAD_UP)) buttons |= XAMINPUT_GAMEPAD_DPAD_UP;
-        if (btn(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) buttons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
-        if (btn(SDL_GAMEPAD_BUTTON_DPAD_LEFT)) buttons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
-        if (btn(SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) buttons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
-        if (btn(SDL_GAMEPAD_BUTTON_START)) buttons |= XAMINPUT_GAMEPAD_START;
-        if (btn(SDL_GAMEPAD_BUTTON_BACK)) buttons |= XAMINPUT_GAMEPAD_BACK;
-        if (btn(SDL_GAMEPAD_BUTTON_LEFT_STICK)) buttons |= XAMINPUT_GAMEPAD_LEFT_THUMB;
-        if (btn(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) buttons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
-        if (btn(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) buttons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
-        if (btn(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) buttons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-        if (face(SDL_GAMEPAD_BUTTON_SOUTH)) buttons |= XAMINPUT_GAMEPAD_A;
-        if (face(SDL_GAMEPAD_BUTTON_EAST)) buttons |= XAMINPUT_GAMEPAD_B;
-        if (face(SDL_GAMEPAD_BUTTON_WEST)) buttons |= XAMINPUT_GAMEPAD_X;
-        if (face(SDL_GAMEPAD_BUTTON_NORTH)) buttons |= XAMINPUT_GAMEPAD_Y;
-        lt = std::max(lt, uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFT_TRIGGER))) >> 7));
-        rt = std::max(rt, uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))) >> 7));
+        const auto pad = ApplyController(g_controllerMap, ReadSources(controller));
+        buttons |= pad.buttons;
+        lt = std::max(lt, pad.leftTrigger);
+        rt = std::max(rt, pad.rightTrigger);
     }
     PublishPromptStyle();
     return buttons;
@@ -314,6 +395,8 @@ void hid::Poll()
             HandleKeyboardEvent(e.key.scancode, e.type == SDL_EVENT_KEY_DOWN);
         else if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST)
             ClearKeyboardState();
+        else if (e.type == SDL_EVENT_KEYMAP_CHANGED)
+            RefreshKeyNames();
         else if (e.type == SDL_EVENT_QUIT)
             (os::shaderlog::CloseForExit(), std::_Exit(0));
     }
@@ -331,7 +414,11 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     pState->dwPacketNumber = ++g_packet;
     auto& gp = pState->Gamepad;
     std::array<Uint8, SDL_SCANCODE_COUNT> keys{};
+    map::KeyboardMap keyboardMap = map::DefaultKeyboard;
     bool controllerConnected = false;
+    // The same input on the default layouts: the Controls page navigates with
+    // it, so a layout that leaves a button out of reach can be undone there.
+    uint16_t defaultButtons = 0;
 
     {
         std::lock_guard lock(g_hidMutex);
@@ -340,28 +427,13 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         {
             if (!SDL_GamepadConnected(controller)) continue;
             ObserveController(controller);
-            auto btn = [&](SDL_GamepadButton b) { return SDL_GetGamepadButton(controller, b) != 0; };
-            const auto type = hid::face_buttons::LabelType(controller);
-            auto face = [&](SDL_GamepadButton b) { return btn(hid::face_buttons::Physical(type, b)); };
             auto axis = [&](SDL_GamepadAxis a) { return SDL_GetGamepadAxis(controller, a); };
-
-            if (btn(SDL_GAMEPAD_BUTTON_DPAD_UP)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
-            if (btn(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
-            if (btn(SDL_GAMEPAD_BUTTON_DPAD_LEFT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
-            if (btn(SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
-            if (btn(SDL_GAMEPAD_BUTTON_START)) gp.wButtons |= XAMINPUT_GAMEPAD_START;
-            if (btn(SDL_GAMEPAD_BUTTON_BACK)) gp.wButtons |= XAMINPUT_GAMEPAD_BACK;
-            if (btn(SDL_GAMEPAD_BUTTON_LEFT_STICK)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_THUMB;
-            if (btn(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_THUMB;
-            if (btn(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
-            if (btn(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-            if (face(SDL_GAMEPAD_BUTTON_SOUTH)) gp.wButtons |= XAMINPUT_GAMEPAD_A;
-            if (face(SDL_GAMEPAD_BUTTON_EAST)) gp.wButtons |= XAMINPUT_GAMEPAD_B;
-            if (face(SDL_GAMEPAD_BUTTON_WEST)) gp.wButtons |= XAMINPUT_GAMEPAD_X;
-            if (face(SDL_GAMEPAD_BUTTON_NORTH)) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
-
-            gp.bLeftTrigger = std::max(gp.bLeftTrigger, uint8_t(std::max(0, int(axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER))) >> 7));
-            gp.bRightTrigger = std::max(gp.bRightTrigger, uint8_t(std::max(0, int(axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))) >> 7));
+            const auto sources = ReadSources(controller);
+            const auto pad = ApplyController(g_controllerMap, sources);
+            gp.wButtons |= pad.buttons;
+            defaultButtons |= ApplyController(map::DefaultController, sources).buttons;
+            gp.bLeftTrigger = std::max(gp.bLeftTrigger, pad.leftTrigger);
+            gp.bRightTrigger = std::max(gp.bRightTrigger, pad.rightTrigger);
             auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
             MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_GAMEPAD_AXIS_LEFTX), flip(axis(SDL_GAMEPAD_AXIS_LEFTY)), 7849);
             MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_GAMEPAD_AXIS_RIGHTX), flip(axis(SDL_GAMEPAD_AXIS_RIGHTY)), 8689);
@@ -369,6 +441,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         controllerConnected = !g_controllers.empty();
         PublishPromptStyle();
         keys = g_keys;
+        keyboardMap = g_keyboardMap;
     }
 
 #if LO_PLATFORM_ANDROID
@@ -376,6 +449,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     // sticks follow the same larger-magnitude policy as multiple SDL pads.
     const auto touch = android_touch::Snapshot();
     gp.wButtons |= touch.buttons;
+    defaultButtons |= touch.buttons;
     gp.bLeftTrigger = std::max(gp.bLeftTrigger, touch.leftTrigger);
     gp.bRightTrigger = std::max(gp.bRightTrigger, touch.rightTrigger);
     MergeStick(gp.sThumbLX, gp.sThumbLY, touch.leftX, touch.leftY, 7849);
@@ -456,22 +530,25 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             }
         }
 
+        uint16_t automatic = 0;
         switch (pressed)
         {
         case 0: break;
-        case 'a': gp.wButtons |= XAMINPUT_GAMEPAD_A; break;
-        case 'b': gp.wButtons |= XAMINPUT_GAMEPAD_B; break;
-        case 'x': gp.wButtons |= XAMINPUT_GAMEPAD_X; break;
-        case 'y': gp.wButtons |= XAMINPUT_GAMEPAD_Y; break;
-        case 'u': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP; break;
-        case 'd': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN; break;
-        case 'l': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT; break;
-        case 'r': gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
-        case 'k': gp.wButtons |= XAMINPUT_GAMEPAD_BACK; break;
-        case 'L': gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER; break;
-        case 'R': gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER; break;
-        default: gp.wButtons |= XAMINPUT_GAMEPAD_START; break;
+        case 'a': automatic = XAMINPUT_GAMEPAD_A; break;
+        case 'b': automatic = XAMINPUT_GAMEPAD_B; break;
+        case 'x': automatic = XAMINPUT_GAMEPAD_X; break;
+        case 'y': automatic = XAMINPUT_GAMEPAD_Y; break;
+        case 'u': automatic = XAMINPUT_GAMEPAD_DPAD_UP; break;
+        case 'd': automatic = XAMINPUT_GAMEPAD_DPAD_DOWN; break;
+        case 'l': automatic = XAMINPUT_GAMEPAD_DPAD_LEFT; break;
+        case 'r': automatic = XAMINPUT_GAMEPAD_DPAD_RIGHT; break;
+        case 'k': automatic = XAMINPUT_GAMEPAD_BACK; break;
+        case 'L': automatic = XAMINPUT_GAMEPAD_LEFT_SHOULDER; break;
+        case 'R': automatic = XAMINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+        default: automatic = XAMINPUT_GAMEPAD_START; break;
         }
+        gp.wButtons |= automatic;
+        defaultButtons |= automatic;
     }
 
     // Reproducible field movement for local scene tests: x,y,firstSwap,lastSwap.
@@ -493,26 +570,12 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     }
 
     // Event-thread snapshot: keyboard remains available with any number of pads.
-    if (!keys.empty())
     {
-        if (keys[SDL_SCANCODE_UP]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_UP;
-        if (keys[SDL_SCANCODE_DOWN]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_DOWN;
-        if (keys[SDL_SCANCODE_LEFT]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_LEFT;
-        if (keys[SDL_SCANCODE_RIGHT]) gp.wButtons |= XAMINPUT_GAMEPAD_DPAD_RIGHT;
-        if (keys[SDL_SCANCODE_RETURN]) gp.wButtons |= XAMINPUT_GAMEPAD_START;
-        if (keys[SDL_SCANCODE_BACKSPACE]) gp.wButtons |= XAMINPUT_GAMEPAD_BACK;
-        if (keys[SDL_SCANCODE_Z]) gp.wButtons |= XAMINPUT_GAMEPAD_A;
-        if (keys[SDL_SCANCODE_X]) gp.wButtons |= XAMINPUT_GAMEPAD_B;
-        if (keys[SDL_SCANCODE_A]) gp.wButtons |= XAMINPUT_GAMEPAD_X;
-        if (keys[SDL_SCANCODE_S]) gp.wButtons |= XAMINPUT_GAMEPAD_Y;
-        if (keys[SDL_SCANCODE_Q]) gp.wButtons |= XAMINPUT_GAMEPAD_LEFT_SHOULDER;
-        if (keys[SDL_SCANCODE_W]) gp.wButtons |= XAMINPUT_GAMEPAD_RIGHT_SHOULDER;
-        if (keys[SDL_SCANCODE_E]) gp.bLeftTrigger = 255;
-        if (keys[SDL_SCANCODE_R]) gp.bRightTrigger = 255;
-        if (keys[SDL_SCANCODE_I]) gp.sThumbLY = 32767;
-        if (keys[SDL_SCANCODE_K]) gp.sThumbLY = -32768;
-        if (keys[SDL_SCANCODE_J]) gp.sThumbLX = -32768;
-        if (keys[SDL_SCANCODE_L]) gp.sThumbLX = 32767;
+        const auto held = [&](uint16_t scancode) { return scancode < keys.size() && keys[scancode] != 0; };
+        map::ApplyKeyboard(keyboardMap, held, gp.wButtons, gp.bLeftTrigger, gp.bRightTrigger, gp.sThumbLX, gp.sThumbLY);
+        uint8_t leftTrigger = 0, rightTrigger = 0;
+        int16_t leftX = 0, leftY = 0;
+        map::ApplyKeyboard(map::DefaultKeyboard, held, defaultButtons, leftTrigger, rightTrigger, leftX, leftY);
     }
 
     // Background integration input, opt-in per test process. A new serial starts
@@ -573,6 +636,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             gp.bLeftTrigger = uint8_t(leftTrigger);
             gp.bRightTrigger = uint8_t(rightTrigger);
             gp.wButtons |= uint16_t(buttons);
+            defaultButtons |= uint16_t(buttons);
             gp.sThumbLX = int16_t(leftX);
             gp.sThumbLY = int16_t(leftY);
             gp.sThumbRX = int16_t(rightX);
@@ -600,6 +664,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     // Read-only on guest paths. The host sampler (or the serialized standalone
     // sampler above) clears quarantine only after observing a physical release.
     gp.wButtons &= ~s_quarantinedButtons;
+    defaultButtons &= ~s_quarantinedButtons;
 
     bool overlayOwnsInput = overlayVisibleBefore || debug_menu::IsOverlayVisible();
     const uint16_t beforeMenuButtons = gp.wButtons;
@@ -609,7 +674,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         gp.wButtons = 0;
     }
     else {
-        menuFiltered = settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY);
+        menuFiltered = settings::FilterInput(gp.wButtons, gp.sThumbLX, gp.sThumbLY, defaultButtons);
     }
     if (menuFiltered) {
         gp.sThumbLX=gp.sThumbLY=gp.sThumbRX=gp.sThumbRY=0;

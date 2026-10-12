@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → System → Shader bundle downloads the shader bundle again.
 - Nintendo-layout controllers used through Steam Input follow Steam's button layout setting again instead of having A/B and X/Y swapped.
 - Android: CTRL → Saves and logs exports the logs to a ZIP for bug reports.
+- Settings → Gameplay → Controls changes the controller buttons and keyboard keys; Button prompts and Vibration moved there.
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 系统 → 着色器包可以重新下载着色器包。
 - 通过 Steam Input 使用的任天堂布局手柄重新按 Steam 的按键布局设置工作，A/B 和 X/Y 不再对调。
 - Android：CTRL → Saves and logs 可以把日志导出成 ZIP，用于反馈问题。
+- 设置 → 游戏 → 按键设置可以更改手柄按键和键盘按键；按键提示和震动也移到了这里。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
