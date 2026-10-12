@@ -129,7 +129,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 1. 在设备上下载 APK 并打开，按 Android 的提示允许来自浏览器或文件管理器的安装。先打开一次应用：它会在内部存储和每张 SD 卡上建好 `Android/data/io.github.freefrank.lostodyssey/files/game/` 文件夹。
 2. 用以下三种方法之一把游戏放到设备上：
-   - **在设备上导入：** **Game folder → Import disc images…** 可以从内部存储或 SD 卡导入光盘镜像（`.iso`）或已解出的光盘，完成后直接启动游戏。需要“所有文件访问”权限，页面会先请求。
+   - **在设备上导入：** **Game folder → Import disc images…** 会打开 Android 的文件选择器。在内部存储、SD 卡或 U 盘上选一个光盘镜像（`.iso`），同一文件夹里的其他光盘会一起导入，完成后直接启动游戏。已解出的光盘请选 `default.xex`。需要“所有文件访问”权限，页面会先请求。
    - **从电脑复制：** 先用电脑版导入游戏，再用 USB 文件传输模式连接设备，把 `disc1`–`disc4`（和 `dlc/`）复制到上面的 `game` 文件夹，使 `game/disc1/default.xex` 存在。
    - **使用其他文件夹：** 设备上的文件管理器一般写不进 `Android/data`，可以用它把光盘复制到其他任意位置，再在 **Game folder → Choose folder…** 选中包含 `disc1` 的文件夹。同样需要“所有文件访问”权限。
 3. 打开应用。高通设备会先显示 **GPU driver** 页面，因为手机自带的驱动会让部分菜单文字不可见：在这里下载 Turnip 驱动（页面会显示推荐给你机型的版本），然后按 **Start game**。之后可从 **CTRL → GPU driver** 再进入。如果某个驱动无法运行游戏，游戏会回到这个页面并说明原因。

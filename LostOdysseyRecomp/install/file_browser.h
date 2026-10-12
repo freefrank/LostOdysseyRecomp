@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -78,18 +79,19 @@ inline std::vector<DirectoryItem> GetSystemRoots()
     }
 #elif defined(__ANDROID__)
     // Shared storage volumes: the internal one and every mounted SD card or
-    // USB drive (/storage/<uuid>). Reading them needs All files access.
+    // USB drive. Apps cannot list /storage, so the Java side passes the
+    // removable volumes as LO_STORAGE_VOLUMES (':'-separated). Reading them
+    // needs All files access.
     roots.push_back({ "Internal storage", std::filesystem::path("/storage/emulated/0"), true, true });
-    std::error_code ec;
-    std::vector<DirectoryItem> volumes;
-    for (const auto& entry : std::filesystem::directory_iterator("/storage", ec))
+    std::string_view volumes;
+    if (const char* value = std::getenv("LO_STORAGE_VOLUMES")) volumes = value;
+    while (!volumes.empty())
     {
-        const auto name = entry.path().filename().string();
-        if (name == "emulated" || name == "self" || !entry.is_directory(ec)) continue;
-        volumes.push_back({ "SD card " + name, entry.path(), true, true });
+        const auto end = volumes.find(':');
+        const std::filesystem::path volume(volumes.substr(0, end));
+        if (!volume.empty()) roots.push_back({ "SD card " + volume.filename().string(), volume, true, true });
+        volumes = end == std::string_view::npos ? std::string_view() : volumes.substr(end + 1);
     }
-    std::sort(volumes.begin(), volumes.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
-    roots.insert(roots.end(), volumes.begin(), volumes.end());
 #else
     roots.push_back({ "/", std::filesystem::path("/"), true, true });
 #endif

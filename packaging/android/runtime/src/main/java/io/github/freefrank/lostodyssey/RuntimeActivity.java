@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -14,12 +15,17 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.libsdl.app.SDLActivity;
 
 /** Experimental game runtime. User-supplied discs live in app-owned storage. */
 public final class RuntimeActivity extends SDLActivity {
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";
+    /** Files and folders picked in the system file picker, which the importer scans at once. */
+    static final String EXTRA_IMPORT_SOURCES = "import_sources";
     /** A start that stays in the foreground this long counts as reached for the driver choice. */
     private static final long BOOT_SETTLED_MS = 15000;
 
@@ -195,6 +201,8 @@ public final class RuntimeActivity extends SDLActivity {
         // Logs go where a PC can copy them over USB; the device line names the phone.
         nativeSetenv("LO_LOG_DIR", PlayerLogs.directory(this).getAbsolutePath());
         nativeSetenv("LO_ANDROID_DEVICE", PlayerLogs.deviceDescription());
+        // The importer's drive list: SD cards and USB drives (apps cannot list /storage).
+        nativeSetenv("LO_STORAGE_VOLUMES", TextUtils.join(":", GameStorage.removableRoots(this)));
         // Mesa drivers (Turnip) keep compiled pipelines on disk only with a cache
         // directory; Android gives them none. Other drivers ignore these.
         nativeSetenv("MESA_SHADER_CACHE_DIR", new File(getCacheDir(), "mesa_shader_cache").getAbsolutePath());
@@ -223,7 +231,11 @@ public final class RuntimeActivity extends SDLActivity {
         if (importing) {
             //noinspection ResultOfMethodCallIgnored
             game.mkdirs();
-            return new String[] { "--game", game.getAbsolutePath(), "--install", "--quiet-kernel" };
+            List<String> arguments = new ArrayList<>(Arrays.asList(
+                "--game", game.getAbsolutePath(), "--install", "--quiet-kernel"));
+            String[] sources = getIntent().getStringArrayExtra(EXTRA_IMPORT_SOURCES);
+            if (sources != null) for (String source : sources) arguments.addAll(Arrays.asList("--install-source", source));
+            return arguments.toArray(new String[0]);
         }
         return new String[] { "--game", game.getAbsolutePath(), "--quiet-kernel" };
     }

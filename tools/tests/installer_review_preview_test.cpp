@@ -61,7 +61,7 @@ int main()
         SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_BMP", bmp.string().c_str(), 1);
         SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_SCROLL", pair.second == std::string_view("review-scrolled.bmp") ? "1" : "", 1);
         SDL_setenv_unsafe("LO_IMPORTER_PREVIEW_ERROR", pair.second == std::string_view("review-error.bmp") ? kScanError : "", 1);
-        const auto result = install::ShowInstallerUI(output, output, output / "unused-fixture-root");
+        const auto result = install::ShowInstallerUI(output, {}, output / "unused-fixture-root");
         if (!result.cancelled || result.success || !std::filesystem::is_regular_file(bmp) ||
             std::filesystem::file_size(bmp) < 1280 * 720 * 3)
             return 1;
