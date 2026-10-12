@@ -9,6 +9,13 @@ from pathlib import Path
 
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
 out.mkdir(parents=True, exist_ok=True)
+
+
+def write(name, text):
+    with open(out / name, 'w', encoding='utf-8', newline='') as file:
+        file.write(text)
+
+
 C = 512
 TILT = 20  # sword angle, clockwise: upright reads as a power symbol, 45 degrees as a prohibition sign
 SWORD = .74  # sword scale about the centre: it stays inside the lettered band, like a clock hand
@@ -191,12 +198,12 @@ def scaled(body, s):
     return f'<g transform="translate({C * (1 - s):.1f},{C * (1 - s):.1f}) scale({s})">{body}</g>'
 
 
-(out / 'icon.svg').write_text(svg(scaled(emblem(True), 1.24)))
-(out / 'icon-small.svg').write_text(svg(scaled(emblem(False), 1.28)))
-(out / 'android-foreground.svg').write_text(svg(scaled(emblem(True), .78)))
+write('icon.svg', svg(scaled(emblem(True), 1.24)))
+write('icon-small.svg', svg(scaled(emblem(False), 1.28)))
+write('android-foreground.svg', svg(scaled(emblem(True), .78)))
 stars = ''.join(f'<circle cx="{x}" cy="{y}" r="{r}" fill="#ffffff" opacity=".35"/>'
                 for x, y, r in [(170, 230, 4), (860, 260, 5), (220, 850, 3), (820, 820, 4), (120, 560, 3), (900, 560, 3)])
-(out / 'android-background.svg').write_text(svg('<rect width="1024" height="1024" fill="url(#bg)"/>' + stars))
+write('android-background.svg', svg('<rect width="1024" height="1024" fill="url(#bg)"/>' + stars))
 cut = sword_shape('#000000')
 mono = ('<defs><mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">'
         '<rect width="1024" height="1024" fill="#ffffff"/>'
@@ -204,5 +211,5 @@ mono = ('<defs><mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024
         + scaled(f'<circle cx="{C}" cy="{C}" r="330" fill="none" stroke="#ffffff" stroke-width="72" mask="url(#gap)"/>'
                  f'<circle cx="{C}" cy="{C}" r="250" fill="none" stroke="#ffffff" stroke-width="14" mask="url(#gap)"/>'
                  f'<g transform="{sword_frame()}">{sword_shape("#ffffff")}</g>', .78))
-(out / 'android-monochrome.svg').write_text(svg(mono, defs=False))
+write('android-monochrome.svg', svg(mono, defs=False))
 print('wrote', sorted(p.name for p in out.glob('*.svg')))
