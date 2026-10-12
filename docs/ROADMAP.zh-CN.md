@@ -94,13 +94,11 @@ Gate 1 backlog：调查已知 SDK `PRESENT-AFTER-WRITE` 同步例外并补充显
 
 ## v1.0.0 延后计划
 
-- [ ] **更省的超分运动信息：**只重画上一帧之后动过的物体，静止几何改用相机重投影，且移动角色不能出现新的鬼影（[#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172)；2026-10-08 排期）。
-- [ ] **Android 帧时间优化（画面不变）：**先在 TB321FU 上测基线，再精简渲染线程 record 路径里重复的绑定调用，根据 `TU_DEBUG=perf` 诊断定点修 Turnip 问题，并加入 ADPF performance hint session；画面必须不变；性能目标待 render pass 合并的结果再定（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
-- [ ] **合并 render pass，让分块渲染 GPU 把工作留在片上：**减少每帧的 render pass 数和全屏 pass，让 Adreno/Turnip、Apple 和 Mali 的 GPU 能把工作留在片上；画面必须不变，桌面端不能变慢（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
+- [ ] **Android 帧时间优化（画面不变）：**在画面不变的前提下缩短 TB321FU 的帧时间。验收标准（维护者 2026-10-12）：热机、出厂 720p 下 Uhra 的帧间隔 p95 不高于约 18 ms（冷机满 60 的基线因计时抖动为 p95 17.4–17.6 ms）；p99 不再作为门槛。v0.9.32 已发布：游戏线程放到性能核（PR #443）、libmain 直接调用（PR #444）、渲染线程 CPU 第五批（PR #445）和顶点／索引写入代数（PR #447）。热机 Uhra 现为 p95 21.3–22.6 ms、55–58 fps，还差约 4 ms。限制来自 cpu2–4 与 prime 核的温度上限、渲染线程（热机约 14–15 ms／帧）和游戏自己的 UE3 渲染线程（热机约 15 ms／帧）。下一步：减少 UE3 渲染线程的工作量和总能耗。ADPF 实测更差，已放弃（[Project](https://github.com/users/freefrank/projects/3)；2026-10-10 排期）。
 
 ## 后续积压
 
-DX11、超出 v0.7.35、v0.8.0 和 v0.8.5 实验性输出的 HDR 覆盖、高分辨率阴影、SSAO／深度访问、GI／反射、光追、WMV 播放、Linux AArch64 打包（2026-10-06 挪到 v1.0.0 之后）、HUDless／UI 分离（2026-10-10 挪到 v1.0.0 之后）、时域 P0 剩余的覆盖（物理显示器分类、故障注入和改设置后重启；2026-10-07 移出 v0.9.0）、移除 PM4 转换器与暂停的 Switch 工作保留各自 Project 范围。明确延期的研究与 SDK 同步例外使用 Paused／Deferred，移出当前 Todo，但不代表取消。
+DX11、超出 v0.7.35、v0.8.0 和 v0.8.5 实验性输出的 HDR 覆盖、高分辨率阴影、SSAO／深度访问、GI／反射、光追、WMV 播放、Linux AArch64 打包（2026-10-06 挪到 v1.0.0 之后）、HUDless／UI 分离（2026-10-10 挪到 v1.0.0 之后）、合并 render pass 让分块渲染 GPU 把工作留在片上（2026-10-12 挪到 v1.0.0 之后；PR #405 的 TB321FU 阶段 0 测量没有发现值得改动的片上渲染收益）、更省的超分运动信息（[#172](https://github.com/freefrank/LostOdysseyRecomp/issues/172)，2026-10-12 挪到 v1.0.0 之后，不再是 v1.0.0 门槛，若完成仍可能先于 v1.0.0 合入）、时域 P0 剩余的覆盖（物理显示器分类、故障注入和改设置后重启；2026-10-07 移出 v0.9.0）、移除 PM4 转换器与暂停的 Switch 工作保留各自 Project 范围。明确延期的研究与 SDK 同步例外使用 Paused／Deferred，移出当前 Todo，但不代表取消。
 
 逐项证据见 [Project](https://github.com/users/freefrank/projects/3)，早期细节见[历史路线图](archive/ROADMAP-2026-09-10.md)。本轮整理没有重跑构建、游戏或测试。
 

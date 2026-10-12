@@ -4090,12 +4090,13 @@
         "Status": "Todo",
         "Delivery": "Not started",
         "Kind": "Feature",
-        "Release": "v1.0.0",
+        "Release": "After v1.0.0",
         "Area": "Graphics performance",
-        "Source key": "sr-motion-replay-moving-only"
+        "Source key": "sr-motion-replay-moving-only",
+        "Evidence": "Not a v1.0.0 gate (maintainer, 2026-10-12). It may still land before v1.0.0 if done. Not started. Scheduled for before v1.0.0 on 2026-10-08 after the #172 reporter's v0.8.61 numbers (FSR Performance at 4K about 50 FPS); that schedule is superseded."
       },
-      "title": "v1.0.0: Replay upscaler motion only for geometry that moved",
-      "body_sha256": "1ce57d74cfd8b7dc82f2c33cc585ca35f6297c4124732ddbff20e6768bea7d7a"
+      "title": "Replay upscaler motion only for geometry that moved",
+      "body_sha256": "9cb1618bc3472f4b492b71421f35bedd1782b7963881a01564c94e7de4777f73"
     },
     "aspect-ratio-setting": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_ebdI",
@@ -4133,8 +4134,8 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Localization",
-        "Status": "In Progress",
-        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research (PR #371) started the same day. Scope: language packs for modders: export the game's text to editable files, import translations, add languages selectable in Settings, and font glyph additions. Released as an experimental Windows path in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted): text export (PR #374), import (#378), Game language choice (#381), export and clean-for-sharing tool (#382), mod format v2 (#383) and a Mods page (#384). Not delivered: a Brazilian Portuguese language in the game (the maintainer's 2026-10-09 comment says modders can add one) and font glyph additions. The Issue stays open. No reporter confirmation and no game run with the v0.9.22 packages.",
+        "Status": "Done",
+        "Evidence": "Maintainer accepted this as a planned feature on 2026-10-09; research (PR #371) started the same day. Scope: language packs for modders: export the game's text to editable files, import translations, add languages selectable in Settings, and font glyph additions. Released as an experimental Windows path in v0.9.22 (published 2026-10-10T05:10:10Z, not accepted): text export (PR #374), import (#378), Game language choice (#381), export and clean-for-sharing tool (#382), mod format v2 (#383) and a Mods page (#384). Not delivered: a Brazilian Portuguese language in the game (the maintainer's 2026-10-09 comment says modders can add one) and font glyph additions. The Issue stays open. No reporter confirmation and no game run with the v0.9.22 packages. Closed by the maintainer on 2026-10-12T17:46:36Z as completed; Project Status Done.",
         "Source key": "issue-369-more-language-options",
         "Delivery": "Released",
         "Release": "v0.9.22"
@@ -4145,9 +4146,9 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Video playback",
-        "Status": "Todo",
+        "Status": "Done",
         "Delivery": "Research complete",
-        "Evidence": "Reopened (state OPEN, reason REOPENED; last update 2026-10-09T19:30:39Z). PR #345 (merged 2026-10-09T06:04:11Z as f72be6f9) adds docs/notes/hd-cutscene-replacement.zh-CN.md, a research note on HD and high-frame-rate CG replacement only. No game change for this Issue in v0.9.22 is recorded; the mod export of CG movies (PR #346) is a separate tool. Sharp text is not covered by the note. Not scheduled; no reporter confirmation is recorded.",
+        "Evidence": "Reopened (state OPEN, reason REOPENED; last update 2026-10-09T19:30:39Z). PR #345 (merged 2026-10-09T06:04:11Z as f72be6f9) adds docs/notes/hd-cutscene-replacement.zh-CN.md, a research note on HD and high-frame-rate CG replacement only. No game change for this Issue in v0.9.22 is recorded; the mod export of CG movies (PR #346) is a separate tool. Sharp text is not covered by the note. Not scheduled; no reporter confirmation is recorded. Closed by the maintainer on 2026-10-12T18:11:11Z as completed; Project Status Done.",
         "Source key": "issue-265-upscaled-cutscenes-sharp-text"
       }
     },
@@ -4233,28 +4234,28 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Release": "v1.0.0",
-        "Evidence": "Reddit v0.9.0 lists \"Better Android performance\" for 1.0.0; no item existed. Same-output wins #302 #303 #304 #310 #313 #314 #315 shipped. OPPO PLP110 (Adreno 840): GPU-bound once hot. Closed: forced GMEM (3x slower), keep-color on Adreno (-9%), HDR sidecar batching (0.3-0.8 ms). Untested on Android: adaptive occlusion (#316), background startup pipelines (#379). Older TB321FU run (v0.8.45-dev, 1280x800, SSAO, Uhra, not defaults): render-thread bound, draw_ms 54-69, ~15 FPS. Hot baseline 2026-10-10, TB321FU, v0.9.22 defaults (native 2560x1600): Uhra 23.1-23.9 FPS, GPU 40.5-41.5 ms, render thread 25-26 ms; battle 24.9-27.0 FPS, GPU 36-39 ms; high settings Uhra 17.2 FPS (GPU 56.3 ms), battle 20.1 FPS (GPU 48.1 ms). All GPU-limited. TU_DEBUG=perf: about 230 LRZ-disabled lines per frame. The factory default Render resolution is now 720p on all platforms (PR #402, unreleased). Targets wait for render-pass-merging-v100. Scheduled for v1.0.0 on 2026-10-10. Not started.",
+        "Evidence": "Acceptance changed by the maintainer on 2026-10-12 (p95 60 fps is enough): hot frame-interval p95 at or below about 18 ms at the factory 720p in hot Uhra on the TB321FU; the cool full-60 baseline measures p95 17.4-17.6 ms from timer jitter. p99 is no longer the gate. Shipped in v0.9.32: #443 game threads on the performance cores (hot Uhra 53.1 to 54.4 fps, p95 25.8 to 22.5 ms), #444 -Bsymbolic-functions for libmain, #445 render-thread CPU batch 5, #447 vertex/index write generations (render CPU about -16%, hot about 58 fps). Current: hot Uhra p95 21.3-22.6 ms at 55-58 fps, about 4 ms short. Limits: thermal caps on cpu2-4 and the prime core, the render thread (about 14-15 ms/frame hot) and the game's UE3 render thread (about 15 ms/frame hot). Next: cut the UE3 render thread's work and total energy. ADPF was measured and rejected (worse); the render-pass merge dependency no longer applies.",
         "Source key": "android-frame-time-v100"
       },
       "title": "v1.0.0: Faster Android frames with the same image",
-      "body_sha256": "d12aa99b947bbc44c11fd8cd42fb302f0a3bb96da763add80916cfa35510023e"
+      "body_sha256": "5952516a2db1301c138da062f9d686afb64df485ef0c98e48cae476fc5c65d6d"
     },
     "render-pass-merging-v100": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_6qcw",
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Release": "v1.0.0",
-        "Evidence": "Maintainer decided 2026-10-10 that pass merging is required for v1.0.0. TB321FU (Adreno 750, Turnip), v0.9.22, native 2560x1600, hot: Uhra about 23 FPS; GPU 40-43 ms (gpubusy 99-100%), GPU-limited. About 320 Vulkan render passes per frame (about 187 full-screen), about 268 framebuffer switches and 51 barriers. Turnip runs the whole frame in sysmem; forced GMEM is 3x slower. TU_DEBUG=perf shows LRZ disabled often (for example after CmdClearAttachments). Design and per-pass baseline in progress; implementation not started. Sources: docs/ROADMAP.md, docs/ROADMAP.zh-CN.md, android-frame-time-v100.",
+        "Status": "Paused",
+        "Delivery": "Deferred",
+        "Release": "After v1.0.0",
+        "Evidence": "Moved out of v1.0.0 on 2026-10-12 by the maintainer and paused. Phase 0 measurements on the TB321FU (docs PR #405, merged; design in #404) found no GMEM/on-chip gain worth the change. Background from the 2026-10-10 v0.9.22 run: Uhra about 23 FPS, GPU 40-43 ms, about 320 render passes per frame (about 187 full-screen). Not started; no implementation.",
         "Source key": "render-pass-merging-v100"
       },
-      "title": "v1.0.0: Merge render passes so tile-based GPUs keep work on chip",
-      "body_sha256": "6219edadb4ac7d326d0847b2e9beaf1069792143fed8185c0232e8b9343583eb"
+      "title": "Merge render passes so tile-based GPUs keep work on chip",
+      "body_sha256": "1bc46f85c564230194513b2e9d5a03d361cb99687152df845759409ba7a13ca0"
     }
   },
   "project_id": "PVT_kwHOAAsUY84Biy1a"
