@@ -2,7 +2,37 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v0.9.32 published — 2026-10-12
+
+[v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) was published at 2026-10-12T17:41:58Z. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` and `isPrerelease` false and the release is the Latest). It was cut from annotated tag `v0.9.32` (tag object `01737782`, peeled to commit `f87d2524a2bb6ccc464506dd21194309f473ff6e`, PR [#448](https://github.com/freefrank/LostOdysseyRecomp/pull/448), `chore: release v0.9.32`, which set the source version to 0.9.32, added the CHANGELOG heading and the INSTALLING asset names). The tag was pushed to GitHub and to the zkx mirror at about 17:19 UTC. The previous release is v0.9.22, published 2026-10-10T05:10:10Z at `d3888a0d`. The five assets are listed under [Published v0.9.32 assets](#published-v0932-assets).
+
+The release run is Gitea run API id 1124 (`release.yml` on `refs/tags/v0.9.32`). Its jobs succeeded: Create draft release, Prepare FSR Vulkan build inputs, Windows Release, Linux Release, Android Release and Publish complete release.
+
+Shader packs: the contracts are unchanged since the publication of 2026-10-12 06:03Z (d3d12 `05fd9431…`, vulkan `03ef0787…`, corpus `183df2d9…`), and no pack was published for this release. `tools/release/publish_shader_packs.py --check` passed on Windows and on the maintainer's M1 Max before the tag.
+
+The macOS disk image was built on the maintainer's M1 Max from the tag with `mac-release-sdl3.sh v0.9.32 v0.9.32 tag package` (SDL release-3.4.18, 46 s incremental build) and uploaded to the draft by hand with `gh release upload --clobber`. `hdiutil verify` reports it VALID, `codesign` verification passes (ad-hoc signature) and `CFBundleShortVersionString` is 0.9.32. A first image built with the older pre-SDL3 script was uploaded to the draft by mistake and replaced before publication; the published image is the SDL3 build ([macOS releases](MACOS_RELEASE.md#v0932-image)).
+
+The PortForge manifest `.forge.json` moved from 0.9.22 to 0.9.32 with `tools/release/update_forge_manifest.py`; both of its download URLs return HTTP 200.
+
+Scope of this record: publication, asset integrity and workflow results only. `git log --first-parent v0.9.22..v0.9.32` lists 41 commits, PRs #387 to #448, including the v0.9.22 record (#387) and the Project and PM docs PRs. The player-facing changes are the [Changelog, v0.9.32](../CHANGELOG.md#v0932--2026-10-12) section and are not repeated here. Release mentions were posted on 2026-10-12 on #394, #424, #375, #441 and #251, one line each with the release link.
+
+Acceptance: none. No game run was made with the v0.9.32 packages, and the maintainer has not accepted v0.9.32. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
+### Published v0.9.32 assets
+
+These are the release asset sizes and SHA-256 values as listed by GitHub's release metadata for this record. No download was requested, and the four CI packages were not hashed, extracted or launched in this documentation task. The Android APK is experimental.
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v0.9.32.zip` | 151,392,478 | `54f4621a6afd816ff15ecc3bd088e0bfd1dbf2aba1f3b2b26b3515852c27a94b` |
+| `LostOdysseyRecomp-linux-x64-v0.9.32.AppImage` | 77,416,952 | `e509a113f14cdd7ec6105f0364b968a8c5f0d73f05b0a26762c1f3b0e2860e8d` |
+| `LostOdysseyRecomp-linux-x64-v0.9.32.flatpak` | 55,006,784 | `2dc7f2af43b85ac068f47f7dc3bd0ecce2c4e7fe0163e4cfd15665dbc41853e2` |
+| `LostOdysseyRecomp-android-arm64-v0.9.32.apk` | 45,905,238 | `a7b23ffb57abf52237352ff1bd2912e02be236f03a4f181a2d85495aacfaf175` |
+| `LostOdysseyRecomp-macos-arm64-v0.9.32.dmg` | 61,609,258 | `55b105b9b91934b1b926c3f2ed41249c847dbcbd3170bcd595b94f735400b659` |
+
 ## v0.9.22 published — 2026-10-10
+
+Update, 2026-10-12: v0.9.22 stopped being the latest release when [v0.9.32](#v0932-published--2026-10-12) was published at 2026-10-12T17:41:58Z. The record below is unchanged.
 
 [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) was published at 2026-10-10T05:10:10Z. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` and `isPrerelease` false and `gh release list` marks it Latest). It was cut from annotated tag `v0.9.22` (tag object `a34cd171`) on commit `d3888a0d879a23ff26197a3ad29fe64975b4b6b8` (PR [#386](https://github.com/freefrank/LostOdysseyRecomp/pull/386), `chore: release v0.9.22`, which set the source version to 0.9.22). The previous release is v0.9.0, published 2026-10-08T18:31:57Z at `8d33c146`. The version step from 0.9.0 to 0.9.22 was the maintainer's choice. The live state was read on 2026-10-10 at about 05:15 UTC; at that read `origin/main` was at the tag commit. The release body equals the matching [Changelog](../CHANGELOG.md#v0922--2026-10-10) section (compared with `tools/release/extract_release_notes.py`). The five assets are listed under [Published v0.9.22 assets](#published-v0922-assets).
 
@@ -295,6 +325,8 @@ Update, 2026-10-08 (after v0.9.0): [v0.9.0](#v090-published--2026-10-08) carries
 
 Update, 2026-10-10 (after v0.9.22): [v0.9.22](#v0922-published--2026-10-10) carries the 46 first-parent commits since v0.9.0, including `0a478d9f` ([#331](https://github.com/freefrank/LostOdysseyRecomp/pull/331)). `main` was at the v0.9.22 tag commit when read at about 05:15 UTC on 2026-10-10. The first two rows below describe v0.9.22; the v0.9.0 rows after them keep their wording and are superseded.
 
+Update, 2026-10-12 (after v0.9.32): [v0.9.32](#v0932-published--2026-10-12) carries the 41 first-parent commits since v0.9.22 (PRs #387 to #448). The first two rows below describe v0.9.32; the v0.9.22 rows after them keep their wording and are superseded.
+
 Update, 2026-10-08 (later): the two rows that follow the v0.9.22 rows describe v0.9.0, read with `gh`, the GitHub API and `git ls-remote` up to about 18:47 UTC, after publication at 18:31 UTC. The v0.8.61 rows after them keep their wording and are superseded.
 
 Update, 2026-10-08: the v0.8.61 rows below (the third and fourth) describe v0.8.61, read with `gh`, the GitHub API and `git ls-remote` at about 08:50 UTC, after publication at 08:33 UTC. The v0.8.53 rows after them keep their wording and are superseded.
@@ -319,7 +351,9 @@ GitHub release and Issue states were read on 2026-09-30 at 06:49 UTC. Project it
 
 | Area | Verified state | Evidence and limits |
 |---|---|---|
-| Published release (2026-10-10, after v0.9.0) | **v0.9.22**, published 2026-10-10T05:10:10Z, the latest release; tag commit `d3888a0d879a23ff26197a3ad29fe64975b4b6b8`, equal to `origin/main` when read at about 05:15 UTC. The previous release is v0.9.0, published 2026-10-08T18:31:57Z at `8d33c146e9f1800493b4bc02d3be97d4fbf4cb7d` | [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) with its Windows ZIP, Linux AppImage, standalone Flatpak, Android APK and macOS disk image, the [publication record](#v0922-published--2026-10-10) and the [Changelog](../CHANGELOG.md#v0922--2026-10-10). Publication does not establish full-game or cross-GPU acceptance, and no acceptance of v0.9.22 is recorded. |
+| Published release (2026-10-12, after v0.9.22) | **v0.9.32**, published 2026-10-12T17:41:58Z, the latest release; tag commit `f87d2524a2bb6ccc464506dd21194309f473ff6e` (PR [#448](https://github.com/freefrank/LostOdysseyRecomp/pull/448)). The previous release is v0.9.22, published 2026-10-10T05:10:10Z at `d3888a0d879a23ff26197a3ad29fe64975b4b6b8` | [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) with its Windows ZIP, Linux AppImage, standalone Flatpak, Android APK and macOS disk image, the [publication record](#v0932-published--2026-10-12) and the [Changelog](../CHANGELOG.md#v0932--2026-10-12). Publication does not establish full-game or cross-GPU acceptance, and no acceptance of v0.9.32 is recorded. |
+| Source in v0.9.32 (since v0.9.22) | The 41 first-parent commits between the v0.9.22 tag commit `d3888a0d` and the v0.9.32 tag commit `f87d2524`, PRs #387 to #448 as `git log --first-parent v0.9.22..v0.9.32` lists them (including the v0.9.22 record #387 and the Project and PM docs PRs) | [Changelog, v0.9.32](../CHANGELOG.md#v0932--2026-10-12) and the delivered-behavior rows below. Merging is not release, reporter or maintainer acceptance. |
+| Published release (2026-10-10, after v0.9.0) | Superseded on 2026-10-12: the rows above are current. **v0.9.22**, published 2026-10-10T05:10:10Z, then the latest release; tag commit `d3888a0d879a23ff26197a3ad29fe64975b4b6b8`, equal to `origin/main` when read at about 05:15 UTC. The previous release is v0.9.0, published 2026-10-08T18:31:57Z at `8d33c146e9f1800493b4bc02d3be97d4fbf4cb7d` | [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) with its Windows ZIP, Linux AppImage, standalone Flatpak, Android APK and macOS disk image, the [publication record](#v0922-published--2026-10-10) and the [Changelog](../CHANGELOG.md#v0922--2026-10-10). Publication does not establish full-game or cross-GPU acceptance, and no acceptance of v0.9.22 is recorded. |
 | Source in v0.9.22 (since v0.9.0) | The 46 first-parent commits between the v0.9.0 tag commit `8d33c146` and the v0.9.22 tag commit, PRs #331 to #386 as `git log --first-parent v0.9.0..v0.9.22` lists them (including #331, the v0.9.0 record #333 and the release PR #386) | [Changelog, v0.9.22](../CHANGELOG.md#v0922--2026-10-10) and the delivered-behavior rows below. Merging is not release, reporter or maintainer acceptance. |
 | Published release (2026-10-08, after v0.9.0) | Superseded on 2026-10-10: the rows above are current. **v0.9.0**, published 2026-10-08T18:31:57Z, then the latest release; tag commit `8d33c146e9f1800493b4bc02d3be97d4fbf4cb7d`, which `origin/main` was one commit ahead of (`0a478d9f`, #331, a Project-manifest change). The previous release is v0.8.61, published 2026-10-08T08:33:11Z at `787fed28edda09ebc3acab5c9e743390b9ac5eb1` | [v0.9.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.0) with its Windows ZIP, Linux AppImage, standalone Flatpak, Android APK and macOS disk image, the [publication record](#v090-published--2026-10-08), the [v0.8.61 record](#v0861-published--2026-10-08) and the [Changelog](../CHANGELOG.md#v090--2026-10-08). Publication does not establish full-game or cross-GPU acceptance, and no acceptance of v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61 or v0.9.0 as a release is recorded. |
 | Source in v0.9.0 (since v0.8.61) | The merges and commits between the v0.8.61 tag commit `787fed28` and the v0.9.0 tag commit: PRs #324 to #329 (six PRs) and three commits that are not PRs (`5d1958b4` deletes `HANDOFF.md`, `6cbb17b8` source version, `8d33c146` release notes) | [Changelog, v0.9.0](../CHANGELOG.md#v090--2026-10-08) and the delivered-behavior rows below. Merging is not release, reporter or maintainer acceptance. |
@@ -589,6 +623,8 @@ The GitHub API listed these three assets. Sizes are metadata readback; this docu
 | `LostOdysseyRecomp-linux-x64-v0.7.20.flatpak` | 231,367,664 |
 
 ## Delivered behavior and validation scope
+
+Update, 2026-10-12: the PRs merged after v0.9.22 (#387 to #448) are in [v0.9.32](#v0932-published--2026-10-12).
 
 Update, 2026-10-10: the PRs merged after v0.9.0 (#331 to #386) are in [v0.9.22](#v0922-published--2026-10-10). Rows that say a change is in no published release, or is waiting for a release, were written before that and are not edited row by row; the validation limits in each row still apply.
 
