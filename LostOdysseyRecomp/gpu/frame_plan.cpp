@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/guest_writes.h"
 #include "gpu/dlss_status_log.h"
 #include "gpu/video.h"
 #include <string_view>
@@ -322,6 +323,7 @@ PPC_FUNC(sub_827B6E48)
     const uint32_t device = ctx.r3.u32, parameter = ctx.r4.u32;
     gpu::frame_plan::DeviceStreamDestroyed();
     __imp__sub_827B6E48(ctx, base);
+    gpu::guest_writes::CommandBufferSetUp(device, base);
     if (parameter) gpu::frame_plan::DeviceStreamReadyFromContext(device, ctx);
 }
 PPC_FUNC(sub_827BA640)

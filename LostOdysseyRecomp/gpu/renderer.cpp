@@ -9032,38 +9032,16 @@ void main()
             }
 
             // ---- vertex buffers ------------------------------------------------------------
-            // A cached vertex/index source is compared with its snapshot once per
-            // sync epoch. Between two sync points only an unsynchronized guest CPU
-            // write racing the GPU can change memory a draw already read; such a
-            // write is seen at the next epoch instead of at the next draw.
-            // LO_REVALIDATE_VERIFY=1 compares skipped sources too and logs mismatches.
-            uint64_t revalidationChecks = 0, revalidationSkips = 0, revalidationMismatches = 0;
-            uint64_t revalidationEpoch = 0;
-            template<class Matches>
-            bool SourceMatches(uint64_t& validatedEpoch, Matches&& matches, uint32_t address)
-            {
-                static const bool verify = [] { const char* v = getenv("LO_REVALIDATE_VERIFY"); return v && strcmp(v, "0") != 0; }();
-                const uint64_t epoch = g_commandProcessor.SyncEpoch();
-                if (validatedEpoch == epoch) {
-                    ++revalidationSkips;
-                    if (!verify || matches()) return true;
-                    static uint32_t reported = 0;
-                    if (reported++ < 32)
-                        LOG_ERROR("renderer: source {:#x} changed within sync epoch {} (frame {})", address, epoch, frame);
-                    ++revalidationMismatches;
-                    validatedEpoch = 0;
-                    return false;
-                }
-                ++revalidationChecks;
-                const bool ok = matches();
-                validatedEpoch = ok ? epoch : 0;
-                return ok;
-            }
+            // A cached vertex or index source is taken again only after a guest write
+            // was noted in its range (gpu/guest_writes.h): a D3D Unlock, a buffer bound
+            // to memory, a kernel file read. Sources in the title's command buffer
+            // (DrawVerticesUP data) change with every draw and are not cached.
+            uint64_t sourceRetakes = 0, sourceDirect = 0; // LO_RENDER_TIMING, since the previous line
 
-            // Sources already found and validated in the current sync epoch, by
-            // key hash: a repeat skips the map lookup. Valid while the cache's
-            // version is unchanged (no entry added, removed or recaptured since).
-            struct VertexLookup { uint64_t key = 0, epoch = 0, version = 0; geometry_prepare::VertexEntry* entry = nullptr; };
+            // Sources already found unchanged at the current published write count,
+            // by key hash: a repeat skips the map lookup. Valid while the cache's
+            // version is unchanged (no entry added, removed or refreshed since).
+            struct VertexLookup { uint64_t key = 0, published = 0, version = 0; geometry_prepare::VertexEntry* entry = nullptr; };
             std::array<VertexLookup, 256> vertexLookups{};
 
             // Returns the arena offset of the swapped copy of a guest vertex buffer.
@@ -9071,14 +9049,11 @@ void main()
             {
                 const size_t bytes = size_t(sizeDwords) * 4;
                 const uint64_t key = (uint64_t(address) << 32) | (uint64_t(sizeDwords) << 2) | endian;
-                static const bool verify = [] { const char* v = getenv("LO_REVALIDATE_VERIFY"); return v && strcmp(v, "0") != 0; }();
+                const bool direct = gpu::guest_writes::InCommandBuffer(address & 0x1FFFFFFFu, uint32_t(bytes));
                 auto& lookup = vertexLookups[(key * 0x9E3779B97F4A7C15ull) >> 56];
-                const uint64_t epoch = g_commandProcessor.SyncEpoch();
-                if (!vertexTimingEnabled && !verify && lookup.entry && lookup.key == key && lookup.epoch == epoch &&
-                    lookup.version == vertexCache.Version())
+                if (!vertexTimingEnabled && !direct && lookup.entry && lookup.key == key &&
+                    lookup.published == gpu::guest_writes::Published() && lookup.version == vertexCache.Version())
                 {
-                    // What the map path does for a source validated this epoch.
-                    ++revalidationSkips;
                     lookup.entry->lastFrame = frame;
                     return lookup.entry->offset;
                 }
@@ -9089,32 +9064,33 @@ void main()
                     vertexTiming.initialBuckets = vertexCache.bucket_count();
                     vertexTiming.initialEvictions = vertexCache.Evictions();
                 }
-                auto it = [&] {
+                auto it = vertexCache.end();
+                if (!direct) {
                     VertexStageTimer timer(vertexTiming.find, vertexTimingEnabled, address, bytes);
-                    return vertexCache.find(key);
-                }();
+                    it = vertexCache.find(key);
+                }
                 bool changed = false;
                 if (it != vertexCache.end())
                 {
-                    const bool matches = [&] {
+                    const bool unchanged = [&] {
                         VertexStageTimer timer(vertexTiming.match, vertexTimingEnabled, address, bytes);
-                        return SourceMatches(it->second.validatedEpoch,
-                            [&] { return it->second.content.Matches(guest, bytes); }, address);
+                        return geometry_prepare::Unchanged(it->second.stamp, address, bytes);
                     }();
-                    if (gpu::render_arena::VertexCacheReusable(matches))
+                    if (unchanged)
                     {
                         it->second.lastFrame = frame;
-                        if (it->second.validatedEpoch == epoch)
-                            lookup = {key, epoch, vertexCache.Version(), &it->second};
+                        lookup = {key, it->second.stamp.checked, vertexCache.Version(), &it->second};
                         return it->second.offset;
                     }
-                    // Contents changed. Overwriting the arena copy in place would
-                    // corrupt draws already recorded into an open command list, so
-                    // allocate fresh; the entry itself is refreshed below.
+                    // Written since. Overwriting the arena copy in place would corrupt
+                    // draws already recorded into an open command list, so allocate
+                    // fresh; the entry itself is refreshed below.
                     if (it->second.slot == uint8_t(gpuSlot))
                         vertexRevalidations++;
+                    ++sourceRetakes;
                     changed = true;
                 }
+                sourceDirect += direct;
 
                 // Allocate (16-byte aligned, 16 bytes of slack for the shader's
                 // last fetch). Prefer the current half; if it is full, append to
@@ -9134,47 +9110,36 @@ void main()
                 uint64_t& local = gpuSlots[allocSlot].arenaOffset;
                 const uint64_t offset = gpu::render_arena::SlotBase(allocSlot) + local;
                 local += needed;
-                if (changed) {
-                    // Same key, same size: refresh the entry and reuse its snapshot
-                    // storage instead of erasing it and inserting a new allocation.
-                    auto& entry = it->second;
-                    entry.offset = offset;
-                    entry.lastFrame = frame;
-                    entry.slot = uint8_t(allocSlot);
-                    entry.validatedEpoch = g_commandProcessor.SyncEpoch();
-                    {
-                        VertexStageTimer timer(vertexTiming.capture, vertexTimingEnabled, address, bytes);
-                        vertexCache.Recapture(it, guest, bytes);
-                    }
-                    {
-                        VertexStageTimer timer(vertexTiming.copy, vertexTimingEnabled, address, bytes);
-                        geometry_prepare::CopyDwordsSwapped(arenaMapped + offset, guest, sizeDwords, endian);
-                        memset(arenaMapped + offset + bytes, 0, 16);
-                    }
-                    vertexUploads++;
-                    vertexBytesUploaded += bytes;
-                    return offset;
-                }
-                VertexEntry entry{ offset, {}, frame, uint8_t(allocSlot) };
-                entry.validatedEpoch = g_commandProcessor.SyncEpoch();
-                {
+                geometry_prepare::SourceStamp stamp;
+                if (!direct) {
                     VertexStageTimer timer(vertexTiming.capture, vertexTimingEnabled, address, bytes);
-                    entry.content.Capture(guest, bytes, vertexCache.TakeSpare(bytes));
+                    stamp = geometry_prepare::TakeStamp(address, bytes);
                 }
                 {
                     VertexStageTimer timer(vertexTiming.copy, vertexTimingEnabled, address, bytes);
                     geometry_prepare::CopyDwordsSwapped(arenaMapped + offset, guest, sizeDwords, endian);
                     memset(arenaMapped + offset + bytes, 0, 16);
                 }
+                vertexUploads++;
+                vertexBytesUploaded += bytes;
+                if (direct) return offset;
+                if (changed) {
+                    // Same key, same size: refresh the entry in place.
+                    auto& entry = it->second;
+                    entry.offset = offset;
+                    entry.lastFrame = frame;
+                    entry.slot = uint8_t(allocSlot);
+                    entry.stamp = stamp;
+                    vertexCache.Refreshed();
+                    return offset;
+                }
                 const size_t bucketsBefore = vertexTimingEnabled ? vertexCache.bucket_count() : 0;
                 {
                     VertexStageTimer timer(vertexTiming.insert, vertexTimingEnabled, address, bytes);
-                    vertexCache.emplace(key, std::move(entry));
+                    vertexCache.emplace(key, VertexEntry{ offset, frame, uint8_t(allocSlot), stamp });
                 }
                 if (vertexTimingEnabled && vertexCache.bucket_count() != bucketsBefore)
                     ++vertexTiming.rehashes;
-                vertexUploads++;
-                vertexBytesUploaded += bytes;
                 return offset;
             }
 
@@ -11017,8 +10982,8 @@ void main()
                 }
 
                 // Index buffer / primitive conversion. Static geometry skips
-                // ConvertIndices and primitive expansion on an exact-content
-                // hit; the cached output is already post-expansion.
+                // ConvertIndices and primitive expansion while no write was noted
+                // in its source; the cached output is already post-expansion.
                 auto& converted = indexScratch;
                 if (!info.indexed) converted.clear();
                 bool useIndices = false;
@@ -11030,18 +10995,21 @@ void main()
                 const uint8_t* indexSrc = nullptr;
                 size_t indexSrcBytes = 0;
                 geometry_prepare::IndexKey indexKey{};
+                geometry_prepare::SourceStamp indexStamp;
+                bool indexCacheable = false;
                 if (info.indexed)
                 {
                     indexSrcCount = std::min<uint32_t>(info.indexCount, info.indexBufferWords);
                     indexSrc = Phys(info.indexBase);
                     indexSrcBytes = size_t(indexSrcCount) * (info.index32 ? 4 : 2);
-                    if (indexSrcCount >= geometry_prepare::IndexCache::kMinCount)
+                    indexCacheable = indexSrcCount >= geometry_prepare::IndexCache::kMinCount &&
+                        !gpu::guest_writes::InCommandBuffer(info.indexBase & 0x1FFFFFFFu, uint32_t(indexSrcBytes));
+                    if (indexCacheable)
                     {
                         indexKey = { info.indexBase, indexSrcCount, info.primitiveType,
                             uint8_t(info.index32 ? 1 : 0), uint8_t(info.indexEndian & 3) };
                         auto it = indexCache.find(indexKey);
-                        if (it != indexCache.end() && SourceMatches(it->second.validatedEpoch,
-                            [&] { return it->second.content.Matches(indexSrc, indexSrcBytes); }, info.indexBase))
+                        if (it != indexCache.end() && geometry_prepare::Unchanged(it->second.stamp, info.indexBase, indexSrcBytes))
                         {
                             cachedIndexEntry = &it->second;
                             it->second.lastFrame = frame;
@@ -11051,7 +11019,9 @@ void main()
                         }
                         else
                         {
+                            if (it != indexCache.end()) ++sourceRetakes;
                             // Convert below, then replace the cached result.
+                            indexStamp = geometry_prepare::TakeStamp(info.indexBase, indexSrcBytes);
                             converted.resize(indexSrcCount);
                             geometry_prepare::ConvertIndices(indexSrc, converted.data(), indexSrcCount, info.index32, info.indexEndian);
                             useIndices = true;
@@ -11101,16 +11071,15 @@ void main()
                 }
                 // Expanded rect lists fold VGT_INDX_OFFSET into the indices, which
                 // the cache key does not cover.
-                if (info.indexed && !indexCached && indexSrcCount >= geometry_prepare::IndexCache::kMinCount &&
+                if (info.indexed && !indexCached && indexCacheable &&
                     !(info.primitiveType == 8 && rectListExpansion))
                 {
                     // Store the post-expansion result against the exact source
                     // bytes; a later identical draw copies it verbatim.
                     geometry_prepare::IndexEntry entry;
                     entry.data = converted;
-                    entry.content.Capture(indexSrc, indexSrcBytes);
+                    entry.stamp = indexStamp;
                     entry.lastFrame = frame;
-                    entry.validatedEpoch = g_commandProcessor.SyncEpoch();
                     indexCache.emplace(indexKey, std::move(entry));
                     if (cpuTimingEnabled) ++indexCacheMisses;
                 }
@@ -14676,17 +14645,11 @@ void main()
                     r.indexCache.AllocatedBytes(), r.indexCache.PeakBytes(), r.indexCache.Evictions());
                 r.indexCacheHits = r.indexCacheMisses = 0;
             }
-            {
-                static const bool verify = [] { const char* v = getenv("LO_REVALIDATE_VERIFY"); return v && strcmp(v, "0") != 0; }();
+            if (render_timing::Enabled()) {
                 auto& r = *g_renderer;
-                const uint64_t epoch = g_commandProcessor.SyncEpoch();
-                if (render_timing::Enabled() || (verify && r.frame % 60 == 0))
-                    LOG_INFO("source revalidation frame={} sync_epochs={} compared={} skipped={} verify_mismatches={} scope=since_previous_line",
-                        r.frame, epoch - r.revalidationEpoch, r.revalidationChecks, r.revalidationSkips, r.revalidationMismatches);
-                if (render_timing::Enabled() || r.frame % 60 == 0) {
-                    r.revalidationEpoch = epoch;
-                    r.revalidationChecks = r.revalidationSkips = r.revalidationMismatches = 0;
-                }
+                LOG_INFO("source writes frame={} published={} retaken={} direct={} scope=since_previous_line",
+                    r.frame, gpu::guest_writes::Published(), r.sourceRetakes, r.sourceDirect);
+                r.sourceRetakes = r.sourceDirect = 0;
             }
             if (render_timing::Enabled()) {
                 Renderer& r = *g_renderer;

@@ -1,20 +1,47 @@
 #pragma once
 
 #include "geometry_prepare.h"
+#include "guest_writes.h"
 #include <ankerl/unordered_dense.h>
 #include <algorithm>
-#include <array>
-#include <bit>
 
 namespace gpu::geometry_prepare
 {
+    // Guest write state of a cached source when it was taken: the newest noted
+    // write in its range and the published note count read before that.
+    struct SourceStamp
+    {
+        uint32_t generation = 0;
+        uint32_t checked = 0;
+    };
+
+    // Call before reading the source bytes, so a write noted while they are
+    // read makes the next lookup take them again.
+    inline SourceStamp TakeStamp(uint32_t physical, size_t bytes)
+    {
+        SourceStamp stamp;
+        stamp.checked = guest_writes::Published();
+        stamp.generation = guest_writes::Newest(physical & 0x1FFFFFFFu, uint32_t(bytes));
+        return stamp;
+    }
+
+    // True while no guest write was noted in the source's range since its
+    // stamp was taken. Without any new note anywhere, one load decides.
+    inline bool Unchanged(SourceStamp& stamp, uint32_t physical, size_t bytes)
+    {
+        const uint32_t published = guest_writes::Published();
+        if (stamp.checked == published) return true;
+        if (guest_writes::Newest(physical & 0x1FFFFFFFu, uint32_t(bytes)) > stamp.generation) return false;
+        stamp.checked = published;
+        return true;
+    }
+
     struct VertexEntry
     {
         uint64_t offset;
-        VertexSampledContent content;
         uint64_t lastFrame;
         uint8_t slot = 0;
-        uint64_t validatedEpoch = 0; // CommandProcessor::SyncEpoch of the last content match
+        SourceStamp stamp;
     };
 
     // This is lookup metadata, not ownership of arena bytes. Discarding an
@@ -26,38 +53,17 @@ namespace gpu::geometry_prepare
         using Map = ankerl::unordered_dense::map<uint64_t, VertexEntry>;
         Map entries;
         size_t capacity;
-        size_t byteCapacity;
-        size_t capturedBytes = 0;
         size_t evictionCursor = 0;
         uint64_t evictions = 0;
-        // Changes whenever an entry is added, removed or recaptured: a pointer
+        // Changes whenever an entry is added, removed or refreshed: a pointer
         // taken at an unchanged version still names the same, unchanged entry.
         uint64_t version = 1;
-        // Snapshot storage of removed entries, reused by new ones, by size class
-        // (floor(log2(capacity))), at most kSparePerClass each and kSpareBytes total.
-        std::array<std::vector<std::vector<uint8_t>>, 64> spare;
-        size_t spareBytes = 0;
-        static size_t SizeClass(size_t bytes) { return size_t(std::bit_width(bytes)) - 1; }
-        void Keep(VertexEntry& entry)
-        {
-            auto storage = entry.content.Release();
-            const size_t capacity = storage.capacity();
-            if (!capacity) return;
-            auto& list = spare[SizeClass(capacity)];
-            if (list.size() < kSparePerClass && spareBytes + capacity <= kSpareBytes) {
-                spareBytes += capacity;
-                list.push_back(std::move(storage));
-            }
-        }
 
     public:
-        static constexpr size_t kSparePerClass = 16;
-        static constexpr size_t kSpareBytes = 16ull << 20;
         static constexpr size_t kCapacity = 65536;
         static constexpr size_t kEvictionCandidates = 16;
-        static constexpr size_t kByteCapacity = 256ull << 20;
-        explicit VertexCache(size_t limit = kCapacity, size_t bytes = kByteCapacity)
-            : capacity(std::max(size_t(1), limit)), byteCapacity(bytes)
+        explicit VertexCache(size_t limit = kCapacity)
+            : capacity(std::max(size_t(1), limit))
         {
             entries.reserve(capacity);
         }
@@ -65,40 +71,12 @@ namespace gpu::geometry_prepare
         auto end() { return entries.end(); }
         auto find(uint64_t key) { return entries.find(key); }
         auto erase(Map::iterator it) {
-            capturedBytes -= it->second.content.AllocatedBytes();
-            Keep(it->second);
             ++version;
             return entries.erase(it);
         }
-        // New contents for an entry that stays cached; keeps the byte total.
-        void Recapture(Map::iterator it, const uint8_t* data, size_t bytes)
-        {
-            capturedBytes -= it->second.content.AllocatedBytes();
-            it->second.content.Capture(data, bytes);
-            capturedBytes += it->second.content.AllocatedBytes();
-            ++version;
-        }
+        // The caller gave an entry that stays cached a new arena copy and stamp.
+        void Refreshed() { ++version; }
         uint64_t Version() const { return version; }
-        // Storage for a new entry's snapshot: a released one of at least `bytes`
-        // from the same size class or the next one up (under 4x), else empty.
-        std::vector<uint8_t> TakeSpare(size_t bytes)
-        {
-            if (!bytes) return {};
-            const size_t first = SizeClass(bytes);
-            for (size_t c = first; c <= first + 1 && c < spare.size(); ++c) {
-                auto& list = spare[c];
-                for (size_t i = list.size(); i-- > 0;)
-                    if (list[i].capacity() >= bytes) {
-                        std::vector<uint8_t> storage = std::move(list[i]);
-                        if (i + 1 != list.size()) list[i] = std::move(list.back());
-                        list.pop_back();
-                        spareBytes -= storage.capacity();
-                        return storage;
-                    }
-            }
-            return {};
-        }
-        size_t CapturedBytes() const { return capturedBytes; }
         size_t size() const { return entries.size(); }
         size_t bucket_count() const { return entries.bucket_count(); }
         uint64_t Evictions() const { return evictions; }
@@ -108,11 +86,7 @@ namespace gpu::geometry_prepare
             // Caller already checked/removed this key; no iterators or entry
             // references survive insertion. Sample a rotating bounded window,
             // keeping recently used buffers without a per-hit LRU list update.
-            const size_t bytes = entry.content.AllocatedBytes();
-            // Oversized buffers remain usable for this draw, but are not cached.
-            if (bytes > byteCapacity) return;
-            while (!entries.empty() &&
-                (entries.size() == capacity || capturedBytes > byteCapacity - bytes))
+            while (entries.size() == capacity)
             {
                 size_t victim = evictionCursor % entries.size();
                 const size_t count = std::min(kEvictionCandidates, entries.size());
@@ -127,8 +101,7 @@ namespace gpu::geometry_prepare
                 erase(entries.begin() + victim);
                 ++evictions;
             }
-            const auto [it, inserted] = entries.emplace(key, std::move(entry));
-            if (inserted) capturedBytes += bytes;
+            entries.emplace(key, std::move(entry));
             ++version;
         }
     };
@@ -160,10 +133,8 @@ namespace gpu::geometry_prepare
     {
         // Final post-expansion indices, ready to upload.
         std::vector<uint32_t> data;
-        // Source guest bytes the conversion was built from.
-        SampledContent content;
-        // Lazily computed on a motion draw; exact source validation above
-        // ensures this fingerprint still describes the cached output.
+        // Lazily computed on a motion draw; an entry is replaced when its
+        // source changes, so this fingerprint describes the cached output.
         uint64_t motionIndexHash = 0;
         bool motionIndexHashReady = false;
         uint64_t lastFrame = 0;
@@ -176,14 +147,14 @@ namespace gpu::geometry_prepare
         uint64_t arenaOffset = UINT64_MAX;
         uint64_t arenaGeneration = 0;
         uint8_t arenaSlot = 0;
-        uint64_t validatedEpoch = 0; // CommandProcessor::SyncEpoch of the last content match
-        size_t AllocatedBytes() const { return content.AllocatedBytes() + data.capacity() * sizeof(uint32_t); }
+        SourceStamp stamp;
+        size_t AllocatedBytes() const { return data.capacity() * sizeof(uint32_t); }
     };
 
     // Converted index buffers are host-side scratch copies, so unlike the
     // vertex arena no slot purge is needed: entries stay valid across wraps.
     // Only large buffers are cached: below kMinCount a direct conversion is
-    // cheaper than the lookup plus content validation.
+    // cheaper than the lookup.
     class IndexCache
     {
         using Map = ankerl::unordered_dense::map<IndexKey, IndexEntry, IndexKeyHash>;

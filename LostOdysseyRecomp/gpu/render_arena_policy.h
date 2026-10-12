@@ -55,13 +55,6 @@ namespace gpu::render_arena
         return decision;
     }
 
-    // Guest bytes match: reuse the existing arena copy from either half.
-    // Slot identity is not part of the hit; overwriting still requires a miss.
-    inline bool VertexCacheReusable(bool contentMatches)
-    {
-        return contentMatches;
-    }
-
     struct WrapFenceWait
     {
         bool waitIncoming = false;

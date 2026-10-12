@@ -18,7 +18,6 @@ int main() {
     using gpu::render_arena::SlotLow;
     using gpu::render_arena::SubmittedSlotAfterFlush;
     using gpu::render_arena::VertexAllocSlot;
-    using gpu::render_arena::VertexCacheReusable;
     using gpu::render_arena::WrapAction;
     using gpu::render_arena::WrapFenceWaits;
     using gpu::render_arena::kArenaHeadroom;
@@ -55,10 +54,6 @@ int main() {
     Check(wrapReset.resetIncoming == true, "both-low wrap resets incoming");
     Check(wrapReset.incomingSlot == 0, "wrap from slot 1 recycles slot 0");
     Check(wrapReset.incomingSlot != 1, "never recycle the current slot as incoming");
-
-    Check(VertexCacheReusable(true), "matching copy is reusable");
-    Check(VertexCacheReusable(true), "other-slot matching copy is a hit");
-    Check(!VertexCacheReusable(false), "content mismatch is a miss");
 
     Check(SubmittedSlotAfterFlush(1) == 0, "flush to slot 1 submitted slot 0");
     Check(SubmittedSlotAfterFlush(0) == 1, "flush to slot 0 submitted slot 1");

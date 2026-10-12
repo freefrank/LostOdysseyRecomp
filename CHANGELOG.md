@@ -24,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Music no longer stays stuck on the previous area's track after several item fanfares; it used to recover only after a battle or a restart (#375).
 - Android: fewer stutters once the device gets hot; the game's threads no longer run on the slow cores.
 - Android: the game's own code runs a little faster.
+- Less CPU time and memory use: model data is no longer re-checked every frame, and large models no longer occasionally draw with outdated data.
 
 ### 简体中文
 
@@ -43,6 +44,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 道具获得的音效响过几次之后，音乐不再卡在上一个区域的曲子上；以前要打一场仗或重启才恢复（#375）。
 - Android：设备发热后卡顿更少，游戏线程不再跑到慢核上。
 - Android：游戏本身的代码运行稍快一些。
+- CPU 和内存占用更少：不再每帧重新核对模型数据；大模型也不会再偶尔用旧数据绘制。
 
 ## [v0.9.22](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.22) — 2026-10-10
 
