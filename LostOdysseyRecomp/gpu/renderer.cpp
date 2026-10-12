@@ -12207,6 +12207,7 @@ void main()
                         if (maskPipeline) {
                             TextureSetCache::Key maskBindings[3] = {
                                 textureBindings[0], textureBindings[1], textureBindings[2]};
+                            uint32_t maskSlots = 0;
                             for (unsigned slot : {0u, 2u, 3u}) {
                                 if (slot != 0 && !tone) continue;
                                 if (slot == 2 && !needDof) continue;
@@ -12214,10 +12215,13 @@ void main()
                                 auto& input = *alphaPostInputs[slot];
                                 Gpu().fsrAlphaBridgeUses.push_back(input.fetch.mask);
                                 maskBindings[0][slot] = input.fetch.mask->texture.get();
+                                maskSlots |= 1u << slot;
                             }
-                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0], textureSwapSlots);
-                            auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1], textureSwapSlots);
-                            auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2], textureSwapSlots);
+                            // XeFsrMaskTap reads a mask's .r raw: never through an R/B-swapped view.
+                            const uint32_t maskSwapSlots = textureSwapSlots & ~maskSlots;
+                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0], maskSwapSlots);
+                            auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1], maskSwapSlots);
+                            auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2], maskSwapSlots);
                             const RenderBufferReference maskConstants[3] = {
                                 {uploadRing, vsOffset}, {uploadRing, sharedOffset}, {uploadRing, psOffset}};
                             RenderDescriptorSet* maskSets[] = {set0, maskSet1, maskSet2,
