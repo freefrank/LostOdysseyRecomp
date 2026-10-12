@@ -46,6 +46,12 @@ public class GameStorageTest {
     }
 
     @Test
+    public void volumeRootIsFourLevelsAboveTheAppFolder() {
+        assertEquals(new File("/storage/1234-ABCD"),
+            GameStorage.volumeRoot(new File("/storage/1234-ABCD/Android/data/io.github.freefrank.lostodyssey/files")));
+    }
+
+    @Test
     public void fallsBackToPrivateStorageWithoutVolumes() {
         File fallback = temporary.getRoot();
         assertEquals(new File(fallback, "game/disc1"), GameStorage.selectDisc1(null, Collections.emptyList(), fallback));

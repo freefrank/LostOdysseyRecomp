@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -195,6 +196,8 @@ public final class RuntimeActivity extends SDLActivity {
         // Logs go where a PC can copy them over USB; the device line names the phone.
         nativeSetenv("LO_LOG_DIR", PlayerLogs.directory(this).getAbsolutePath());
         nativeSetenv("LO_ANDROID_DEVICE", PlayerLogs.deviceDescription());
+        // The importer's drive list: SD cards and USB drives (apps cannot list /storage).
+        nativeSetenv("LO_STORAGE_VOLUMES", TextUtils.join(":", GameStorage.removableRoots(this)));
         // Mesa drivers (Turnip) keep compiled pipelines on disk only with a cache
         // directory; Android gives them none. Other drivers ignore these.
         nativeSetenv("MESA_SHADER_CACHE_DIR", new File(getCacheDir(), "mesa_shader_cache").getAbsolutePath());

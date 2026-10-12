@@ -691,6 +691,21 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
     };
 
+    auto handleSelectCurrent = [&]() {
+        if (state.isScanning.load() || state.isImporting.load()) return;
+        if (state.screen == ScreenState::BrowseSource)
+        {
+            startScan(state.currentSourceBrowse);
+            state.screen = ScreenState::ReviewDiscs;
+            state.reviewSelectedIndex = ReviewActionStart(state.scanResult);
+        }
+        else if (state.screen == ScreenState::BrowseDest)
+        {
+            state.selectedDest = state.currentDestBrowse;
+            state.screen = ScreenState::ReviewDiscs;
+        }
+    };
+
     auto handleAction = [&]() {
         if (state.isScanning.load() || state.isImporting.load()) return;
         if (state.screen == ScreenState::BrowseSource)
@@ -715,6 +730,11 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                         auto can = std::filesystem::canonical(item.path, ec);
                         state.currentSourceBrowse = ec ? item.path : can;
                         refreshSourceList();
+                    }
+                    else
+                    {
+                        // Opening a disc image selects the folder that holds it, with the other discs.
+                        handleSelectCurrent();
                     }
                 }
             }
@@ -771,21 +791,6 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         }
         else if (state.screen == ScreenState::Error)
         {
-            state.screen = ScreenState::ReviewDiscs;
-        }
-    };
-
-    auto handleSelectCurrent = [&]() {
-        if (state.isScanning.load() || state.isImporting.load()) return;
-        if (state.screen == ScreenState::BrowseSource)
-        {
-            startScan(state.currentSourceBrowse);
-            state.screen = ScreenState::ReviewDiscs;
-            state.reviewSelectedIndex = ReviewActionStart(state.scanResult);
-        }
-        else if (state.screen == ScreenState::BrowseDest)
-        {
-            state.selectedDest = state.currentDestBrowse;
             state.screen = ScreenState::ReviewDiscs;
         }
     };

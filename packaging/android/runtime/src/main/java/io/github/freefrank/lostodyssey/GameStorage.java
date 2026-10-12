@@ -3,6 +3,9 @@ package io.github.freefrank.lostodyssey;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.MediaScannerConnection;
+import android.os.Build;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -40,6 +43,37 @@ final class GameStorage {
         File[] dirs = context.getExternalFilesDirs(null);
         if (dirs != null) for (File dir : Arrays.asList(dirs)) if (dir != null) result.add(dir);
         return result;
+    }
+
+    /**
+     * The roots of the mounted SD cards and USB drives, for the importer's drive
+     * list: apps cannot list {@code /storage}, so the native side cannot find them.
+     */
+    static List<File> removableRoots(Context context) {
+        List<File> roots = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= 30 /* Android 11 (R) */) {
+            StorageManager storage = context.getSystemService(StorageManager.class);
+            if (storage == null) return roots;
+            for (StorageVolume volume : storage.getStorageVolumes()) {
+                File directory = volume.getDirectory();
+                if (!volume.isPrimary() && directory != null) roots.add(directory);
+            }
+            return roots;
+        }
+        // Before Android 11 only the app folders name the volumes; the first is the internal one.
+        List<File> volumes = volumes(context);
+        for (File files : volumes.subList(Math.min(1, volumes.size()), volumes.size())) {
+            File root = volumeRoot(files);
+            if (root != null) roots.add(root);
+        }
+        return roots;
+    }
+
+    /** {@code /storage/1234-ABCD} for the app folder {@code /storage/1234-ABCD/Android/data/<package>/files}. */
+    static File volumeRoot(File appFiles) {
+        File root = appFiles;
+        for (int level = 0; level < 4 && root != null; ++level) root = root.getParentFile();
+        return root;
     }
 
     /** Creates {@code game/} with a README on each volume; returns the README paths written. */
