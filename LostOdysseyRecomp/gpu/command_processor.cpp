@@ -117,14 +117,16 @@ namespace gpu
     static const char* const g_shaderDumpDirectory = getenv("LO_SHADER_DUMP_DIR");
     static uint32_t g_detailBudget = 0;
 
-    // words point at big-endian microcode in guest memory.
-    static void CaptureShader(uint32_t type, const uint32_t* words, uint32_t count)
+    // words point at big-endian microcode: guest memory for IM_LOAD, the
+    // packet's inline payload for IM_LOAD_IMMEDIATE (`immediate`).
+    static void CaptureShader(uint32_t type, const uint32_t* words, uint32_t count, bool immediate)
     {
         if (type > 1 || count == 0 || count > 0x10000)
             return;
         if (g_gpuStats) g_frame.shaderLoads++;
         auto& snapshot = g_activeShaderSnapshots[type];
-        if (!snapshot.Load(words, count)) return;
+        if (!(immediate ? snapshot.LoadImmediate(words, count) : snapshot.Load(words, count, g_commandProcessor.SyncEpoch())))
+            return;
         const char* dumpDirectory = g_shaderDumpDirectory;
         if (!g_gpuStats && !dumpDirectory) return;
         const uint64_t hash = snapshot.CommandHash();
@@ -1590,7 +1592,7 @@ namespace gpu
                 LOG_ERROR("IM_LOAD: invalid physical shader extent");
                 return false;
             }
-            CaptureShader(addrType & 3, reinterpret_cast<uint32_t*>(TranslatePhysical(addrType & ~3u)), sizeDwords);
+            CaptureShader(addrType & 3, reinterpret_cast<uint32_t*>(TranslatePhysical(addrType & ~3u)), sizeDwords, false);
             reader.Advance(count - 2);
             return true;
         }
@@ -1607,7 +1609,7 @@ namespace gpu
             }
             if (const auto* words = reader.Contiguous(sizeDwords))
             {
-                CaptureShader(type & 3, words, sizeDwords);
+                CaptureShader(type & 3, words, sizeDwords, true);
                 reader.Advance(count - 2);
             }
             else
@@ -1616,7 +1618,7 @@ namespace gpu
                 // instead of passing a span that runs beyond the ring storage.
                 std::vector<uint32_t> snapshotWords(sizeDwords);
                 for (auto& word : snapshotWords) word = ByteSwap(reader.ReadAndSwap());
-                CaptureShader(type & 3, snapshotWords.data(), sizeDwords);
+                CaptureShader(type & 3, snapshotWords.data(), sizeDwords, true);
                 reader.Advance(count - 2 - sizeDwords);
             }
             return true;

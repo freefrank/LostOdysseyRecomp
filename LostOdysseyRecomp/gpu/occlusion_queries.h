@@ -172,6 +172,7 @@ namespace gpu::occlusion
         Write Begin(uint32_t address, uint64_t owner = 0)
         {
             const uint32_t slot = SlotOf(address);
+            if (active_) Keep(active_->parts);
             active_ = Query{slot, ++generations_[slot], counter_};
             active_->owner = owner ? owner : slot;
             // Reuse a finished query's part storage: one allocation per query
@@ -196,13 +197,18 @@ namespace gpu::occlusion
             const uint32_t slot = SlotOf(address);
             if (!active_ || active_->slot != slot) {
                 // An END without its BEGIN cannot be measured.
-                if (active_ && active_->slot != slot) active_.reset();
+                if (active_ && active_->slot != slot) {
+                    Keep(active_->parts);
+                    active_.reset();
+                }
                 return Unmeasured(address, counter_);
             }
             Query query = std::move(*active_);
             active_.reset();
-            if (query.parts.empty() || query.parts.size() != query.drawsSeen)
+            if (query.parts.empty() || query.parts.size() != query.drawsSeen) {
+                Keep(query.parts);
                 return Unmeasured(address, query.begin);
+            }
             query.end = address;
             std::optional<Write> write;
             query.history = mode_ == Mode::History && IsHistoryOwner(query.owner);
@@ -343,13 +349,19 @@ namespace gpu::occlusion
                     if (!it->written && it->begin + samples - counter_ < 0x80000000u) counter_ = it->begin + samples;
                 }
                 if (!it->written) --unwritten_;
-                if (it->parts.capacity() && spareParts_.size() < kSparePartLists) {
-                    it->parts.clear();
-                    spareParts_.push_back(std::move(it->parts));
-                }
+                Keep(it->parts);
                 it = pending_.erase(it);
             }
             return writes;
+        }
+
+        // Parks a finished query's part storage for the next Begin.
+        void Keep(std::vector<Part>& parts)
+        {
+            if (parts.capacity() && spareParts_.size() < kSparePartLists) {
+                parts.clear();
+                spareParts_.push_back(std::move(parts));
+            }
         }
 
         Mode mode_;
@@ -357,7 +369,10 @@ namespace gpu::occlusion
         size_t unwritten_ = 0; // pending queries whose END record waits for host results
         std::optional<Query> active_;
         std::deque<Query> pending_;
-        static constexpr size_t kSparePartLists = 256;
+        // Queries wait in pending_ for their batch (a frame or more in Mode::History
+        // and Strict), so a frame's worth of lists must fit here or every Begin past
+        // the bound allocates again. Never more than the queries once in flight.
+        static constexpr size_t kSparePartLists = 8192;
         std::vector<std::vector<Part>> spareParts_; // cleared part lists of finished queries
         std::unordered_map<uint32_t, uint32_t> generations_;
         std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner

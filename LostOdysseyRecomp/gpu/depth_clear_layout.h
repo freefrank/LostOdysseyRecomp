@@ -42,12 +42,13 @@ inline void CoalesceDepthClearRects(std::vector<DepthClearRect>& rects)
 // Map a rectangle between 32-bit depth views of the same EDRAM base.
 // EDRAM tiles contain 80 x 16 samples; MSAA changes the pixel-to-sample
 // scale, while a different pitch changes where each tile appears on screen.
-inline std::vector<DepthClearRect> MapDepthClear(
+// Replaces the contents of `result`, keeping its storage.
+inline void MapDepthClear(std::vector<DepthClearRect>& result,
     uint32_t srcPitch, uint32_t srcMsaa, DepthClearRect area,
     uint32_t dstPitch, uint32_t dstHeight, uint32_t dstMsaa)
 {
-    std::vector<DepthClearRect> result;
-    if (!srcPitch || !dstPitch || srcMsaa > 2 || dstMsaa > 2) return result;
+    result.clear();
+    if (!srcPitch || !dstPitch || srcMsaa > 2 || dstMsaa > 2) return;
     const uint32_t sx = srcMsaa == 2 ? 2 : 1, sy = srcMsaa ? 2 : 1;
     const uint32_t dx = dstMsaa == 2 ? 2 : 1, dy = dstMsaa ? 2 : 1;
     const uint32_t srcTiles = (srcPitch * sx + 79) / 80;
@@ -73,6 +74,14 @@ inline std::vector<DepthClearRect> MapDepthClear(
         }
         y = endY;
     }
+}
+
+inline std::vector<DepthClearRect> MapDepthClear(
+    uint32_t srcPitch, uint32_t srcMsaa, DepthClearRect area,
+    uint32_t dstPitch, uint32_t dstHeight, uint32_t dstMsaa)
+{
+    std::vector<DepthClearRect> result;
+    MapDepthClear(result, srcPitch, srcMsaa, area, dstPitch, dstHeight, dstMsaa);
     return result;
 }
 }

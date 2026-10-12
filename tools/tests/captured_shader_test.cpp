@@ -117,5 +117,54 @@ int main()
             Check(stage.CommandHash() == WordReference(big[s]) && stage.RendererHash(ids) == ByteReference(big[s]));
         }
     }
+    // A source that matched in the current sync epoch is not compared again
+    // until the epoch advances; epoch 0 compares every load.
+    {
+        CapturedShader stage;
+        std::vector<uint32_t> a{1, 2, 3, 4}, b{5, 6, 7};
+        Check(stage.Load(a.data(), 4, 7) && stage.CommandHash() == WordReference(a));
+        Check(stage.Load(b.data(), 3, 7) && stage.CommandHash() == WordReference(b));
+        const auto before = a;
+        a[1] ^= 1; // a guest write racing the GPU inside epoch 7
+        Check(stage.Load(a.data(), 4, 7) && stage.CommandHash() == WordReference(before));
+        Check(!stage.Load(a.data(), 4, 7));
+        Check(stage.Load(a.data(), 4, 8) && stage.CommandHash() == WordReference(a));
+        Check(!stage.Load(a.data(), 4, 8));
+        Check(stage.Load(b.data(), 3, 8) && stage.Load(a.data(), 4, 8) && stage.Words()[1] == a[1]);
+        a[2] ^= 1;
+        Check(stage.Load(a.data(), 4) && stage.CommandHash() == WordReference(a));
+        a[3] ^= 1;
+        Check(stage.Load(a.data(), 4) && stage.CommandHash() == WordReference(a));
+        // Another length at the same source is captured again.
+        Check(stage.Load(a.data(), 3, 8) && stage.Count() == 3);
+        Check(stage.Load(a.data(), 4, 8) && stage.Count() == 4 && stage.CommandHash() == WordReference(a));
+    }
+    // Inline words are compared on every load and kept by content: the same
+    // command-stream place carries other words next time.
+    {
+        CapturedShader stage;
+        CountingCache ids;
+        const std::vector<uint32_t> first{9, 8, 7}, second{1, 2, 3};
+        std::vector<uint32_t> ring = first;
+        Check(stage.LoadImmediate(ring.data(), 3) && stage.CommandHash() == WordReference(first));
+        Check(stage.RendererHash(ids) == ByteReference(first) && ids.calls == 1);
+        Check(!stage.LoadImmediate(ring.data(), 3));
+        ring = second;
+        Check(stage.LoadImmediate(ring.data(), 3) && stage.CommandHash() == WordReference(second));
+        Check(stage.RendererHash(ids) == ByteReference(second) && ids.calls == 2);
+        ring = first;
+        Check(stage.LoadImmediate(ring.data(), 3) && stage.RendererHash(ids) == ByteReference(first) && ids.calls == 2);
+        // More distinct payloads than kept snapshots: still exact.
+        for (uint32_t n = 0; n < 40; ++n) {
+            ring = {n, n * 3u, n * 7u, n + 1};
+            Check(stage.LoadImmediate(ring.data(), 4) && stage.CommandHash() == WordReference(ring));
+            Check(stage.RendererHash(ids) == ByteReference(ring));
+        }
+        std::vector<uint32_t> guest{4, 5, 6};
+        Check(stage.Load(guest.data(), 3, 1) && stage.CommandHash() == WordReference(guest));
+        ring = guest;
+        Check(!stage.LoadImmediate(ring.data(), 3));
+        Check(!stage.Load(guest.data(), 3, 1));
+    }
     std::printf("captured shader: %u checks passed\n", checks);
 }

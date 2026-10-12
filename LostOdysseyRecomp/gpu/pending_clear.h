@@ -78,9 +78,12 @@ public:
         }
         if (!ops_.empty() && ops_.back().SameValue(op)) {
             Op& last = ops_.back();
-            if (last.Whole()) return; // Already covers these pixels with this value.
-            if (op.Whole()) last.rects.clear();
-            else last.rects.insert(last.rects.end(), op.rects.begin(), op.rects.end());
+            // A whole last clear already covers these pixels with this value.
+            if (!last.Whole()) {
+                if (op.Whole()) last.rects.clear();
+                else last.rects.insert(last.rects.end(), op.rects.begin(), op.rects.end());
+            }
+            Keep(op.rects);
             return;
         }
         ops_.push_back(std::move(op));
@@ -91,6 +94,26 @@ public:
         std::vector<Op> ops;
         ops.swap(ops_);
         return ops;
+    }
+
+    // Hands back the ops of a Take() after they ran. Their storage serves
+    // later clears of this texture: SpareRects() and the op list itself.
+    void Recycle(std::vector<Op>&& ops)
+    {
+        for (auto& op : ops) Keep(op.rects);
+        if (ops_.empty() && ops_.capacity() < ops.capacity()) {
+            ops.clear();
+            ops_.swap(ops);
+        }
+    }
+
+    // Empty rectangle storage for a clear about to be recorded here.
+    std::vector<Rect> SpareRects()
+    {
+        if (spareRects_.empty()) return {};
+        std::vector<Rect> rects = std::move(spareRects_.back());
+        spareRects_.pop_back();
+        return rects;
     }
 
     void Drop() { ops_.clear(); }
@@ -113,7 +136,16 @@ public:
     }
 
 private:
+    void Keep(std::vector<Rect>& rects)
+    {
+        if (rects.capacity() && spareRects_.size() < kMaxOps) {
+            rects.clear();
+            spareRects_.push_back(std::move(rects));
+        }
+    }
+
     std::vector<Op> ops_;
+    std::vector<std::vector<Rect>> spareRects_;
 };
 
 } // namespace gpu::pending_clear
