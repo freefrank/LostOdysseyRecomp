@@ -57,7 +57,7 @@
         "Source key": "runtime-kernel-hle-foundation"
       },
       "title": "Implement guest memory, threads and kernel services",
-      "body_sha256": "414f1ccc82c534f1e1b2fe8bfef79a3a66b1fdbeaf6ce6fa5bf799c3a7ced51b"
+      "body_sha256": "728069687d2971a8f913567107c891a666535496c041c176150d0392c077181a"
     },
     "d3d12-renderer-foundation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ch4",
@@ -72,7 +72,7 @@
         "Source key": "d3d12-renderer-foundation"
       },
       "title": "Render the game through the D3D12 backend",
-      "body_sha256": "a0c04986cd133f5604cd6c80f875f3d634f9e4ae981a3dd1b42e66398d86926e"
+      "body_sha256": "50048a9c26b99f06eb79e2f1c4097a446690a02fee6455f1098f8a880d103dd2"
     },
     "xenos-runtime-shader-translation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cjc",
@@ -87,7 +87,7 @@
         "Source key": "xenos-runtime-shader-translation"
       },
       "title": "Translate Xenos shaders to HLSL and DXIL",
-      "body_sha256": "767df8e1bfab56548213573d5979ffce262b1e0212292d7b8954a268009b2486"
+      "body_sha256": "bd1c99a5f1344edb66f308ac9cec3a0a9e69b61610e9c40da29781393f368cd1"
     },
     "controller-keyboard-player-one": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ck4",
@@ -117,7 +117,7 @@
         "Source key": "profile-signin-persistence"
       },
       "title": "Persist guest profiles and complete startup sign-in",
-      "body_sha256": "c5efc9a0a0aff2fbe7d2f8d383ac1e4083986aaa3c773bff9ad7a3807c2226f2"
+      "body_sha256": "e2087829442c0c16a676e9eb7521ebc71ccecb02963b0e25e9dc9ff3759c1faf"
     },
     "runtime-diagnostic-instrumentation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cns",
@@ -132,7 +132,7 @@
         "Source key": "runtime-diagnostic-instrumentation"
       },
       "title": "Add persistent runtime and GPU-stall diagnostics",
-      "body_sha256": "37c9e7687d5cb9ba2b919c498251027d4a1a99c4d18c576e07fc13180f83f073"
+      "body_sha256": "f4072653a961ca35797d69ec6e6f8fc65a8724a25a4d4d520fc660aca2d4d5fc"
     },
     "conditional-return-memset-boundary": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56coY",
@@ -162,7 +162,7 @@
         "Source key": "gpu-resolve-resource-lifetime"
       },
       "title": "Move resolves to the GPU and bound renderer caches",
-      "body_sha256": "7e54e439d13f08e1900f1e1cc8c57503f07c3bd3a6e0049c3ff8c2dccf3316ab"
+      "body_sha256": "c9e6b4c6e9109f6006297478d34f6b78af44dc574358ab3105959adddfedacdf"
     },
     "guest-timebase-frequency": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56crE",
@@ -177,7 +177,7 @@
         "Source key": "guest-timebase-frequency"
       },
       "title": "Use the guest timebase frequency",
-      "body_sha256": "1084392a655637b04600b8c3c8b74c13a70b5767410f019f3893dbdd1768d438"
+      "body_sha256": "d41d5551300cd6dfebefae7d4520b3ece80471c5bf75c76b9aefec6b2e42d1ac"
     },
     "character-index-geometry": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56csA",
@@ -192,7 +192,7 @@
         "Source key": "character-index-geometry"
       },
       "title": "Correct character mesh index alignment",
-      "body_sha256": "29c206ba3924fc661e9e33ad9467f9432b657caab56881cd7465305bd6f3f27c"
+      "body_sha256": "344fc8464bb0c3cbbe98046f4ca1872cd84d882416bd234b7a989ba316ef1c62"
     },
     "postprocess-texture-colors": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ctc",
@@ -207,7 +207,7 @@
         "Source key": "postprocess-texture-colors"
       },
       "title": "Correct postprocessing coordinates and texture colors",
-      "body_sha256": "333fd8284bd8d4ffb506205782762de8fae420b554695fa10fb61b0c4b017f27"
+      "body_sha256": "52964724204c87fe07400f861235a0190476440a3abaadce26ee3da1830d67f1"
     },
     "physical-memory-render-aliases": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cuU",
@@ -237,7 +237,7 @@
         "Source key": "lighting-stencil-depth-clear"
       },
       "title": "Restore stencil-gated lighting and depth clears",
-      "body_sha256": "1bb459055d632567b9eb7e4b9b5bb46088d653f503c879927cc50ce92c4ce868"
+      "body_sha256": "3ee0f66f40a82f3c8f5eb76cfe518c9a16b8b46f8d91f8dba2ff8215136bb0d9"
     },
     "post-battle-whiteout": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cwc",
@@ -312,7 +312,7 @@
         "Source key": "encounter-animation-progression"
       },
       "title": "Restore random-encounter animation and attack progression",
-      "body_sha256": "14fd683505f05cb06267d0be2be8faf48cd6929d46694cb204ab0bcab8a20ab4"
+      "body_sha256": "5a853fceb31b1a74ee4812f8ac1b3f571ab034783f78ba57065b9dfb59f75150"
     },
     "ring-combat-resource": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56c3k",
@@ -327,7 +327,7 @@
         "Source key": "ring-combat-resource"
       },
       "title": "Restore the localized Ring combat resource",
-      "body_sha256": "72aa19f455e58ab28111f3ef29f6bd30bcb7c84f14ac138081f14b7a39c773eb"
+      "body_sha256": "5f711a9e243efee0e41d4600ffac8c2b59678f55db9c808b188319dbf1b9a799"
     },
     "debug-victory-controls": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56c4g",
@@ -342,7 +342,7 @@
         "Source key": "debug-victory-controls"
       },
       "title": "Add battle victory controls for debugging",
-      "body_sha256": "74f58b6a6b9774c328c52b583eee23d4fe96a83f574d172a51ed6ae75f950daf"
+      "body_sha256": "1c22c223df42e230748055d054748cd5c4b8e27d82ca43f329744be2ffce3777"
     },
     "debug-map-identification": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56c6U",
@@ -417,7 +417,7 @@
         "Source key": "window-event-thread"
       },
       "title": "Keep Windows messages responsive during rendering stalls",
-      "body_sha256": "adf597deed59d258bdb045965a9809906e8fced14320f2b20066519223d8e9cc"
+      "body_sha256": "bf30ae73fe5178f8b1c0bdce294092770931de74b98dfd6ac14dda728081ca3f"
     },
     "partial-depth-clear-layout": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dAw",
@@ -432,7 +432,7 @@
         "Source key": "partial-depth-clear-layout"
       },
       "title": "Preserve shadow tiles during partial depth clears",
-      "body_sha256": "d168d7daa24e61d883172542ab8ce494d4d1eb0f57e8cf240192cb31e4b9d187"
+      "body_sha256": "2d7bd8fe4643c72c9136e1538d5750dd6c2f389875a13eb2edb8cef0b324f736"
     },
     "ground-shadow-stencil-pass": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dCE",
@@ -447,7 +447,7 @@
         "Source key": "ground-shadow-stencil-pass"
       },
       "title": "Restore ground shadows after player movement",
-      "body_sha256": "f320c5504bc539c43c99003938240e5596388d105e6d05dbc16ee0e435ce2689"
+      "body_sha256": "a251f7b1ded32276be47ba1b0490cbd70aa2bb6b4780680c495bb5a3b51f72d7"
     },
     "batched-depth-clear-driver-crash": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dDc",
@@ -462,7 +462,7 @@
         "Source key": "batched-depth-clear-driver-crash"
       },
       "title": "Avoid the reproduced startup depth-clear driver crash",
-      "body_sha256": "f32df4dd2c9b102e4c4ca5dda9e9d50f3e1a88aa61febab17ca0562bec739f64"
+      "body_sha256": "f9fc3806dfbe1d9d92f011110d7604173a3b2079e11b7cfb833e40ae508b6f5d"
     },
     "map12-poster-depth-bias": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dEA",
@@ -477,7 +477,7 @@
         "Source key": "map12-poster-depth-bias"
       },
       "title": "Remove black patches on the Map12 poster",
-      "body_sha256": "0855b9b1f4dac2af2d2e91fcc19d21632a0856cf4642c344fed45cf1dd534dd4"
+      "body_sha256": "d0bc9a0690b5ca9fdaa9d117606a167d704dd9dd8b7b41a2c915111de72bfae4"
     },
     "startup-shader-preparation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dF8",
@@ -625,7 +625,7 @@
         "Source key": "amd-placed-resolve-initialization"
       },
       "title": "Fix tested AMD black and dark resolve output",
-      "body_sha256": "9bdbd1eefd289b1ae2e8ec0cb02aa0f44679f8c28d1ec239b67d621d1668e8a3"
+      "body_sha256": "be30dc9ca45433e676a512a191e42e2b7f1b01e101fd4c7b06a4a7351045de45"
     },
     "unicode-startup-save-paths": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dZY",
@@ -712,7 +712,7 @@
         "Source key": "bilingual-debug-menu"
       },
       "title": "Add independent English and Simplified Chinese Debug UI",
-      "body_sha256": "c78ced56fc44799d6c0b09738671f77802f771f741d5e04a237fa3800ab61080"
+      "body_sha256": "185ea7735292029aa9500d22a545f29509b467822a5cc63cc0f9f0ac4def7fec"
     },
     "smaa-camera-taa-settings": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dkQ",
@@ -727,7 +727,7 @@
         "Source key": "smaa-camera-taa-settings"
       },
       "title": "Add SMAA and experimental camera-based TAA",
-      "body_sha256": "15c4f142720b9a52861837bc59ee86da366b8ce75420a5b200e52f7501717dca"
+      "body_sha256": "684aaa9456edfa8ce34456c20dbfb8b9713366c7b9f90f9bf92f19c64095a840"
     },
     "output-resolution-text-pre-ui-aa": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dnE",
@@ -742,7 +742,7 @@
         "Source key": "output-resolution-text-pre-ui-aa"
       },
       "title": "Improve host text and avoid repeated scene anti-aliasing",
-      "body_sha256": "0ce74b8e719d6378e878e0a6833e94357fa2b91da185cb8255f50b5fdd610668"
+      "body_sha256": "6002327371aba5567599b91173b8fa45403d60b54466f2e3fa52d875e326e3f4"
     },
     "spatial-filter-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56doA",
@@ -757,7 +757,7 @@
         "Source key": "spatial-filter-quality"
       },
       "title": "Add Standard and High spatial scaling quality",
-      "body_sha256": "5d647d0068c4944c9dd3b03be18e3b544702792d0ba6c2e6422c4f26c396feb2"
+      "body_sha256": "52024fc26a4081725ae21f068a7aaddb7d93054efe4cd913e91936f67f533244"
     },
     "automatic-manual-internal-resolution": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dpA",
@@ -772,7 +772,7 @@
         "Source key": "automatic-manual-internal-resolution"
       },
       "title": "Render internally up to 4K with safe graphics preview",
-      "body_sha256": "a963bb77fb4aa58e6b7ee738b447b16b9088d411ac7688fe1bd80f539090fbcc"
+      "body_sha256": "112466f6f051b308d912e879db2c53323471d74b25e431a52fc3850a7b347008"
     },
     "taa-camera-reference-rejection": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dqk",
@@ -787,7 +787,7 @@
         "Source key": "taa-camera-reference-rejection"
       },
       "title": "Prevent false TAA camera-history rejection",
-      "body_sha256": "d98ae557ce2bc61796fce405bd7627114078a894af8afb096d7e3746a935451f"
+      "body_sha256": "2dfbcb51eef42f333bac781ce583c37a8095a5694a3fd58290a07ad472f0f0ae"
     },
     "saved-30-60-fps-controls": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56drw",
@@ -802,7 +802,7 @@
         "Source key": "saved-30-60-fps-controls"
       },
       "title": "Add saved 30 and 60 FPS controls with correct pacing",
-      "body_sha256": "a3a6b4ec9c7afb1773368354d30870f5957cccaf1f882a91ef30d2dc81e64c56"
+      "body_sha256": "a2988e87c1f4276b39194dd7fc4d484fb86750bc9822d52f4f49b9a4a47a89d9"
     },
     "dual-edition-cpx-metadata-index": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ds0",
@@ -817,7 +817,7 @@
         "Source key": "dual-edition-cpx-metadata-index"
       },
       "title": "Index CPX resource blocks for both supported editions",
-      "body_sha256": "e11780246d3c637f660ade206bfcd19257c3e880e521894f0503b67f754a15b4"
+      "body_sha256": "1f592e0c8f6859341e6b256715fda52644c94b111477abd9563144c7acd65f4b"
     },
     "issue5-missing-indirect-entries": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56duY",
@@ -846,7 +846,7 @@
         "Source key": "startup-allocation-error-context"
       },
       "title": "Report actionable guest allocation failure context",
-      "body_sha256": "07c6554efa1f9e62821e2a784cc949021d1ea8b0b5c15c5fb12e1cd37ef4b058"
+      "body_sha256": "14226b1cc0752b48b619aa2c543d0bca8967fc09849706c0d6a2348f4c59d8a2"
     },
     "temporal-upscaling-feasibility": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dwE",
@@ -860,7 +860,7 @@
         "Source key": "temporal-upscaling-feasibility"
       },
       "title": "Complete DLSS and FSR feasibility research",
-      "body_sha256": "3167de215095bb052cf2cec3dd694b0843847273853c8c48ccda926d1b9dd8c2"
+      "body_sha256": "7059b615f2ce60bab2f4cdd688004694672e18bd8f259f8fdc3fec1ded6bd288"
     },
     "map3-tire-taa-shadow-alignment": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dwo",
@@ -875,7 +875,7 @@
         "Source key": "map3-tire-taa-shadow-alignment"
       },
       "title": "Fix accepted Map3 tire-shadow flicker with TAA",
-      "body_sha256": "d2ac866d4663e65ae85cf6fbcce868462a171fd7a650b218ddba4ffae80a6bc0"
+      "body_sha256": "b7f9dfae0d4481b16d53c4d916676242829cf36e11914089b9d81d086fac67b7"
     },
     "three-frame-capture-process-log": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56dyc",
@@ -905,7 +905,7 @@
         "Source key": "battle-terrain-taa-six-paths"
       },
       "title": "Align six additional battle TAA position paths",
-      "body_sha256": "9789bc339b1074674d9f9fba94c587d8677b1a2ff2f55185bd8ea66c5e794502"
+      "body_sha256": "367d9c95544e656df3e5ec9e09d2d4e01ea7543ae808276a4aae7358124bb7c7"
     },
     "four-disc-taa-contract-audit": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56d08",
@@ -919,7 +919,7 @@
         "Source key": "four-disc-taa-contract-audit"
       },
       "title": "Audit the four-disc TAA shader contracts",
-      "body_sha256": "a8bbf6de2d74a304b3dd9c3196d85d37f053dc7a0f04d7cde9fb21aa147d9fb7"
+      "body_sha256": "c2c632f61697eee64f28dc744b0b31f82a038b40020c0f228747c53992c048ea"
     },
     "enemy-disappearance-capture-diagnosis": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56d14",
@@ -933,7 +933,7 @@
         "Source key": "enemy-disappearance-capture-diagnosis"
       },
       "title": "Localize the enemy-disappearance flicker report",
-      "body_sha256": "b6f883e4261d3e9657838a7ad737c71cf2f00230928f8061fd7696c961f4587b"
+      "body_sha256": "9086c2f9abbef6e119a7446d0f082e9e5a859f49d96272e5790ff16677d06ec3"
     },
     "background-capture-zip": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56d28",
@@ -1007,7 +1007,7 @@
         "Source key": "native-crash-runtime-log-sink"
       },
       "title": "Write native crash context into automatic runtime logs",
-      "body_sha256": "24d56b2bae13e127f9129ba7f86e1a32a02fd37d602a9f05a2284de7211238bc"
+      "body_sha256": "8d98c4b27172181b442f5fe531cf0b43a668f6d036f14423b75cbce55c100952"
     },
     "bilingual-changelog-release-notes": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56d9c",
@@ -1168,7 +1168,7 @@
         "Source key": "vulkan-foundation"
       },
       "title": "Port reusable Vulkan foundations",
-      "body_sha256": "d67242c214c712dd7036b61dd3845b89e48a815828ddc6d8cb39f11b576ed915"
+      "body_sha256": "8bbfe6c4df9c2b104b90dd2fd8faba31b01f932c2a8edb060e9fa49f0f290672"
     },
     "vulkan-shader-compilation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eMg",
@@ -1181,7 +1181,7 @@
         "Source key": "vulkan-shader-compilation"
       },
       "title": "Support SPIR-V shader compilation",
-      "body_sha256": "0da2f5c1eb958a4a950104b7bea9cf20160a00949505f226f2a72feb98e4b20d"
+      "body_sha256": "71423d4152f4ed5093898a754942f1e4ffafa0f9447d29d96c69ceefee15d54a"
     },
     "backend-cache-isolation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eNs",
@@ -1208,7 +1208,7 @@
         "Source key": "vulkan-runtime-integration"
       },
       "title": "Connect the Windows Vulkan renderer and WSI",
-      "body_sha256": "2525d5bc77f317f58ca88d2823f6eb171c9b9d91e88a476b1003c6bb9f5602f6"
+      "body_sha256": "630fc6c0682d1f9254b4ff75519027f33fe1b7447c82615f4898e3ce45cb796a"
     },
     "vulkan-temporal-presentation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eQw",
@@ -1317,7 +1317,7 @@
         "Evidence": "Lead closed remaining original-reporter wait on 2026-09-15. Local Council/save/reload evidence and closed Issue #7 are retained. Recurrence reopens the repair item."
       },
       "title": "Confirm the Council repair on reporter systems",
-      "body_sha256": "f04b96f49b89bb0f60cb7d116df6cb719b73c321da459ba1b99d9888c1466200"
+      "body_sha256": "46ad81ec439e5164320bb9d33ba1adb784cc0746272cd022dbd006ee5797f018"
     },
     "ppc-semantics-gameplay-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56edk",
@@ -1343,7 +1343,7 @@
         "Evidence": "Lead closed remaining player-acceptance wait on 2026-09-15. Bounded Map3/32-phase TAA terrain evidence is retained. Recurrence or a new scene report is a separate item."
       },
       "title": "Confirm the battle terrain TAA repair with the player",
-      "body_sha256": "5e59a935f07b1c202052217c01b29b15d92521858619e0388a9da8adec2a21ec"
+      "body_sha256": "fccf6d578da99bda1088b4a78afe39c1bc56e7fa8c08ee141bdb6366b476b0cb"
     },
     "enemy-disappearance-flicker": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56efg",
@@ -1357,7 +1357,7 @@
         "Target date": "2026-09-15"
       },
       "title": "Diagnose and repair enemy disappearance flicker",
-      "body_sha256": "16ab50a837c113119a80f56ee8fca4865f64dd3128810391a270454cfadf27fc"
+      "body_sha256": "f158dbda23dcd3110f77c12e0b3cbeeabf4523c82ff93e0f5c6de07cb3984e68"
     },
     "shader-log-coverage-audit": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eho",
@@ -1372,7 +1372,7 @@
         "Evidence": "v0.5.3 is published Latest from 6fa9adc281c5693ac0af8a47fec815b20c29ff50; CI 34505504344, package verification and four anonymous public-asset checks passed. Compact diagnostics are included in the published client. Private archive schema-4 and Worker schema 1–4 deployment remain recorded. Publication does not establish a visual repair, player acceptance or full updater transaction."
       },
       "title": "Add independent shader logs and cumulative coverage auditing",
-      "body_sha256": "5aa79cb39c19b1de48399d8f4e36a041c4b6bc47779761d148dbacff711465ff"
+      "body_sha256": "a89761e832be9505f589f5eacb8da9af4747297ec16c8b2a7414629c0109b370"
     },
     "amd-opening-shadow-report": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ekQ",
@@ -1384,7 +1384,7 @@
         "Source key": "amd-opening-shadow-report"
       },
       "title": "Resume the earlier AMD opening-battle shadow report",
-      "body_sha256": "017ce84f416ae66c4cfdfa849ddb631855141d091e90573d4e1d41e530d38c22"
+      "body_sha256": "a0d0b6a62ff710fa5d1eb88b0b4f55e6c1a15b810866a0997726e952eedcc0ca"
     },
     "rx9060xt-kaim-shadow-report": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56emU",
@@ -1396,7 +1396,7 @@
         "Source key": "rx9060xt-kaim-shadow-report"
       },
       "title": "Resume the RX 9060 XT Kaim shadow investigation",
-      "body_sha256": "7e2fd300261bcdce89e739277ac4306430966980df8dea9a1a4afad071b77736"
+      "body_sha256": "651ed68ac358a3407b947cb3c3e38b0a23c6b41f5c51ef494d719d9a208d84be"
     },
     "attack-animation-stutter": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56enw",
@@ -1420,7 +1420,7 @@
         "Source key": "text-clarity-and-garbled-glyphs"
       },
       "title": "Investigate blurry and garbled game text",
-      "body_sha256": "e2a922c32a86b69577bfd7498347b63da0878751380b98cb6f6ffb56ca215f61"
+      "body_sha256": "5b53ea12fcb5d1f8592df6a857c1752b383fe0af30766acce5ebdaabe7026c96"
     },
     "fire-breath-shadow-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56epw",
@@ -1456,7 +1456,7 @@
         "Source key": "shader-translation-failures"
       },
       "title": "Resolve the two remaining shader translation failures",
-      "body_sha256": "7ed5b5a7a592470a76f93e8ced200da8550f8a1f5067e9193f7b8d7ea5188a04"
+      "body_sha256": "7bab3c78f76b3b25fb740bd8b26a0795e043953e46a2b00d7d641474449de235"
     },
     "resource-only-pso-preparation": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56etw",
@@ -1468,7 +1468,7 @@
         "Source key": "resource-only-pso-preparation"
       },
       "title": "Complete resource-only shader and first-use pipeline preparation",
-      "body_sha256": "b4fbd787ec93697ae2337a41924e6e2a1e3d28d7db522c95f9ef18c5c9305feb"
+      "body_sha256": "a7ef83fb0dd83053e374c367ed26f2a150e42fe30f58b223f6e794cf8f4a6ac7"
     },
     "ime-game-controls": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56euY",
@@ -1494,7 +1494,7 @@
         "Source key": "enemy-encounter-poses"
       },
       "title": "Repair remaining enemy encounter poses",
-      "body_sha256": "3e7320da9176408afc2533004c88bfb6698722c78cf04d62a1e30b857a6b298e"
+      "body_sha256": "88c93dfcd4095dd9d21d60c6ac64d0402b723476672ac4bef43dba951e121172"
     },
     "fire-hit-checker-effects": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56exA",
@@ -1506,7 +1506,7 @@
         "Source key": "fire-hit-checker-effects"
       },
       "title": "Diagnose fire-hit checkerboard effects",
-      "body_sha256": "880999e5eee06861107280ccdd65e3e783086e68c2ea4cd810a18a61c6d3dc10"
+      "body_sha256": "2907e96b1b6c82ff241174fae541ba8f3c8333088f42e8545ac21741ac14037b"
     },
     "debug-protagonist-damage": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56eyo",
@@ -1518,7 +1518,7 @@
         "Source key": "debug-protagonist-damage"
       },
       "title": "Add temporary protagonist damage controls",
-      "body_sha256": "34f60e6735838058140a8db6b580738f573fac6d504233dcc7fe7d25634e3393"
+      "body_sha256": "204c1758064bab7ddf868e77f24c31b8f5e3756a1ffe9738520335e36b68c077"
     },
     "save-content-compatibility": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56ezo",
@@ -1544,7 +1544,7 @@
         "Start date": "2026-09-10"
       },
       "title": "Validate chapter and disc transitions on both editions",
-      "body_sha256": "8d475698ffdea8dcac36c388be7a07968aae2138ae78ac8b846739a9d6198a9a"
+      "body_sha256": "d566cfb2f16aecbdffdd71314f8662b0013df46a7b389e66487d59fc6440b6bc"
     },
     "full-playthrough-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e1o",
@@ -1556,7 +1556,7 @@
         "Source key": "full-playthrough-regression"
       },
       "title": "Complete native-save full-playthrough regression",
-      "body_sha256": "a294fec5a6cc6ab206b7f48056019f78dc01381db5b4a63118fda1ec33abe223"
+      "body_sha256": "cda3a07f66a43539ecd9d03470b5c7677a088c5e20e61514d21c3ad859837ecf"
     },
     "map13-shadow-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e2k",
@@ -1568,7 +1568,7 @@
         "Source key": "map13-shadow-regression"
       },
       "title": "Recheck Map 13 body and environment shadows",
-      "body_sha256": "8205534abcc2b7383a56ca51c2de8adef47463f284181ac7beabdae08d8dc61e"
+      "body_sha256": "81f34338c20e49b089da0dd4316cddd439ba64458d2a563c98536e788ebdb767"
     },
     "crate-destruction-black-effects": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e3E",
@@ -1580,7 +1580,7 @@
         "Source key": "crate-destruction-black-effects"
       },
       "title": "Investigate black crate-destruction effects",
-      "body_sha256": "2e858fe027f01640b752ed1914892bd2e0da176e132806e69ddba88ae9f60799"
+      "body_sha256": "b0bb15551eaa96196f100c0d94075a9001dc45d483572e3ff5a7fe53b55a5063"
     },
     "save-anywhere-acceptance": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e30",
@@ -1604,7 +1604,7 @@
         "Source key": "gpu-query-pointer-corruption"
       },
       "title": "Diagnose GPU query and wait pointer corruption",
-      "body_sha256": "8806c54ad2b870bfaae9a4c55e666e9597c6e6e52f6a728a2f271cf15472caba"
+      "body_sha256": "999b75f505ceedab43c916bc9b06bbbfe3e4fa71aa7bb03ece27344fd3caa174"
     },
     "desktop-display-acceptance": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e4w",
@@ -1644,7 +1644,7 @@
         "Evidence": "Marked done by the maintainer on 2026-10-06. The four combinations of the v0.7.0 plan shipped: 2x DLSS-G and FSR frame generation on Direct3D 12 in v0.7.9, and Vulkan DLSS-G and FSR 3.1 frame generation in v0.7.35 (the Vulkan FSR path labelled experimental). Later releases added XeSS frame generation on Direct3D 12 (v0.8.30). No separate acceptance record for this research item."
       },
       "title": "Evaluate frame generation integration",
-      "body_sha256": "69a78e7a176e5fd66c88d7bd8dc126539bfdab1c0d75a31af3358398a3e676e3"
+      "body_sha256": "44694bc39ebc88f7c5feb901918fb00b23775f6379225a3923b818a8354c9161"
     },
     "hdr-output-tonemapping": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e64",
@@ -1701,7 +1701,7 @@
         "Release": "v0.7.0"
       },
       "title": "Port and validate Linux and Steam Deck",
-      "body_sha256": "dbd31da8eb62c74f543b8f4b38f5976047232fc01837c1d439043ea8f292301f"
+      "body_sha256": "b0cc77eb8fdd1ab10224fc83540cfb66a10623b3b53af0061c4f476d866f8145"
     },
     "screen-space-gi-ssr": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e-0",
@@ -1752,7 +1752,7 @@
         "Evidence": "Future experimental Switch collaboration with u/Adoky is recorded. It remains paused pending an explicit resume and retains the PC-alignment prerequisite; it does not imply main-repository merge or platform support."
       },
       "title": "Resume the Switch platform branch after PC Vulkan",
-      "body_sha256": "431a995e860df135012eb4e5a3fdec0cd114b94985c2d6e2b8f8b6ddbfa298c2"
+      "body_sha256": "1acf251a01a2d2c8ad804281e8188714ad2285d49bd6634cfb7b84b4165a9ff8"
     },
     "cross-edition-text-patch": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fBw",
@@ -1764,7 +1764,7 @@
         "Source key": "cross-edition-text-patch"
       },
       "title": "Resume cross-edition text and font patch research",
-      "body_sha256": "b66afd0c86dea82f0064c9d032233782472b443a938dfb440f43674d4729d1aa"
+      "body_sha256": "28c226cc61c5048be9cab3f0422df694369a415f43a6487f68d3858095ca1ac2"
     },
     "native-object-motion": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fDA",
@@ -1778,7 +1778,7 @@
         "Release": "v0.7.0"
       },
       "title": "Develop native object and skeletal motion vectors",
-      "body_sha256": "049429164f9ffc9fad8d2adca0ec08470c86b08d9934439160001e3646b843ed"
+      "body_sha256": "92df54913505aadf33073ef90aacfc33a720ead25eacd7373ce64e5d35297171"
     },
     "temporal-color-exposure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fEU",
@@ -1792,7 +1792,7 @@
         "Release": "v0.7.0"
       },
       "title": "Define the temporal color and exposure contract",
-      "body_sha256": "b1633375b8d90eb7c11e5a29676c43a4433aa16a67038103181d8b9825b6a9ca"
+      "body_sha256": "7a3a114ffd800ab46b16341b8cc4135d023bec32637697c6ee807e8d963e3b37"
     },
     "vendor-temporal-upscaling": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fFA",
@@ -1807,7 +1807,7 @@
         "Release": "v0.7.0"
       },
       "title": "Integrate vendor temporal upscaling after input validation",
-      "body_sha256": "f6f13c54dc8ccf7aec684d4b13193e98df1d45846e47fb4437d9d5a36e17ab37"
+      "body_sha256": "63d56f8087ab99cd0a2d5b4a3357ee1db09ca79276b933f66314b4c324916f35"
     },
     "taa-motion-quality": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fGM",
@@ -1820,7 +1820,7 @@
         "Evidence": "Archived private-feedback aggregate checkpoint 1789199762 adds 15,557 observations for diagnosis only; it does not establish a visual repair, root cause, cross-version result, or player acceptance."
       },
       "title": "Validate TAA motion and history quality across scenes",
-      "body_sha256": "348673e43a84dcc2040f0d3e37039239a64a56a4f400e5255d29cf44132f2eef"
+      "body_sha256": "9afce36fc586bb9319fa76867bf59f328aa5e3921aed470b0c15aed174615266"
     },
     "internal-resolution-acceptance": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fHM",
@@ -1832,7 +1832,7 @@
         "Source key": "internal-resolution-acceptance"
       },
       "title": "Complete internal-resolution visual acceptance",
-      "body_sha256": "2e7774df2b162530c8eac843a9d873fe9823a6240de4bd68d8de6ab5af2c1705"
+      "body_sha256": "8020d71131828dbfa081903094536e99c4daf832e3fe25ca660cbccbd9b46c9c"
     },
     "60fps-gameplay-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fIs",
@@ -1844,7 +1844,7 @@
         "Source key": "60fps-gameplay-regression"
       },
       "title": "Extend correct-speed 60 FPS gameplay validation",
-      "body_sha256": "3974d215c1a25bd6688938bec3ec5297cb2da54164a2804c9ad5949aa1280828"
+      "body_sha256": "45a809b346414288c1455bd6e3b86efa6579926fdc719ada1a6258f087e4d225"
     },
     "optional-120fps": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fJs",
@@ -1882,7 +1882,7 @@
         "Source key": "wmv-playback"
       },
       "title": "Implement and validate WMV movie playback",
-      "body_sha256": "1eb66333d558054421b9809d781ebd7c0d04261f8698c36a0fced1e4bd2be32f"
+      "body_sha256": "ac72ffef683f1692e6ec4b0a9e2779cdeedf649a5341b939558cde1683c912a8"
     },
     "debug-victory-special-battles": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fMM",
@@ -1894,7 +1894,7 @@
         "Source key": "debug-victory-special-battles"
       },
       "title": "Validate debug victory in special battles",
-      "body_sha256": "43d1688cddfec854d5bc2f050150a9b17cc214c759a4ce718a73cea48d8b42fb"
+      "body_sha256": "f56c0767b42224a6d6163517b43f0116fec213cb6fce2f22d0489aaa30d1feac"
     },
     "physical-controller-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fNQ",
@@ -1934,7 +1934,7 @@
         "Release": "v0.5.6"
       },
       "title": "Maintain PPC generated-source provenance guard and remaining contracts",
-      "body_sha256": "2577fdb1ded0bcf386a72617fed62f59815d21aa49fa2a5c7fa0b77c42efc522"
+      "body_sha256": "73fe6a2468c9e00706903033278014206510a8e746a7da9c47a63adf6d8a3d80"
     },
     "embsec-segment-research": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fPQ",
@@ -1970,7 +1970,7 @@
         "Source key": "edram-aliasing-completeness"
       },
       "title": "Audit remaining EDRAM aliasing contracts",
-      "body_sha256": "2347592171d8d6ed1fab94e1ae3607eb94d8515453b5d6ad4440ed5cc90fe3d3"
+      "body_sha256": "acb627e612ee4786eb98e6d05d8dd98a714cf56d6a3c33bf50fed84880740c5c"
     },
     "issue9-cpu-temperatures-taa-flicker": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fSA",
@@ -2037,7 +2037,7 @@
         "Evidence": "The locally accepted PostMessageW installer drag repair is released in v0.5.4. Its message-only HWND DragDispatch case passed 1/1; the legacy UI fixture remains limited by an unchanged foreground setup assertion. v0.5.4 was publicly released 2026-09-11T01:36:30Z from 2ad94d418bb0478417ab9589109f1f685ed92eb3; CI 34550200618 passed. ZIP SHA-256 104ced8b60c16cd1b9013543a3940c9ed8d7cf904c3d05a6a8ef8d591f51d218, package provenance/50 file hash+CRC checks and four anonymous 200-download asset checks passed. User acceptance remains limited to the reported drag path."
       },
       "title": "Expand installer recognition for supported game inputs",
-      "body_sha256": "42dd11e1a69aea54e92b70663b7cda94a884434c554ec7f09a9d0256733393f0"
+      "body_sha256": "82d6c579398fc0b072c0f5219845c9045b399a1f0f360b48ad0f331285877b0f"
     },
     "qol-empty-game-path-default": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5630U",
@@ -2053,7 +2053,7 @@
         "Evidence": "Regression verified 2026-09-14: Resolve accepts relative `--game default.xex` but Recognize returns its empty parent, so the later game: resource root is empty. A C++20 temporary-file fixture gave relative valid=1/root empty and absolute valid=1/nonempty; static file-system flow returns STATUS_OBJECT_PATH_NOT_FOUND for empty host root. TODO: resolve explicit relative CLI paths against CWD before recognition and cover default.xex, ./default.xex, relative directory/disc1, absolute paths and invalid explicit paths without fallback. No game run; resource failure is source-chain inference. Historical v0.5.0 direct-EXE validation remains recorded separately."
       },
       "title": "Default an empty game-path.txt to ../game",
-      "body_sha256": "82831c5c41c5f6c87d661ecd463286a152165ed3dd2cbf3799ab703ea8a93e3c"
+      "body_sha256": "1dc8ac58b20615acd2717d20fce0b47baf2ab23f13c787e57d981bb9caca4412"
     },
     "qol-recomp-exe-icon": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5631c",
@@ -2066,7 +2066,7 @@
         "Source key": "qol-recomp-exe-icon"
       },
       "title": "Refresh the executable icon with recomp identity",
-      "body_sha256": "31d7eade50a75a109882c37399b90608e9b3a9c78d0160497da8ff6026d17e1e"
+      "body_sha256": "369477123a20e7c2d2e218f15934b20b7d576b5bb1b65efd18242dd88c1f795f"
     },
     "qol-direct-exe-resource-discovery": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5632o",
@@ -2081,7 +2081,7 @@
         "Target date": "2026-09-08"
       },
       "title": "Start directly from the executable directory",
-      "body_sha256": "6c8bed505571d608956d9ab96ad9bb01592777e69562c8763b258cb390ec460e"
+      "body_sha256": "bdab1e0afcd889939cb74e36c07e22bd1f18d57155a6161d543a462ad970ce9c"
     },
     "qol-first-launch-configuration": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5634E",
@@ -2096,7 +2096,7 @@
         "Target date": "2026-09-08"
       },
       "title": "Modernize the independent first-launch configuration flow",
-      "body_sha256": "b00436cb1220f8270a95a76111c159cf43da615aa475719b4ce1ad9817437be7"
+      "body_sha256": "62d41b2d7f019b27edb58eb50d6072ce622a88787faffd0cf134fcbb8becd222"
     },
     "qol-shader-cache-startup-diagnosis": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5635E",
@@ -2109,7 +2109,7 @@
         "Source key": "qol-shader-cache-startup-diagnosis"
       },
       "title": "Diagnose repeated shader-cache compilation at startup",
-      "body_sha256": "6d4d0f5c42530ea75c9a9078e8a412a31909a7db6998e469d448688f3da797ed"
+      "body_sha256": "98340208d1dee8305e926b23318f950713ba0ab7b62ef7216c5b4f6c3d364770"
     },
     "qol-shader-preparation-active-path": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5636A",
@@ -2122,7 +2122,7 @@
         "Source key": "qol-shader-preparation-active-path"
       },
       "title": "Verify startup shader-preparation worker coverage",
-      "body_sha256": "69646b5a351dedaed59d8774af0358a0acb6516cc9c9979408261bc33e0439da"
+      "body_sha256": "831e92e1c1d1deb51bf64e530344a255fc82562e72777edd44ed7a0021ef64d1"
     },
     "qol-debug-menu-modernization": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5637Q",
@@ -2138,7 +2138,7 @@
         "Evidence": "Debug Menu refinement is implemented and validated in local source 0.4.18. The focused native fixture passed paged callbacks, child F1/Esc/Gamepad B dismissal, caption controls, viewport focus and reclamping, stable fonts, current-DPI layout, bilingual status and cleanup. Root reviewed actual Overview, Teleport, narrow focused and error windows on an inactive desktop. A 150% DPI layout defect was corrected by keeping the thread DPI context across window creation and updates. This does not implement the newly requested game-window pixel sizing. No game run, physical monitor transition or player acceptance is claimed. Evidence: out/v0.5.0/ui-modernization/native/DEBUG-STATUS.md."
       },
       "title": "Modernize and simplify the Debug Menu",
-      "body_sha256": "1afd60e7f6109040e8677656ae5cd1e830ce83c024f6fdd0a3390bf85824495f"
+      "body_sha256": "90af07b087f769a9fe48b679c82b12ac2807ccb80e02f5978e2cf0c074639800"
     },
     "qol-host-settings-feasibility": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5638c",
@@ -2152,7 +2152,7 @@
         "Start date": "2026-09-08"
       },
       "title": "Assess host settings as a replacement for game settings",
-      "body_sha256": "d247130ce3e4dee7922039f67cbfd12043fd771e888a82460a3500d82eb7a027"
+      "body_sha256": "dc1b9446ecfec9c4ebd7f3826db3d7f3d31aa87802f1036586fdc4a5e351f5b3"
     },
     "qol-original-style-settings": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5639Y",
@@ -2167,7 +2167,7 @@
         "Target date": "2026-09-08"
       },
       "title": "Recreate original game style in modern settings",
-      "body_sha256": "7ef7327c36db4bbd8ec8ec8acccaf658ce1e3d7d97c34ffbfbd03837e3e1bc21"
+      "body_sha256": "a019f1dc6b79fff647b5d1320be52ad09ff05dce9e958b4b64ed2ddb51cc26c4"
     },
     "qol-restart-now-or-later": {
       "id": "PVTI_lAHOAAsUY84Biy1azg563-M",
@@ -2181,7 +2181,7 @@
         "Start date": "2026-09-08"
       },
       "title": "Offer restart now or later for saved settings",
-      "body_sha256": "32ca3aa87fee91becd9cc415077989ac1df2bd7a8f24f1c01a551e2356423e7a"
+      "body_sha256": "f2bf122f1fc81dfacd1be81631fae6f791e627ed9cc33da131b7de40bfbac308"
     },
     "qol-github-binary-updater": {
       "id": "PVTI_lAHOAAsUY84Biy1azg564AU",
@@ -2197,7 +2197,7 @@
         "Evidence": "Published v0.5.7 Latest at https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.7 (2026-09-13T06:51:32Z), source/tag 954d0e17dbe63e49189873db3949ebf5df2462aa; CI 34743383193 succeeded (https://github.com/freefrank/LostOdysseyRecomp/actions/runs/34743383193). PPC key 3260d975104d2cdf612e5858a7712a23f7264a8c4ebb857adf962b8c16c842eb reused the equivalence-reviewed v0.5.6 original library without PPC code changes; CI consumed the matching identity. Public ZIP 44262080 bytes SHA-256 618a96aef78ac79f566d78bed48159e65b6275f1d02f741ed66eeb1c2856a5a7; all 50 manifest payload hashes and ZIP, standalone updater and two sidecars passed anonymous HTTP 200 size/hash checks. Lead closed remaining updater acceptance wait on 2026-09-15. Published v0.5.7 includes the GitHub binary updater with package verification, rollback and preserved user data. Real network update-transaction coverage remains a separate regression item."
       },
       "title": "Add safe GitHub binary update checks",
-      "body_sha256": "c53485514ed0a84941edfcc8d725c9fc5665efc77e052c9886ef341f9232bbe9"
+      "body_sha256": "d0d497be5c759a2db7c889d5998dbb83b815efec9bccd7c3a6044c57a75e1ee5"
     },
     "steady-state-cpu-hotspot-profile": {
       "id": "PVTI_lAHOAAsUY84Biy1azg5_iS4",
@@ -2276,7 +2276,7 @@
         "Source key": "qol-game-window-pixel-size"
       },
       "title": "Size the game window in actual pixels independently of desktop DPI",
-      "body_sha256": "aa46751e6445b819fcccbd08e72800dce117b1a12b96d53a91aea90b1c001049"
+      "body_sha256": "c38d43f03c4db8603b89d0c53f39e78463aac7aabae675c43dd711875459b514"
     },
     "render-output-dpi-presentation-diagnosis": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6Knuo",
@@ -2349,7 +2349,7 @@
         "Target date": "2026-09-15"
       },
       "title": "Diagnose observed 4K runtime performance",
-      "body_sha256": "b75a9438b6a529f8b48c869c95fedc16081b06430849961b31ee7e31fd57814b"
+      "body_sha256": "9339bc8f1ba04c192b89de00783db91e6cfa369616a2257166cbbc0fcba14c78"
     },
     "4k-taa-ground-shadow-diagnosis": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6K5Kg",
@@ -2488,7 +2488,7 @@
         "Source key": "performance-and-shader-startup"
       },
       "title": "Investigate remaining stalls and shader-startup compiler failures",
-      "body_sha256": "7c0e092c394bd2ae3889382c651ce3269e2cc7ad38533ec7acbe9949647646df"
+      "body_sha256": "48c68e576f28468363c3fc6767474e76e644db8ffc32e0b3a2fe2aae926ec7a2"
     },
     "vulkan-ps-loopend-predicate-exit": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6sV44",
@@ -2505,7 +2505,7 @@
         "Target date": "2026-09-15"
       },
       "title": "Fix Vulkan pixel-shader LoopEnd predicate exit",
-      "body_sha256": "c763f2e745024fb2dabf134907f95ee50ad582d7ef41ade7255cca1664db65d8"
+      "body_sha256": "ade126d9bd747a729fc1b75cab175918c0f072f70a6e44f549008d49cf1029a9"
     },
     "adjacent-resolve-copy-elision": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6sbAY",
@@ -2699,7 +2699,7 @@
         "Source key": "temporal-phased-p0-common-contracts-probe"
       },
       "title": "P0: Implement common upscaler/FG contracts and evaluate coexistence architecture",
-      "body_sha256": "27792f1530551ca6f9968adb8110d650b6c68a00e4a51a0b809154a45123ade2"
+      "body_sha256": "d715dfa0cbdebf712fba60861871f6ea33a4e4fe61f206222f3aeda3f0c84c6f"
     },
     "temporal-phased-p1-runnable-fsr": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8QYpk",
@@ -2728,7 +2728,7 @@
         "Start date": "2026-09-23"
       },
       "title": "P2: Validate FSR visual quality and multi-platform hardware",
-      "body_sha256": "9d6e78e4595f9725164cc0d70fb75122aaa9d1074992fd59a1c7f29d24054039"
+      "body_sha256": "55158517b9466610472df417f43b0e2c54318099559215afde4b09286a97dfd2"
     },
     "temporal-phased-p3-fg-infrastructure": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8QYrU",
@@ -2741,7 +2741,7 @@
         "Source key": "temporal-phased-p3-fg-infrastructure"
       },
       "title": "P3: Implement frame generation presentation infrastructure and leases",
-      "body_sha256": "5fa1db975db261a33391b1bccaa4c48943f64c242a09f1588f7d33aeb483ee61"
+      "body_sha256": "98e6a359492e154c5aaf786459469f42cc9c0e68cb3e2f93eba61395e89f51b9"
     },
     "temporal-phased-p4-dlss-fg-2x": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8QYr4",
@@ -2755,7 +2755,7 @@
         "Source key": "temporal-phased-p4-dlss-fg-2x"
       },
       "title": "P4: Deliver fixed 2× DLSS Frame Generation on Windows Vulkan",
-      "body_sha256": "9c101799e2c4419e8665eabc71423379d33484768bdcc8e4a15de8b8aaa2e743"
+      "body_sha256": "2131c4aced4f086d901e958d92dedf23772dc70556ad44a63408d68c685ad13f"
     },
     "d3d12-bundled-shader-pack": {
       "id": "PVTI_lAHOAAsUY84Biy1azg8n2NU",
@@ -2992,7 +2992,7 @@
         "Release": "v0.8.5"
       },
       "title": "Experimental Android platform support",
-      "body_sha256": "e66156862f117bae7afe9566d8b4c39dbfa14051039d589ca04fe927e08cd9d7"
+      "body_sha256": "a2d05e6a1e8b8fa75d28f32196cde7a53eb760caa7df7be9776c4eaa2f7ea0bd"
     },
     "remove-pm4-translator": {
       "id": "PVTI_lAHOAAsUY84Biy1azg816wM",
@@ -3104,7 +3104,7 @@
         "Source key": "v100-ui-separation-production-handoff"
       },
       "title": "Deliver production HUDless/UI separation handoff",
-      "body_sha256": "6ce44946802b32fbfd66be841f9e326e65a23d255230e2a0cc5608c6ab37b96e"
+      "body_sha256": "39c3bf72cb6676be8f6533af45a5cb02d4f8391cc8ce1144772536177615c548"
     },
     "streamline-vulkan-present-after-write": {
       "id": "PVTI_lAHOAAsUY84Biy1azg9F10Q",
@@ -3117,7 +3117,7 @@
         "Evidence": "Accepted exception for P0 Gate 1 on 2026-09-27. Validation reports repeat PRESENT-AFTER-WRITE messages until its 10-message duplicate cap; total occurrences are unknown. Follow upstream SDK synchronization fixes and re-evaluate display classification, failure injection, and settings restart coverage."
       },
       "title": "Backlog: Streamline Vulkan PRESENT-AFTER-WRITE synchronization exception",
-      "body_sha256": "6cdf8122e7716d874bbd9cb1e92d51bddf97a6aff70e5a1af6fdf1ee65efbb1d"
+      "body_sha256": "40aae25cda25e9efaf4a4a37427de040b81a91699408c3637af4681b4c5a6194"
     },
     "native-migration-architecture-boundaries": {
       "id": "PVTI_lAHOAAsUY84Biy1azg6R6fI",
@@ -3373,7 +3373,7 @@
         "Release": "v0.7.35"
       },
       "title": "TAA/FSR/DLSS jitter fixes from F1 captures and map tours",
-      "body_sha256": "49139b99da087818b74a24a088f7441c859230dc6b231ac65f6b5f5c96807c76"
+      "body_sha256": "5ebc0968be1c1e3662a74e96c519e02d8c0a4509c5a8974d40a5e90b631e8cd5"
     },
     "flicker-triage-tooling-20261001": {
       "id": "PVTI_lAHOAAsUY84Biy1azg-D8Ec",
