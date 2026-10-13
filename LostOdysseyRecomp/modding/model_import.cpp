@@ -1358,6 +1358,18 @@ Result RebuildPackage(std::span<const uint8_t> bytes, const std::string &stem, c
     return result;
 }
 
+bool PlacesStaticMeshes(std::span<const uint8_t> bytes)
+{
+    try
+    {
+        const Package package(bytes);
+        for (const auto &e : package.exports)
+            if (package.ClassName(e) == "StaticMeshComponent") return true;
+    }
+    catch (const std::exception &) {}
+    return false;
+}
+
 Result RemapLighting(std::span<const uint8_t> bytes, const std::string &stem, const VertexMaps &maps)
 {
     Result result;

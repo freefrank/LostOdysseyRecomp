@@ -79,6 +79,7 @@ struct Tail
     fs::path path;               // empty: in memory
     std::ofstream file;
     std::vector<uint8_t> memory;
+    bool broken = false;         // a write failed: the file no longer matches size
     void Append(std::span<const uint8_t> bytes)
     {
         const auto padded = (bytes.size() + fpi::kSector - 1) / fpi::kSector * fpi::kSector;
@@ -88,9 +89,13 @@ struct Tail
             memory.insert(memory.end(), bytes.begin(), bytes.end());
             memory.resize(memory.size() + padded - bytes.size(), 0);
         }
-        else if (!file.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size())) ||
+        else if (broken || !file.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size())) ||
                  !file.write(reinterpret_cast<const char *>(zeros.data()), std::streamsize(padded - bytes.size())))
+        {
+            // Nothing more goes into this file: later members would land past what the index says.
+            broken = true;
             throw std::runtime_error("cannot write " + Utf8(path));
+        }
         size += padded;
     }
 };
@@ -276,7 +281,20 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     std::mutex translating;          // gFiles
     auto work = [&](const std::pair<const std::string, Group> &entry, Counts &counts) {
         const auto &[memberFolder, group] = entry;
+        // Packages that may place a replaced static mesh wait for the second
+        // pass; every other rebuilt member is stored and freed at once, so a
+        // folder of many packages does not stay in memory.
         std::map<const fpi::File *, Rebuilt> rebuilt;
+        std::set<const fpi::File *> stored;
+        auto put = [&](const fpi::File &file, Rebuilt &item) {
+            stored.insert(&file);
+            try { store(file, item, counts); }
+            catch (const std::exception &error)
+            {
+                ++counts.failed;
+                LOG_WARNING("[mods] {} {} kept original in {}: {}", item.model ? "model" : "text", file.path, Utf8(folder), error.what());
+            }
+        };
         model_import::VertexMaps maps = shared;
         const auto before = maps.size();
         for (const auto *member : group.members)
@@ -309,7 +327,9 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                     counts.unknownKeys += unknown;
                 }
                 if (bytes.empty() || bytes == loaded.bytes) continue;
-                rebuilt[member] = {std::move(loaded), std::move(bytes), model};
+                Rebuilt item{std::move(loaded), std::move(bytes), model};
+                if (model && model_import::PlacesStaticMeshes(item.bytes)) rebuilt[member] = std::move(item);
+                else put(file, item);
             }
             catch (const std::exception &error)
             {
@@ -329,16 +349,24 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         for (const auto *placer : placers)
         {
             const auto &file = *placer;
+            if (stored.count(placer)) continue; // places no static mesh
             try
             {
-                const auto it = rebuilt.find(placer);
+                auto it = rebuilt.find(placer);
                 Member loaded;
                 if (it == rebuilt.end()) loaded = load(file);
                 auto result = model_import::RemapLighting(it != rebuilt.end() ? it->second.bytes : loaded.bytes, StemOf(file.path), maps);
                 for (const auto &note : result.notes) LOG_NOTICE("[mods] model lighting {}: {}", file.path, note);
-                if (result.package.empty()) continue;
-                if (it != rebuilt.end()) it->second.bytes = std::move(result.package);
-                else rebuilt[placer] = {std::move(loaded), std::move(result.package), true};
+                if (it == rebuilt.end())
+                {
+                    if (result.package.empty()) continue;
+                    Rebuilt item{std::move(loaded), std::move(result.package), true};
+                    put(file, item);
+                    continue;
+                }
+                if (!result.package.empty()) it->second.bytes = std::move(result.package);
+                put(file, it->second);
+                rebuilt.erase(it);
             }
             catch (const std::exception &error)
             {
@@ -346,27 +374,20 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 LOG_WARNING("[mods] model lighting {} kept original in {}: {}", file.path, Utf8(folder), error.what());
             }
         }
-
-        std::vector<const fpi::File *> stored;
-        for (const auto &[file, item] : rebuilt) stored.push_back(file);
-        std::sort(stored.begin(), stored.end(), byOffset);
-        for (const auto *file : stored)
-        {
-            auto &item = rebuilt.at(file);
-            try { store(*file, item, counts); }
-            catch (const std::exception &error)
-            {
-                ++counts.failed;
-                LOG_WARNING("[mods] {} {} kept original in {}: {}", item.model ? "model" : "text", file->path, Utf8(folder), error.what());
-            }
-        }
+        // Members that place static meshes but had none of theirs replaced.
+        for (auto &[file, item] : rebuilt) put(*file, item);
     };
 
     // Shared mesh folders (sorted first) one by one, as the others need their
     // vertex maps; the rest on worker threads.
     size_t next = 0;
     for (; next < order.size() && order[next]->second.shared; ++next) work(*order[next], counts);
-    const size_t threads = std::min<size_t>(std::clamp<size_t>(std::thread::hardware_concurrency(), 1, 8), order.size() - next);
+#ifdef __ANDROID__
+    constexpr size_t kMaxThreads = 2; // each holds a few packages; phones share their memory with the game
+#else
+    constexpr size_t kMaxThreads = 8;
+#endif
+    const size_t threads = std::min<size_t>(std::clamp<size_t>(std::thread::hardware_concurrency(), 1, kMaxThreads), order.size() - next);
     std::atomic<size_t> claimed = next;
     std::vector<Counts> partial(threads);
     std::vector<std::thread> pool;

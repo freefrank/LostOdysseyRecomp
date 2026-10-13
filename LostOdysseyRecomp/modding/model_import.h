@@ -51,6 +51,9 @@ struct Result
 // package: the decoded package bytes (no CPX); stem: its file name without extension.
 Result RebuildPackage(std::span<const uint8_t> package, const std::string &stem, const std::vector<Replacement> &replacements);
 
+// Whether a package has StaticMeshComponents, which may place a replaced mesh.
+bool PlacesStaticMeshes(std::span<const uint8_t> package);
+
 // The StaticMeshComponents of a package that place a mesh in maps: their
 // per-vertex light maps and ShadowMap1D buffers rebuilt for the new vertices,
 // interpolated at each one's surface point. result.replaced counts the light

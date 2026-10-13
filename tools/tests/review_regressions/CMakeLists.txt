@@ -36,6 +36,7 @@ target_include_directories(LoTextureContentTest PRIVATE "${LO_ROOT}/tools/XenonR
 lo_review_test(LoTextureLayoutTest texture_layout_test.cpp)
 lo_review_test(LoDriverPipelineCacheTest driver_pipeline_cache_test.cpp)
 lo_review_test(LoBcDecodeTest bc_decode_test.cpp)
+lo_review_test(LoCpxDecodeTest cpx_decode_test.cpp)
 lo_review_test(LoAudioCallbackTest audio_callback_test.cpp)
 lo_review_test(LoSettingsPathTest settings_path_test.cpp "${LO_RUNTIME}/updater/update.cpp")
 lo_review_test(LoUserPathsTest user_paths_test.cpp)
