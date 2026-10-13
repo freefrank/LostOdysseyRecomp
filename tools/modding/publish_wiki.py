@@ -35,6 +35,10 @@ def stage(source: Path, wiki: Path, repository: str, revision: str) -> list[str]
             page, anchor = match.group(1), match.group(2) or ""
             return f"]({url}/wiki/{page}{anchor})" if page in PAGES else match.group(0)
         content = re.sub(r"\]\(([A-Za-z0-9_-]+)\.md(#[^)]+)?\)", link, content)
+        # The Wiki holds pages only: images load from the source revision.
+        content = re.sub(r"\]\(images/([A-Za-z0-9_./-]+)\)",
+                         lambda m: f"](https://raw.githubusercontent.com/{repository}/{revision}/docs/wiki/images/{m.group(1)})",
+                         content)
         banner = f"> Source: [{revision[:12]}]({url}/blob/{revision}/docs/wiki/{name}.md). Check the source page for feature scope.\n\n"
         plan[name + ".md"] = banner + content
     links = "\n".join(f"- [{name.replace('-', ' ')}]({url}/wiki/{name})" for name in PAGES)
