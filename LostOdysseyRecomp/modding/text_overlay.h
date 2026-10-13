@@ -12,16 +12,24 @@
 // package a mod replaces a model in (modding/model_import.h) is rebuilt and
 // stored past the end of its archive; the index records of those files are
 // pointed there with their new sizes. The game's loader takes offsets and
-// sizes from the index, so rebuilt files may be longer.
+// sizes from the index, so rebuilt files may be longer. The rebuilt indexes and
+// files are kept in cache/mods (LO_MODS_CACHE_DIR; none keeps them in memory)
+// with a key of what they were made from, so later starts read them from there.
 // See docs/notes/language-pack-research.zh-CN.md.
 namespace modding::text_overlay
 {
-// Bytes of a file that come from memory: the patched index at offset 0, or
-// the rebuilt files after the file's real end (2048-byte aligned).
+struct CachedFile;
+
+// Bytes of a file that come from elsewhere: the patched index at offset 0, or
+// the rebuilt files after the file's real end (2048-byte aligned), in memory
+// or in a file of the mod cache.
 struct Range
 {
-    uint64_t offset = 0;
-    std::shared_ptr<const std::vector<uint8_t>> bytes;
+    uint64_t offset = 0, size = 0;
+    std::shared_ptr<const std::vector<uint8_t>> bytes; // in memory, or
+    std::shared_ptr<CachedFile> file;                  // a cache file
+    // Copies count bytes from at (counted from offset); false if the cache file cannot be read.
+    bool Read(uint64_t at, uint8_t *out, size_t count) const;
 };
 
 // For a file the game opens read-only. Empty unless it is an archive (.fpd)

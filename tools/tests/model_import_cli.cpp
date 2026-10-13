@@ -57,8 +57,9 @@ std::vector<uint8_t> Read(const fs::path &file, uint64_t offset, uint64_t size)
     }
     for (const auto &range : ranges)
     {
-        const uint64_t begin = std::max(offset, range.offset), end = std::min(offset + size, range.offset + range.bytes->size());
-        for (uint64_t at = begin; at < end; ++at) bytes[size_t(at - offset)] = (*range.bytes)[size_t(at - range.offset)];
+        const uint64_t begin = std::max(offset, range.offset), end = std::min(offset + size, range.offset + range.size);
+        if (begin < end && !range.Read(begin - range.offset, bytes.data() + (begin - offset), size_t(end - begin)))
+            throw std::runtime_error("cannot read the rebuilt bytes of " + file.string());
     }
     return bytes;
 }

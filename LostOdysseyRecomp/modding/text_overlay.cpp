@@ -1,4 +1,5 @@
 #include "text_overlay.h"
+#include "cpx_pack.h"
 #include "fpi_index.h"
 #include "mod_api.h"
 #include "model_import.h"
@@ -8,16 +9,30 @@
 #include <gpu/shader/cpx_decode.h>
 #include <os/json.h>
 #include <os/logger.h>
+#include <os/user_paths.h>
+#include <version.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <mutex>
 #include <set>
+#include <thread>
 #include <tuple>
 
 namespace modding::text_overlay
 {
+// A file of the mod cache, opened on the first read.
+struct CachedFile
+{
+    std::filesystem::path path;
+    std::mutex mutex;
+    std::ifstream stream;
+};
+
 namespace
 {
 namespace fs = std::filesystem;
@@ -51,40 +66,33 @@ void PutLe32(std::vector<uint8_t> &out, size_t at, uint32_t value)
     for (int i = 0; i < 4; ++i) out[at + i] = uint8_t(value >> (8 * i));
 }
 
-// The decoded bytes in CPX stored blocks (FF 00, then the block size - 1 as
-// u16 LE, then the bytes), as the discs store incompressible data. Header
-// bytes 4-5 (bit width) are the original file's. Byte 3 is the loader's
-// reserve in 2048-byte units: it decodes in place with the stream placed at
-// buffer + decoded + reserve - stored (sub_8284E6B8, sub_828571B8), and a
-// stored stream is 16 + 8 per block bytes longer than its output, so the
-// reserve has to cover that or block output overwrites the next block header.
-std::vector<uint8_t> StoreCpx(std::span<const uint8_t> payload, std::span<const uint8_t> original)
-{
-    const size_t blocks = (payload.size() + cpx::kBlockSize - 1) / cpx::kBlockSize;
-    if (!blocks || blocks > 0xffff) throw std::runtime_error("file too large for CPX");
-    std::vector<uint8_t> out(16 + 4 * blocks, 0);
-    std::copy_n("cpx", 3, out.begin());
-    std::copy_n(original.begin() + 3, 3, out.begin() + 3);
-    const size_t reserve = (16 + 8 * blocks + fpi::kSector - 1) / fpi::kSector;
-    if (reserve > 0xff) throw std::runtime_error("file too large for CPX");
-    out[3] = std::max(out[3], uint8_t(reserve));
-    out[6] = uint8_t(blocks);
-    out[7] = uint8_t(blocks >> 8);
-    for (size_t i = 0; i < blocks; ++i)
-    {
-        const auto chunk = payload.subspan(i * cpx::kBlockSize, std::min(cpx::kBlockSize, payload.size() - i * cpx::kBlockSize));
-        PutLe32(out, 16 + 4 * i, uint32_t(out.size()));
-        out.insert(out.end(), {0xff, 0x00, uint8_t(chunk.size() - 1), uint8_t((chunk.size() - 1) >> 8)});
-        out.insert(out.end(), chunk.begin(), chunk.end());
-    }
-    PutLe32(out, 8, uint32_t(out.size()));
-    PutLe32(out, 12, uint32_t(payload.size()));
-    return out;
-}
-
 struct Folder
 {
     std::map<std::string, std::vector<Range>> ranges; // by lower-case file name
+};
+
+// Rebuilt files after an archive's real end: appended to a cache file, or kept
+// in memory when there is no cache.
+struct Tail
+{
+    uint64_t base = 0, size = 0; // base: the archive's size rounded up to a sector
+    fs::path path;               // empty: in memory
+    std::ofstream file;
+    std::vector<uint8_t> memory;
+    void Append(std::span<const uint8_t> bytes)
+    {
+        const auto padded = (bytes.size() + fpi::kSector - 1) / fpi::kSector * fpi::kSector;
+        static const std::vector<uint8_t> zeros(fpi::kSector, 0);
+        if (path.empty())
+        {
+            memory.insert(memory.end(), bytes.begin(), bytes.end());
+            memory.resize(memory.size() + padded - bytes.size(), 0);
+        }
+        else if (!file.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size())) ||
+                 !file.write(reinterpret_cast<const char *>(zeros.data()), std::streamsize(padded - bytes.size())))
+            throw std::runtime_error("cannot write " + Utf8(path));
+        size += padded;
+    }
 };
 
 std::mutex gMutex;
@@ -186,7 +194,7 @@ std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<ui
 // index: the file's first IndexSize() bytes, patched in place; tails: per
 // archive file name.
 void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &names, std::vector<uint8_t> &index,
-                std::map<std::string, std::pair<uint64_t, std::vector<uint8_t>>> &tails, Counts &counts)
+                std::map<std::string, Tail> &tails, const fs::path &cache, Counts &counts)
 {
     const auto parsed = fpi::Read(index);
     // In archive order, so the reads run forward through each file (slow disks).
@@ -231,21 +239,28 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         return member;
     };
     struct Rebuilt { Member member; std::vector<uint8_t> bytes; bool model = false; };
-    auto store = [&](const fpi::File &file, Rebuilt &item) {
+    std::mutex storing; // tails, index
+    auto store = [&](const fpi::File &file, Rebuilt &item, Counts &counts) {
         const auto archive = names.find(parsed.archives.at(file.archive));
-        const auto payload = item.member.packed ? StoreCpx(item.bytes, item.member.stored) : item.bytes;
-        auto &[base, tail] = tails.try_emplace(archive->first, 0, std::vector<uint8_t>{}).first->second;
-        if (!base)
+        const auto payload = item.member.packed ? cpx_pack::Pack(item.bytes, item.member.stored, fpi::kSector) : item.bytes;
+        std::lock_guard lock(storing);
+        auto &tail = tails[archive->first];
+        if (!tail.base)
         {
             std::error_code ec;
             const auto size = fs::file_size(archive->second, ec);
             if (ec) throw std::runtime_error("cannot size " + Utf8(archive->second));
-            base = (size + fpi::kSector - 1) / fpi::kSector * fpi::kSector;
+            tail.base = (size + fpi::kSector - 1) / fpi::kSector * fpi::kSector;
+            if (!cache.empty())
+            {
+                tail.path = cache / (archive->first + ".tail");
+                tail.file.open(tail.path, std::ios::binary | std::ios::trunc);
+                if (!tail.file) throw std::runtime_error("cannot write " + Utf8(tail.path));
+            }
         }
-        const uint64_t offset = base + tail.size();
+        const uint64_t offset = tail.base + tail.size;
         if (offset + payload.size() > kMaxOffset) throw std::runtime_error("archive would pass 4 GiB");
-        tail.insert(tail.end(), payload.begin(), payload.end());
-        tail.resize((tail.size() + fpi::kSector - 1) / fpi::kSector * fpi::kSector, 0);
+        tail.Append(payload);
 
         // +8: keep the disc and layer byte, point the sector at the copy.
         uint32_t sector = 0;
@@ -258,9 +273,9 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     };
 
     model_import::VertexMaps shared; // of the shared mesh packages, kept for the folders that place them
-    for (auto *entry : order)
-    {
-        const auto &[memberFolder, group] = *entry;
+    std::mutex translating;          // gFiles
+    auto work = [&](const std::pair<const std::string, Group> &entry, Counts &counts) {
+        const auto &[memberFolder, group] = entry;
         std::map<const fpi::File *, Rebuilt> rebuilt;
         model_import::VertexMaps maps = shared;
         const auto before = maps.size();
@@ -271,7 +286,12 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
             const bool model = gModels.count(file.path) != 0;
             try
             {
-                const auto *translation = model ? nullptr : Translation(text->second);
+                const text::Replacements *translation = nullptr;
+                if (!model)
+                {
+                    std::lock_guard lock(translating);
+                    translation = Translation(text->second);
+                }
                 if (!model && !translation) continue;
                 auto loaded = load(file);
                 std::vector<uint8_t> bytes;
@@ -333,14 +353,113 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         for (const auto *file : stored)
         {
             auto &item = rebuilt.at(file);
-            try { store(*file, item); }
+            try { store(*file, item, counts); }
             catch (const std::exception &error)
             {
                 ++counts.failed;
                 LOG_WARNING("[mods] {} {} kept original in {}: {}", item.model ? "model" : "text", file->path, Utf8(folder), error.what());
             }
         }
+    };
+
+    // Shared mesh folders (sorted first) one by one, as the others need their
+    // vertex maps; the rest on worker threads.
+    size_t next = 0;
+    for (; next < order.size() && order[next]->second.shared; ++next) work(*order[next], counts);
+    const size_t threads = std::min<size_t>(std::clamp<size_t>(std::thread::hardware_concurrency(), 1, 8), order.size() - next);
+    std::atomic<size_t> claimed = next;
+    std::vector<Counts> partial(threads);
+    std::vector<std::thread> pool;
+    for (size_t t = 0; t < threads; ++t)
+        pool.emplace_back([&, t] {
+            for (size_t i; (i = claimed++) < order.size();)
+            {
+                try { work(*order[i], partial[t]); }
+                catch (const std::exception &error)
+                {
+                    ++partial[t].failed;
+                    LOG_WARNING("[mods] {} kept original in {}: {}", order[i]->first, Utf8(folder), error.what());
+                }
+            }
+        });
+    for (auto &thread : pool) thread.join();
+    for (const auto &c : partial)
+    {
+        counts.files += c.files; counts.texts += c.texts; counts.unknownKeys += c.unknownKeys;
+        counts.failed += c.failed; counts.models += c.models;
     }
+}
+
+// ---- The cache ----------------------------------------------------------------
+// cache/mods/<folder hash>/ holds a folder's patched indexes (<name>.index), its
+// tails (<archive>.tail) and manifest.txt, written last: the key, then one line
+// per index ("index <name>") and tail ("tail <archive> <base> <size>"). The key
+// covers this build's version and cache format, the selected language pack, the
+// mods' files (path, entry, size, time), and the folder's indexes and archive
+// sizes; any change rebuilds.
+constexpr const char *kCacheFormat = "2"; // bump when the rebuilt bytes change for the same inputs
+uint64_t gModsKey = 0;
+
+uint64_t Hash(uint64_t hash, std::string_view bytes)
+{
+    for (const unsigned char c : bytes) hash = (hash ^ c) * 0x100000001b3ull;
+    return (hash ^ 0xff) * 0x100000001b3ull; // field separator
+}
+uint64_t Hash(uint64_t hash, uint64_t value) { return Hash(hash, std::string_view(reinterpret_cast<const char *>(&value), 8)); }
+
+std::string Hex(uint64_t value)
+{
+    static const char digits[] = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i, value >>= 4) out[size_t(i)] = digits[value & 15];
+    return out;
+}
+
+// Where the cache is; empty without one.
+fs::path CacheRoot()
+{
+    if (const char *configured = std::getenv("LO_MODS_CACHE_DIR"))
+        return std::string_view(configured) == "none" ? fs::path() : fs::path(configured);
+    return os::user_paths::UsePortableLayout() ? fs::path("cache/mods") : os::user_paths::DataDir() / "cache/mods";
+}
+
+// The cache folder for a game folder; empty without a cache.
+fs::path CacheFolder(const fs::path &folder)
+{
+    const auto root = CacheRoot();
+    return root.empty() ? root : root / Hex(Hash(0xcbf29ce484222325ull, Utf8(fs::absolute(folder).lexically_normal())));
+}
+
+bool LoadCache(const fs::path &cache, uint64_t key, Folder &result)
+{
+    std::ifstream manifest(cache / "manifest.txt");
+    std::string word, value;
+    if (!(manifest >> word >> value) || word != "key" || value != Hex(key)) return false;
+    Folder loaded;
+    while (manifest >> word >> value)
+    {
+        std::error_code ec;
+        if (word == "index")
+        {
+            const auto path = cache / (value + ".index");
+            const auto size = fs::file_size(path, ec);
+            if (ec) return false;
+            auto bytes = std::make_shared<std::vector<uint8_t>>(ReadAt(path, 0, size_t(size)));
+            loaded.ranges[value].push_back({0, size, std::move(bytes), nullptr});
+        }
+        else if (word == "tail")
+        {
+            uint64_t base = 0, size = 0;
+            if (!(manifest >> base >> size)) return false;
+            auto file = std::make_shared<CachedFile>();
+            file->path = cache / (value + ".tail");
+            if (fs::file_size(file->path, ec) != size || ec) return false;
+            loaded.ranges[value].push_back({base, size, nullptr, std::move(file)});
+        }
+        else return false;
+    }
+    result = std::move(loaded);
+    return true;
 }
 
 Folder Build(const fs::path &folder)
@@ -351,33 +470,123 @@ Folder Build(const fs::path &folder)
     std::error_code ec;
     for (const auto &item : fs::directory_iterator(folder, ec))
         names.emplace(Lower(Utf8(item.path().filename())), item.path());
-    std::map<std::string, std::pair<uint64_t, std::vector<uint8_t>>> tails;
-    Counts counts;
+    // The indexes and the archives' sizes are part of the key.
+    std::map<std::string, std::vector<uint8_t>> indexes;
+    uint64_t key = Hash(gModsKey, Utf8(fs::absolute(folder).lexically_normal()));
     for (const auto &[name, path] : names)
     {
-        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".fpi") != 0) continue;
+        const bool index = name.ends_with(".fpi");
+        if (!index && !name.ends_with(".fpd")) continue;
+        key = Hash(Hash(key, name), uint64_t(fs::file_size(path, ec)));
+        if (!index) continue;
         try
         {
-            auto index = ReadAt(path, 0, 64);
-            index = ReadAt(path, 0, size_t(fpi::IndexSize(index)));
-            const auto before = counts.files;
-            PatchIndex(folder, names, index, tails, counts);
-            if (counts.files != before)
-                result.ranges[name].push_back({0, std::make_shared<const std::vector<uint8_t>>(std::move(index))});
+            auto bytes = ReadAt(path, 0, 64);
+            bytes = ReadAt(path, 0, size_t(fpi::IndexSize(bytes)));
+            key = Hash(key, std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size()));
+            indexes.emplace(name, std::move(bytes));
         }
         catch (const std::exception &error)
         {
-            LOG_WARNING("[mods] text: cannot read index {}: {}", Utf8(path), error.what());
+            LOG_WARNING("[mods] cannot read index {}: {}", Utf8(path), error.what());
         }
     }
-    for (auto &[name, tail] : tails)
-        if (!tail.second.empty())
-            result.ranges[name].push_back({tail.first, std::make_shared<const std::vector<uint8_t>>(std::move(tail.second))});
+    const auto cache = CacheFolder(folder);
+    if (!cache.empty() && LoadCache(cache, key, result))
+    {
+        LOG_NOTICE("[mods] rebuilt files for {} read from {}", Utf8(folder), Utf8(cache));
+        return result;
+    }
+
+    // Build into <cache>.new, then put it in place of the old one.
+    fs::path building = cache.empty() ? fs::path() : fs::path(cache).concat(".new");
+    if (!building.empty())
+    {
+        fs::remove_all(building, ec);
+        fs::create_directories(building, ec);
+        if (ec)
+        {
+            LOG_WARNING("[mods] no cache for rebuilt files ({}): {}; keeping them in memory", Utf8(building), ec.message());
+            building.clear();
+        }
+    }
+    std::map<std::string, Tail> tails;
+    std::vector<std::string> patched;
+    Counts counts;
+    for (auto &[name, index] : indexes)
+    {
+        try
+        {
+            const auto before = counts.files;
+            PatchIndex(folder, names, index, tails, building, counts);
+            if (counts.files != before) patched.push_back(name);
+        }
+        catch (const std::exception &error)
+        {
+            LOG_WARNING("[mods] cannot patch index {}: {}", Utf8(names.at(name)), error.what());
+        }
+    }
+    for (auto &[name, tail] : tails) tail.file.close();
     if (counts.files || counts.failed)
         // Keys a copy lacks are normal: a pack made from the DLC copy of a file
         // also applies to the disc copy, which has fewer entries.
         LOG_NOTICE("[mods] {} translated and {} model packages rebuilt in {} ({} failed; {} translation keys this copy does not have)",
                    counts.texts, counts.files - counts.texts, Utf8(folder), counts.failed, counts.unknownKeys);
+
+    bool cached = false;
+    if (!building.empty())
+    {
+        try
+        {
+            std::ofstream manifest(building / "manifest.txt.part");
+            manifest << "key " << Hex(key) << "\n";
+            for (const auto &name : patched)
+            {
+                std::ofstream out(building / (name + ".index"), std::ios::binary | std::ios::trunc);
+                const auto &bytes = indexes.at(name);
+                if (!out.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size())))
+                    throw std::runtime_error("cannot write the index");
+                manifest << "index " << name << "\n";
+            }
+            for (const auto &[name, tail] : tails)
+                if (tail.size) manifest << "tail " << name << " " << tail.base << " " << tail.size << "\n";
+            manifest.close();
+            if (!manifest) throw std::runtime_error("cannot write the manifest");
+            fs::rename(building / "manifest.txt.part", building / "manifest.txt");
+            fs::remove_all(cache);
+            fs::rename(building, cache);
+            cached = LoadCache(cache, key, result);
+        }
+        catch (const std::exception &error)
+        {
+            LOG_WARNING("[mods] cannot keep the rebuilt files in {}: {}", Utf8(cache), error.what());
+        }
+    }
+    if (!cached)
+    {
+        // In memory: the cache could not be written, or there is none.
+        result = {};
+        for (const auto &name : patched)
+        {
+            auto bytes = std::make_shared<const std::vector<uint8_t>>(indexes.at(name));
+            result.ranges[name].push_back({0, bytes->size(), bytes, nullptr});
+        }
+        for (auto &[name, tail] : tails)
+        {
+            if (!tail.size) continue;
+            if (tail.path.empty())
+            {
+                auto bytes = std::make_shared<const std::vector<uint8_t>>(std::move(tail.memory));
+                result.ranges[name].push_back({tail.base, bytes->size(), bytes, nullptr});
+            }
+            else
+            {
+                auto file = std::make_shared<CachedFile>();
+                file->path = tail.path;
+                result.ranges[name].push_back({tail.base, tail.size, nullptr, std::move(file)});
+            }
+        }
+    }
     return result;
 }
 
@@ -406,6 +615,32 @@ void List()
         ++models;
     }
     if (models) LOG_NOTICE("[mods] model: {} replacements in {} packages", models, gModels.size());
+
+    uint64_t key = Hash(Hash(0xcbf29ce484222325ull, lo_version::Source), kCacheFormat);
+    key = Hash(key, gLanguagePack);
+    // Sizes and times from one listing per folder: a stat per file takes
+    // seconds for a pack of tens of thousands of files on Windows.
+    using Stat = std::pair<uint64_t, int64_t>;
+    std::map<fs::path, std::map<fs::path, Stat>> folders;
+    auto stat = [&](const fs::path &path) {
+        auto [it, added] = folders.try_emplace(path.parent_path());
+        std::error_code ec;
+        if (added)
+            for (const auto &entry : fs::directory_iterator(path.parent_path(), ec))
+                it->second[entry.path().filename()] = {uint64_t(entry.file_size(ec)),
+                                                       int64_t(entry.last_write_time(ec).time_since_epoch().count())};
+        const auto found = it->second.find(path.filename());
+        return found == it->second.end() ? Stat{} : found->second;
+    };
+    auto add = [&](const ResolvedAsset &asset) {
+        const auto [size, time] = stat(asset.path);
+        key = Hash(Hash(Hash(key, asset.id.key), Utf8(asset.path)), asset.offset);
+        key = Hash(Hash(Hash(key, asset.size), size), uint64_t(time));
+    };
+    for (const auto &[member, asset] : gTexts) add(asset);
+    for (const auto &[member, assets] : gModels)
+        for (const auto &asset : assets) add(asset);
+    gModsKey = key;
 }
 } // namespace
 
@@ -416,12 +651,52 @@ std::vector<Range> RangesFor(const fs::path &file)
     if (!archive) return {};
     std::lock_guard lock(gMutex);
     List();
-    if (gTexts.empty() && gModels.empty()) return {};
+    if (gTexts.empty() && gModels.empty())
+    {
+        // Without mods the rebuilt files of earlier starts are not needed (a
+        // pack's can take gigabytes). Only the cache's own folders go.
+        static bool cleared = false;
+        if (const auto root = CacheRoot(); !cleared && !root.empty())
+        {
+            cleared = true;
+            std::error_code ec;
+            size_t removed = 0;
+            for (const auto &entry : fs::directory_iterator(root, ec))
+            {
+                auto name = Utf8(entry.path().filename());
+                if (name.ends_with(".new")) name.resize(name.size() - 4);
+                if (name.size() == 16 && name.find_first_not_of("0123456789abcdef") == std::string::npos && entry.is_directory(ec))
+                    removed += fs::remove_all(entry.path(), ec) > 0;
+            }
+            if (removed) LOG_NOTICE("[mods] no mods: removed {} folders of rebuilt files in {}", removed, Utf8(root));
+        }
+        return {};
+    }
     const auto folder = file.parent_path().lexically_normal();
     auto it = gFolders.find(folder);
     if (it == gFolders.end()) it = gFolders.emplace(folder, Build(folder)).first;
     const auto ranges = it->second.ranges.find(name);
     return ranges == it->second.ranges.end() ? std::vector<Range>{} : ranges->second;
+}
+
+bool Range::Read(uint64_t at, uint8_t *out, size_t count) const
+{
+    if (at > size || count > size - at) return false;
+    if (bytes)
+    {
+        std::memcpy(out, bytes->data() + at, count);
+        return true;
+    }
+    if (!file) return false;
+    std::lock_guard lock(file->mutex);
+    if (!file->stream.is_open()) file->stream.open(file->path, std::ios::binary);
+    file->stream.clear();
+    if (!file->stream.seekg(std::streamoff(at)) || !file->stream.read(reinterpret_cast<char *>(out), std::streamsize(count)))
+    {
+        LOG_WARNING("[mods] cannot read {} at {}", Utf8(file->path), at);
+        return false;
+    }
+    return true;
 }
 
 bool Translates(const std::string &memberPath, const std::string &key)

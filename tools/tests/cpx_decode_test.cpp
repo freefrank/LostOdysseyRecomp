@@ -1,7 +1,10 @@
 #include "gpu/shader/cpx_decode.h"
+#include "modding/cpx_pack.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
 
 using namespace xenos::resources;
@@ -167,7 +170,39 @@ int main(int argc, char** argv) {
         Reject(bad, "failure discards partial output");
         header.decodedSize = 123;
         Require(!cpx::ReadHeader({}, header) && header.decodedSize == 0, "failure resets header");
-        std::cout << "PASS: CPX raw/multiple blocks, 8/16-bit streams, overlap, modes, prefetch, framing, caps, transactional failure\n";
+
+        // Packing (modding/cpx_pack.h): zeros, text and noise decode back, also in
+        // place as the game does it (block offsets read first, then each block's
+        // bytes before its output, with the stream at decoded + reserve - stored).
+        {
+            std::mt19937 random(7);
+            Bytes data(5 * 65536 + 1234);
+            for (size_t i = 0; i < data.size(); ++i)
+                data[i] = i < 2 * 65536 ? 0 : i < 3 * 65536 ? uint8_t('a' + i % 7) : uint8_t(random());
+            Bytes original(16, 0);
+            original[4] = 0x20; // 16-bit words, as on the discs
+            const auto packed = modding::cpx_pack::Pack(data, original, 2048);
+            Require(packed.size() < data.size(), "packing compresses");
+            Accept(packed, data, "packed stream");
+            const size_t decoded = data.size(), stored = packed.size(), reserve = size_t(packed[3]) * 2048;
+            Require(decoded + reserve >= stored, "reserve covers the stream");
+            Bytes buffer(decoded + reserve);
+            const size_t start = decoded + reserve - stored;
+            std::copy(packed.begin(), packed.end(), buffer.begin() + std::ptrdiff_t(start));
+            const size_t blocks = size_t(packed[6]) | size_t(packed[7]) << 8;
+            std::vector<size_t> offsets;
+            for (size_t i = 0; i < blocks; ++i)
+                offsets.push_back(cpx::detail::ReadLE32(buffer.data() + start + 16 + 4 * i));
+            offsets.push_back(stored);
+            for (size_t i = 0, out = 0; i < blocks; ++i) {
+                const Bytes block(buffer.begin() + std::ptrdiff_t(start + offsets[i]), buffer.begin() + std::ptrdiff_t(start + offsets[i + 1]));
+                const size_t count = std::min<size_t>(65536, decoded - out);
+                cpx::detail::DecodeBlock(block, 16, std::span<uint8_t>(buffer.data() + out, count));
+                out += count;
+            }
+            Require(std::equal(data.begin(), data.end(), buffer.begin()), "packed stream decodes in place");
+        }
+        std::cout << "PASS: CPX raw/multiple blocks, 8/16-bit streams, overlap, modes, prefetch, framing, caps, transactional failure, packing\n";
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         return 1;

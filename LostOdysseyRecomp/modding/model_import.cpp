@@ -1343,6 +1343,8 @@ Result RebuildPackage(std::span<const uint8_t> bytes, const std::string &stem, c
             out.insert(out.end(), data.begin(), data.end());
             PutBe32(out, e.record + 32, uint32_t(data.size()));
             PutBe32(out, e.record + 36, uint32_t(base));
+            // Nothing refers to the old bytes now; zeros pack to almost nothing.
+            std::fill_n(out.begin() + std::ptrdiff_t(e.offset), e.size, uint8_t(0));
             ++result.replaced;
             result.notes.push_back(e.name + ": " + summary);
             if (!skeletal) result.vertexMaps[Lower(stem + "." + e.name)] = std::move(vertexMap);
@@ -1378,6 +1380,7 @@ Result RemapLighting(std::span<const uint8_t> bytes, const std::string &stem, co
         out.insert(out.end(), data.begin(), data.end());
         PutBe32(out, e.record + 32, uint32_t(data.size()));
         PutBe32(out, e.record + 36, uint32_t(base));
+        std::fill_n(out.begin() + std::ptrdiff_t(e.offset), e.size, uint8_t(0));
     };
     std::map<int32_t, const VertexMap *> shadowBuffers; // ShadowMap1D reference -> its mesh's map
     size_t lightMaps = 0, skipped = 0;

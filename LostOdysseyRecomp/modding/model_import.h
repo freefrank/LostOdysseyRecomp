@@ -11,7 +11,7 @@
 // The package is rebuilt when the game opens the archive that holds it
 // (modding/text_overlay.h): the new mesh is serialized at the end of the
 // package and the export table points there, so nothing else in the package
-// moves. The skeleton and the material slots stay the original's; vertices,
+// moves; the old export's bytes are zeroed. The skeleton and the material slots stay the original's; vertices,
 // triangles, UVs and weights are the file's. A static mesh gets a new collision
 // tree, and the baked lighting of its placements follows its new vertices
 // (RemapLighting). See docs/wiki/Creating-Mods.md#replace-a-model.

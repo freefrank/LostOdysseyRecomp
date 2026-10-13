@@ -627,7 +627,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
         {
             handle->ranges = modding::text_overlay::RangesFor(hostPath);
             for (const auto &range : handle->ranges)
-                handle->size = std::max<uint64_t>(handle->size, range.offset + range.bytes->size());
+                handle->size = std::max<uint64_t>(handle->size, range.offset + range.size);
         }
     }
 
@@ -666,8 +666,8 @@ uint32_t NtOpenFile(be<uint32_t>* FileHandle, uint32_t DesiredAccess, XOBJECT_AT
     return OpenFileHandle(FileHandle, DesiredAccess, Attributes, IoStatusBlock, FILE_OPEN, OpenOptions);
 }
 
-// Reads a handle that has language-pack ranges: the file's bytes up to its
-// real end, zeros after it, and the ranges' bytes over both.
+// Reads a handle that has language-pack or model ranges: the file's bytes up
+// to its real end, zeros after it, and the ranges' bytes over both.
 static uint32_t ReadWithRanges(FileHandle& handle, uint64_t offset, uint8_t* out, size_t length, size_t& read)
 {
     read = 0;
@@ -688,9 +688,9 @@ static uint32_t ReadWithRanges(FileHandle& handle, uint64_t offset, uint8_t* out
     for (const auto& range : handle.ranges)
     {
         const uint64_t begin = std::max(offset, range.offset);
-        const uint64_t end = std::min<uint64_t>(offset + length, range.offset + range.bytes->size());
-        if (begin < end)
-            std::memcpy(out + (begin - offset), range.bytes->data() + (begin - range.offset), size_t(end - begin));
+        const uint64_t end = std::min<uint64_t>(offset + length, range.offset + range.size);
+        if (begin < end && !range.Read(begin - range.offset, out + (begin - offset), size_t(end - begin)))
+            return FileIoError(EIO);
     }
     read = length;
     return STATUS_SUCCESS;
