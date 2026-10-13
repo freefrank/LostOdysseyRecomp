@@ -366,6 +366,22 @@ target_include_directories(LoLogCaptureTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoLogCaptureTest PRIVATE cxx_std_20)
 target_link_libraries(LoLogCaptureTest PRIVATE fmt::fmt)
 
+# Model replacements (modding/model_import.h) on a package or through the archive
+# overlay, without guest/GPU work.
+add_executable(LoModelImport EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/model_import_cli.cpp
+    ${LO_RUNTIME_ROOT}/modding/gltf_reader.cpp
+    ${LO_RUNTIME_ROOT}/modding/model_import.cpp
+    ${LO_RUNTIME_ROOT}/modding/mod_api.cpp
+    ${LO_RUNTIME_ROOT}/modding/text_format.cpp
+    ${LO_RUNTIME_ROOT}/modding/text_menu.cpp
+    ${LO_RUNTIME_ROOT}/modding/text_overlay.cpp)
+target_include_directories(LoModelImport PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoModelImport PRIVATE cxx_std_20)
+target_compile_definitions(LoModelImport PRIVATE NOMINMAX)
+target_link_libraries(LoModelImport PRIVATE fmt::fmt Threads::Threads)
+set_target_properties(LoModelImport PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+
 # Background archive publication and failure recovery, without guest/GPU work.
 if(WIN32)
     add_executable(LoCaptureArchiveTest EXCLUDE_FROM_ALL

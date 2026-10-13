@@ -1,6 +1,7 @@
 #include "text_overlay.h"
 #include "fpi_index.h"
 #include "mod_api.h"
+#include "model_import.h"
 #include "text_format.h"
 
 #include <gpu/shader/cpx_decode.h>
@@ -58,12 +59,12 @@ void PutLe32(std::vector<uint8_t> &out, size_t at, uint32_t value)
 std::vector<uint8_t> StoreCpx(std::span<const uint8_t> payload, std::span<const uint8_t> original)
 {
     const size_t blocks = (payload.size() + cpx::kBlockSize - 1) / cpx::kBlockSize;
-    if (!blocks || blocks > 0xffff) throw std::runtime_error("text file too large for CPX");
+    if (!blocks || blocks > 0xffff) throw std::runtime_error("file too large for CPX");
     std::vector<uint8_t> out(16 + 4 * blocks, 0);
     std::copy_n("cpx", 3, out.begin());
     std::copy_n(original.begin() + 3, 3, out.begin() + 3);
     const size_t reserve = (16 + 8 * blocks + fpi::kSector - 1) / fpi::kSector;
-    if (reserve > 0xff) throw std::runtime_error("text file too large for CPX");
+    if (reserve > 0xff) throw std::runtime_error("file too large for CPX");
     out[3] = std::max(out[3], uint8_t(reserve));
     out[6] = uint8_t(blocks);
     out[7] = uint8_t(blocks >> 8);
@@ -88,6 +89,7 @@ std::mutex gMutex;
 bool gListed = false;
 std::string gLanguagePack;
 std::map<std::string, ResolvedAsset> gTexts; // member path -> translation file or archive entry
+std::map<std::string, std::vector<ResolvedAsset>> gModels; // package member path -> its model replacements
 std::map<std::pair<fs::path, uint64_t>, std::optional<text::Replacements>> gFiles; // parsed, by file and offset
 std::map<fs::path, Folder> gFolders;
 
@@ -124,8 +126,43 @@ const text::Replacements *Translation(const ResolvedAsset &file)
 
 struct Counts
 {
-    size_t files = 0, unknownKeys = 0, failed = 0;
+    size_t files = 0, texts = 0, unknownKeys = 0, failed = 0, models = 0;
 };
+
+// The package with its model replacements, or empty to keep it.
+std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<uint8_t> &package, Counts &counts)
+{
+    std::vector<model_import::Replacement> replacements;
+    for (const auto &asset : gModels.at(path))
+    {
+        // Key: <package>#<export index>:<object>.
+        const auto hash = asset.id.key.rfind('#'), colon = asset.id.key.find(':', hash);
+        model_import::Replacement r;
+        r.exportIndex = uint32_t(std::stoul(asset.id.key.substr(hash + 1, colon - hash - 1)));
+        r.object = asset.id.key.substr(colon + 1);
+        r.source = DescribeAsset(asset);
+        std::ifstream input;
+        uint64_t length = 0;
+        if (!OpenAsset(asset, input, length) || length > 256 * 1024 * 1024)
+        {
+            LOG_WARNING("[mods] model {} skipped: cannot read it or larger than 256 MiB", r.source);
+            continue;
+        }
+        r.glb.resize(size_t(length));
+        if (!input.read(reinterpret_cast<char *>(r.glb.data()), std::streamsize(r.glb.size())))
+        {
+            LOG_WARNING("[mods] model {} skipped: truncated", r.source);
+            continue;
+        }
+        replacements.push_back(std::move(r));
+    }
+    auto result = model_import::RebuildPackage(package, replacements);
+    for (const auto &note : result.notes)
+        if (result.replaced) LOG_NOTICE("[mods] model {}: {}", path, note);
+        else LOG_WARNING("[mods] model {}: {}", path, note);
+    counts.models += result.replaced;
+    return std::move(result.package);
+}
 
 // Rebuilds the translated files one index points to. index: the file's first
 // IndexSize() bytes, patched in place; tails: per archive file name.
@@ -136,7 +173,8 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     // In archive order, so the reads run forward through each file (slow disks).
     std::vector<const fpi::File *> files;
     for (const auto &file : parsed.files)
-        if (gTexts.count(file.path) && text::Detect(file.path) != text::Format::None) files.push_back(&file);
+        if ((gTexts.count(file.path) && text::Detect(file.path) != text::Format::None) || gModels.count(file.path))
+            files.push_back(&file);
     std::sort(files.begin(), files.end(), [](const fpi::File *a, const fpi::File *b) {
         return std::tie(a->archive, a->offset) < std::tie(b->archive, b->offset);
     });
@@ -144,22 +182,28 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     {
         const auto &file = *entry;
         const auto text = gTexts.find(file.path);
+        const bool model = gModels.count(file.path) != 0;
         const auto format = text::Detect(file.path);
         try
         {
             const auto archive = names.find(parsed.archives.at(file.archive));
             if (archive == names.end()) throw std::runtime_error("archive " + parsed.archives[file.archive] + " missing");
-            const auto *translation = Translation(text->second);
-            if (!translation) continue;
+            const auto *translation = model ? nullptr : Translation(text->second);
+            if (!model && !translation) continue;
             const auto stored = ReadAt(archive->second, file.offset, file.size);
             const bool packed = stored.size() >= 3 && std::equal(stored.begin(), stored.begin() + 3, "cpx");
             std::vector<uint8_t> member;
             if (packed && !cpx::Decode(stored, member)) throw std::runtime_error("invalid CPX data");
             const auto &original = packed ? member : stored;
-            size_t unknown = 0;
-            const auto rebuilt = text::Rebuild(format, original, *translation, &unknown);
-            counts.unknownKeys += unknown;
-            if (rebuilt == original) continue;
+            std::vector<uint8_t> rebuilt;
+            if (model) rebuilt = RebuildModels(file.path, original, counts);
+            else
+            {
+                size_t unknown = 0;
+                rebuilt = text::Rebuild(format, original, *translation, &unknown);
+                counts.unknownKeys += unknown;
+            }
+            if (rebuilt.empty() || rebuilt == original) continue;
             const auto payload = packed ? StoreCpx(rebuilt, stored) : rebuilt;
 
             auto &[base, tail] = tails.try_emplace(archive->first, 0, std::vector<uint8_t>{}).first->second;
@@ -182,11 +226,12 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
             PutLe32(index, file.record + 16, uint32_t(payload.size()));
             if (packed) PutLe32(index, file.record + 20, uint32_t(rebuilt.size()));
             ++counts.files;
+            counts.texts += !model;
         }
         catch (const std::exception &error)
         {
             ++counts.failed;
-            LOG_WARNING("[mods] text {} kept original in {}: {}", file.path, Utf8(folder), error.what());
+            LOG_WARNING("[mods] {} {} kept original in {}: {}", model ? "model" : "text", file.path, Utf8(folder), error.what());
         }
     }
 }
@@ -224,8 +269,8 @@ Folder Build(const fs::path &folder)
     if (counts.files || counts.failed)
         // Keys a copy lacks are normal: a pack made from the DLC copy of a file
         // also applies to the disc copy, which has fewer entries.
-        LOG_NOTICE("[mods] text: {} translated files in {} ({} failed; {} translation keys this copy does not have)",
-                   counts.files, Utf8(folder), counts.failed, counts.unknownKeys);
+        LOG_NOTICE("[mods] {} translated and {} model packages rebuilt in {} ({} failed; {} translation keys this copy does not have)",
+                   counts.texts, counts.files - counts.texts, Utf8(folder), counts.failed, counts.unknownKeys);
     return result;
 }
 
@@ -246,6 +291,14 @@ void List()
     if (!gTexts.empty())
         LOG_NOTICE("[mods] text: {} translation files ({} from language pack {})", gTexts.size(), packFiles,
                    gLanguagePack.empty() ? "none" : gLanguagePack);
+    size_t models = 0;
+    for (auto &asset : ListModels())
+    {
+        const auto package = asset.id.key.substr(0, asset.id.key.rfind('#'));
+        gModels[package].push_back(std::move(asset));
+        ++models;
+    }
+    if (models) LOG_NOTICE("[mods] model: {} replacements in {} packages", models, gModels.size());
 }
 } // namespace
 
@@ -256,7 +309,7 @@ std::vector<Range> RangesFor(const fs::path &file)
     if (!archive) return {};
     std::lock_guard lock(gMutex);
     List();
-    if (gTexts.empty()) return {};
+    if (gTexts.empty() && gModels.empty()) return {};
     const auto folder = file.parent_path().lexically_normal();
     auto it = gFolders.find(folder);
     if (it == gFolders.end()) it = gFolders.emplace(folder, Build(folder)).first;

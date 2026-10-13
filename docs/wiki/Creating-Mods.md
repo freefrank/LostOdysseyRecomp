@@ -121,7 +121,7 @@ my-export/export-summary.txt
 
 ### Models and animations (for reference)
 
-Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. They are for reference only: the game cannot load replacement models or animations yet, so a mod cannot replace them.
+Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. Character, monster and moving-object models can be edited and put back with a mod (see [Replace a model](#replace-a-model)); map pieces and animations are for reference only.
 
 1. Export the models, the animations or both. Add `--export-model-textures` to link each material's colour texture:
 
@@ -186,6 +186,50 @@ movie:mv_00v=movies/mv_00v.mp4
 ```
 
 `python tools/modding/lo_mod.py archive` packs `overlay/movies/*.mp4` into the `.loarc` like other files. It checks each video before packing: if `ffprobe` is installed it must be H.264, `yuv420p` and progressive, or the file is skipped with a message. It warns when the frame rate is outside 24-120 fps, the picture is not 16:9, or `moov` is after the video data.
+
+## Replace a model
+
+A mod can replace the 3D model of a character, monster or moving object (a `SkeletalMesh`) with one you edited. The new model keeps the original's skeleton and materials, so it moves with the game's own animations and uses the original textures, or those of a [texture pack](#make-a-texture-pack-experimental). Map pieces and other static models cannot be replaced yet.
+
+1. Export the model. In the [MO2 tool](Mod-Organizer-2.md#export), select its row and press **Open model**, or run:
+
+   ```sh
+   LostOdysseyRecomp.exe --export-assets my-export --export-kinds models --export-model-textures --export-filter pc_000a0_m
+   ```
+
+   The file is `my-export/models/<package path>/<object>.<export index>.glb`. Kaim's is `my-export/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb`.
+2. In Blender, choose **File → Import → glTF 2.0** and open the file.
+3. Edit the mesh: move, add or delete vertices and faces, change the UV map, paint the weights. Keep these as they are:
+   - The armature and its bone names. Weight the mesh only to bones that are already there. Do not add, rename or delete bones.
+   - The material names. Every face needs one of the original materials, such as `MAT_pc_000a0_bodyMT`. New materials do not work. Names that Blender gives a `.001` ending are fine.
+   - A UV map.
+4. Choose **File → Export → glTF 2.0**, set **Format** to **glTF Binary (.glb)**, and export. The other options can stay as they are. Textures and animations in the file are not used.
+5. Put the file in a mod at the same path it was exported to, under `overlay/models/`:
+
+   ```text
+   mods/my-models/overlay/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb
+   ```
+
+6. Make `mods/my-models/mod.ini` with this text:
+
+   ```ini
+   api_version=2
+   id=my-models
+   name=My Models
+   ```
+
+7. Start the game. The newest `logs/runtime-*.log` in the game folder shows the result:
+   - `[mods] model bin/xenon/chr/pc/pc_000a0_m.xxx: pc_000a0_m: … vertices` means the model was replaced.
+   - `kept original` means it was not, followed by the reason (for example a bone or material the original does not have).
+
+Limits:
+
+- At most 65,535 vertices. The game splits the model into parts of up to 75 bones, and vertices on the seams count twice.
+- Up to 4 bone weights per vertex. Extra weights are dropped and the largest 4 are kept.
+- The replacement is shown at every distance; the original's lower-detail versions are not used.
+- A few models are in more than one package, such as a boss in its battle and event packages. Export and replace each copy.
+
+`python tools/modding/lo_mod.py archive` packs `overlay/models/` into the `.loarc` like other files.
 
 ## Make a texture pack (experimental)
 

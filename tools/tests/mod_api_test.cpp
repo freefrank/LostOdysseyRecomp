@@ -596,6 +596,34 @@ void Movies(const fs::path& root) {
     fs::remove_all(root / "mva");
     Reload();
 }
+// Model keys are package#export:object; the file sits at the path --export-assets gives the model.
+void Models(const fs::path& root) {
+    assert(OverlayRelativePath({AssetKind::Model, "Bin/Xenon/chr/pc/pc_000a0_m.xxx#0:pc_000a0_m"}) ==
+           fs::path("overlay/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb").make_preferred());
+    // Loose files in an api_version=2 folder; names without a package folder or export index are skipped.
+    Write(root / "mdl/mod.ini", "api_version=2\nid=mdl\n");
+    Write(root / "mdl/overlay/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb", "glb");
+    Write(root / "mdl/overlay/models/pc_010a0_m.0.glb", "x");
+    Write(root / "mdl/overlay/models/a.xxx/pc_010a0_m.glb", "x");
+    Initialize(root);
+    {
+        const auto models = ListModels();
+        assert(models.size() == 1 && models[0].id.key == "bin/xenon/chr/pc/pc_000a0_m.xxx#0:pc_000a0_m" && models[0].modId == "mdl");
+        assert(Find(ListMods(), "mdl")->overlayFiles == 1);
+    }
+    fs::remove_all(root / "mdl");
+    // An archive entry (names are lower case).
+    const auto archive = root / "mda/overlay.loarc";
+    Write(root / "mda/mod.ini", "api_version=2\nid=mda\n");
+    Write(archive, Loarc({{"overlay/models/a.xxx/m.3.glb", "glb"}}, 1u << uint32_t(AssetKind::Model)));
+    Reload();
+    {
+        const auto models = ListModels();
+        assert(models.size() == 1 && models[0].id.key == "a.xxx#3:m" && models[0].path == archive && models[0].size == 3);
+    }
+    fs::remove_all(root / "mda");
+    Reload(); assert(ListModels().empty());
+}
 // LO_MOD_TEST_INDEX_FILES=<n>: time Initialize over one mod with n texture files.
 void IndexBench(const fs::path& root) {
     const char* value = std::getenv("LO_MOD_TEST_INDEX_FILES");
@@ -645,6 +673,7 @@ int main() {
     FormatV2(root, temp.path / "mod-list.ini");
     Archives(root);
     Movies(root);
+    Models(root);
     IndexBench(root);
     Shutdown(); assert(!Resolve(request));
     std::cout << "Mod API, image, texture, text and language pack contracts, mod folders, archives and mod list, manager isolation and reload tests passed\n";

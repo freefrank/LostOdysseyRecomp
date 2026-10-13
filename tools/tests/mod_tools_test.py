@@ -419,7 +419,7 @@ class ModToolsTest(unittest.TestCase):
 
     def test_archive_names(self):
         for name in ("overlay/text/a/b.json", "overlay/textures/fp-0123456789abcdef.lotex2",
-                     "overlay/models/key-fnv1a64-0123456789abcdef.loasset", "overlay/text/ü.json",
+                     "overlay/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb", "overlay/text/ü.json",
                      "overlay/movies/mv_00v.mp4", "overlay/movies/" + "a" * 64 + ".mp4"):
             mod.loarc_kind(name)
         for name in ("overlay/text/A.json", "overlay/text/a.JSON", "overlay/text/../a.json", "overlay/text/a//b.json",
@@ -428,7 +428,10 @@ class ModToolsTest(unittest.TestCase):
                      "overlay/fonts/sub/key-fnv1a64-0123456789abcdef.loasset", "other/a", "/overlay/text/a.json",
                      "overlay/movies/MV_00V.mp4", "overlay/movies/mv.00v.mp4", "overlay/movies/.mp4",
                      "overlay/movies/" + "a" * 65 + ".mp4", "overlay/movies/mv_00v.loasset",
-                     "overlay/movies/key-fnv1a64-0123456789abcdef.loasset", "overlay/movies/sub/mv_00v.mp4"):
+                     "overlay/movies/key-fnv1a64-0123456789abcdef.loasset", "overlay/movies/sub/mv_00v.mp4",
+                     "overlay/models/key-fnv1a64-0123456789abcdef.loasset", "overlay/models/pc_000a0_m.0.glb",
+                     "overlay/models/a.xxx/pc_000a0_m.glb", "overlay/models/a.xxx/PC_000A0_M.0.glb",
+                     "overlay/models/a.xxx/../pc_000a0_m.0.glb"):
             with self.assertRaises(ValueError, msg=name):
                 mod.loarc_kind(name)
 

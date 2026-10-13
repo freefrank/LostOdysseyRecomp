@@ -19,6 +19,9 @@ inline constexpr uint32_t kModApiVersion = 2;
 // Movie keys are the original video's file name stem in lower case (mv_00v for
 // bin/xenon/mov/mv_00v.wmv): 1-64 of [a-z0-9_], ASCII case-insensitive; the
 // file is an H.264 MP4.
+// Model keys are package#export:object like image keys; the file is a glTF
+// binary at overlay/models/<package path>/<object>.<export index>.glb, the path
+// --export-assets gives the model (modding/model_import.h).
 enum class AssetKind : uint32_t { Image = 1, Font = 2, Model = 3, Movie = 4, Texture = 5, Text = 6 };
 enum class ResolutionMode : uint32_t { Combined, Standalone, Overlay };
 struct AssetId { AssetKind kind = AssetKind::Image; std::string key; };
@@ -100,6 +103,8 @@ bool HasTextureReplacements();
 // Every text replacement Resolve would return, one per member path (top-level
 // overlay files first, then mod folders in order). Providers are not asked.
 std::vector<ResolvedAsset> ListTexts();
+// Every model replacement, one per key, in the same order as ListTexts.
+std::vector<ResolvedAsset> ListModels();
 // Installed language packs by folder name; a repeated id keeps the first.
 std::vector<LanguagePack> LanguagePacks();
 // The pack's text/ files, one per member path.

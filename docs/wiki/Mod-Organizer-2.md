@@ -74,7 +74,7 @@ If the data folder of an instance is your game folder (step 2.6), create a new i
 
 ## Export the original assets
 
-The export tool copies the game's own textures, movies, text, 3D models and animations out of your game data. Use them as the starting point for a mod: textures to repaint or upscale, text to translate. Models and animations are for reference only. It needs `lostodysseyrecomp_export.py` from [step 1](#1-install-the-plugins-once).
+The export tool copies the game's own textures, movies, text, 3D models and animations out of your game data. Use them as the starting point for a mod: textures to repaint or upscale, text to translate, character models to edit. Map pieces and animations are for reference only. It needs `lostodysseyrecomp_export.py` from [step 1](#1-install-the-plugins-once).
 
 ### Open the tool
 
@@ -147,7 +147,7 @@ Next steps:
 
 - Repaint or upscale textures: [Make a texture pack](Creating-Mods.md#make-a-texture-pack-experimental).
 - Translate text: [Translate the game's text](Creating-Mods.md#translate-the-games-text-experimental).
-- Models and animations (for reference only, not replaceable yet): [Models and animations](Creating-Mods.md#models-and-animations-for-reference).
+- Edit a character model: [Replace a model](Creating-Mods.md#replace-a-model).
 
 The tool reads the game folder directly, not through MO2, so it exports the original game files, not your installed mods. With the DLC installed, files the DLC changes come from the DLC.
 

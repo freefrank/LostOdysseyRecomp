@@ -5,12 +5,14 @@
 #include <string>
 #include <vector>
 
-// Language packs: the game's text files with translations applied, served in
-// place of the originals. When the game opens an archive or index of a disc
-// or DLC folder, every text file a pack translates is rebuilt (modding/
-// text_format.h) and stored past the end of its archive; the index records
-// of those files are pointed there with their new sizes. The game's loader
-// takes offsets and sizes from the index, so translations may be longer.
+// Language packs and model replacements: the game's text files with
+// translations applied, and packages with replaced models, served in place of
+// the originals. When the game opens an archive or index of a disc or DLC
+// folder, every text file a pack translates (modding/text_format.h) and every
+// package a mod replaces a model in (modding/model_import.h) is rebuilt and
+// stored past the end of its archive; the index records of those files are
+// pointed there with their new sizes. The game's loader takes offsets and
+// sizes from the index, so rebuilt files may be longer.
 // See docs/notes/language-pack-research.zh-CN.md.
 namespace modding::text_overlay
 {

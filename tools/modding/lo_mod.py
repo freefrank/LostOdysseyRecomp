@@ -47,6 +47,8 @@ LOARC_KINDS = {"images": 1, "fonts": 2, "models": 3, "movies": 4, "textures": 5,
 LOARC_NAMES = {1: r"key-fnv1a64-[0-9a-f]{16}\.lotex", 2: r"key-fnv1a64-[0-9a-f]{16}\.loasset",
                3: r"key-fnv1a64-[0-9a-f]{16}\.loasset", 4: r"[a-z0-9_]{1,64}\.mp4",
                5: r"fp-[0-9a-f]{16}\.lotex2"}
+# Model replacements keep the path --export-assets gives the model.
+MODEL_NAME = re.compile(r".+/[^/]+\.[0-9]+\.glb")
 LOARC_CHUNK = 1 << 20
 ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
@@ -853,6 +855,12 @@ def loarc_kind(name: str) -> int:
                 or stem != stem.translate(ASCII_LOWER)
                 or any(c in ":\\" or ord(c) < 32 or ord(c) == 127 for c in stem)):
             raise ValueError("text name must be a relative lower-case <path>.json")
+    elif kind == 3:
+        if (not MODEL_NAME.fullmatch(rest) or len(rest.encode("utf-8")) > 1024
+                or any(part in ("", ".", "..") for part in rest.split("/"))
+                or rest != rest.translate(ASCII_LOWER)
+                or any(c in ":\\" or ord(c) < 32 or ord(c) == 127 for c in rest)):
+            raise ValueError("model name must be a lower-case <package path>/<object>.<export index>.glb")
     elif not re.fullmatch(LOARC_NAMES[kind], rest):
         raise ValueError("file name does not match the kind's naming rule")
     return kind
@@ -887,6 +895,16 @@ def loarc_scan(overlay: Path) -> dict[str, Path]:
                         warn(f"skipped {path}: not a .json file")
                     else:
                         add("overlay/text/" + member[:-5].translate(ASCII_LOWER) + ".json", path)
+        elif kind == "models":
+            for base, dirs, files in os.walk(folder):
+                dirs.sort()
+                for file in sorted(files):
+                    path = Path(base) / file
+                    member = path.relative_to(folder).as_posix().translate(ASCII_LOWER)
+                    if not MODEL_NAME.fullmatch(member):
+                        warn(f"skipped {path}: not <package path>/<object>.<export index>.glb")
+                    else:
+                        add("overlay/models/" + member, path)
         else:
             for path in sorted(folder.iterdir()):
                 if path.is_file():

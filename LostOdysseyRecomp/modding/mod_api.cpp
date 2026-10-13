@@ -195,6 +195,19 @@ std::string CanonicalKey(AssetKind kind, std::string_view key) {
     if (kind != AssetKind::Texture) return CanonicalKey(key);
     return Hex16(key) ? std::string(key) : std::string{};
 }
+// A model file's key from its path under overlay/models, as --export-assets
+// names models: <package path>/<object>.<export index>.glb. Empty otherwise.
+std::string ModelKey(std::string relative) {
+    std::replace(relative.begin(), relative.end(), '\\', '/');
+    if (relative.size() <= 4 || Lower(relative.substr(relative.size() - 4)) != ".glb") return {};
+    const auto slash = relative.rfind('/');
+    if (slash == relative.npos) return {};
+    const auto file = std::string_view(relative).substr(slash + 1, relative.size() - slash - 5);
+    const auto dot = file.rfind('.');
+    uint32_t index = 0;
+    if (dot == file.npos || !Number(file.substr(dot + 1), index)) return {};
+    return MakeManifestKey(std::string_view(relative).substr(0, slash), index, file.substr(0, dot));
+}
 // Overlay-relative name with '/' separators for a canonical key.
 std::string OverlayKey(AssetKind kind, const std::string& key) {
     // A fingerprint is already a fixed-size name, so two manager mods that
@@ -202,6 +215,11 @@ std::string OverlayKey(AssetKind kind, const std::string& key) {
     if (kind == AssetKind::Texture) return "overlay/textures/fp-" + key + ".lotex2";
     if (kind == AssetKind::Text) return "overlay/text/" + key + ".json";
     if (kind == AssetKind::Movie) return "overlay/movies/" + key + ".mp4";
+    if (kind == AssetKind::Model) {
+        const auto hash = key.rfind('#'), colon = key.find(':', hash);
+        return "overlay/models/" + key.substr(0, hash) + "/" + key.substr(colon + 1) + "." +
+            key.substr(hash + 1, colon - hash - 1) + ".glb";
+    }
     uint64_t hash = 14695981039346656037ull;
     for (unsigned char c : key) { hash ^= c; hash *= 1099511628211ull; }
     char name[40];
@@ -245,6 +263,11 @@ std::optional<AssetId> ArchiveEntryId(std::string_view name) {
         auto key = MovieName(file);
         if (key.empty()) return {};
         return AssetId{AssetKind::Movie, std::move(key)};
+    }
+    if (*kind == AssetKind::Model) {
+        auto key = ModelKey(std::string(file));
+        if (key.empty()) return {};
+        return AssetId{AssetKind::Model, std::move(key)};
     }
     const auto hex = HashedName(*kind, file);
     if (!hex) return {};
@@ -401,6 +424,16 @@ size_t ListKindFolder(Index& index, AssetKind kind, const std::filesystem::path&
             if (key.empty()) continue;
             auto name = OverlayKey(AssetKind::Text, key);
             index.entries.try_emplace(std::move(name), Entry{{AssetKind::Text, std::move(key)}, it->path(), mod});
+            ++count;
+        }
+    } else if (kind == AssetKind::Model) {
+        for (std::filesystem::recursive_directory_iterator it(folder, listError), last; !listError && it != last; it.increment(listError)) {
+            std::error_code fileError;
+            if (!it->is_regular_file(fileError)) continue;
+            auto key = ModelKey(Utf8(it->path().lexically_relative(folder)));
+            if (key.empty()) continue;
+            auto name = OverlayKey(AssetKind::Model, key);
+            index.entries.try_emplace(std::move(name), Entry{{AssetKind::Model, std::move(key)}, it->path(), mod});
             ++count;
         }
     } else {
@@ -608,6 +641,18 @@ void LoadLanguagePack(Snapshot& snapshot, const std::filesystem::path& file, std
     }
     if (!ids.insert(pack.id).second) { Diagnose(snapshot, file, 0, "language pack id already used: " + pack.id); return; }
     snapshot.languagePacks.push_back(std::move(pack));
+}
+// Model .glb files under a models folder (ModelKey names).
+void ListModelFolder(const std::filesystem::path& folder, const std::string& modId, std::map<std::string, ResolvedAsset>& found) {
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(folder, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        if (!it->is_regular_file(entryError)) continue;
+        const auto key = ModelKey(Utf8(it->path().lexically_relative(folder)));
+        if (!key.empty() && ContainedFile(folder, it->path()))
+            found.emplace(key, ResolvedAsset{{AssetKind::Model, key}, it->path(), modId, 0});
+    }
 }
 // Translation JSON under a text folder; the member path is the relative path without .json.
 void ListTextFolder(const std::filesystem::path& folder, const std::string& modId, std::map<std::string, ResolvedAsset>& found) {
@@ -875,6 +920,21 @@ std::vector<ResolvedAsset> ListTexts() {
         ListTextFolder(snapshot->root / "overlay" / "text", "@overlay", found);
     for (const auto& [name, e] : Files(*snapshot, true).entries)
         if (e.id.kind == AssetKind::Text) {
+            const auto& mod = snapshot->mods[e.mod];
+            found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority, e.offset, e.size});
+        }
+    std::vector<ResolvedAsset> result;
+    for (auto& [key, asset] : found) result.push_back(std::move(asset));
+    return result;
+}
+std::vector<ResolvedAsset> ListModels() {
+    const auto snapshot = Current();
+    std::map<std::string, ResolvedAsset> found;
+    if (!snapshot->enabled) return {};
+    if (snapshot->mode != ResolutionMode::Standalone && (snapshot->overlayKinds & KindBit(AssetKind::Model)))
+        ListModelFolder(snapshot->root / "overlay" / "models", "@overlay", found);
+    for (const auto& [name, e] : Files(*snapshot, false).entries)
+        if (e.id.kind == AssetKind::Model) {
             const auto& mod = snapshot->mods[e.mod];
             found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority, e.offset, e.size});
         }
