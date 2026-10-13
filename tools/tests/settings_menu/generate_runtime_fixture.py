@@ -28,6 +28,7 @@ PREAMBLE = r'''
 #include <settings/restart.h>
 #include <settings/language_selection.h>
 #include <settings/mods_page.h>
+#include <settings/achievements_page.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_rate.h>
 #include <gpu/dlss_nr_state.h>
@@ -118,6 +119,12 @@ bool SetConsent(bool){++consents;return true;}
 namespace apu { bool surround=false; uint32_t matrixRear=110; void SetOutput(Output o){surround=o==Output::Surround;}
 void SetMatrixRearAngle(uint32_t d){matrixRear=d;} void SetVoiceVolume(uint32_t){} void SetTestSignal(bool){} float TestSignalPosition(){return -1.0f;} uint32_t OutputChannels(){return surround?6:2;} }
 namespace settings { bool SaveAudioOutput(uint32_t o){savedConfig.audioOutput=o;return true;} }
+// No title data: the Achievements page lists nothing.
+namespace achievements {
+std::vector<Info> List(){return {};}
+int64_t EarnedTime(uint16_t){return 0;}
+Icon IconOf(uint16_t){return {};}
+}
 // No mods folder: the Mods page shows its empty state.
 namespace modding {
 std::vector<ModInfo> ListMods(){return {};}
