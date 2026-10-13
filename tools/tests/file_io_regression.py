@@ -51,7 +51,17 @@ COMMON = r'''
 #include "byteswap.h"
 // EXTRACTED_GUEST_TYPES
 namespace modding::text_overlay {
-struct Range { uint64_t offset = 0; std::shared_ptr<const std::vector<uint8_t>> bytes; };
+struct CachedFile;
+struct Range {
+    uint64_t offset = 0, size = 0;
+    std::shared_ptr<const std::vector<uint8_t>> bytes;
+    std::shared_ptr<CachedFile> file;
+    bool Read(uint64_t at, uint8_t* out, size_t count) const {
+        if (!bytes || at > bytes->size() || count > bytes->size() - at) return false;
+        memcpy(out, bytes->data() + at, count);
+        return true;
+    }
+};
 }
 constexpr uint64_t PPC_MEMORY_SIZE = 0x100000000ull;
 constexpr uint32_t STATUS_SUCCESS = 0, STATUS_END_OF_FILE = 0xC0000011u,
@@ -445,14 +455,14 @@ static void DirectoryCases() {
     Check(NtQueryDirectoryFile(1, 0, 0, 0, &iosb, nullptr, bytes.size(), nullptr, 0) == STATUS_INVALID_PARAMETER &&
         currentHandle->nextEntry == 1, "null directory output consumed item");
 }
-// Language-pack ranges: bytes over the file, a gap of zeros past its end and a tail.
+// Language-pack and model ranges: bytes over the file, a gap of zeros past its end and a tail.
 static void RangeReadCases(bool scatter) {
     FileFixture();
     using modding::text_overlay::Range;
     std::vector<uint8_t> tail(4096);
     for (size_t i = 0; i < tail.size(); ++i) tail[i] = uint8_t(i * 13 + 1);
-    currentHandle->ranges = {Range{0, std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t>{'x', 'y'})},
-                             Range{2048, std::make_shared<const std::vector<uint8_t>>(tail)}};
+    currentHandle->ranges = {Range{0, 2, std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t>{'x', 'y'}), nullptr},
+                             Range{2048, tail.size(), std::make_shared<const std::vector<uint8_t>>(tail), nullptr}};
     currentHandle->fileSize = 6;
     currentHandle->size = 2048 + tail.size();
     std::vector<uint8_t> expected(currentHandle->size, 0);
@@ -520,7 +530,7 @@ def main() -> int:
     handle = between(source, "struct FileHandle : KernelObject", "void FileSystem::TraceHandleClose(")
     lock = between(source, "class FileIoLock\n", "// Semantics follow Xenia")
     queue_apc = between(source, "static void QueueIoApc(", "namespace\n{")
-    reads = between(source, "// Reads a handle that has language-pack ranges", "uint32_t NtReadFile(")
+    reads = between(source, "// Reads a handle that has language-pack or model ranges", "uint32_t NtReadFile(")
     reads += between(source, "uint32_t NtReadFile(", "uint32_t NtWriteFile(")
     query_set_directory = between(source, "uint32_t NtQueryInformationFile(", "uint32_t NtQueryFullAttributesFile(")
     scatter = between(source, "uint32_t NtReadFileScatter(", "GUEST_FUNCTION_HOOK(__imp__NtCreateFile,")
