@@ -16,6 +16,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → Gameplay → Controls changes the controller buttons and keyboard keys; Button prompts and Vibration moved there.
 - Android: less crackling in the sound when the device is busy or hot.
 - If the graphics driver stops working, the game says so and closes instead of freezing on the last picture.
+- Mods can ship their files as one `overlay.loarc` archive instead of thousands of loose files; `tools/modding/lo_mod.py archive` makes it.
 
 ### 简体中文
 
@@ -27,6 +28,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 游戏 → 按键设置可以更改手柄按键和键盘按键；按键提示和震动也移到了这里。
 - Android：设备繁忙或发热时，声音的爆音更少。
 - 显卡驱动停止工作时，游戏会弹出提示并关闭，不再停在最后一帧。
+- Mod 可以把文件打成一个 `overlay.loarc` 包发布，不用再带成千上万个散文件；用 `tools/modding/lo_mod.py archive` 打包。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 

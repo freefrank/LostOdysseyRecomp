@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,18 @@ FOLDERS = {"image": "images", "font": "fonts", "model": "models", "movie": "movi
 KIND_FOLDERS = ("images", "fonts", "models", "movies", "textures", "text")
 # api_version=2 display metadata: UTF-8 bytes per field, as the runtime checks them.
 META_LIMITS = {"name": 128, "version": 64, "author": 128, "description": 1024}
+# overlay.loarc: one file that holds a mod's overlay/ files (format in docs/wiki/Creating-Mods.md).
+LOARC_MAGIC = b"LOARC1\r\n"
+LOARC_HEADER = struct.Struct("<8sIIQQI28x")  # 64 bytes
+LOARC_RECORD = struct.Struct("<QQI")  # offset, size, name length; the name follows
+LOARC_ALIGN = 4096
+LOARC_MAX_INDEX = 64 << 20
+LOARC_KINDS = {"images": 1, "fonts": 2, "models": 3, "movies": 4, "textures": 5, "text": 6}
+LOARC_NAMES = {1: r"key-fnv1a64-[0-9a-f]{16}\.lotex", 2: r"key-fnv1a64-[0-9a-f]{16}\.loasset",
+               3: r"key-fnv1a64-[0-9a-f]{16}\.loasset", 4: r"key-fnv1a64-[0-9a-f]{16}\.loasset",
+               5: r"fp-[0-9a-f]{16}\.lotex2"}
+LOARC_CHUNK = 1 << 20
+ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 def text(value: object) -> str:
@@ -754,6 +767,233 @@ def overlay_to_mod(mods: Path, identity: str, priority: int = 0, meta: dict | No
     return moves, ini_text
 
 
+def warn(message: str) -> None:
+    print(f"lo_mod: warning: {message}", file=sys.stderr)
+
+
+def loarc_kind(name: str) -> int:
+    """Kind (1-6) of a stored archive name; ValueError unless it is the runtime's canonical overlay name."""
+    if not name.startswith("overlay/"):
+        raise ValueError("name does not start with overlay/")
+    folder, _, rest = name[8:].partition("/")
+    kind = LOARC_KINDS.get(folder)
+    if kind is None:
+        raise ValueError("unknown kind folder")
+    if kind == 6:
+        stem = rest[:-5]
+        if (not rest.endswith(".json") or not stem or len(stem.encode("utf-8")) > 1024
+                or any(part in ("", ".", "..") for part in stem.split("/"))
+                or stem != stem.translate(ASCII_LOWER)
+                or any(c in ":\\" or ord(c) < 32 or ord(c) == 127 for c in stem)):
+            raise ValueError("text name must be a relative lower-case <path>.json")
+    elif not re.fullmatch(LOARC_NAMES[kind], rest):
+        raise ValueError("file name does not match the kind's naming rule")
+    return kind
+
+
+def loarc_scan(overlay: Path) -> dict[str, Path]:
+    """Stored name -> source file for every overlay file the runtime would load; others are skipped with a warning."""
+    found: dict[str, Path] = {}
+
+    def add(name: str, path: Path) -> None:
+        try:
+            loarc_kind(name)
+        except ValueError as exc:
+            warn(f"skipped {path}: {exc}")
+            return
+        if name in found:
+            raise ValueError(f"{path} and {found[name]} both map to {name}")
+        found[name] = path
+
+    for folder in sorted(overlay.iterdir()):
+        kind = folder.name.translate(ASCII_LOWER)
+        if kind not in LOARC_KINDS or not folder.is_dir():
+            warn(f"skipped {folder}: not a kind folder ({', '.join(LOARC_KINDS)})")
+        elif kind == "text":
+            for base, dirs, files in os.walk(folder):
+                dirs.sort()
+                for file in sorted(files):
+                    path = Path(base) / file
+                    member = path.relative_to(folder).as_posix()
+                    if len(member) <= 5 or member[-5:].translate(ASCII_LOWER) != ".json":
+                        warn(f"skipped {path}: not a .json file")
+                    else:
+                        add("overlay/text/" + member[:-5].translate(ASCII_LOWER) + ".json", path)
+        else:
+            for path in sorted(folder.iterdir()):
+                if path.is_file():
+                    add(f"overlay/{kind}/{path.name.translate(ASCII_LOWER)}", path)
+                else:
+                    warn(f"skipped {path}: only files directly in {folder.name} are loaded")
+    return found
+
+
+def loarc_write(entries: dict[str, Path], target: Path) -> tuple[dict[str, bytes], int]:
+    """Stream the entries into a new archive file; returns the data hash of each entry and the total data bytes."""
+    names = sorted(entries, key=lambda n: n.encode("utf-8"))
+    digests: dict[str, bytes] = {}
+    index, mask, total, pos = [], 0, 0, LOARC_HEADER.size
+    with target.open("wb") as file:
+        file.write(bytes(LOARC_HEADER.size))  # Replaced once the index is known.
+        for name in names:
+            offset = -(-pos // LOARC_ALIGN) * LOARC_ALIGN
+            file.write(bytes(offset - pos))
+            digest, size = hashlib.blake2b(digest_size=16), 0
+            with entries[name].open("rb") as source:
+                while chunk := source.read(LOARC_CHUNK):
+                    file.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            digests[name] = digest.digest()
+            raw = name.encode("utf-8")
+            index.append(LOARC_RECORD.pack(offset, size, len(raw)) + raw)
+            mask |= 1 << loarc_kind(name)
+            total += size
+            pos = offset + size
+        blob = b"".join(index)
+        file.write(blob)
+        file.seek(0)
+        file.write(LOARC_HEADER.pack(LOARC_MAGIC, LOARC_HEADER.size, len(names), pos, len(blob), mask))
+    return digests, total
+
+
+def loarc_read(path: Path, digests: dict[str, bytes] | None = None) -> list[tuple[str, int, int]]:
+    """Check an archive against every format rule; returns (name, offset, size) in index order.
+    With `digests` (name -> blake2b-128 from loarc_write) it also re-reads every entry's data."""
+    with path.open("rb") as file:
+        total = file.seek(0, os.SEEK_END)
+        file.seek(0)
+        head = file.read(LOARC_HEADER.size)
+        if len(head) < LOARC_HEADER.size:
+            raise ValueError("archive is shorter than its header")
+        magic, header_size, count, index_offset, index_size, mask = LOARC_HEADER.unpack(head)
+        if magic != LOARC_MAGIC or header_size != LOARC_HEADER.size or any(head[36:]):
+            raise ValueError("not a LOARC1 archive (bad magic, header size or reserved bytes)")
+        if (index_offset < LOARC_HEADER.size or index_size > LOARC_MAX_INDEX or index_offset + index_size > total
+                or count * (LOARC_RECORD.size + 1) > index_size):
+            raise ValueError("index lies outside the file or is too large")
+        file.seek(index_offset)
+        index = file.read(index_size)
+        entries, pos, previous, seen = [], 0, None, 0
+        for _ in range(count):
+            if pos + LOARC_RECORD.size > index_size:
+                raise ValueError("index is truncated")
+            offset, size, length = LOARC_RECORD.unpack_from(index, pos)
+            pos += LOARC_RECORD.size
+            if not 1 <= length <= 1100 or pos + length > index_size:
+                raise ValueError("invalid name length in the index")
+            raw = index[pos:pos + length]
+            pos += length
+            if previous is not None and raw <= previous:
+                raise ValueError("index names are not sorted and unique")
+            previous = raw
+            try:
+                name = raw.decode("utf-8")
+                seen |= 1 << loarc_kind(name)
+            except ValueError as exc:
+                raise ValueError(f"invalid entry name {raw!r}: {exc}") from exc
+            if offset % LOARC_ALIGN or offset < LOARC_ALIGN or offset + size > index_offset:
+                raise ValueError(f"{name}: data is unaligned or outside the data area")
+            entries.append((name, offset, size))
+        if pos != index_size:
+            raise ValueError("index has trailing bytes")
+        if seen != mask:
+            raise ValueError("kind_mask does not match the entries")
+        end = 0
+        for name, offset, size in sorted(entries, key=lambda e: (e[1], e[2])):
+            if offset < end:
+                raise ValueError(f"{name}: data overlaps another entry")
+            end = offset + size
+        if digests is not None:
+            for name, offset, size in entries:
+                digest = hashlib.blake2b(digest_size=16)
+                file.seek(offset)
+                left = size
+                while left:
+                    chunk = file.read(min(left, LOARC_CHUNK))
+                    if not chunk:
+                        raise ValueError(f"{name}: data is truncated")
+                    digest.update(chunk)
+                    left -= len(chunk)
+                if digest.digest() != digests.get(name):
+                    raise ValueError(f"{name}: archived data differs from the source file")
+    return entries
+
+
+def archive_mod(src: Path, dest: Path, force: bool = False, quick: bool = False) -> str:
+    """Copy a mod folder, putting its overlay/ files into overlay.loarc; returns a summary line."""
+    src, dest = src.resolve(), dest.resolve()
+    ini = src / "mod.ini"
+    if not ini.is_file() or not re.search(r"^\s*api_version\s*=\s*2\s*$", ini.read_text(encoding="utf-8-sig"), re.M):
+        raise ValueError(f"{ini} must exist and say api_version=2")
+    overlay = next((c for c in sorted(src.iterdir()) if c.is_dir() and c.name.translate(ASCII_LOWER) == "overlay"), None)
+    if overlay is None:
+        raise ValueError(f"{src} has no overlay/ folder")
+    if dest == src or dest.is_relative_to(src) or src.is_relative_to(dest):
+        raise ValueError("source and destination folders must not contain each other")
+    entries = loarc_scan(overlay)  # Name collisions fail here, before anything is written.
+    if not entries:
+        raise ValueError(f"{overlay} has no files the game loads")
+    if dest.exists() and (not dest.is_dir() or (any(dest.iterdir()) and not force)):
+        raise FileExistsError(f"{dest} is not empty (--force writes into it)")
+    created = not dest.exists()
+    dest.mkdir(parents=True, exist_ok=True)
+    tmp, final = dest / "overlay.loarc.tmp", dest / "overlay.loarc"
+    try:
+        digests, total = loarc_write(entries, tmp)
+        names = sorted(entries, key=lambda n: n.encode("utf-8"))
+        if [e[0] for e in loarc_read(tmp, None if quick else digests)] != names:
+            raise ValueError("archive index does not list the source files")
+        os.replace(tmp, final)
+        for base, dirs, files in os.walk(src):
+            folder = Path(base).relative_to(src)
+            if folder == Path("."):
+                dirs[:] = [d for d in dirs if d != overlay.name]
+            for file in files:
+                if folder == Path(".") and file.translate(ASCII_LOWER) in ("overlay.loarc", "overlay.loarc.tmp"):
+                    warn(f"skipped {Path(base) / file}: the archive is written fresh")
+                    continue
+                (dest / folder).mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(Path(base) / file, dest / folder / file)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        if created:
+            shutil.rmtree(dest, ignore_errors=True)
+        raise
+    kinds = {n: sum(1 for name in entries if loarc_kind(name) == k) for n, k in LOARC_KINDS.items()}
+    shown = ", ".join(f"{n}={c}" for n, c in kinds.items() if c)
+    return f"Archived {len(entries)} entries ({shown}), {total} bytes ({total / 1048576:.1f} MiB): {final}"
+
+
+def extract_archive(archive: Path, dest: Path, list_only: bool = False) -> list[tuple[str, int, int]]:
+    """Validate an archive and write its entries under dest (never overwriting); list_only writes nothing."""
+    entries = loarc_read(archive)
+    if list_only:
+        return entries
+    targets = []
+    for name, offset, size in entries:
+        parts = name.split("/")
+        if name.startswith("/") or ":" in name or "\\" in name or ".." in parts or "" in parts:
+            raise ValueError(f"unsafe entry name {name!r}")
+        target = dest.joinpath(*parts)
+        if target.exists() or target.is_symlink():
+            raise FileExistsError(f"{target} already exists")
+        targets.append(target)
+    with archive.open("rb") as file:
+        for target, (name, offset, size) in zip(targets, entries):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            file.seek(offset)
+            with target.open("xb") as out:
+                left = size
+                while left:
+                    chunk = file.read(min(left, LOARC_CHUNK))
+                    if not chunk:
+                        raise ValueError(f"{name}: data is truncated")
+                    out.write(chunk)
+                    left -= len(chunk)
+    return entries
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -821,6 +1061,15 @@ def main(argv: list[str] | None = None) -> int:
     clean_parser.add_argument("--original", type=Path,
                               help="untranslated export (default: original/ beside the pack, from --export-language-pack)")
     clean_parser.add_argument("--output", type=Path, help="new folder (default: share/<pack folder name> beside the pack)")
+    archive_parser = sub.add_parser("archive", help="copy an api_version=2 mod folder, packing its overlay/ files into one overlay.loarc")
+    archive_parser.add_argument("src", type=Path, help="the mod folder (mod.ini and overlay/)")
+    archive_parser.add_argument("dest", type=Path, help="the new mod folder")
+    archive_parser.add_argument("--force", action="store_true", help="write into an existing, non-empty dest")
+    archive_parser.add_argument("--quick", action="store_true", help="check the header and index only; skip re-reading the data")
+    extract_parser = sub.add_parser("extract", help="check an overlay.loarc and write its files out, or list them")
+    extract_parser.add_argument("archive", type=Path)
+    extract_parser.add_argument("dest", type=Path, help="folder that receives overlay/... (never overwrites)")
+    extract_parser.add_argument("--list", action="store_true", help="print name<TAB>size per entry and write nothing")
     args = parser.parse_args(argv)
     meta = {field: getattr(args, field, None) for field in META_LIMITS}
     try:
@@ -897,6 +1146,15 @@ def main(argv: list[str] | None = None) -> int:
             with args.file.open("rb") as file:
                 data = file.read(MAX_FILE + 1)
             print(json.dumps(inspect(data), ensure_ascii=False, indent=2))
+        elif args.command == "archive":
+            print(archive_mod(args.src, args.dest, args.force, args.quick))
+        elif args.command == "extract":
+            entries = extract_archive(args.archive, args.dest, args.list)
+            if args.list:
+                for name, _, size in entries:
+                    print(f"{name}\t{size}")
+            else:
+                print(f"Extracted {len(entries)} file(s) to {args.dest}")
         elif args.command == "language-clean":
             stats = language_clean(args.pack, args.original, args.output)
             print(f"Kept {stats['entries']} translated entries in {stats['files']} files; dropped "

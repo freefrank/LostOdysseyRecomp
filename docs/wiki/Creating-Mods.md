@@ -47,6 +47,44 @@ python tools/modding/lo_mod.py overlay-to-mod mods --id my-textures --name "My T
 
 This moves `mods/overlay/textures` (and `images`, `text` and the other kind folders) into `mods/my-textures/overlay/` and writes `mod.ini`. Folders are renamed, not copied, so even a large pack moves at once; across drives the command fails instead of copying. It refuses when `mods/my-textures` exists, and `--dry-run` only prints what it would do. For a mod already installed in Mod Organizer 2, pass that mod's folder (the one that holds `overlay/`).
 
+## Ship a mod as one archive
+
+A mod with thousands of files under `overlay/` (a full texture pack) is slow to copy, unzip and install. `overlay.loarc` holds all of them in one file that sits in the mod folder; the game reads the files from it as if they were loose. Only `api_version=2` mod folders can use it.
+
+1. Build the mod folder as usual: `mod.ini` plus `overlay/`.
+2. Run, with the mod folder first and a new folder second:
+
+   ```sh
+   python tools/modding/lo_mod.py archive mods/my-textures packed/my-textures
+   ```
+
+   The command copies `mod.ini` and every other file outside `overlay/`, and writes `overlay.loarc` into the new folder with every overlay file the game loads. Files it does not load (wrong name, wrong folder) are skipped with a warning. Two files that end up under the same name (`FP-…` and `fp-…`) are an error and nothing is written. The new folder must not exist or must be empty; `--force` writes into a non-empty one.
+3. The command re-reads the archive and compares every file with its source. `--quick` checks only the archive's header and file list, which is much faster for a mod of tens of gigabytes.
+4. Install `packed/my-textures` like any mod folder: `mods/my-textures/mod.ini` and `mods/my-textures/overlay.loarc`. Do not leave the `overlay/` folder in it unless you want loose files to override the archive.
+
+Things to know:
+
+- `mod.ini` always stays a loose file; the game reads it before it opens the archive.
+- A loose file in the same mod's `overlay/` folder wins over the archive entry with the same name. Between different mods the usual order and `priority` still decide.
+- One archive can be larger than 4 GB, so it cannot sit on a FAT32 drive.
+- To look inside an archive: `python tools/modding/lo_mod.py extract mods/my-textures/overlay.loarc out --list` prints `name` and `size` of every file. Without `--list` it writes the files to `out/overlay/...` (and refuses to overwrite existing files). Extracting gives back exactly the files that were archived.
+
+### Archive format
+
+All numbers are little endian. The header is 64 bytes:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 8 | magic `LOARC1\r\n` |
+| 8 | 4 | header size, 64 |
+| 12 | 4 | entry count |
+| 16 | 8 | index offset |
+| 24 | 8 | index size in bytes (at most 64 MiB) |
+| 32 | 4 | kind mask: bit `1 << kind` for each kind present (Image 1, Font 2, Model 3, Movie 4, Texture 5, Text 6) |
+| 36 | 28 | zero |
+
+Each file's data starts at a multiple of 4096 (at least 4096) and ends before the index offset; data ranges do not overlap. The index follows the last file's data. It holds one record per file, sorted by name bytes, names unique: `u64` offset, `u64` size, `u32` name length (1 to 1100), then the UTF-8 name. A name is the file's path inside the mod folder with `/` separators and lower case: `overlay/textures/fp-<16 hex>.lotex2`, `overlay/images/key-fnv1a64-<16 hex>.lotex`, `overlay/<fonts|models|movies>/key-fnv1a64-<16 hex>.loasset`, or `overlay/text/<path>.json`.
+
 ## Export the original assets
 
 The game can export its own textures, movies and text from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.

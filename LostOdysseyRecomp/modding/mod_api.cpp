@@ -1,5 +1,6 @@
 #include "mod_api.h"
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstdio>
 #include <cstdlib>
@@ -21,6 +22,7 @@ struct Entry {
     AssetId id; // key empty for hashed kinds found by file name
     std::filesystem::path file;
     uint32_t mod = 0; // index into Snapshot::mods
+    uint64_t offset = 0, size = kWholeFile; // an archive entry's bytes in file
 };
 // The files of the active mod folders, winners in mod order.
 struct Index {
@@ -33,6 +35,7 @@ struct ModFiles {
     uint32_t mod = 0;
     std::vector<std::pair<std::string, Entry>> declared;
     std::vector<std::pair<AssetKind, std::filesystem::path>> folders;
+    std::vector<std::filesystem::path> archives; // .loarc files, by name
 };
 struct Snapshot {
     std::filesystem::path root, defaultRoot, modList;
@@ -195,6 +198,60 @@ std::string OverlayKey(AssetKind kind, const std::string& key) {
     return std::string("overlay/") + kKindFolders[static_cast<uint32_t>(kind)] + "/" + name +
         (kind == AssetKind::Image ? ".lotex" : ".loasset");
 }
+// The 16 hex digits of a hashed overlay file name in lower case
+// (fp-<hex>.lotex2, key-fnv1a64-<hex>.lotex or .loasset); nullopt otherwise.
+std::optional<std::string_view> HashedName(AssetKind kind, std::string_view name) {
+    const std::string_view prefix = kind == AssetKind::Texture ? "fp-" : "key-fnv1a64-";
+    const std::string_view suffix = kind == AssetKind::Texture ? ".lotex2" : kind == AssetKind::Image ? ".lotex" : ".loasset";
+    if (name.size() != prefix.size() + 16 + suffix.size() || name.substr(0, prefix.size()) != prefix ||
+        name.substr(prefix.size() + 16) != suffix || !Hex16(name.substr(prefix.size(), 16))) return {};
+    return name.substr(prefix.size(), 16);
+}
+// An archive entry is named like its loose file would be under the mod folder:
+// overlay/<kind folder>/<file>, '/'-separated and lower case.
+std::optional<AssetId> ArchiveEntryId(std::string_view name) {
+    constexpr std::string_view root = "overlay/";
+    const auto slash = name.find('/', root.size());
+    if (name.substr(0, root.size()) != root || slash == name.npos) return {};
+    const auto kind = FolderKind(name.substr(root.size(), slash - root.size()));
+    const auto file = name.substr(slash + 1);
+    if (!kind) return {};
+    if (*kind == AssetKind::Text) {
+        if (file.size() <= 5 || file.substr(file.size() - 5) != ".json") return {};
+        const auto member = file.substr(0, file.size() - 5);
+        auto key = CanonicalTextKey(member);
+        if (key.empty() || key != member) return {};
+        return AssetId{AssetKind::Text, std::move(key)};
+    }
+    const auto hex = HashedName(*kind, file);
+    if (!hex) return {};
+    return AssetId{*kind, *kind == AssetKind::Texture ? std::string(*hex) : std::string{}};
+}
+// .loarc, a mod's overlay/ files as one file (tools/modding/lo_mod.py archive).
+// Little endian. Header (64 bytes): magic, u32 header size 64, u32 entry count,
+// u64 index offset, u64 index size, u32 kind bits (1 << AssetKind), zeros. Then
+// the entry data, each at a 4096-byte boundary, then the index: per entry u64
+// offset, u64 size, u32 name length and the name, sorted by name.
+constexpr std::array<uint8_t, 8> kArchiveMagic{'L', 'O', 'A', 'R', 'C', '1', '\r', '\n'};
+constexpr uint64_t kArchiveAlign = 4096, kMaxArchiveIndex = 64ull << 20;
+constexpr uint32_t kMaxArchiveEntries = 1u << 20, kMaxArchiveName = 1100;
+struct ArchiveHeader { uint32_t entries = 0, kinds = 0; uint64_t indexOffset = 0, indexSize = 0; };
+uint32_t Le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
+uint64_t Le64(const uint8_t* p) { return uint64_t(Le32(p)) | uint64_t(Le32(p + 4)) << 32; }
+// Opens an archive and checks its header; in is left just after the header.
+std::optional<ArchiveHeader> OpenArchive(const std::filesystem::path& file, std::ifstream& in, std::string& error) {
+    in.open(file, std::ios::binary | std::ios::ate);
+    if (!in) { error = "cannot open"; return {}; }
+    const uint64_t bytes = uint64_t(std::streamoff(in.tellg()));
+    in.seekg(0);
+    std::array<uint8_t, 64> h{};
+    if (bytes < h.size() || !in.read(reinterpret_cast<char*>(h.data()), h.size())) { error = "truncated header"; return {}; }
+    if (!std::equal(kArchiveMagic.begin(), kArchiveMagic.end(), h.begin())) { error = "not a LOARC1 archive"; return {}; }
+    const ArchiveHeader a{Le32(&h[12]), Le32(&h[32]), Le64(&h[16]), Le64(&h[24])};
+    if (Le32(&h[8]) != h.size() || a.entries > kMaxArchiveEntries || a.indexSize > kMaxArchiveIndex ||
+        a.indexOffset < h.size() || a.indexOffset > bytes || a.indexSize > bytes - a.indexOffset) { error = "bad header"; return {}; }
+    return a;
+}
 void Diagnose(Snapshot& snapshot, const std::filesystem::path& file, size_t line, std::string message) {
     if (snapshot.diagnostics.size() < 256)
         snapshot.diagnostics.push_back({file, line, std::move(message)});
@@ -324,16 +381,13 @@ size_t ListKindFolder(Index& index, AssetKind kind, const std::filesystem::path&
             ++count;
         }
     } else {
-        const std::string_view prefix = kind == AssetKind::Texture ? "fp-" : "key-fnv1a64-";
-        const std::string_view suffix = kind == AssetKind::Texture ? ".lotex2" : kind == AssetKind::Image ? ".lotex" : ".loasset";
         const auto base = std::string("overlay/") + kKindFolders[static_cast<uint32_t>(kind)] + "/";
         for (std::filesystem::directory_iterator it(folder, listError), last; !listError && it != last; it.increment(listError)) {
             std::error_code fileError;
             const auto name = Lower(Utf8(it->path().filename()));
-            if (name.size() != prefix.size() + 16 + suffix.size() || name.compare(0, prefix.size(), prefix) != 0 ||
-                name.compare(prefix.size() + 16, suffix.size(), suffix) != 0 || !Hex16(std::string_view(name).substr(prefix.size(), 16)) ||
-                !it->is_regular_file(fileError)) continue;
-            AssetId id{kind, kind == AssetKind::Texture ? name.substr(prefix.size(), 16) : std::string{}};
+            const auto hex = HashedName(kind, name);
+            if (!hex || !it->is_regular_file(fileError)) continue;
+            AssetId id{kind, kind == AssetKind::Texture ? std::string(*hex) : std::string{}};
             index.entries.try_emplace(base + name, Entry{std::move(id), it->path(), mod});
             ++count;
         }
@@ -342,10 +396,61 @@ size_t ListKindFolder(Index& index, AssetKind kind, const std::filesystem::path&
         index.problems.emplace_back(mod, Diagnostic{folder, 0, "overlay folder listing incomplete: " + listError.message()});
     return count;
 }
+// Indexes one archive's entries of the text or the other kinds. A damaged
+// index adds nothing; unknown names (a later format's kinds) are skipped.
+size_t ListArchive(Index& index, const std::filesystem::path& file, uint32_t mod, bool text) {
+    // Both passes read the archive; the other kinds' pass reports its problems
+    // unless the archive holds only text.
+    bool reports = !text;
+    auto fail = [&](std::string message) {
+        if (reports) index.problems.emplace_back(mod, Diagnostic{file, 0, "archive: " + message});
+        return size_t(0);
+    };
+    std::ifstream in;
+    std::string error;
+    const auto header = OpenArchive(file, in, error);
+    if (!header) return fail(error);
+    const uint32_t textBit = KindBit(AssetKind::Text);
+    if (!(header->kinds & (text ? textBit : ~textBit))) return 0;
+    reports = !text || !(header->kinds & ~textBit);
+    std::vector<uint8_t> bytes(size_t(header->indexSize));
+    in.seekg(std::streamoff(header->indexOffset));
+    if (!in.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(bytes.size()))) return fail("truncated index");
+    std::vector<std::pair<std::string, Entry>> found;
+    std::vector<std::pair<uint64_t, uint64_t>> ranges;
+    ranges.reserve(header->entries);
+    std::string_view previous;
+    size_t p = 0, unknown = 0;
+    for (uint32_t i = 0; i != header->entries; ++i) {
+        if (bytes.size() - p < 20) return fail("truncated index");
+        const uint64_t offset = Le64(&bytes[p]), size = Le64(&bytes[p + 8]);
+        const uint32_t length = Le32(&bytes[p + 16]);
+        p += 20;
+        if (!length || length > kMaxArchiveName || bytes.size() - p < length) return fail("bad entry name");
+        const std::string_view name(reinterpret_cast<const char*>(&bytes[p]), length);
+        p += length;
+        if (i && name <= previous) return fail("entry names are not sorted and unique");
+        previous = name;
+        if (offset < kArchiveAlign || offset % kArchiveAlign || offset > header->indexOffset || size > header->indexOffset - offset)
+            return fail("entry outside the data area: " + std::string(name));
+        ranges.emplace_back(offset, size);
+        auto id = ArchiveEntryId(name);
+        if (!id) { ++unknown; continue; }
+        if ((id->kind == AssetKind::Text) == text) found.emplace_back(std::string(name), Entry{std::move(*id), file, mod, offset, size});
+    }
+    if (p != bytes.size()) return fail("index size does not match its entries");
+    std::sort(ranges.begin(), ranges.end());
+    for (size_t i = 1; i < ranges.size(); ++i)
+        if (ranges[i].first < ranges[i - 1].first + ranges[i - 1].second) return fail("entries overlap");
+    if (unknown && reports)
+        index.problems.emplace_back(mod, Diagnostic{file, 0, "archive: " + std::to_string(unknown) + " entries with unknown names skipped"});
+    for (auto& [name, entry] : found) index.entries.try_emplace(std::move(name), std::move(entry));
+    return found.size();
+}
 // Mods in order, each with its mod.ini lines first and then its overlay/ files:
 // within a mod a line beats the file of the same resource, and mods earlier in
-// the order keep what they claimed. Text or every other kind; names of the two
-// never collide. Runs in the background.
+// the order keep what they claimed; archive entries come after the loose files.
+// Text or every other kind; names of the two never collide. Runs in the background.
 Index BuildIndex(std::vector<ModFiles> work, size_t mods, bool text) noexcept {
     Index index;
     try {
@@ -355,13 +460,15 @@ Index BuildIndex(std::vector<ModFiles> work, size_t mods, bool text) noexcept {
                 if ((entry.id.kind == AssetKind::Text) == text) index.entries.try_emplace(std::move(name), std::move(entry));
             for (const auto& [kind, folder] : m.folders)
                 if ((kind == AssetKind::Text) == text) index.overlayFiles[m.mod] += ListKindFolder(index, kind, folder, m.mod);
+            for (const auto& archive : m.archives) index.overlayFiles[m.mod] += ListArchive(index, archive, m.mod, text);
         }
     } catch (...) { /* A partial index: files not listed keep the originals. */ }
     return index;
 }
 // The part of an active mod read at Initialize: its mod.ini lines (the last line
 // of an identity wins; one stat each) and, for api_version=2, the kind folders
-// under its overlay/ (one short listing).
+// under its overlay/ and its .loarc archives (one short listing each, plus each
+// archive's header).
 ModFiles PrepareModFiles(Snapshot& snapshot, Loaded& l, uint32_t mod) {
     ModFiles files{mod, {}, {}};
     const auto manifest = l.info.folder / "mod.ini";
@@ -398,6 +505,22 @@ ModFiles PrepareModFiles(Snapshot& snapshot, Loaded& l, uint32_t mod) {
         snapshot.textureEntries |= *kind == AssetKind::Texture;
         files.folders.emplace_back(*kind, top->path());
     }
+    ec.clear();
+    for (std::filesystem::directory_iterator it(l.info.folder, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        const auto name = Lower(Utf8(it->path().filename()));
+        if (name.size() > 6 && name.ends_with(".loarc") && it->is_regular_file(entryError)) files.archives.push_back(it->path());
+    }
+    // In file name order: the first archive that holds a name provides it.
+    std::sort(files.archives.begin(), files.archives.end());
+    std::erase_if(files.archives, [&](const std::filesystem::path& archive) {
+        std::ifstream in;
+        std::string error;
+        const auto header = OpenArchive(archive, in, error);
+        if (!header) { Problem(snapshot, l.info, archive, 0, "archive: " + error); return true; }
+        snapshot.textureEntries |= (header->kinds & KindBit(AssetKind::Texture)) != 0;
+        return false;
+    });
     return files;
 }
 std::optional<bool> Switch(std::string_view value) {
@@ -555,7 +678,8 @@ void Scan(Snapshot& snapshot) {
     for (auto& pack : packs) snapshot.mods.push_back(std::move(pack));
     for (const bool text : {true, false}) {
         const bool listing = std::any_of(work.begin(), work.end(), [&](const ModFiles& m) {
-            return std::any_of(m.folders.begin(), m.folders.end(), [&](const auto& f) { return (f.first == AssetKind::Text) == text; });
+            return !m.archives.empty() ||
+                std::any_of(m.folders.begin(), m.folders.end(), [&](const auto& f) { return (f.first == AssetKind::Text) == text; });
         });
         auto files = text ? work : std::move(work);
         if (listing) {
@@ -722,7 +846,7 @@ std::vector<ResolvedAsset> ListTexts() {
     for (const auto& [name, e] : Files(*snapshot, true).entries)
         if (e.id.kind == AssetKind::Text) {
             const auto& mod = snapshot->mods[e.mod];
-            found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority});
+            found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority, e.offset, e.size});
         }
     std::vector<ResolvedAsset> result;
     for (auto& [key, asset] : found) result.push_back(std::move(asset));
@@ -780,9 +904,29 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     const auto& files = Files(*snapshot, normalized.id.kind == AssetKind::Text).entries;
     if (const auto it = files.find(name); it != files.end()) {
         const auto& mod = snapshot->mods[it->second.mod];
-        return ResolvedAsset{normalized.id, it->second.file, mod.id, mod.priority};
+        return ResolvedAsset{normalized.id, it->second.file, mod.id, mod.priority, it->second.offset, it->second.size};
     }
     return {};
+}
+bool OpenAsset(const ResolvedAsset& asset, std::ifstream& in, uint64_t& length) {
+    in.open(asset.path, std::ios::binary | std::ios::ate);
+    if (!in) return false;
+    const uint64_t bytes = uint64_t(std::streamoff(in.tellg()));
+    uint64_t offset = 0;
+    length = bytes;
+    if (asset.size != kWholeFile) {
+        // The archive changed since Initialize when the entry no longer fits.
+        if (asset.offset > bytes || asset.size > bytes - asset.offset) return false;
+        offset = asset.offset;
+        length = asset.size;
+    }
+    in.seekg(std::streamoff(offset));
+    return bool(in);
+}
+std::string DescribeAsset(const ResolvedAsset& asset) {
+    auto text = Utf8(asset.path);
+    if (asset.size != kWholeFile) text += ":" + OverlayKey(asset.id.kind, CanonicalKey(asset.id.kind, asset.id.key));
+    return text;
 }
 bool RegisterProvider(AssetKind kind, std::shared_ptr<AssetProvider> provider) {
     if (!KindValid(kind) || !provider) return false;

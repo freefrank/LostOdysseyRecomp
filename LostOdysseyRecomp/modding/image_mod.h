@@ -21,11 +21,9 @@ inline std::optional<ImageData> ReadImageReplacement(const AssetRequest& request
         const auto resolved = Resolve(request);
         if (!resolved) return {};
         auto decode = [&]() -> std::optional<ImageData> {
-            std::ifstream in(resolved->path, std::ios::binary | std::ios::ate);
-            if (!in) return {};
-            const auto length = in.tellg();
-            if (length < 24 || length > std::streamoff(24 + 4096 + 64 * 1024 * 1024)) return {};
-            in.seekg(0);
+            std::ifstream in;
+            uint64_t length = 0;
+            if (!OpenAsset(*resolved, in, length) || length < 24 || length > 24 + 4096 + 64 * 1024 * 1024) return {};
             std::array<uint8_t, 24> header{};
             if (!in.read(reinterpret_cast<char*>(header.data()), header.size())) return {};
             const std::array<uint8_t, 8> magic{'L','O','T','E','X','1','\r','\n'};
@@ -52,9 +50,7 @@ inline std::optional<ImageData> ReadImageReplacement(const AssetRequest& request
         };
         auto image = decode();
         if (!image) {
-            const auto path = resolved->path.generic_u8string();
-            std::fprintf(stderr, "[mods] invalid image, using original: %s\n",
-                std::string(path.begin(), path.end()).c_str());
+            std::fprintf(stderr, "[mods] invalid image, using original: %s\n", DescribeAsset(*resolved).c_str());
         }
         return image;
     } catch (...) { return {}; }

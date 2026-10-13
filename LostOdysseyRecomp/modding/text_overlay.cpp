@@ -87,19 +87,24 @@ struct Folder
 std::mutex gMutex;
 bool gListed = false;
 std::string gLanguagePack;
-std::map<std::string, fs::path> gTexts;                     // member path -> translation file
-std::map<fs::path, std::optional<text::Replacements>> gFiles; // parsed translations
+std::map<std::string, ResolvedAsset> gTexts; // member path -> translation file or archive entry
+std::map<std::pair<fs::path, uint64_t>, std::optional<text::Replacements>> gFiles; // parsed, by file and offset
 std::map<fs::path, Folder> gFolders;
 
-const text::Replacements *Translation(const fs::path &file)
+const text::Replacements *Translation(const ResolvedAsset &file)
 {
-    auto [it, added] = gFiles.try_emplace(file);
+    auto [it, added] = gFiles.try_emplace({file.path, file.offset});
     if (added)
     {
         try
         {
-            std::ifstream input(file, std::ios::binary);
-            const auto json = nlohmann::json::parse(input);
+            std::ifstream input;
+            uint64_t length = 0;
+            if (!OpenAsset(file, input, length)) throw std::runtime_error("cannot open");
+            if (length > 64 * 1024 * 1024) throw std::runtime_error("larger than 64 MiB");
+            std::string bytes(size_t(length), '\0');
+            if (!input.read(bytes.data(), std::streamsize(bytes.size()))) throw std::runtime_error("truncated");
+            const auto json = nlohmann::json::parse(bytes);
             if (!json.is_object()) throw std::runtime_error("not a JSON object");
             text::Replacements replacements;
             for (const auto &[key, value] : json.items())
@@ -111,7 +116,7 @@ const text::Replacements *Translation(const fs::path &file)
         }
         catch (const std::exception &error)
         {
-            LOG_WARNING("[mods] text {} skipped: {}", Utf8(file), error.what());
+            LOG_WARNING("[mods] text {} skipped: {}", DescribeAsset(file), error.what());
         }
     }
     return it->second ? &*it->second : nullptr;
@@ -229,13 +234,13 @@ void List()
 {
     if (gListed) return;
     gListed = true;
-    for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset.path));
+    for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset));
     size_t packFiles = 0;
     for (const auto &pack : LanguagePacks())
         if (pack.id == gLanguagePack)
             for (auto &asset : ListTexts(pack))
             {
-                gTexts.insert_or_assign(asset.id.key, std::move(asset.path));
+                gTexts.insert_or_assign(asset.id.key, std::move(asset));
                 ++packFiles;
             }
     if (!gTexts.empty())

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+import contextlib
 import csv
 import importlib.util
+import io
 import json
 import os
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -264,6 +267,160 @@ class ModToolsTest(unittest.TestCase):
         self.assertFalse((mods / "hd").exists())
         self.assertTrue((mods / "overlay" / "textures" / "fp-00000000000000ab.lotex2").exists())
         self.assertTrue((mods / "overlay" / "text" / "bin" / "a.dat.json").exists())
+
+    def run_tool(self, *args) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = mod.main([str(a) for a in args])
+        return code, out.getvalue(), err.getvalue()
+
+    def make_archive_mod(self) -> Path:
+        src = self.root / "src"
+        files = {
+            "mod.ini": b"api_version=2\nid=big\n",
+            "README.txt": b"readme",
+            "docs/notes.txt": b"notes",
+            "overlay/Textures/FP-00000000000000AB.LOTEX2":
+                mod.encode2(0xab, 6, (2, 2), (2, 2), [bytes(range(16))], KEY),
+            "overlay/images/" + mod.overlay_path(KEY).rpartition("/")[2]: mod.encode(KEY, 2, 1, bytes(8)),
+            "overlay/fonts/key-fnv1a64-0000000000000001.loasset": b"",
+            "overlay/Text/Bin/Menu/A.Dat.JSON": b'{"a": "b"}',
+            "overlay/images/readme.txt": b"not an asset",
+        }
+        for name, data in files.items():
+            (src / name).parent.mkdir(parents=True, exist_ok=True)
+            (src / name).write_bytes(data)
+        return src
+
+    def parse_archive(self, data: bytes) -> tuple[tuple, list[tuple[str, int, int]]]:
+        head = struct.unpack_from("<8sIIQQI", data)
+        pos, entries = head[3], []
+        for _ in range(head[2]):
+            offset, size, length = struct.unpack_from("<QQI", data, pos)
+            entries.append((data[pos + 20:pos + 20 + length].decode(), offset, size))
+            pos += 20 + length
+        self.assertEqual(pos, head[3] + head[4])
+        return head, entries
+
+    def test_archive_round_trip(self):
+        src, dest = self.make_archive_mod(), self.root / "dest"
+        code, out, err = self.run_tool("archive", src, dest)
+        self.assertEqual(code, 0, err)
+        self.assertIn("4 entries", out)
+        self.assertIn("readme.txt", err)  # Skipped with a warning.
+        self.assertFalse((dest / "overlay.loarc.tmp").exists())
+        self.assertFalse((dest / "overlay").exists())
+        for name in ("mod.ini", "README.txt", "docs/notes.txt"):
+            self.assertEqual((dest / name).read_bytes(), (src / name).read_bytes())
+        data = (dest / "overlay.loarc").read_bytes()
+        head, entries = self.parse_archive(data)
+        self.assertEqual(head[:3], (b"LOARC1\r\n", 64, 4))
+        self.assertEqual(head[5], 1 << 1 | 1 << 2 | 1 << 5 | 1 << 6)
+        self.assertEqual(data[36:64], bytes(28))
+        names = [e[0] for e in entries]
+        self.assertEqual(names, sorted(names, key=str.encode))
+        self.assertEqual(names, ["overlay/fonts/key-fnv1a64-0000000000000001.loasset", mod.overlay_path(KEY),
+                                 "overlay/text/bin/menu/a.dat.json", "overlay/textures/fp-00000000000000ab.lotex2"])
+        for name, offset, size in entries:
+            self.assertTrue(offset % 4096 == 0 and offset >= 4096 and offset + size <= head[3], name)
+        self.assertEqual(head[3], max(o + s for _, o, s in entries))
+        # Extract round trip and --list.
+        out_dir = self.root / "out"
+        code, listing, _ = self.run_tool("extract", dest / "overlay.loarc", out_dir, "--list")
+        self.assertEqual((code, out_dir.exists()), (0, False))
+        self.assertEqual([line.split("\t") for line in listing.splitlines()], [[n, str(s)] for n, _, s in entries])
+        self.assertEqual(self.run_tool("extract", dest / "overlay.loarc", out_dir)[0], 0)
+        for source, name in (("overlay/Textures/FP-00000000000000AB.LOTEX2", "overlay/textures/fp-00000000000000ab.lotex2"),
+                             ("overlay/Text/Bin/Menu/A.Dat.JSON", "overlay/text/bin/menu/a.dat.json"),
+                             ("overlay/fonts/key-fnv1a64-0000000000000001.loasset",) * 2):
+            self.assertEqual((out_dir / name).read_bytes(), (src / source).read_bytes())
+        self.assertEqual(mod.inspect((out_dir / "overlay/textures/fp-00000000000000ab.lotex2").read_bytes())["key"], KEY)
+        self.assertEqual(self.run_tool("extract", dest / "overlay.loarc", out_dir)[0], 2)  # Never overwrites.
+
+    def test_archive_refusals(self):
+        src, dest = self.make_archive_mod(), self.root / "dest"
+        self.assertEqual(self.run_tool("archive", src, dest, "--quick")[0], 0)
+        self.assertEqual(self.run_tool("archive", src, dest)[0], 2)  # Not empty.
+        self.assertEqual(self.run_tool("archive", src, dest, "--force")[0], 0)
+        self.assertEqual(self.run_tool("archive", src, src / "inside")[0], 2)
+        (src / "mod.ini").write_text("api_version=1\nid=big\n")
+        self.assertEqual(self.run_tool("archive", src, self.root / "v1")[0], 2)
+        self.assertFalse((self.root / "v1").exists())
+
+    def test_archive_collision(self):
+        probe = self.root / "Probe"
+        probe.mkdir()
+        (self.root / "probe").mkdir(exist_ok=True)
+        if len(list(self.root.glob("[Pp]robe"))) < 2:
+            self.skipTest("case-insensitive filesystem")
+        src = self.root / "case"
+        (src / "overlay" / "textures").mkdir(parents=True)
+        (src / "mod.ini").write_text("api_version=2\nid=case\n")
+        for name in ("FP-00000000000000AB.lotex2", "fp-00000000000000ab.lotex2"):
+            (src / "overlay" / "textures" / name).write_bytes(b"x")
+        dest = self.root / "case-out"
+        code, _, err = self.run_tool("archive", src, dest)
+        self.assertEqual(code, 2)
+        self.assertIn("both map to", err)
+        self.assertFalse((dest / "overlay.loarc").exists() or (dest / "overlay.loarc.tmp").exists())
+
+    def test_archive_rejects_corruption(self):
+        src, dest = self.make_archive_mod(), self.root / "dest"
+        self.assertEqual(self.run_tool("archive", src, dest)[0], 0)
+        good = (dest / "overlay.loarc").read_bytes()
+        head, entries = self.parse_archive(good)
+        records, pos = [], head[3]
+        for name, _, _ in entries:
+            length = 20 + len(name.encode())
+            records.append(good[pos:pos + length])
+            pos += length
+
+        def with_index(blob: bytes) -> bytes:
+            return good[:head[3]] + blob
+
+        sizes = [e[2] for e in entries]
+        first, second = [i for i, s in enumerate(sizes) if s][:2]
+        overlap = bytearray(with_index(b"".join(records)))
+        struct.pack_into("<Q", overlap, head[3] + sum(map(len, records[:second])), entries[first][1])
+        bad_mask = bytearray(good)
+        struct.pack_into("<I", bad_mask, 32, head[5] | 1 << 3)
+        unaligned = bytearray(good)
+        struct.pack_into("<Q", unaligned, head[3], entries[0][1] + 1)
+        cases = {
+            "magic": b"LOARC2\r\n" + good[8:],
+            "unsorted": with_index(b"".join(reversed(records))),
+            "overlap": bytes(overlap),
+            "kind_mask": bytes(bad_mask),
+            "unaligned": bytes(unaligned),
+            "truncated": good[:-3],
+        }
+        for label, data in cases.items():
+            bad = self.root / f"bad-{label}.loarc"
+            bad.write_bytes(data)
+            out_dir = self.root / f"bad-{label}"
+            code, _, err = self.run_tool("extract", bad, out_dir)
+            self.assertEqual(code, 2, label)
+            self.assertFalse(out_dir.exists(), label)
+        # The deep check compares data with what was hashed from the source.
+        entries_by_name = mod.loarc_scan(src / "overlay")
+        digests, _ = mod.loarc_write(entries_by_name, self.root / "deep.loarc")
+        mod.loarc_read(self.root / "deep.loarc", digests)
+        flipped = bytearray((self.root / "deep.loarc").read_bytes())
+        flipped[4096] ^= 1
+        (self.root / "deep.loarc").write_bytes(flipped)
+        with self.assertRaises(ValueError):
+            mod.loarc_read(self.root / "deep.loarc", digests)
+
+    def test_archive_names(self):
+        for name in ("overlay/text/a/b.json", "overlay/textures/fp-0123456789abcdef.lotex2",
+                     "overlay/models/key-fnv1a64-0123456789abcdef.loasset", "overlay/text/ü.json"):
+            mod.loarc_kind(name)
+        for name in ("overlay/text/A.json", "overlay/text/a.JSON", "overlay/text/../a.json", "overlay/text/a//b.json",
+                     "overlay/text/c:/a.json", "overlay/text/a\\b.json", "overlay/text/.json", "overlay/text/" + "a" * 1025 + ".json",
+                     "overlay/textures/FP-0123456789abcdef.lotex2", "overlay/images/key-fnv1a64-0123456789abcdef.loasset",
+                     "overlay/fonts/sub/key-fnv1a64-0123456789abcdef.loasset", "other/a", "/overlay/text/a.json"):
+            with self.assertRaises(ValueError, msg=name):
+                mod.loarc_kind(name)
 
     @unittest.skipUnless(mod.DEFAULT_TEXCONV.is_file(), "texconv not available")
     def test_texture_pack_dds(self):

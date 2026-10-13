@@ -483,6 +483,69 @@ void FormatV2(const fs::path& root, const fs::path& list) {
     fs::remove_all(root / "hd"); fs::remove_all(root / "zz"); fs::remove(list);
     Reload(); assert(!HasTextureReplacements());
 }
+// A .loarc as lo_mod.py archive writes it; sorted = false keeps the given name order.
+std::string Loarc(std::vector<std::pair<std::string, std::string>> entries, uint32_t kinds, bool sorted = true) {
+    if (sorted) std::sort(entries.begin(), entries.end());
+    auto put = [](std::string& out, uint64_t value, int bytes) { for (int i = 0; i != bytes; ++i) out.push_back(char(value >> (8 * i))); };
+    std::string data(64, '\0'), index;
+    for (const auto& [name, bytes] : entries) {
+        data.resize((data.size() + 4095) / 4096 * 4096, '\0');
+        put(index, data.size(), 8); put(index, bytes.size(), 8); put(index, name.size(), 4);
+        index += name;
+        data += bytes;
+    }
+    std::string header("LOARC1\r\n", 8);
+    put(header, 64, 4); put(header, entries.size(), 4); put(header, data.size(), 8); put(header, index.size(), 8); put(header, kinds, 4);
+    header.resize(64, '\0');
+    return header + data.substr(64) + index;
+}
+// A mod's overlay/ files as one overlay.loarc; loose files of the same mod win.
+void Archives(const fs::path& root) {
+    const AssetRequest ab{{AssetKind::Texture, "00000000000000ab"}, {}}, cd{{AssetKind::Texture, "00000000000000cd"}, {}};
+    const auto texAb = Lotex2(0xab, 18, 2, 2, std::string(16, 'p')), texCd = Lotex2(0xcd, 18, 2, 2, std::string(16, 'q'));
+    const std::string menu = "bin/xenon/loc/int/menu/menu_int.dat", json = "{\"a\":\"b\"}";
+    const uint32_t kinds = 1u << uint32_t(AssetKind::Texture) | 1u << uint32_t(AssetKind::Text) | 1u << uint32_t(AssetKind::Image);
+    const auto archive = root / "arc/overlay.loarc";
+    Write(root / "arc/mod.ini", "api_version=2\nid=arc\npriority=100\n");
+    Write(archive, Loarc({{"overlay/textures/fp-00000000000000ab.lotex2", texAb}, {"overlay/textures/fp-00000000000000cd.lotex2", texCd},
+        {"overlay/text/" + menu + ".json", json}, {OverlayRelativePath(request.id).generic_string(), Lotex(key)},
+        {"overlay/future/x.bin", "x"}}, kinds));
+    Reload();
+    assert(HasTextureReplacements());
+    const auto resolved = Resolve(ab);
+    assert(resolved && resolved->modId == "arc" && resolved->path == archive && resolved->offset % 4096 == 0 && resolved->size == texAb.size());
+    assert(DescribeAsset(*resolved).ends_with(".loarc:overlay/textures/fp-00000000000000ab.lotex2"));
+    assert(ReadTextureReplacement(0xab, 18, 2, 2, UINT64_MAX) && ReadTextureReplacement(0xcd, 18, 2, 2, UINT64_MAX));
+    assert(Resolve(request)->modId == "arc" && ReadImageReplacement(request, 2, 1));
+    const auto texts = ListTexts();
+    assert(texts.size() == 1 && texts[0].modId == "arc" && texts[0].size == json.size());
+    {
+        std::ifstream in;
+        uint64_t length = 0;
+        std::string bytes(json.size(), '\0');
+        assert(OpenAsset(texts[0], in, length) && length == json.size() && in.read(bytes.data(), bytes.size()) && bytes == json);
+        const auto mods = ListMods();
+        const auto* arc = Find(mods, "arc");
+        assert(arc && arc->overlayFiles == 4 && arc->problems.size() == 1); // the unknown name is skipped and reported
+    }
+    // A loose file beats the same name in the mod's archive.
+    Write(root / "arc" / OverlayRelativePath(ab.id), texAb);
+    Reload();
+    assert(Resolve(ab)->size == kWholeFile && Resolve(cd)->path == archive);
+    // An archive that shrank after Initialize fails in the reader; at the next
+    // Initialize its header is rejected and the mod keeps only its loose files.
+    fs::resize_file(archive, 4096 + 8);
+    std::string error;
+    assert(!ReadTextureReplacement(0xcd, 18, 2, 2, UINT64_MAX, &error) && error.find(".loarc:overlay/textures/") != std::string::npos);
+    Reload();
+    assert(!Resolve(cd) && Resolve(ab) && Find(ListMods(), "arc")->problems.size() == 1);
+    // A damaged index adds nothing.
+    Write(archive, Loarc({{"overlay/textures/fp-00000000000000cd.lotex2", texCd}, {"overlay/textures/fp-00000000000000ab.lotex2", texAb}}, kinds, false));
+    Reload();
+    assert(!Resolve(cd) && Find(ListMods(), "arc")->problems.size() == 1);
+    fs::remove_all(root / "arc");
+    Reload(); assert(!HasTextureReplacements());
+}
 // LO_MOD_TEST_INDEX_FILES=<n>: time Initialize over one mod with n texture files.
 void IndexBench(const fs::path& root) {
     const char* value = std::getenv("LO_MOD_TEST_INDEX_FILES");
@@ -530,7 +593,8 @@ int main() {
     Texts(root);
     Languages(root);
     FormatV2(root, temp.path / "mod-list.ini");
+    Archives(root);
     IndexBench(root);
     Shutdown(); assert(!Resolve(request));
-    std::cout << "Mod API, image, texture, text and language pack contracts, mod folders and mod list, manager isolation and reload tests passed\n";
+    std::cout << "Mod API, image, texture, text and language pack contracts, mod folders, archives and mod list, manager isolation and reload tests passed\n";
 }

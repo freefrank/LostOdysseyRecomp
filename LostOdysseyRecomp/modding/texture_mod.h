@@ -74,11 +74,10 @@ inline std::optional<TextureData> ReadTextureReplacement(uint64_t fingerprint, u
         const char* reason = nullptr;
         bool skipped = false;
         auto decode = [&]() -> std::optional<TextureData> {
-            std::ifstream in(resolved->path, std::ios::binary | std::ios::ate);
-            if (!in) { reason = "cannot open"; return {}; }
-            const uint64_t length = uint64_t(std::streamoff(in.tellg()));
+            std::ifstream in;
+            uint64_t length = 0;
+            if (!OpenAsset(*resolved, in, length)) { reason = "cannot open"; return {}; }
             std::array<uint8_t, 64> header{};
-            in.seekg(0);
             if (length < header.size() || !in.read(reinterpret_cast<char*>(header.data()), header.size())) { reason = "truncated header"; return {}; }
             const std::array<uint8_t, 8> magic{'L','O','T','E','X','2','\r','\n'};
             if (!std::equal(magic.begin(), magic.end(), header.begin())) { reason = "not LOTEX2"; return {}; }
@@ -163,8 +162,7 @@ inline std::optional<TextureData> ReadTextureReplacement(uint64_t fingerprint, u
             return {};
         }
         if (!data) {
-            const auto path = resolved->path.generic_u8string();
-            std::string message = "invalid texture replacement, using original: " + std::string(path.begin(), path.end()) +
+            std::string message = "invalid texture replacement, using original: " + DescribeAsset(*resolved) +
                 " (" + (reason ? reason : "read failed") + ")";
             if (error) *error = std::move(message);
             else std::fprintf(stderr, "[mods] %s\n", message.c_str());

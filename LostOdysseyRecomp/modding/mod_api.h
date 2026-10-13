@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <iosfwd>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,11 +20,15 @@ enum class AssetKind : uint32_t { Image = 1, Font = 2, Model = 3, Movie = 4, Tex
 enum class ResolutionMode : uint32_t { Combined, Standalone, Overlay };
 struct AssetId { AssetKind kind = AssetKind::Image; std::string key; };
 struct AssetRequest { AssetId id; std::filesystem::path originalPath; };
+// ResolvedAsset::size of a loose file: all of path.
+inline constexpr uint64_t kWholeFile = ~0ull;
 struct ResolvedAsset {
     AssetId id;
     std::filesystem::path path;
     std::string modId;
     int32_t priority = 0;
+    // An entry of a mod archive (overlay.loarc) is bytes [offset, offset + size) of path.
+    uint64_t offset = 0, size = kWholeFile;
 };
 struct Diagnostic { std::filesystem::path manifest; size_t line = 0; std::string message; };
 // A mods folder with a language.ini (id, name, base) is a language pack: its
@@ -46,7 +51,7 @@ struct ModInfo {
     bool manifestEnabled = true;                    // mod.ini enabled=
     bool listEnabled = true;                        // mod-list.ini: false only for <id>=off
     bool active = false;                            // contributes files in this snapshot
-    size_t overlayFiles = 0;                        // files found under overlay/ (active mods only)
+    size_t overlayFiles = 0;                        // files under overlay/ and in .loarc archives (active mods only)
     size_t manifestEntries = 0;                     // valid resource lines in mod.ini
     std::vector<Diagnostic> problems;
 };
@@ -61,7 +66,7 @@ public:
 // LO_MODS_MODE=overlay isolates external managers from mod folders AND providers.
 // The default combined mode keeps top-level overlay > provider > mod folders.
 // Mod folders follow modList (mod-list.ini, the in-game manager's order), then
-// priority. Each api_version=2 folder's overlay/ is listed once, on a thread
+// priority. Each api_version=2 folder's overlay/ and .loarc archives are listed once, on a thread
 // Initialize starts (MO2's VFS lists slowly); Resolve, ListTexts and ListMods
 // wait for it and then are hash lookups. Containment is lexical: files may
 // resolve through a VFS (MO2) or symlinks. An empty modList means no list file.
@@ -97,6 +102,11 @@ std::vector<LanguagePack> LanguagePacks();
 // The pack's text/ files, one per member path.
 std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack);
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
+// Opens a resolved file at its first byte; length is its size. An archive
+// entry ends before the archive does, so readers stop at length.
+bool OpenAsset(const ResolvedAsset& asset, std::ifstream& in, uint64_t& length);
+// The file, or the archive and entry name, for messages.
+std::string DescribeAsset(const ResolvedAsset& asset);
 // Providers are trusted host extensions, not DLLs loaded from mod packages.
 // Shared ownership keeps an in-flight callback alive during unregistration.
 bool RegisterProvider(AssetKind kind, std::shared_ptr<AssetProvider> provider);
@@ -107,6 +117,7 @@ void UnregisterProvider(AssetKind kind, const AssetProvider* provider);
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object);
 // Textures: overlay/textures/fp-<16 hex digits>.lotex2; text: overlay/text/<member
 // path>.json, the export's text/ layout; other kinds hash the key. The same
-// names work in a mod folder's own overlay/ (api_version=2).
+// names work in a mod folder's own overlay/ (api_version=2) and, '/'-separated
+// and lower case, as the entry names of its .loarc archives.
 std::filesystem::path OverlayRelativePath(const AssetId& id);
 }
