@@ -128,7 +128,7 @@ What the video must be:
 - Any frame rate from 24 to 120 fps. The game picks frames by time, so the rate does not have to match the original. Twice the original's rate is easiest when a tool doubles the frames: 60 fps for a 30 fps original, 60000/1001 for 29.97. `ffprobe` on the exported video shows its rate (most are 30 or 29.97).
 - 16:9. Use 3840x2160 for desktop packs (H.264 level 5.2) and 1920x1080 for Steam Deck and phones (level 4.2).
 - No audio track is needed. An audio track in the file is ignored.
-- The same length as the original, lined up from the first frame. If a tool changes the frame rate, check that the length did not change: a video that runs longer or shorter drifts away from the sound.
+- The same length as the original picture, lined up from the first frame. A video up to 1% longer or shorter is stretched or squeezed evenly to the original's length, which covers a tool that labels 29.97 fps as 30 or drops a few frames. A bigger difference plays as it is, so check the length when a tool changes the frame rate: a video that runs longer or shorter drifts away from the sound.
 
 Example ffmpeg command:
 

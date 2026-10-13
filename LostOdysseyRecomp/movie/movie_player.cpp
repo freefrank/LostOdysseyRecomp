@@ -1,10 +1,12 @@
 #include "movie_player.h"
+#include "original_lengths.h"
 #include <modding/mod_api.h>
 #include <os/logger.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <deque>
 #include <map>
@@ -26,6 +28,9 @@ constexpr size_t kClockSamples = 60;
 constexpr size_t kQueueAhead = 4;
 // A stopped session stays readable this long for draws already queued.
 constexpr double kRetireMs = 2000.0;
+// A replacement this close to the original's length is stretched or squeezed
+// evenly to it: a tool that relabels 29.97 fps as 30, or drops a few frames.
+constexpr double kFitRange = 0.01;
 
 struct Decoded {
     std::shared_ptr<Nv12Frame> frame;
@@ -119,8 +124,17 @@ private:
             failed_.store(true, std::memory_order_release);
             return;
         }
+        double lengthUs = 0.0;
+        for (const auto& sample : track.samples)
+            lengthUs = std::max(lengthUs, 1e6 * double(sample.pts + sample.duration) / track.timescale);
+        double scale = 1.0;
+        const double originalUs = 1e3 * OriginalLengthMs(name_);
+        // More than a frame off, but within the fit range.
+        if (originalUs > 0 && lengthUs > 0 && std::abs(originalUs - lengthUs) > 20000.0 &&
+            std::abs(originalUs / lengthUs - 1.0) <= kFitRange)
+            scale = originalUs / lengthUs;
         const double frameUs = track.frameDuration ? 1e6 * track.frameDuration / track.timescale : 1e6 / 60.0;
-        endHoldUs_ = int64_t(frameUs * 1.5);
+        endHoldUs_ = int64_t(frameUs * scale * 1.5);
         bool first = true;
         for (;;) {
             std::shared_ptr<Nv12Frame> frame;
@@ -141,8 +155,10 @@ private:
                 first = false;
                 LOG_NOTICE("movie: {} replaced by {} ({}x{}, {:.3f} fps, {} {})", name_, modding::DescribeAsset(asset_),
                     track.width, track.height, 1e6 / frameUs, decoder->Name(), decoder->Hardware() ? "hardware" : "software");
+                if (scale != 1.0)
+                    LOG_NOTICE("movie: {} is {:.3f} s, fitted to the original's {:.3f} s", name_, lengthUs / 1e6, originalUs / 1e6);
             }
-            const int64_t us = track.timescale ? frame->pts * 1000000 / int64_t(track.timescale) : 0;
+            const int64_t us = int64_t(1e6 * double(frame->pts) * scale / track.timescale);
             std::lock_guard lock(mutex_);
             queue_.push_back({std::move(frame), us, ++gSerial});
         }
