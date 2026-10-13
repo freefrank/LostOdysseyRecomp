@@ -3,25 +3,34 @@
 #include <optional>
 #include <string>
 
-// `--export-assets <dir> [--export-kinds textures,fingerprints,movies,text] [--export-filter <text>]
+// `--export-assets <dir> [--export-kinds textures,fingerprints,movies,text,models,animations]
+//  [--export-model-textures] [--export-filter <text>] [--export-select <file>]
 //  [--export-language <code>] [--export-language-pack <id>] [--export-list]`
 // copies the player's own game data into a folder for mod authors: textures as
-// PNG (keyed like image mods), movies as the original WMV bytes and the game's
-// text as JSON (keyed like language packs). --export-language keeps the text of
-// one language (int, jpn...); --export-language-pack writes only that text (int
-// by default) as a language pack to translate: <dir>/<id>/language.ini and
-// <dir>/<id>/text/. --export-list writes only <dir>/list.csv, one row per
-// texture, movie and text file the same options would export, without decoding
-// textures (the MO2 tool's preview). Reads game files only: no window, GPU
-// device, installer, logs or guest code.
+// PNG (keyed like image mods), movies as the original WMV bytes, the game's
+// text as JSON (keyed like language packs), and on request models (LOD 0 with
+// skeleton) and animation sets as glTF binaries (.glb); an animation set
+// carries the model whose skeleton it moves. --export-model-textures embeds each
+// material's colour texture in those .glb files. --export-select names a UTF-8
+// file of list.csv names, one per line, and exports only those. --export-language
+// keeps the text of one language (int, jpn...); --export-language-pack writes
+// only that text (int by default) as a language pack to translate:
+// <dir>/<id>/language.ini and <dir>/<id>/text/. --export-list writes only
+// <dir>/list.csv, one row per texture, movie, text file, model and animation
+// set the same options would export, without decoding textures (the MO2 tool's
+// preview). Reads game files only: no window, GPU device, installer, logs or
+// guest code.
 namespace modding::asset_export
 {
 struct Request
 {
     std::filesystem::path output;
     bool textures = true, movies = true, text = true;
+    bool models = false, animations = false; // not in the default kinds: tens of thousands of files
+    bool modelTextures = false;
     bool pngs = true; // false with --export-kinds fingerprints: index.csv only
     std::string filter; // ASCII lower case; matched against package / file paths
+    std::filesystem::path select; // list of names to export, or empty for all
     std::string language; // text of this language code only; empty for all
     std::string languagePack; // pack id (lower case): text only, written as a language pack
     bool list = false;        // list.csv only

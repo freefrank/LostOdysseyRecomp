@@ -3,14 +3,16 @@
 # Copy this file to <MO2>/plugins/ and restart MO2. With a "Lost Odyssey Recomp"
 # instance selected, the Tools menu gets "Export Lost Odyssey assets". It runs
 # LostOdysseyRecomp.exe --export-assets in the game folder (outside MO2's
-# virtual file system) and writes textures, movies and text from your own game data
-# to a new folder. Use the result as reference for your mods; do not share it.
-# "Scan game data" lists everything once and shows what the current settings
-# would export, with a preview of the selected texture, movie or text file.
+# virtual file system) and writes textures, movies, text, 3D models and animations (glTF) from
+# your own game data to a new folder. Use the result as reference for your mods; do
+# not share it. "Scan game data" lists everything once and shows what the current
+# settings would export, with a preview of the selected texture, movie, text file,
+# model or animation set. Select rows (Ctrl/Shift) and use "Export selected" to export only those.
 
 from __future__ import annotations
 
 import csv
+import glob
 import hashlib
 import json
 import os
@@ -62,6 +64,13 @@ LANGUAGES = (
 )
 SCAN_HINT = "Scan game data to preview what will be exported."
 OLD_GAME = "This version of LostOdysseyRecomp cannot list assets; update the game."
+OLD_GAME_NEW = (
+    "This version of LostOdysseyRecomp cannot export models, animations or selections; update the game."
+)
+KIND_ARGUMENT = {"texture": "textures", "movie": "movies", "text": "text", "model": "models",
+                 "animation": "animations"}
+GLB_KINDS = ("model", "animation")  # Rows exported as one glTF binary each.
+MODEL_CLASSES = {"SkeletalMesh": "Skeletal", "StaticMesh": "Static", "StaticMeshRPG": "Static (map)"}
 NO_DATA = (
     "LostOdysseyRecomp in this folder found no game data. Start the game once from this folder "
     "to set it up, or use Change... to choose the folder you start the game from."
@@ -127,9 +136,9 @@ def clean_language_pack(pack: str) -> tuple[str, int, int]:
 
 
 def catalog_name(row: list[str]) -> str:
-    """Textures are keyed <package>#<index>:<object>; show the object."""
+    """Textures and models are keyed <package>#<index>:<object>; show the object."""
     name = row[NAME]
-    if row[KIND] == "texture":
+    if row[KIND] in ("texture", "model", "animation"):
         start = name.find("#")
         colon = name.find(":", max(start, 0))
         if colon >= 0:
@@ -142,6 +151,10 @@ def catalog_size(row: list[str]) -> str:
         return f"{row[WIDTH]}×{row[HEIGHT]}"
     if row[KIND] == "movie":
         return f"{int(row[SIZE] or 0) / 1048576:.1f} MB"
+    if row[KIND] == "animation":
+        return f"{int(row[WIDTH] or 0):,} sequences · {int(row[ENTRIES] or 0):,} frames"
+    if row[KIND] == "model":
+        return f"{int(row[WIDTH] or 0):,} verts · {int(row[HEIGHT] or 0):,} tris"
     return f"{row[ENTRIES]} lines"
 
 
@@ -150,7 +163,24 @@ def catalog_format(row: list[str]) -> str:
         return row[FORMAT]
     if row[KIND] == "movie":
         return os.path.splitext(row[NAME])[1].lstrip(".").upper()
+    if row[KIND] == "animation":
+        return "Animation"
+    if row[KIND] == "model":
+        return MODEL_CLASSES.get(row[FORMAT], row[FORMAT])
     return row[LANGUAGE]
+
+
+def unknown_option(line: str) -> bool:
+    """True when an exporter error line is an old build rejecting an option or kind."""
+    text = line.lower()
+    return "unknown" in text or "unrecognized" in text or "--export-select" in text \
+        or "models" in text or "animations" in text or "model-textures" in text
+
+
+def write_selection(path: str, names: list[str]) -> None:
+    """The --export-select file: one list.csv name per line."""
+    with open(path, "w", encoding="utf-8", newline="\n") as file:
+        file.write("".join(name + "\n" for name in names))
 
 
 def read_catalog(path: str) -> list[list[str]]:
@@ -251,7 +281,9 @@ class ExportDialog(QDialog):
         self._jobs = 0
         self._catalog: list[list[str]] = []
         self._wanted: list[str] | None = None  # Selected row.
-        self._play: list[str] | None = None  # Movie to open once exported.
+        self._play: list[str] | None = None  # Movie, model or animation set to open once exported.
+        self._busy = False
+        self._new_options = False  # The running export needs a newer game build.
         self._helper: QProcess | None = None
         self._helper_job: tuple[tuple, str] | None = None
         self._helper_errors: list[str] = []
@@ -264,9 +296,9 @@ class ExportDialog(QDialog):
         self._errors: list[str] = []
 
         info = QLabel(
-            "Exports the original textures (PNG), movies and text (JSON, the "
-            "starting point for a translation) from your own game data. The files "
-            "are for reference only; do not share them."
+            "Exports the original textures (PNG), movies, text (JSON, the "
+            "starting point for a translation), 3D models and animations (glTF) from your "
+            "own game data. The files are for reference only; do not share them."
         )
         info.setWordWrap(True)
         self._game = QLineEdit(game_dir)
@@ -294,10 +326,21 @@ class ExportDialog(QDialog):
         self._movies.setChecked(True)
         self._text = QCheckBox("Text")
         self._text.setChecked(True)
+        self._models = QCheckBox("Models")
+        self._models.setToolTip("All models are about 52,000 files and 4 GB.")
+        self._model_textures = QCheckBox("With textures")
+        self._model_textures.setChecked(True)
+        self._model_textures.setEnabled(False)
+        self._model_textures.setToolTip("Write each material's colour texture beside the models, linked from them.")
+        self._animations = QCheckBox("Animations")
+        self._animations.setToolTip("Every animation set with its character model, as glTF (about 2.5 GB).")
         kinds = QHBoxLayout()
         kinds.addWidget(self._textures)
         kinds.addWidget(self._movies)
         kinds.addWidget(self._text)
+        kinds.addWidget(self._models)
+        kinds.addWidget(self._model_textures)
+        kinds.addWidget(self._animations)
         kinds.addStretch(1)
         self._filter = QLineEdit()
         self._filter.setPlaceholderText("optional: only names containing this text")
@@ -316,27 +359,31 @@ class ExportDialog(QDialog):
         form.addRow("Filter", self._filter)
         form.addRow("Text language", self._language)
         form.addRow("Language pack", self._pack)
-        for box in (self._textures, self._movies, self._text):
+        for box in (self._textures, self._movies, self._text, self._models, self._animations):
             box.toggled.connect(self._schedule_refresh)
+        self._models.toggled.connect(self._model_textures.setEnabled)
         self._filter.textChanged.connect(self._schedule_refresh)
         self._language.currentIndexChanged.connect(self._schedule_refresh)
         self._pack.textChanged.connect(self._schedule_refresh)
+        self._pack.textChanged.connect(self._update_export_selected)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._refresh)
 
         self._scan = QPushButton("Scan game data")
-        self._scan.setToolTip("List every texture, movie and text file once, to preview an export")
+        self._scan.setToolTip("List every texture, movie, text file, model and animation set once, to preview an export")
         self._scan.clicked.connect(self._begin_scan)
         self._count = QLabel(SCAN_HINT)
         self._count.setWordWrap(True)
         self._model = CatalogModel(self)
         self._table = QTableView()
         self._table.setModel(self._model)
-        self._table.setToolTip("Double-click a row to put its path into Filter.")
+        self._table.setToolTip(
+            "Double-click a row to put its path into Filter. Ctrl/Shift selects several rows."
+        )
         self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        self._table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        self._table.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().hide()
         self._table.verticalHeader().setDefaultSectionSize(22)
@@ -345,6 +392,7 @@ class ExportDialog(QDialog):
             self._table.setColumnWidth(column, width)
         self._table.doubleClicked.connect(self._use_path)
         self._table.selectionModel().currentRowChanged.connect(self._selected)
+        self._table.selectionModel().selectionChanged.connect(self._update_export_selected)
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -379,8 +427,20 @@ class ExportDialog(QDialog):
         movie_layout.addWidget(self._play_button)
         movie_layout.addWidget(self._movie_note)
         movie_layout.addStretch(1)
+        self._model_info = QLabel("")
+        self._model_info.setWordWrap(True)
+        self._model_note = QLabel("")
+        self._model_note.setWordWrap(True)
+        self._open_model_button = QPushButton("Open")
+        self._open_model_button.clicked.connect(self._open_model_clicked)
+        model_page = QWidget()
+        model_layout = QVBoxLayout(model_page)
+        model_layout.addWidget(self._model_info)
+        model_layout.addWidget(self._open_model_button)
+        model_layout.addWidget(self._model_note)
+        model_layout.addStretch(1)
         self._pages = QStackedWidget()
-        for page in (self._message, image_page, self._preview_text, movie_page):
+        for page in (self._message, image_page, self._preview_text, movie_page, model_page):
             self._pages.addWidget(page)
         self._show_message("Select a row to preview it.")
 
@@ -403,6 +463,10 @@ class ExportDialog(QDialog):
 
         self._start = QPushButton("Start")
         self._start.clicked.connect(self._begin)
+        self._export_selected = QPushButton("Export selected")
+        self._export_selected.setToolTip("Export only the rows selected in the table")
+        self._export_selected.clicked.connect(self._begin_selected)
+        self._export_selected.setEnabled(False)
         self._open = QPushButton("Open folder")
         self._open.clicked.connect(self._open_folder)
         self._open.setEnabled(False)
@@ -417,6 +481,7 @@ class ExportDialog(QDialog):
         buttons.addWidget(self._clean)
         buttons.addStretch(1)
         buttons.addWidget(self._start)
+        buttons.addWidget(self._export_selected)
         buttons.addWidget(self._open)
         buttons.addWidget(self._close)
 
@@ -515,21 +580,35 @@ class ExportDialog(QDialog):
         for widget in (
             self._folder, self._textures, self._movies, self._text, self._filter,
             self._language, self._pack, self._start, self._clean, self._scan, self._change,
+            self._models, self._animations,
         ):
             widget.setEnabled(not busy)
+        self._model_textures.setEnabled(not busy and self._models.isChecked())
+        self._busy = busy
+        self._update_export_selected()
 
     def _fail(self, message: str) -> None:
         self._status.setText(message)
 
-    def _begin(self) -> None:
+    def _output_folder(self) -> str | None:
+        """The validated output folder, or None after showing why not."""
         output = os.path.abspath(self._folder.text().strip())
         if not self._folder.text().strip():
             self._fail("Choose an output folder.")
-            return
+            return None
         if os.path.exists(output) and (not os.path.isdir(output) or os.listdir(output)):
             self._fail("The output folder must not exist or must be empty.")
+            return None
+        return output
+
+    def _begin(self) -> None:
+        output = self._output_folder()
+        if output is None:
             return
-        boxes = (("textures", self._textures), ("movies", self._movies), ("text", self._text))
+        boxes = (
+            ("textures", self._textures), ("movies", self._movies),
+            ("text", self._text), ("models", self._models), ("animations", self._animations),
+        )
         kinds = [name for name, box in boxes if box.isChecked()]
         pack = self._pack.text().strip()
         language = self._language.currentData()
@@ -537,7 +616,7 @@ class ExportDialog(QDialog):
             self._fail("The language pack id may use only letters, digits, '-', '_' and '.', such as pt-br.")
             return
         if not kinds and not pack:
-            self._fail("Select at least one of textures, movies and text.")
+            self._fail("Select at least one of textures, movies, text, models and animations.")
             return
         exe = os.path.join(self._game_dir, GAME_BINARY)
         if not os.path.isfile(exe):
@@ -549,13 +628,60 @@ class ExportDialog(QDialog):
             arguments += ["--export-language-pack", pack]
         else:
             arguments += ["--export-kinds", ",".join(kinds)]
+            if "models" in kinds and self._model_textures.isChecked():
+                arguments.append("--export-model-textures")
         if language:
             arguments += ["--export-language", language]
         if self._filter.text().strip():
             arguments += ["--export-filter", self._filter.text().strip()]
 
         self._output = output
+        self._new_options = "models" in kinds or "animations" in kinds
         self._launch("export", exe, arguments)
+
+    def _selected_rows(self) -> list[list[str]]:
+        rows = (self._model.row_at(index) for index in self._table.selectionModel().selectedRows())
+        return [row for row in rows if row is not None]
+
+    def _update_export_selected(self, *_) -> None:
+        count = len(self._selected_rows())
+        self._export_selected.setText(f"Export selected ({count})" if count else "Export selected")
+        self._export_selected.setEnabled(
+            count > 0 and not self._busy and not self._running() and not self._pack.text().strip()
+        )
+
+    def _selection_arguments(self, output: str, selection_file: str,
+                             rows: list[list[str]]) -> list[str]:
+        """Exporter arguments that write exactly the given catalog rows."""
+        kinds = [name for kind, name in KIND_ARGUMENT.items() if any(r[KIND] == kind for r in rows)]
+        arguments = ["--export-assets", output, "--export-select", selection_file,
+                     "--export-kinds", ",".join(kinds)]
+        languages = {row[LANGUAGE] for row in rows}
+        if all(row[KIND] == "text" for row in rows) and len(languages) == 1 and "" not in languages:
+            arguments += ["--export-language", languages.pop()]
+        if any(row[KIND] == "model" for row in rows) and self._model_textures.isChecked():
+            arguments.append("--export-model-textures")
+        return arguments
+
+    def _begin_selected(self) -> None:
+        rows = self._selected_rows()
+        if not rows or self._running() or self._pack.text().strip():
+            return
+        output = self._output_folder()
+        if output is None:
+            return
+        exe = self._exe()
+        if exe is None:
+            return
+        selection_file = self._session_dir("select") + ".txt"
+        try:
+            write_selection(selection_file, [row[NAME] for row in rows])
+        except OSError as error:
+            self._fail(f"Could not write the selection: {error}")
+            return
+        self._output = output
+        self._new_options = True
+        self._launch("export", exe, self._selection_arguments(output, selection_file, rows))
 
     def _launch(self, mode: str, exe: str, arguments: list[str]) -> None:
         self._mode = mode
@@ -645,7 +771,8 @@ class ExportDialog(QDialog):
                 self._open_folder()
         else:
             no_data = any("no game data" in line for line in self._errors)
-            self._status.setText(NO_DATA if no_data else "Export failed.")
+            old = self._new_options and any(unknown_option(line) for line in self._errors)
+            self._status.setText(OLD_GAME_NEW if old else NO_DATA if no_data else "Export failed.")
             self._log.setPlainText("\n".join(self._errors[-20:]) or "No error message was printed.")
             self._log.show()
 
@@ -762,7 +889,10 @@ class ExportDialog(QDialog):
         text = self._filter.text().strip().lower()
         if pack:
             return {"text"}, language or "int", text
-        boxes = (("texture", self._textures), ("movie", self._movies), ("text", self._text))
+        boxes = (
+            ("texture", self._textures), ("movie", self._movies),
+            ("text", self._text), ("model", self._models), ("animation", self._animations),
+        )
         return {name for name, box in boxes if box.isChecked()}, language, text
 
     def _refresh(self) -> None:
@@ -779,13 +909,13 @@ class ExportDialog(QDialog):
             and (row[KIND] != "text" or not language or row[LANGUAGE] == language)
         ]
         self._model.set_rows(rows)
-        counts = {"texture": 0, "movie": 0, "text": 0}
+        counts = {"texture": 0, "movie": 0, "text": 0, "model": 0, "animation": 0}
         for row in rows:
             counts[row[KIND]] += 1
         movies = "movie" if counts["movie"] == 1 else "movies"
         self._count.setText(
             f"{counts['texture']:,} textures, {counts['movie']:,} {movies}, "
-            f"{counts['text']:,} text files will be exported"
+            f"{counts['text']:,} text files, {counts['model']:,} models, {counts['animation']:,} animation sets will be exported"
         )
         self._selected(self._table.currentIndex())
 
@@ -812,6 +942,19 @@ class ExportDialog(QDialog):
         self._play_button.setEnabled(self._play is None)
         self._pages.setCurrentIndex(3)
 
+    def _show_model(self, row: list[str], note: str) -> None:
+        if row[KIND] == "animation":
+            detail = (f"{int(row[WIDTH] or 0):,} sequences, {int(row[HEIGHT] or 0):,} tracks, "
+                      f"{int(row[ENTRIES] or 0):,} frames")
+        else:
+            detail = (f"{row[FORMAT]}\n{int(row[WIDTH] or 0):,} vertices, "
+                      f"{int(row[HEIGHT] or 0):,} triangles, {row[ENTRIES]} bones")
+        self._model_info.setText(f"{catalog_name(row)}\n{detail}\n{row[PATH]}")
+        self._model_note.setText(note)
+        self._open_model_button.setText("Open animation" if row[KIND] == "animation" else "Open model")
+        self._open_model_button.setEnabled(self._play is None)
+        self._pages.setCurrentIndex(4)
+
     def _job(self, row: list[str]) -> tuple[tuple, list[str]]:
         """Cache key and exporter arguments that produce the row's files."""
         kind, path = row[KIND], row[PATH]
@@ -820,8 +963,22 @@ class ExportDialog(QDialog):
             if row[LANGUAGE]:
                 arguments += ["--export-language", row[LANGUAGE]]
             return ("text", path, row[LANGUAGE]), arguments
+        if kind in GLB_KINDS:  # The key is selected through a one-line file, see _start_helper.
+            arguments = ["--export-kinds", KIND_ARGUMENT[kind]]
+            textures = kind == "model" and self._model_textures.isChecked()
+            if textures:
+                arguments.append("--export-model-textures")
+            return (kind, row[NAME], textures), arguments
         name = "textures" if kind == "texture" else "movies"
         return (kind, path), ["--export-kinds", name, "--export-filter", path.lower()]
+
+    def _open_model_clicked(self) -> None:
+        row = self._wanted
+        if row is None or row[KIND] not in GLB_KINDS:
+            return
+        self._failed.pop(self._job(row)[0], None)
+        self._play = row
+        self._pump()
 
     def _play_clicked(self) -> None:
         row = self._wanted
@@ -836,11 +993,16 @@ class ExportDialog(QDialog):
         if self._play is not None:
             key = self._job(self._play)[0]
             if key in self._done:
-                self._open_movie(self._play)
+                if self._play[KIND] in GLB_KINDS:
+                    self._open_model(self._play)
+                else:
+                    self._open_movie(self._play)
                 self._play = None
             elif key not in self._failed:
                 if self._wanted is not None and self._wanted[KIND] == "movie":
                     self._show_movie(self._wanted, "Loading preview...")
+                elif self._wanted is not None and self._wanted[KIND] in GLB_KINDS:
+                    self._show_model(self._wanted, "Exporting...")
                 return self._play
             else:
                 self._play = None
@@ -850,6 +1012,8 @@ class ExportDialog(QDialog):
         key = self._job(row)[0]
         if row[KIND] == "movie":
             self._show_movie(row, self._failed.get(key, ""))
+        elif row[KIND] in GLB_KINDS:
+            self._show_model(row, self._failed.get(key, ""))
         elif key in self._done:
             self._render(row, self._done[key])
         elif key in self._failed:
@@ -867,6 +1031,15 @@ class ExportDialog(QDialog):
     def _start_helper(self, row: list[str]) -> None:
         key, arguments = self._job(row)
         folder = self._session_dir("job")
+        if row[KIND] in GLB_KINDS:
+            selection = folder + ".txt"
+            try:
+                write_selection(selection, [row[NAME]])
+            except OSError as error:
+                self._failed[key] = f"Could not write the selection: {error}"
+                self._pump()
+                return
+            arguments = arguments + ["--export-select", selection]
         self._helper_errors = []
         process = QProcess(self)
         process.setProgram(os.path.join(self._game_dir, GAME_BINARY))
@@ -910,7 +1083,10 @@ class ExportDialog(QDialog):
             self._done[key] = folder
         else:
             no_data = any("no game data" in line for line in self._helper_errors)
-            self._failed[key] = NO_DATA if no_data else "\n".join(self._helper_errors[-10:])
+            old = key[0] in GLB_KINDS and any(unknown_option(line) for line in self._helper_errors)
+            self._failed[key] = (
+                OLD_GAME_NEW if old else NO_DATA if no_data else "\n".join(self._helper_errors[-10:])
+            )
         self._pump()
 
     def _stop_helper(self) -> None:
@@ -970,6 +1146,26 @@ class ExportDialog(QDialog):
         else:
             self._failed[key] = "The exporter did not write this movie."
 
+    def _open_model(self, row: list[str]) -> None:
+        key = self._job(row)[0]
+        base = os.path.join(self._done[key], KIND_ARGUMENT[row[KIND]])
+        path = ""
+        try:
+            with open(os.path.join(base, "index.csv"), encoding="utf-8", newline="") as file:
+                found = next((r for r in csv.DictReader(file) if r.get("key") == row[NAME]), None)
+            if found:
+                path = os.path.join(base, os.path.normpath(found["file"]))
+        except OSError:
+            pass
+        if not os.path.isfile(path):
+            files = glob.glob(os.path.join(glob.escape(base), "**", "*.glb"), recursive=True)
+            path = files[0] if files else ""
+        if path:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        else:
+            self._failed[key] = "The exporter did not write this file."
+            self._show_model(row, self._failed[key])
+
 
 class LostOdysseyRecompExport(mobase.IPluginTool):
     def __init__(self):
@@ -988,10 +1184,10 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "dotSlash"
 
     def description(self) -> str:
-        return "Exports the original textures, movies and text from your own game data."
+        return "Exports the original textures, movies, text, models and animations from your own game data."
 
     def version(self) -> mobase.VersionInfo:
-        return mobase.VersionInfo(1, 2, 0, 0)
+        return mobase.VersionInfo(1, 3, 0, 0)
 
     def requirements(self) -> list[mobase.IPluginRequirement]:
         return [mobase.PluginRequirementFactory.gameDependency(GAME_NAME)]
@@ -1005,7 +1201,7 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "Export Lost Odyssey assets"
 
     def tooltip(self) -> str:
-        return "Export the original textures, movies and text to a folder for reference."
+        return "Export the original textures, movies, text, models and animations to a folder for reference."
 
     def icon(self) -> QIcon:
         return QIcon()

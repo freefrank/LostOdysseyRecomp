@@ -1,5 +1,6 @@
 #include "asset_export.h"
 #include "fpi_index.h"
+#include "gltf_writer.h"
 #include "mod_api.h"
 #include "text_format.h"
 #include "xenos_texture.h"
@@ -14,6 +15,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -188,6 +190,8 @@ struct Reader
         const auto value = bytes.subspan(pos, count); pos += count; return value;
     }
     uint8_t Byte() { return Take(1)[0]; }
+    uint16_t U16() { const auto b = Take(2); return uint16_t(b[0] << 8 | b[1]); }
+    float F32() { return std::bit_cast<float>(U32()); }
     uint32_t U32()
     {
         const auto b = Take(4);
@@ -286,6 +290,14 @@ struct Package
         if (e.classRef < 0) return imports[size_t(-int64_t(e.classRef)) - 1];
         if (e.classRef > 0) return exports[size_t(e.classRef) - 1].name;
         return "Class";
+    }
+    // An object reference: export index + 1, -(import index + 1), or 0 for none.
+    const Export *ExportAt(int32_t ref) const { return ref > 0 && size_t(ref) <= exports.size() ? &exports[size_t(ref) - 1] : nullptr; }
+    std::string RefName(int32_t ref) const
+    {
+        if (const auto *e = ExportAt(ref)) return e->name;
+        if (ref < 0 && uint64_t(-int64_t(ref)) <= imports.size()) return imports[size_t(-int64_t(ref)) - 1];
+        return "None";
     }
 };
 
@@ -505,15 +517,22 @@ Image DecodeTexture(const Package &package, const Export &e)
     return image;
 }
 
-size_t WritePng(const fs::path &file, const Image &image)
+std::vector<uint8_t> EncodePng(const Image &image)
 {
     size_t length = 0;
     void *png = tdefl_write_image_to_png_file_in_memory_ex(image.pixels.data(), int(image.width), int(image.height),
                                                            int(image.channels), &length, kPngLevel, MZ_FALSE);
-    if (!png) throw OutputError("PNG encoding failed for " + Utf8(file));
+    if (!png) throw OutputError("PNG encoding failed");
     std::unique_ptr<void, decltype(&mz_free)> owner(png, &mz_free);
-    WriteFile(file, png, length);
-    return length;
+    const auto *bytes = static_cast<const uint8_t *>(png);
+    return {bytes, bytes + length};
+}
+
+size_t WritePng(const fs::path &file, const Image &image)
+{
+    const auto png = EncodePng(image);
+    WriteFile(file, png.data(), png.size());
+    return png.size();
 }
 
 std::string FileStem(std::string_view object)
@@ -528,19 +547,446 @@ std::string FileStem(std::string_view object)
     return reserved.count(upper) ? "_" + name : name;
 }
 
+// ---- Models and animations -------------------------------------------------
+// LOD 0 of SkeletalMesh, StaticMesh and the game's StaticMeshRPG at package
+// version 419, and the AnimSets that move the skeletal ones. Layouts follow UE
+// Viewer (umodel, MIT) for this version; StaticMeshRPG serializes as StaticMesh,
+// and this game's static vertices are 40 bytes: position, 4 bytes of padding,
+// three packed normals, an ARGB colour, then the UV sets. glTF space from
+// Unreal's (umodel ExportGLTF): (x, y, z) -> (x, z, y), centimetres to metres;
+// reference pose rotations (x, y, z, w) -> (x, z, y, -w), animation keys
+// -> (x, z, y, w) except on the root bone, which takes -w as well.
+
+enum class MeshClass { None, Skeletal, Static };
+MeshClass ClassifyMesh(const std::string &name)
+{
+    if (name == "SkeletalMesh") return MeshClass::Skeletal;
+    return name == "StaticMesh" || name == "StaticMeshRPG" ? MeshClass::Static : MeshClass::None;
+}
+
+constexpr float kMetres = 0.01f;
+using Vec3 = std::array<float, 3>;
+Vec3 ReadVec(Reader &r) { const float x = r.F32(), y = r.F32(), z = r.F32(); return {x, y, z}; }
+Vec3 Position(const Vec3 &v) { return {v[0] * kMetres, v[2] * kMetres, v[1] * kMetres}; }
+// FPackedNormal: x in the low byte.
+Vec3 Normal(uint32_t packed)
+{
+    auto axis = [&](int shift) { return float(packed >> shift & 0xff) / 127.5f - 1; };
+    return {axis(0), axis(16), axis(8)};
+}
+
+// Element count of an array whose elements take at least `size` bytes.
+uint32_t Count(Reader &r, size_t size)
+{
+    const auto count = r.U32();
+    Require(count <= (r.bytes.size() - r.pos) / size, "invalid array count");
+    return count;
+}
+void SkipArray(Reader &r, size_t size) { r.Take(size_t(Count(r, size)) * size); }
+
+// Tagged properties up to "None"; objects start with their net index.
+template <typename Visit> void Properties(const Package &package, Reader &r, bool object, Visit &&visit)
+{
+    if (object) r.I32();
+    for (size_t count = 0;; ++count)
+    {
+        Require(count < 65536, "property count exceeds limit");
+        const auto name = package.Name(r);
+        if (name == "None") return;
+        const auto type = package.Name(r);
+        const auto size = r.U32(); r.U32();
+        if (type == "StructProperty") package.Name(r);
+        uint32_t boolean = 0;
+        if (type == "BoolProperty") boolean = r.U32();
+        Reader value{r.Take(size)};
+        visit(name, type, value, boolean);
+    }
+}
+Reader ObjectReader(const Package &package, const Export &e) { return {package.bytes.first(size_t(e.offset) + e.size), e.offset}; }
+
+struct Model
+{
+    gltf::Mesh mesh;
+    std::vector<int32_t> materials; // object reference of each mesh.materials entry
+    uint32_t vertices = 0, triangles = 0;
+};
+
+void CheckGeometry(const gltf::Mesh &mesh)
+{
+    Require(!mesh.positions.empty() && !mesh.indices.empty(), "empty mesh");
+    for (const auto index : mesh.indices) Require(index < mesh.positions.size(), "index outside the vertices");
+    for (const auto &section : mesh.sections)
+        Require(section.material < mesh.materials.size() && section.firstIndex <= mesh.indices.size() &&
+                section.indexCount <= mesh.indices.size() - section.firstIndex, "section outside the indices");
+}
+
+Model ReadSkeletalMesh(const Package &package, const Export &e)
+{
+    auto r = ObjectReader(package, e);
+    Properties(package, r, true, [](auto &&...) {});
+    Model model;
+    auto &mesh = model.mesh;
+    r.Take(28); // Bounds.
+    for (uint32_t i = 0, n = Count(r, 4); i < n; ++i)
+    {
+        model.materials.push_back(r.I32());
+        mesh.materials.push_back({package.RefName(model.materials.back())});
+    }
+    r.Take(24); // Origin, RotOrigin.
+    for (uint32_t i = 0, n = Count(r, 48); i < n; ++i)
+    {
+        gltf::Bone bone;
+        bone.name = package.Name(r);
+        r.U32(); // Flags.
+        const float x = r.F32(), y = r.F32(), z = r.F32(), w = r.F32();
+        bone.rotation = {x, z, y, -w};
+        bone.translation = Position(ReadVec(r));
+        r.I32(); // Children.
+        const auto parent = r.I32();
+        bone.parent = i ? parent : -1;
+        Require(bone.parent < int(i), "bone parent after the bone");
+        mesh.bones.push_back(std::move(bone));
+    }
+    Require(!mesh.bones.empty(), "no skeleton");
+    r.I32(); // SkeletalDepth.
+    Require(Count(r, 4) >= 1, "no LOD");
+    struct SourceSection { int16_t material; uint32_t first, triangles; };
+    std::vector<SourceSection> sections(Count(r, 10));
+    for (auto &s : sections)
+    {
+        s.material = int16_t(r.U16()); r.U16(); // ChunkIndex.
+        s.first = r.U32(); s.triangles = r.U16();
+    }
+    for (uint32_t i = 0, n = Count(r, 2); i < n; ++i) mesh.indices.push_back(r.U16());
+    SkipArray(r, 2); SkipArray(r, 2); SkipArray(r, 1); // f68, ActiveBoneIndices, f74.
+    struct Chunk { uint32_t first, count; std::vector<uint16_t> bones; };
+    std::vector<Chunk> chunks(Count(r, 28));
+    for (auto &c : chunks)
+    {
+        c.first = r.U32();
+        SkipArray(r, 33); SkipArray(r, 40); // CPU rigid and soft vertices; the GPU copy below has all.
+        for (uint32_t i = 0, n = Count(r, 2); i < n; ++i) c.bones.push_back(r.U16());
+        c.count = r.U32(); c.count += r.U32(); r.U32(); // Rigid + soft vertices, MaxInfluences.
+    }
+    r.U32();
+    const auto vertices = r.U32();
+    SkipArray(r, 16); SkipArray(r, 1); // Edges, RequiredBones.
+    const auto flags = r.U32(); r.U32(); const auto stored = r.U32(); r.U32();
+    if (!(flags & 0x21)) r.Take(stored);
+    Require(Count(r, 40) == vertices && vertices, "GPU vertices missing");
+    mesh.positions.resize(vertices); mesh.normals.resize(vertices);
+    mesh.uvs.assign(1, std::vector<std::array<float, 2>>(vertices));
+    mesh.joints.resize(vertices); mesh.weights.resize(vertices);
+    size_t chunk = 0;
+    for (uint32_t v = 0; v < vertices; ++v)
+    {
+        mesh.positions[v] = Position(ReadVec(r));
+        r.U32(); r.U32(); mesh.normals[v] = Normal(r.U32()); // Tangent, binormal, normal.
+        mesh.uvs[0][v] = {r.F32(), r.F32()};
+        const auto bones = r.Take(4), weights = r.Take(4);
+        while (chunk < chunks.size() && v >= chunks[chunk].first + chunks[chunk].count) ++chunk;
+        Require(chunk < chunks.size() && v >= chunks[chunk].first, "vertex outside the chunks");
+        const auto &map = chunks[chunk].bones;
+        float total = 0;
+        for (int k = 0; k < 4; ++k) total += weights[k];
+        for (int k = 0; k < 4; ++k)
+        {
+            Require(!weights[k] || (bones[k] < map.size() && map[bones[k]] < mesh.bones.size()), "influence outside the skeleton");
+            mesh.joints[v][k] = weights[k] ? map[bones[k]] : 0;
+            mesh.weights[v][k] = total > 0 ? weights[k] / total : float(k == 0);
+        }
+    }
+    for (const auto &s : sections)
+        mesh.sections.push_back({uint32_t(s.material), s.first, s.triangles * 3});
+    CheckGeometry(mesh);
+    model.vertices = vertices;
+    model.triangles = uint32_t(mesh.indices.size() / 3);
+    return model;
+}
+
+Model ReadStaticMesh(const Package &package, const Export &e)
+{
+    auto r = ObjectReader(package, e);
+    Properties(package, r, true, [](auto &&...) {});
+    r.Take(28); r.I32(); // Bounds, BodySetup.
+    SkipArray(r, 36); SkipArray(r, 16); // kDOP nodes and triangles.
+    if (r.I32() >= 17) SkipArray(r, 8); // InternalVersion; content tags.
+    Require(Count(r, 4) >= 1, "no LOD");
+    const auto flags = r.U32(); r.U32(); const auto stored = r.U32(); r.U32();
+    if (!(flags & 0x21)) r.Take(stored);
+    Model model;
+    auto &mesh = model.mesh;
+    for (uint32_t i = 0, n = Count(r, 28); i < n; ++i)
+    {
+        const auto material = r.I32();
+        r.I32(); r.I32();
+        const auto first = r.U32(), faces = r.U32();
+        r.I32(); r.I32();
+        auto slot = std::find(model.materials.begin(), model.materials.end(), material);
+        if (slot == model.materials.end())
+        {
+            model.materials.push_back(material);
+            mesh.materials.push_back({package.RefName(material)});
+            slot = model.materials.end() - 1;
+        }
+        mesh.sections.push_back({uint32_t(slot - model.materials.begin()), first, faces * 3});
+    }
+    const auto sets = r.U32(), itemSize = r.U32(), vertices = r.U32();
+    Require(sets >= 1 && sets <= 8 && itemSize == 32 + 8 * sets, "unexpected static vertex layout");
+    Require(Count(r, itemSize) == vertices && vertices, "vertex count mismatch");
+    mesh.positions.resize(vertices); mesh.normals.resize(vertices); mesh.colors.resize(vertices);
+    mesh.uvs.assign(sets, std::vector<std::array<float, 2>>(vertices));
+    bool coloured = false;
+    for (uint32_t v = 0; v < vertices; ++v)
+    {
+        mesh.positions[v] = Position(ReadVec(r));
+        r.U32(); r.U32(); r.U32(); // Padding, tangent, binormal.
+        mesh.normals[v] = Normal(r.U32());
+        const auto argb = r.U32();
+        mesh.colors[v] = {uint8_t(argb >> 16), uint8_t(argb >> 8), uint8_t(argb), uint8_t(argb >> 24)};
+        coloured |= argb != 0xffffffffu;
+        for (auto &set : mesh.uvs) set[v] = {r.F32(), r.F32()};
+    }
+    if (!coloured) mesh.colors.clear();
+    Require(r.U32() == vertices, "vertex count mismatch");
+    for (uint32_t i = 0, n = Count(r, 2); i < n; ++i) mesh.indices.push_back(r.U16());
+    CheckGeometry(mesh);
+    model.vertices = vertices;
+    model.triangles = uint32_t(mesh.indices.size() / 3);
+    return model;
+}
+
+// Base colour textures of one package, each written once beside its models.
+struct TextureCache
+{
+    struct Entry { std::string file; bool mask = false, tried = false; };
+    std::map<int32_t, Entry> entries;
+    uint64_t bytes = 0;
+};
+
+// The texture a MaterialInstanceConstant of this package draws its colour from:
+// of the textures it lists (rpg_TexturePtrs, else TextureParameterValues; else
+// its parent's), the one named *_C, else the first not named as a normal (_N),
+// specular (_S) or other mask map.
+int32_t BaseColorTexture(const Package &package, int32_t material, int depth = 0)
+{
+    const auto *e = package.ExportAt(material);
+    if (!e || depth > 4 || !package.ClassName(*e).starts_with("MaterialInstance")) return 0;
+    std::vector<int32_t> pointers, parameters;
+    int32_t parent = 0;
+    auto r = ObjectReader(package, *e);
+    try
+    {
+        Properties(package, r, true, [&](const std::string &name, const std::string &type, Reader &value, uint32_t) {
+            if (name == "Parent" && type == "ObjectProperty") parent = value.I32();
+            else if (name == "rpg_TexturePtrs" && type == "ArrayProperty")
+                for (uint32_t i = 0, n = Count(value, 4); i < n; ++i) pointers.push_back(value.I32());
+            else if (name == "TextureParameterValues" && type == "ArrayProperty")
+                for (uint32_t i = 0, n = Count(value, 8); i < n; ++i)
+                    Properties(package, value, false, [&](const std::string &field, const std::string &kind, Reader &v, uint32_t) {
+                        if (field == "ParameterValue" && kind == "ObjectProperty") parameters.push_back(v.I32());
+                    });
+        });
+    }
+    catch (const std::exception &) { return 0; }
+    auto &list = pointers.empty() ? parameters : pointers;
+    std::erase_if(list, [&](int32_t ref) { const auto *t = package.ExportAt(ref); return !t || package.ClassName(*t) != "Texture2D"; });
+    if (list.empty()) return BaseColorTexture(package, parent, depth + 1);
+    auto suffix = [&](int32_t ref) {
+        const auto name = Lower(package.RefName(ref));
+        return name.substr(std::min(name.rfind('_'), name.size()));
+    };
+    for (const auto ref : list) if (suffix(ref) == "_c") return ref;
+    for (const auto ref : list)
+        if (const auto s = suffix(ref); s != "_n" && s != "_s" && s != "_h" && s != "_t" && s != "_tm" && s != "_m") return ref;
+    return 0;
+}
+
+// directory: the package's model folder; textures go to its textures/ folder.
+void AttachTextures(const Package &package, Model &model, TextureCache &cache, const fs::path &directory)
+{
+    for (size_t i = 0; i < model.materials.size(); ++i)
+    {
+        const auto ref = BaseColorTexture(package, model.materials[i]);
+        if (!ref) continue;
+        auto &entry = cache.entries[ref];
+        if (!entry.tried)
+        {
+            entry.tried = true;
+            try
+            {
+                const auto &texture = *package.ExportAt(ref);
+                const auto image = DecodeTexture(package, texture);
+                const auto name = FileStem(texture.name) + "." + std::to_string(ref - 1) + ".png";
+                CreateDirectories(directory / "textures");
+                cache.bytes += WritePng(directory / "textures" / FromUtf8(name), image);
+                entry.file = "textures/" + name;
+                // DXT1 alpha is a cut-out; other formats may keep masks in alpha.
+                entry.mask = image.channels == 4 && std::string_view(image.format->name) == "DXT1";
+            }
+            catch (const OutputError &) { throw; }
+            catch (const std::exception &) {} // Left untextured.
+        }
+        if (entry.file.empty()) continue;
+        auto &images = model.mesh.images;
+        const auto image = std::find(images.begin(), images.end(), entry.file);
+        model.mesh.materials[i].baseColor = int(image - images.begin());
+        model.mesh.materials[i].mask = entry.mask;
+        if (image == images.end()) images.push_back(entry.file);
+    }
+}
+
+// An AnimSet: track bone names and its sequences, keyed for glTF.
+struct AnimSetData
+{
+    std::vector<std::string> tracks;
+    bool rotationOnly = false;
+    struct Track { std::vector<Vec3> positions; std::vector<std::array<float, 4>> rotations; };
+    struct Sequence { std::string name; float length = 0; uint32_t frames = 0; std::vector<Track> tracks; };
+    std::vector<Sequence> sequences;
+};
+
+AnimSetData::Sequence ReadSequence(const Package &package, const Export &e, size_t trackCount)
+{
+    AnimSetData::Sequence sequence;
+    sequence.name = e.name;
+    int translationFormat = 0, rotationFormat = 0;
+    std::vector<uint32_t> offsets;
+    auto r = ObjectReader(package, e);
+    Properties(package, r, true, [&](const std::string &name, const std::string &type, Reader &value, uint32_t) {
+        if (name == "SequenceName" && type == "NameProperty") sequence.name = package.Name(value);
+        else if (name == "SequenceLength" && type == "FloatProperty") sequence.length = value.F32();
+        else if (name == "NumFrames" && type == "IntProperty") sequence.frames = value.U32();
+        else if (name == "TranslationCompressionFormat" && type == "ByteProperty") translationFormat = value.Byte();
+        else if (name == "RotationCompressionFormat" && type == "ByteProperty") rotationFormat = value.Byte();
+        else if (name == "CompressedTrackOffsets" && type == "ArrayProperty")
+            for (uint32_t i = 0, n = Count(value, 4); i < n; ++i) offsets.push_back(value.U32());
+    });
+    // ACF_None or ACF_Float96NoW translations; ACF_None, ACF_Float96NoW or
+    // ACF_Fixed48NoW rotations: what this game's sequences use.
+    if (translationFormat > 1 || rotationFormat > 2)
+        throw Skip("unsupported_animation", e.name + ": formats " + std::to_string(translationFormat) + "/" + std::to_string(rotationFormat));
+    Require(offsets.size() == trackCount * 4, "track offsets do not match the AnimSet");
+    const auto size = Count(r, 1);
+    Reader stream{r.Take(size)};
+    sequence.tracks.resize(trackCount);
+    for (size_t t = 0; t < trackCount; ++t)
+    {
+        auto &track = sequence.tracks[t];
+        const auto *o = &offsets[t * 4];
+        Require(o[1] <= 65536 && o[3] <= 65536, "too many keys");
+        stream.pos = o[0];
+        for (uint32_t k = 0; k < o[1]; ++k) track.positions.push_back(ReadVec(stream));
+        stream.pos = o[2];
+        // Several keys carry a (here unused) range before them.
+        const int format = o[3] == 1 ? 1 : rotationFormat;
+        if (o[3] > 1) stream.Take(24);
+        for (uint32_t k = 0; k < o[3]; ++k)
+        {
+            float x, y, z, w;
+            if (format == 0) { x = stream.F32(); y = stream.F32(); z = stream.F32(); w = stream.F32(); }
+            else
+            {
+                if (format == 1) { x = stream.F32(); y = stream.F32(); z = stream.F32(); }
+                else
+                {
+                    x = (float(stream.U16()) - 32767) / 32767; y = (float(stream.U16()) - 32767) / 32767;
+                    z = (float(stream.U16()) - 32767) / 32767;
+                }
+                w = std::sqrt(std::max(0.0f, 1 - x * x - y * y - z * z));
+            }
+            track.rotations.push_back({x, y, z, w});
+        }
+    }
+    return sequence;
+}
+
+AnimSetData ReadAnimSet(const Package &package, const Export &e)
+{
+    AnimSetData set;
+    std::vector<int32_t> sequences;
+    auto r = ObjectReader(package, e);
+    Properties(package, r, true, [&](const std::string &name, const std::string &type, Reader &value, uint32_t boolean) {
+        if (name == "TrackBoneNames" && type == "ArrayProperty")
+            for (uint32_t i = 0, n = Count(value, 8); i < n; ++i) set.tracks.push_back(package.Name(value));
+        else if (name == "Sequences" && type == "ArrayProperty")
+            for (uint32_t i = 0, n = Count(value, 4); i < n; ++i) sequences.push_back(value.I32());
+        else if (name == "bAnimRotationOnly") set.rotationOnly = boolean != 0;
+    });
+    if (set.tracks.empty()) throw Skip("animation_empty", e.name + ": no tracks");
+    for (const auto ref : sequences)
+        if (const auto *s = package.ExportAt(ref); s && package.ClassName(*s) == "AnimSequence")
+            set.sequences.push_back(ReadSequence(package, *s, set.tracks.size()));
+    return set;
+}
+
+// glTF animations of `set` on `mesh`'s skeleton, matched by bone name. Keys are
+// evenly spaced over the sequence (umodel CAnimTrack). Returns the tracks matched.
+size_t Animate(gltf::Mesh &mesh, const AnimSetData &set)
+{
+    std::map<std::string, uint32_t> bones;
+    for (uint32_t i = 0; i < mesh.bones.size(); ++i) bones.emplace(Lower(mesh.bones[i].name), i);
+    // A few sets list a bone twice; the first track drives it.
+    std::vector<int64_t> target(set.tracks.size(), -1);
+    std::vector<bool> driven(mesh.bones.size());
+    size_t matched = 0;
+    for (size_t t = 0; t < set.tracks.size(); ++t)
+        if (const auto it = bones.find(Lower(set.tracks[t])); it != bones.end() && !driven[it->second])
+        {
+            target[t] = it->second;
+            driven[it->second] = true;
+            ++matched;
+        }
+    for (const auto &sequence : set.sequences)
+    {
+        gltf::Animation animation{sequence.name, {}};
+        for (size_t t = 0; t < sequence.tracks.size(); ++t)
+        {
+            if (target[t] < 0) continue;
+            const auto bone = uint32_t(target[t]);
+            const auto &track = sequence.tracks[t];
+            auto times = [&](size_t keys) {
+                const float length = sequence.length > 0 ? sequence.length : float(keys) / 30; // glTF needs rising times
+                std::vector<float> out(keys);
+                for (size_t k = 0; k < keys; ++k) out[k] = length * float(k) / float(keys);
+                return out;
+            };
+            if (!track.positions.empty() && (!set.rotationOnly || bone == 0))
+            {
+                gltf::Channel channel{bone, false, times(track.positions.size()), {}};
+                for (const auto &p : track.positions) for (const auto value : Position(p)) channel.values.push_back(value);
+                animation.channels.push_back(std::move(channel));
+            }
+            if (!track.rotations.empty())
+            {
+                gltf::Channel channel{bone, true, times(track.rotations.size()), {}};
+                for (const auto &q : track.rotations)
+                    channel.values.insert(channel.values.end(), {q[0], q[2], q[1], bone == 0 ? -q[3] : q[3]});
+                animation.channels.push_back(std::move(channel));
+            }
+        }
+        mesh.animations.push_back(std::move(animation));
+    }
+    return matched;
+}
+
 // ---- Export run ------------------------------------------------------------
 
 struct Row { std::string key, file; uint32_t width = 0, height = 0; const char *format = ""; uint64_t fingerprint = 0, fingerprintTiled = 0; };
 struct TextRow { std::string path, language, source; text::Format format = text::Format::None; size_t entries = 0; bool roundTrip = false; };
 struct MovieRow { std::string name, path; uint64_t bytes = 0; };
+// Models: vertices, triangles, bones. Animation sets: sequences, tracks, frames
+// and the model they were written with.
+struct ModelRow { bool animation = false; std::string key, file, className, model; uint32_t a = 0, b = 0, c = 0; };
 struct Stats
 {
     std::vector<Row> rows;
     std::vector<TextRow> texts;
     std::vector<MovieRow> movieRows;
+    std::vector<ModelRow> models;
     std::map<std::string, uint64_t> formats, skipped, examples;
     std::vector<std::string> notes;
-    uint64_t textureBytes = 0, movies = 0, movieBytes = 0, packages = 0, notPackages = 0;
+    uint64_t textureBytes = 0, movies = 0, movieBytes = 0, modelBytes = 0, packages = 0, notPackages = 0;
     void Skipped(const std::string &reason, const std::string &detail)
     {
         ++skipped[reason];
@@ -551,11 +997,12 @@ struct Stats
         std::move(other.rows.begin(), other.rows.end(), std::back_inserter(rows));
         std::move(other.texts.begin(), other.texts.end(), std::back_inserter(texts));
         std::move(other.movieRows.begin(), other.movieRows.end(), std::back_inserter(movieRows));
+        std::move(other.models.begin(), other.models.end(), std::back_inserter(models));
         for (const auto &[k, v] : other.formats) formats[k] += v;
         for (const auto &[k, v] : other.skipped) skipped[k] += v;
         for (auto &note : other.notes)
             if (examples[note.substr(0, note.find(':'))]++ < 5) notes.push_back(std::move(note));
-        textureBytes += other.textureBytes; movies += other.movies; movieBytes += other.movieBytes;
+        textureBytes += other.textureBytes; movies += other.movies; movieBytes += other.movieBytes; modelBytes += other.modelBytes;
         packages += other.packages; notPackages += other.notPackages;
     }
     uint64_t SkippedTotal() const
@@ -660,18 +1107,126 @@ void ExportText(const Job &job, const fs::path &textRoot, const fs::path &refere
     stats.texts.push_back({job.path, text::Language(job.path), job.source, job.textFormat, entries.size(), roundTrip});
 }
 
-// list: the texture's headers only, no decode, fingerprint or PNG.
-void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool pngs, bool list)
+std::vector<uint8_t> ReadPackageBytes(const Job &job)
 {
-    std::vector<uint8_t> bytes;
+    auto bytes = ReadExtent(job.archive, job.offset, job.size);
+    if (bytes.size() >= 3 && std::memcmp(bytes.data(), "cpx", 3) == 0) Require(cpx::Decode(bytes, bytes), "invalid CPX stream");
+    return bytes;
+}
+bool IsPackage(const std::vector<uint8_t> &bytes)
+{
+    return bytes.size() >= 4 && (uint32_t(bytes[0]) << 24 | uint32_t(bytes[1]) << 16 | uint32_t(bytes[2]) << 8 | bytes[3]) == kPackageMagic;
+}
+
+// A SkeletalMesh an AnimSet can be written with: its package, export index and
+// lower-case bone names.
+struct Skeleton { Job job; uint32_t index = 0; std::string root; std::set<std::string> bones; };
+struct Context
+{
+    const Request &request;
+    fs::path textures, models, animations;
+    const std::set<std::string> *select = nullptr; // list.csv names, or null for everything
+    const std::vector<Skeleton> *skeletons = nullptr;
+};
+
+// The model an AnimSet moves: the one whose root bone is the set's first track,
+// else the one sharing at least 90% of its track names (some sets call the root
+// bs_001a_Root for the model's bs_001a0_Root), the longest common root prefix
+// breaking ties.
+const Skeleton *FindSkeleton(const std::vector<Skeleton> &skeletons, const AnimSetData &set)
+{
+    const auto root = Lower(set.tracks[0]);
+    const Skeleton *best = nullptr;
+    size_t bestShared = 0, bestPrefix = 0;
+    for (const auto &skeleton : skeletons)
+    {
+        if (skeleton.root == root) return &skeleton;
+        size_t shared = 0, prefix = 0;
+        for (const auto &track : set.tracks) shared += skeleton.bones.count(Lower(track));
+        while (prefix < root.size() && prefix < skeleton.root.size() && root[prefix] == skeleton.root[prefix]) ++prefix;
+        if (shared > bestShared || (shared == bestShared && prefix > bestPrefix)) { best = &skeleton; bestShared = shared; bestPrefix = prefix; }
+    }
+    return bestShared * 10 >= set.tracks.size() * 9 ? best : nullptr;
+}
+
+void ExportModel(const Job &job, const Package &package, size_t index, const std::string &key, MeshClass kind,
+                 const Context &context, TextureCache &cache, Stats &stats)
+{
+    const auto &e = package.exports[index];
+    Model model;
+    try { model = kind == MeshClass::Skeletal ? ReadSkeletalMesh(package, e) : ReadStaticMesh(package, e); }
+    catch (const std::exception &error) { stats.Skipped("model_unreadable", key + ": " + error.what()); return; }
+    std::string file = job.path;
+    if (!context.request.list)
+    {
+        const auto name = FileStem(e.name) + "." + std::to_string(index) + ".glb";
+        const auto directory = context.models / FromUtf8(job.path);
+        CreateDirectories(directory);
+        if (context.request.modelTextures) AttachTextures(package, model, cache, directory);
+        const auto glb = gltf::Write(model.mesh, e.name);
+        WriteFile(directory / FromUtf8(name), glb.data(), glb.size());
+        stats.modelBytes += glb.size();
+        file = job.path + "/" + name;
+    }
+    stats.models.push_back({false, key, file, package.ClassName(e), {}, model.vertices, model.triangles,
+                            uint32_t(model.mesh.bones.size())});
+}
+
+// An AnimSet as a .glb of the model whose root bone is its first track. The
+// model goes without textures: a character has a dozen sets, and models/ has
+// the textured copy.
+void ExportAnimSet(const Job &job, const Package &package, size_t index, const std::string &key, const Context &context,
+                   Stats &stats)
+{
+    const auto &e = package.exports[index];
+    AnimSetData set;
+    try { set = ReadAnimSet(package, e); }
+    catch (const Skip &skip) { stats.Skipped(skip.reason, key + ": " + skip.what()); return; }
+    catch (const std::exception &error) { stats.Skipped("animation_unreadable", key + ": " + error.what()); return; }
+    uint32_t frames = 0;
+    for (const auto &sequence : set.sequences) frames += sequence.frames;
+    ModelRow row{true, key, job.path, "AnimSet", {}, uint32_t(set.sequences.size()), uint32_t(set.tracks.size()), frames};
+    if (context.request.list) { stats.models.push_back(std::move(row)); return; }
+    const auto *source = FindSkeleton(*context.skeletons, set);
+    if (!source) { stats.Skipped("animation_without_model", key + " (" + set.tracks[0] + ")"); return; }
+    Model model;
     try
     {
-        bytes = ReadExtent(job.archive, job.offset, job.size);
-        if (bytes.size() >= 3 && std::memcmp(bytes.data(), "cpx", 3) == 0)
-            Require(cpx::Decode(bytes, bytes), "invalid CPX stream");
+        std::vector<uint8_t> bytes;
+        const Package *owner = &package;
+        std::unique_ptr<Package> other;
+        if (source->job.path != job.path)
+        {
+            bytes = ReadPackageBytes(source->job);
+            other = std::make_unique<Package>(bytes);
+            owner = other.get();
+        }
+        Require(source->index < owner->exports.size(), "model export missing");
+        model = ReadSkeletalMesh(*owner, owner->exports[source->index]);
+        row.model = source->job.path + ":" + owner->exports[source->index].name;
     }
+    catch (const OutputError &) { throw; }
+    catch (const std::exception &error) { stats.Skipped("animation_model_unreadable", key + ": " + error.what()); return; }
+    if (!Animate(model.mesh, set)) { stats.Skipped("animation_without_model", key + " (no matching bones)"); return; }
+    const auto name = FileStem(e.name) + "." + std::to_string(index) + ".glb";
+    const auto directory = context.animations / FromUtf8(job.path);
+    CreateDirectories(directory);
+    const auto glb = gltf::Write(model.mesh, e.name);
+    WriteFile(directory / FromUtf8(name), glb.data(), glb.size());
+    stats.modelBytes += glb.size();
+    row.file = job.path + "/" + name;
+    stats.models.push_back(std::move(row));
+}
+
+// list: the texture's headers only, no decode, fingerprint or PNG.
+void ExportPackage(const Job &job, const Context &context, Stats &stats)
+{
+    const auto &request = context.request;
+    const bool pngs = request.pngs, list = request.list;
+    std::vector<uint8_t> bytes;
+    try { bytes = ReadPackageBytes(job); }
     catch (const std::exception &error) { stats.Skipped("package_unreadable", job.path + ": " + error.what()); return; }
-    if (bytes.size() < 4 || (uint32_t(bytes[0]) << 24 | uint32_t(bytes[1]) << 16 | uint32_t(bytes[2]) << 8 | bytes[3]) != kPackageMagic)
+    if (!IsPackage(bytes))
     {
         ++stats.notPackages;
         return;
@@ -680,15 +1235,28 @@ void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool 
     try { package = std::make_unique<Package>(bytes); }
     catch (const std::exception &error) { stats.Skipped("package_unreadable", job.path + ": " + error.what()); return; }
     ++stats.packages;
-    const auto directory = textures / FromUtf8(job.path);
+    const auto directory = context.textures / FromUtf8(job.path);
     bool created = false;
+    TextureCache cache;
     for (size_t index = 0; index < package->exports.size(); ++index)
     {
         const auto &e = package->exports[index];
-        const auto kind = Classify(package->ClassName(e));
-        if (kind == TextureClass::None || e.name.starts_with("Default__")) continue;
+        if (e.name.starts_with("Default__")) continue;
+        const auto className = package->ClassName(e);
+        const auto kind = request.textures ? Classify(className) : TextureClass::None;
+        const auto mesh = request.models ? ClassifyMesh(className) : MeshClass::None;
+        const bool animation = request.animations && className == "AnimSet";
+        if (kind == TextureClass::None && mesh == MeshClass::None && !animation) continue;
         // Extractor export indices are zero-based, as in settings/menu_assets.cpp.
         const auto key = MakeManifestKey(job.path, uint32_t(index), e.name);
+        if (context.select && !context.select->count(key)) continue;
+        if (mesh != MeshClass::None || animation)
+        {
+            if (key.empty()) stats.Skipped("invalid_key", job.path + "#" + std::to_string(index));
+            else if (animation) ExportAnimSet(job, *package, index, key, context, stats);
+            else ExportModel(job, *package, index, key, mesh, context, cache, stats);
+            continue;
+        }
         if (kind == TextureClass::Unsupported)
         {
             stats.Skipped("unsupported_class", (key.empty() ? job.path : key) + " (" + package->ClassName(e) + ")");
@@ -723,6 +1291,7 @@ void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool 
                               image.fingerprint, image.fingerprintTiled});
         ++stats.formats[image.format->name];
     }
+    stats.modelBytes += cache.bytes;
 }
 
 void ExportMovie(const Job &job, const fs::path &movies, Stats &stats)
@@ -840,8 +1409,10 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         if (!argument.starts_with("--export-")) continue;
         option = true;
         if (argument == "--export-list") { parsed.list = true; continue; }
+        if (argument == "--export-model-textures") { parsed.modelTextures = true; continue; }
         const bool known = argument == "--export-assets" || argument == "--export-kinds" || argument == "--export-filter" ||
-                           argument == "--export-language" || argument == "--export-language-pack";
+                           argument == "--export-select" || argument == "--export-language" ||
+                           argument == "--export-language-pack";
         if (!known) { parsed.error = "unknown option " + std::string(argument); continue; }
         if (i + 1 >= argc || std::string_view(argv[i + 1]).starts_with("--"))
         {
@@ -855,6 +1426,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
             parsed.output = FromUtf8(value);
         }
         else if (argument == "--export-filter") parsed.filter = Lower(value);
+        else if (argument == "--export-select") parsed.select = FromUtf8(value);
         else if (argument == "--export-language")
         {
             parsed.language = Lower(value);
@@ -874,7 +1446,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         }
         else
         {
-            parsed.textures = parsed.movies = parsed.pngs = parsed.text = false;
+            parsed.textures = parsed.movies = parsed.pngs = parsed.text = parsed.models = parsed.animations = false;
             size_t begin = 0;
             while (begin <= value.size())
             {
@@ -884,7 +1456,9 @@ std::optional<Request> ParseArguments(int argc, char **argv)
                 else if (kind == "fingerprints") parsed.textures = true; // index.csv without PNG files
                 else if (kind == "movies") parsed.movies = true;
                 else if (kind == "text") parsed.text = true;
-                else parsed.error = "unknown export kind '" + kind + "' (expected textures,fingerprints,movies,text)";
+                else if (kind == "models") parsed.models = true;
+                else if (kind == "animations") parsed.animations = true;
+                else parsed.error = "unknown export kind '" + kind + "' (expected textures,fingerprints,movies,text,models,animations)";
                 begin = end + 1;
             }
         }
@@ -893,7 +1467,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
     if (parsed.output.empty() && parsed.error.empty()) parsed.error = "--export-assets <output folder> is required";
     if (!parsed.languagePack.empty())
     {
-        parsed.textures = parsed.movies = parsed.pngs = false;
+        parsed.textures = parsed.movies = parsed.pngs = parsed.models = parsed.animations = false;
         parsed.text = true;
         if (parsed.language.empty()) parsed.language = "int";
     }
@@ -966,7 +1540,25 @@ int Run(const Request &request, const fs::path &gameRoot)
         if (fs::directory_iterator(output, error) != fs::directory_iterator() || error)
             return Fail("output folder " + Utf8(output) + " is not empty");
     }
+    // --export-select: list.csv names; a texture, model or animation set key
+    // also selects its package.
+    std::set<std::string> select, selectedPackages;
+    if (!request.select.empty())
+    {
+        std::ifstream input(request.select, std::ios::binary);
+        if (!input) return Fail("cannot read " + Utf8(request.select));
+        for (std::string line; std::getline(input, line);)
+        {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            if (line.starts_with("\xef\xbb\xbf")) line.erase(0, 3);
+            if (line.empty()) continue;
+            if (const auto hash = line.find('#'); hash != std::string::npos) selectedPackages.insert(line.substr(0, hash));
+            select.insert(std::move(line));
+        }
+        if (select.empty()) return Fail(Utf8(request.select) + " names nothing to export");
+    }
     const auto textures = output / "textures", movies = output / "movies";
+    const auto models = output / "models", animations = output / "animations";
     const auto pack = request.languagePack.empty() ? fs::path{} : output / FromUtf8(request.languagePack);
     const auto texts = pack.empty() ? output / "text" : pack / "text";
     // The untranslated copy that language-clean compares the pack with.
@@ -979,9 +1571,12 @@ int Run(const Request &request, const fs::path &gameRoot)
             if (request.textures) CreateDirectories(textures);
             if (request.movies) CreateDirectories(movies);
             if (request.text) CreateDirectories(texts);
+            if (request.models) CreateDirectories(models);
+            if (request.animations) CreateDirectories(animations);
         }
     }
     catch (const std::exception &failure) { return Fail(failure.what()); }
+    const bool packages = request.textures || request.models || request.animations;
 
     // One job per FPI path; a path repeated on later discs is the same file
     // when its size matches (the four-disc census found no content variants).
@@ -1014,11 +1609,13 @@ int Run(const Request &request, const fs::path &gameRoot)
             const bool package = extension == ".xxx" || extension == ".upk" || extension == ".umap" || extension == ".u";
             const bool movie = extension == ".wmv";
             const bool textFile = request.text && text::Detect(entry.path) != text::Format::None;
-            if (!((package && request.textures) || (movie && request.movies) || textFile)) continue;
+            if (!((package && packages) || (movie && request.movies) || textFile)) continue;
             if (!request.filter.empty() && entry.path.find(request.filter) == std::string::npos) continue;
+            if (!select.empty() && package && !selectedPackages.count(entry.path)) continue;
             if (textFile)
             {
                 if (!request.language.empty() && text::Language(entry.path) != request.language) continue;
+                if (!select.empty() && !select.count(entry.path)) continue;
                 // One copy per path, as for packages below.
                 if (const auto it = seen.find(entry.path); it != seen.end())
                 {
@@ -1061,16 +1658,55 @@ int Run(const Request &request, const fs::path &gameRoot)
                 }
                 movieNames.insert(Lower(name));
                 job.movieName = name;
+                if (!select.empty() && !select.count(name) && !select.count(entry.path)) continue;
             }
             jobs.push_back(std::move(job));
         }
     // Text files only a DLC has.
     for (const auto &[path, source] : overrides)
-        if ((request.filter.empty() || path.find(request.filter) != std::string::npos) &&
+        if ((request.filter.empty() || path.find(request.filter) != std::string::npos) && (select.empty() || select.count(path)) &&
             (request.language.empty() || text::Language(path) == request.language) && seen.emplace(path, 0).second)
             addText(dlcs[source.first], *source.second, dlcNames[source.first]);
     // Largest first keeps the four workers busy until the end.
     std::stable_sort(jobs.begin(), jobs.end(), [](const Job &a, const Job &b) { return a.size > b.size; });
+
+    // Animation sets name their skeleton only through bone names; each character's
+    // root bone name is unique, and its SkeletalMesh is in a *_m package.
+    std::vector<Skeleton> skeletons;
+    if (request.animations && !request.list)
+    {
+        std::set<std::string> visited;
+        for (const auto &disc : discs)
+            for (const auto &entry : disc.entries)
+            {
+                const auto &archive = disc.archives[entry.archive];
+                if (!entry.path.ends_with("_m.xxx") || !visited.insert(entry.path).second || archive.empty() ||
+                    entry.offset > disc.archiveSizes[entry.archive] || entry.size > disc.archiveSizes[entry.archive] - entry.offset)
+                    continue;
+                try
+                {
+                    Job job{Job::Kind::Package, entry.path, archive, entry.offset, entry.size, {}};
+                    const auto bytes = ReadPackageBytes(job);
+                    if (!IsPackage(bytes)) continue;
+                    const Package package(bytes);
+                    for (size_t index = 0; index < package.exports.size(); ++index)
+                    {
+                        const auto &e = package.exports[index];
+                        if (package.ClassName(e) != "SkeletalMesh" || e.name.starts_with("Default__")) continue;
+                        try
+                        {
+                            const auto model = ReadSkeletalMesh(package, e);
+                            Skeleton skeleton{job, uint32_t(index), Lower(model.mesh.bones[0].name), {}};
+                            for (const auto &bone : model.mesh.bones) skeleton.bones.insert(Lower(bone.name));
+                            skeletons.push_back(std::move(skeleton));
+                        }
+                        catch (const std::exception &) {} // Counted when the model itself is exported.
+                    }
+                }
+                catch (const std::exception &) {}
+            }
+    }
+    const Context context{request, textures, models, animations, select.empty() ? nullptr : &select, &skeletons};
 
     std::mutex mutex;
     std::atomic<size_t> next{0};
@@ -1089,7 +1725,7 @@ int Run(const Request &request, const fs::path &gameRoot)
             try
             {
                 const auto &job = jobs[index];
-                if (job.kind == Job::Kind::Package) ExportPackage(job, textures, local, request.pngs, request.list);
+                if (job.kind == Job::Kind::Package) ExportPackage(job, context, local);
                 else if (job.kind == Job::Kind::Text) ExportText(job, request.list ? fs::path{} : texts, request.list ? fs::path{} : reference, local);
                 else if (request.list) local.movieRows.push_back({job.movieName, job.path, job.size});
                 else ExportMovie(job, movies, local);
@@ -1119,10 +1755,16 @@ int Run(const Request &request, const fs::path &gameRoot)
     for (auto &thread : pool) thread.join();
     if (!fatal.empty()) return Fail(fatal);
 
+    std::sort(total.models.begin(), total.models.end(), [](const ModelRow &a, const ModelRow &b) { return a.key < b.key; });
+    size_t modelCount = 0, animationCount = 0;
+    for (const auto &row : total.models) ++(row.animation ? animationCount : modelCount);
     if (request.list)
     {
         // kind,name,path,width,height,format,language,entries,bytes: name is the
-        // texture key, the movie's output file name or the text member path.
+        // texture, model or animation set key, the movie's output file name or
+        // the text member path. Models put vertices, triangles, the class and
+        // bones in width, height, format and entries; animation sets put
+        // sequences, tracks, AnimSet and frames there.
         std::sort(total.rows.begin(), total.rows.end(), [](const Row &a, const Row &b) { return a.key < b.key; });
         std::sort(total.movieRows.begin(), total.movieRows.end(), [](const MovieRow &a, const MovieRow &b) { return a.path < b.path; });
         std::sort(total.texts.begin(), total.texts.end(), [](const TextRow &a, const TextRow &b) { return a.path < b.path; });
@@ -1135,10 +1777,14 @@ int Run(const Request &request, const fs::path &gameRoot)
         for (const auto &row : total.texts)
             csv += "text," + Csv(row.path) + "," + Csv(row.path) + ",,," + text::Name(row.format) + "," + row.language + "," +
                    std::to_string(row.entries) + ",\n";
+        for (const auto &row : total.models)
+            csv += std::string(row.animation ? "animation," : "model,") + Csv(row.key) + "," + Csv(row.file) + "," +
+                   std::to_string(row.a) + "," + std::to_string(row.b) + "," + row.className + ",," + std::to_string(row.c) + ",\n";
         try { WriteFile(output / "list.csv", csv.data(), csv.size()); }
         catch (const std::exception &failure) { return Fail(failure.what()); }
-        std::printf("listed %zu textures, %zu movies, %zu text files, skipped %llu\n", total.rows.size(), total.movieRows.size(),
-                    total.texts.size(), static_cast<unsigned long long>(total.SkippedTotal()));
+        std::printf("listed %zu textures, %zu movies, %zu text files, %zu models, %zu animation sets, skipped %llu\n",
+                    total.rows.size(), total.movieRows.size(), total.texts.size(), modelCount, animationCount,
+                    static_cast<unsigned long long>(total.SkippedTotal()));
         std::fflush(stdout);
         return 0;
     }
@@ -1158,6 +1804,24 @@ int Run(const Request &request, const fs::path &gameRoot)
                        std::to_string(row.height) + "," + row.format + "," + hex + "\n";
             }
             WriteFile(textures / "index.csv", csv.data(), csv.size());
+        }
+        if (request.models)
+        {
+            std::string csv = "key,file,class,vertices,triangles,bones\n";
+            for (const auto &row : total.models)
+                if (!row.animation)
+                    csv += Csv(row.key) + "," + Csv(row.file) + "," + row.className + "," + std::to_string(row.a) + "," +
+                           std::to_string(row.b) + "," + std::to_string(row.c) + "\n";
+            WriteFile(models / "index.csv", csv.data(), csv.size());
+        }
+        if (request.animations)
+        {
+            std::string csv = "key,file,sequences,tracks,frames,model\n";
+            for (const auto &row : total.models)
+                if (row.animation)
+                    csv += Csv(row.key) + "," + Csv(row.file) + "," + std::to_string(row.a) + "," + std::to_string(row.b) + "," +
+                           std::to_string(row.c) + "," + Csv(row.model) + "\n";
+            WriteFile(animations / "index.csv", csv.data(), csv.size());
         }
         std::map<std::string, size_t> textFormats;
         size_t textEntries = 0, textFailed = 0;
@@ -1193,8 +1857,10 @@ int Run(const Request &request, const fs::path &gameRoot)
             for (const auto &name : dlcNames) summary += " " + name;
         }
         summary += std::string("\nkinds:") + (request.textures ? " textures" : "") + (request.movies ? " movies" : "") +
-                   (request.text ? " text" : "");
+                   (request.text ? " text" : "") + (request.models ? " models" : "") + (request.animations ? " animations" : "") +
+                   (request.modelTextures ? " (with model textures)" : "");
         summary += "\nfilter: " + (request.filter.empty() ? std::string("(none)") : request.filter);
+        if (!select.empty()) summary += "\nselection: " + std::to_string(select.size()) + " names from " + Utf8(request.select);
         summary += "\ntext language: " + (request.language.empty() ? std::string("(all)") : request.language);
         if (!pack.empty()) summary += "\nlanguage pack: " + request.languagePack;
         if (!pack.empty() && dlcNames.empty()) summary += std::string("\nwarning: ") + kNoDlcWarning;
@@ -1205,6 +1871,8 @@ int Run(const Request &request, const fs::path &gameRoot)
         for (const auto &format : kFormats)
             summary += "  " + std::string(format.name) + ": " + std::to_string(total.formats[format.name]) + "\n";
         summary += "movies: " + std::to_string(total.movies) + " (" + std::to_string(total.movieBytes) + " bytes)\n";
+        summary += "models: " + std::to_string(modelCount) + ", animation sets: " + std::to_string(animationCount) + " (" +
+                   std::to_string(total.modelBytes) + " glTF bytes)\n";
         summary += "packages read: " + std::to_string(total.packages) + " (" + std::to_string(total.notPackages) +
                    " package-named files were not UE3 packages)\n";
         summary += "text files: " + std::to_string(total.texts.size()) + " (" + std::to_string(textEntries) +
@@ -1222,8 +1890,8 @@ int Run(const Request &request, const fs::path &gameRoot)
     }
     catch (const std::exception &failure) { return Fail(failure.what()); }
 
-    std::printf("exported %zu textures, %llu movies, %zu text files, skipped %llu\n", total.rows.size(),
-                static_cast<unsigned long long>(total.movies), total.texts.size(),
+    std::printf("exported %zu textures, %llu movies, %zu text files, %zu models, %zu animation sets, skipped %llu\n",
+                total.rows.size(), static_cast<unsigned long long>(total.movies), total.texts.size(), modelCount, animationCount,
                 static_cast<unsigned long long>(total.SkippedTotal()));
     if (!pack.empty() && dlcNames.empty()) std::printf("warning: %s\n", kNoDlcWarning);
     if (!pack.empty()) std::printf("language pack ready to translate: %s\n", Utf8(pack).c_str());
