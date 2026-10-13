@@ -587,6 +587,9 @@ namespace gpu::video
         uint64_t g_captureAllocs = 0, g_captureCopies = 0, g_captureMaps = 0;
         bool g_captureCompletionFault = false;
         submission::VulkanState g_submissionState;
+        // StopGpuWork's first call for this device. A failed submit latches
+        // g_submissionState itself before StopGpuWork runs.
+        std::atomic<bool> g_stopReported{ false };
         // Null in production. A submission test can attach a real queue and make
         // the next reset/wait return before vkQueueSubmit or vkWaitForFences.
         plume::RenderCommandQueue* g_probeQueue = nullptr;
@@ -816,7 +819,8 @@ namespace gpu::video
             if (serial) *serial = acceptedSerial;
             if (!submitted) {
                 if (executionMayBeInFlight) *executionMayBeInFlight = executed;
-                LOG_ERROR("video: D3D12 submission stopped raw_hr={} commands_may_be_in_flight={}", result, executed);
+                LOG_ERROR("video: D3D12 submission stopped raw_hr={} removed_reason={:#x} commands_may_be_in_flight={}", result,
+                    uint32_t(queue->device->d3d->GetDeviceRemovedReason()), executed);
                 StopGpuWork(result);
             }
             return submitted;
@@ -1009,12 +1013,81 @@ namespace gpu::video
                     optimal.maxWidth, optimal.maxHeight, optimal.sharpness, optimal.result.value_or(0));
         }
 
+        // GPU memory in use against the driver's budget, logged when usage moved
+        // by 256 MiB (checked once a second). A long session shows the trend
+        // before a device loss; after one the driver reports released memory.
+        void LogGpuMemoryTrend()
+        {
+            static auto nextCheck = std::chrono::steady_clock::time_point{};
+            static uint64_t logged = 0;
+            const auto now = std::chrono::steady_clock::now();
+            if (now < nextCheck || !g_device) return;
+            nextCheck = now + std::chrono::seconds(1);
+            uint64_t used = 0, budget = 0, system = 0;
+            if (g_vulkan) {
+                VmaAllocator allocator = static_cast<plume::VulkanDevice*>(g_device.get())->allocator;
+                if (!allocator) return;
+                const VkPhysicalDeviceMemoryProperties* memory = nullptr;
+                vmaGetMemoryProperties(allocator, &memory);
+                VmaBudget heaps[VK_MAX_MEMORY_HEAPS]{};
+                vmaGetHeapBudgets(allocator, heaps);
+                for (uint32_t i = 0; i < memory->memoryHeapCount; ++i) {
+                    if (memory->memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) { used += heaps[i].usage; budget += heaps[i].budget; }
+                    else system += heaps[i].usage;
+                }
+            }
+#ifdef _WIN32
+            else if (!g_metal) {
+                D3D12MA::Allocator* allocator = static_cast<plume::D3D12Device*>(g_device.get())->allocator;
+                if (!allocator) return;
+                D3D12MA::Budget local{}, nonLocal{};
+                allocator->GetBudget(&local, &nonLocal);
+                used = local.UsageBytes; budget = local.BudgetBytes; system = nonLocal.UsageBytes;
+            }
+#endif
+            else return;
+            if ((used > logged ? used - logged : logged - used) < (256ull << 20)) return;
+            logged = used;
+            LOG_NOTICE("video: GPU memory {} MiB of {} MiB budget, {} MiB in system memory", used >> 20, budget >> 20, system >> 20);
+        }
+
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
+        // A stopped device never draws again: the last picture stays on screen
+        // until the player closes the window, and closing runs drains and DLL
+        // teardown that a removed device can hang. Say so and end the process.
+        void ExitAfterGpuStop(int32_t nativeResult)
+        {
+            std::thread([nativeResult] {
+                LOG_ERROR("video: closing the game after the GPU stopped raw_result={}", nativeResult);
+                std::fflush(nullptr);
+                constexpr const char* text =
+                    "The graphics device stopped working, so Lost Odyssey has to close. "
+                    "Progress since your last save is lost. The logs folder has the details.";
+                if (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS")) {
+#ifdef _WIN32
+                    MessageBoxA(nullptr, text, "Lost Odyssey", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+#elif defined(__ANDROID__)
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Lost Odyssey", text, nullptr);
+#endif
+                }
+                os::shaderlog::CloseForExit();
+                std::fflush(nullptr);
+#ifdef _WIN32
+                // ExitProcess would run DLL detach in the driver and SDKs first.
+                TerminateProcess(GetCurrentProcess(), EXIT_FAILURE);
+#endif
+                std::_Exit(EXIT_FAILURE);
+            }).detach();
+        }
+#endif
+
         // The presentation fence completed. FG inputs recorded into that batch
         // retire here; every wait that clears g_presentPending must call this,
         // or the next FG recording would find its previous lease still open.
         void PresentationFenceCompleted()
         {
             g_presentPending = false;
+            LogGpuMemoryTrend();
 #if defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
             if (g_fsrVulkanFg) g_fsrVulkanFg->AfterHostDrain();
 #endif
@@ -1424,7 +1497,8 @@ namespace gpu::video
 #if defined(LO_GPU_PLUME)
     bool GpuWorkStopped() { return g_submissionState.Stopped(); }
     void StopGpuWork(int32_t nativeResult) {
-        if (!g_submissionState.Stopped())
+        const bool first = !g_stopReported.exchange(true);
+        if (first)
             LOG_ERROR("video: native GPU work stopped backend={} raw_result={}; device restart required",
                 g_vulkan ? "Vulkan" : g_metal ? "Metal" : "D3D12", nativeResult);
         g_submissionState.Stop(nativeResult);
@@ -1435,6 +1509,11 @@ namespace gpu::video
         // Publish even when the first-stop log is skipped. Resource teardown
         // is unchanged; only the capability snapshot gains the stopped bit.
         PublishOwnedDeviceCapability();
+#if !defined(LO_VIDEO_SUBMISSION_UNIT)
+        // A running game whose device stopped never draws again. Shutdown has
+        // its own drain; a failed startup falls back to the next backend.
+        if (first && g_available && !ExitRequested()) ExitAfterGpuStop(nativeResult);
+#endif
     }
     bool BeginGpuCommands(plume::RenderCommandList* list) {
         if (GpuWorkStopped()) return false;
@@ -1677,7 +1756,7 @@ namespace gpu::video
     void ConfigureSubmissionProbe(plume::RenderCommandQueue* queue, int32_t submitFault, int32_t waitFault, bool resetStop)
     {
         if (resetStop) {
-            g_submissionState = {};
+            g_submissionState = {}; g_stopReported = false;
             PublishClearedDeviceCapability();
         }
         g_probeSubmitFault = submitFault;
@@ -2050,7 +2129,7 @@ namespace gpu::video
         g_fgRuntime.reset();
 #endif
         g_device.reset(); g_interface.reset();
-        g_submissionState = {};
+        g_submissionState = {}; g_stopReported = false;
         g_presentPending = false;
         g_temporalUpscaler.reset();
         g_dlssController.reset();

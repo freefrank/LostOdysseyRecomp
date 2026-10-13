@@ -23,7 +23,10 @@ D3D12Bridge::~D3D12Bridge() { Shutdown(); }
 void D3D12Bridge::Require(bool success, const std::string& reason) {
     if (success) return;
     LOG_ERROR("D3D12 FG: {}; terminating without releasing uncertain GPU ownership", reason);
-    std::fflush(nullptr); std::_Exit(EXIT_FAILURE);
+    std::fflush(nullptr);
+    // Not ExitProcess: DLL detach in the driver and Streamline can hang after a device loss.
+    TerminateProcess(GetCurrentProcess(), EXIT_FAILURE);
+    std::_Exit(EXIT_FAILURE);
 }
 bool D3D12Bridge::Initialize(plume::D3D12Device& device, const framegen::Config& config,
     const std::filesystem::path& runtime, std::string& reason) {
