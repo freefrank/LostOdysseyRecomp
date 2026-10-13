@@ -117,7 +117,7 @@ Text covers the menus, item and skill names and descriptions, battle messages, f
 
 ## Replace a cutscene video
 
-A mod can replace a cutscene with an upscaled or re-rendered video. This works in the Windows build; other platforms play the original video. The replacement takes the place of the picture only: the game keeps playing the original audio and subtitles.
+A mod can replace a cutscene with an upscaled or re-rendered video. This works in the Windows build; other platforms play the original video. The replacement takes the place of the picture only: the game keeps playing the original audio and subtitles. The video is drawn at the game's render resolution, so a 4K video shows its full detail only when Settings → Graphics → Render resolution is as large as your screen.
 
 The video is named after the original. [Export the movies](#export-the-original-assets) to see the names: `my-export/movies/mv_00v.wmv` is replaced by the key `mv_00v`. A key has 1 to 64 characters from `a-z`, `0-9` and `_`.
 

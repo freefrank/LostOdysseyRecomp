@@ -12,8 +12,10 @@
 #include <os/user_paths.h>
 #include "render_resolution.h"
 #include "movie_clear.h"
+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
 #include "movie_yuv_shader.h"
 #include <movie/movie_player.h>
+#endif
 #include "video.h"
 #include "command_processor.h"
 #include "register_snapshot.h"
