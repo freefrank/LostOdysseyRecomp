@@ -560,9 +560,6 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
         help = !problem.empty() ? Tr(L"Problem: ", L"問題：") + problem
                                 : Tr(L"A language pack. Choose it in System → Game language.",
                                      L"語言包。請在 系統 → 遊戲語言 中選擇。");
-    else if (modding::Mode() == modding::ResolutionMode::Overlay)
-        help = Tr(L"Mod folders are not used: the game was started with --mods-mode overlay.",
-                  L"遊戲以 --mods-mode overlay 啟動，不使用 Mod 資料夾。");
     else if (info.apiVersion == 0)
         help = Tr(L"Not loaded: ", L"未載入：") + problem;
     else if (!info.manifestEnabled)

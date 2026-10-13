@@ -670,12 +670,11 @@ void ListTextFolder(const std::filesystem::path& folder, const std::string& modI
 }
 void Scan(Snapshot& snapshot) {
     std::error_code ec;
-    if (snapshot.mode != ResolutionMode::Standalone)
-        for (std::filesystem::directory_iterator it(snapshot.root / "overlay", ec), end; !ec && it != end; it.increment(ec)) {
-            std::error_code entryError;
-            if (const auto kind = FolderKind(Lower(Utf8(it->path().filename()))); kind && it->is_directory(entryError))
-                snapshot.overlayKinds |= KindBit(*kind);
-        }
+    for (std::filesystem::directory_iterator it(snapshot.root / "overlay", ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        if (const auto kind = FolderKind(Lower(Utf8(it->path().filename()))); kind && it->is_directory(entryError))
+            snapshot.overlayKinds |= KindBit(*kind);
+    }
     ec.clear();
     if (!std::filesystem::is_directory(snapshot.root, ec)) return;
     std::vector<std::filesystem::path> dirs;
@@ -741,8 +740,7 @@ void Scan(Snapshot& snapshot) {
     std::vector<ModFiles> work;
     for (auto& l : mods) {
         auto& info = l.info;
-        info.active = snapshot.mode != ResolutionMode::Overlay && info.apiVersion && info.manifestEnabled &&
-            info.listEnabled && !l.duplicate;
+        info.active = info.apiVersion && info.manifestEnabled && info.listEnabled && !l.duplicate;
         if (info.active) {
             try { work.push_back(PrepareModFiles(snapshot, l, static_cast<uint32_t>(snapshot.mods.size()))); }
             catch (const std::exception& e) { Problem(snapshot, info, info.folder, 0, e.what()); }
@@ -909,39 +907,29 @@ bool SaveModList(const std::vector<std::pair<std::string, bool>>& order, std::st
 bool HasTextureReplacements() {
     std::lock_guard lock(gMutex);
     const auto& s = *gSnapshot;
-    return s.enabled && ((s.overlayKinds & KindBit(AssetKind::Texture)) || (s.mode != ResolutionMode::Overlay &&
-        (s.textureEntries || gProviders.count(AssetKind::Texture))));
+    return s.enabled && ((s.overlayKinds & KindBit(AssetKind::Texture)) || s.textureEntries || gProviders.count(AssetKind::Texture));
 }
-std::vector<ResolvedAsset> ListTexts() {
+// Every replacement of one kind, one per key: the top-level overlay folder's and
+// the mod folders', the first in mode order winning (see Resolve).
+static std::vector<ResolvedAsset> ListKind(AssetKind kind, const char* folder,
+                                    void (*listFolder)(const std::filesystem::path&, const std::string&, std::map<std::string, ResolvedAsset>&)) {
     const auto snapshot = Current();
     std::map<std::string, ResolvedAsset> found;
     if (!snapshot->enabled) return {};
-    if (snapshot->mode != ResolutionMode::Standalone && (snapshot->overlayKinds & KindBit(AssetKind::Text)))
-        ListTextFolder(snapshot->root / "overlay" / "text", "@overlay", found);
-    for (const auto& [name, e] : Files(*snapshot, true).entries)
-        if (e.id.kind == AssetKind::Text) {
+    const bool overlay = snapshot->overlayKinds & KindBit(kind);
+    if (overlay && snapshot->mode != ResolutionMode::Standalone) listFolder(snapshot->root / "overlay" / folder, "@overlay", found);
+    for (const auto& [name, e] : Files(*snapshot, kind == AssetKind::Text).entries)
+        if (e.id.kind == kind) {
             const auto& mod = snapshot->mods[e.mod];
             found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority, e.offset, e.size});
         }
+    if (overlay && snapshot->mode == ResolutionMode::Standalone) listFolder(snapshot->root / "overlay" / folder, "@overlay", found);
     std::vector<ResolvedAsset> result;
     for (auto& [key, asset] : found) result.push_back(std::move(asset));
     return result;
 }
-std::vector<ResolvedAsset> ListModels() {
-    const auto snapshot = Current();
-    std::map<std::string, ResolvedAsset> found;
-    if (!snapshot->enabled) return {};
-    if (snapshot->mode != ResolutionMode::Standalone && (snapshot->overlayKinds & KindBit(AssetKind::Model)))
-        ListModelFolder(snapshot->root / "overlay" / "models", "@overlay", found);
-    for (const auto& [name, e] : Files(*snapshot, false).entries)
-        if (e.id.kind == AssetKind::Model) {
-            const auto& mod = snapshot->mods[e.mod];
-            found.emplace(e.id.key, ResolvedAsset{e.id, e.file, mod.id, mod.priority, e.offset, e.size});
-        }
-    std::vector<ResolvedAsset> result;
-    for (auto& [key, asset] : found) result.push_back(std::move(asset));
-    return result;
-}
+std::vector<ResolvedAsset> ListTexts() { return ListKind(AssetKind::Text, "text", ListTextFolder); }
+std::vector<ResolvedAsset> ListModels() { return ListKind(AssetKind::Model, "models", ListModelFolder); }
 std::vector<LanguagePack> LanguagePacks() {
     std::lock_guard lock(gMutex);
     return gSnapshot->enabled ? gSnapshot->languagePacks : std::vector<LanguagePack>{};
@@ -965,21 +953,26 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     {
         std::lock_guard lock(gMutex);
         snapshot = gSnapshot;
-        if (!gInProvider && snapshot->mode != ResolutionMode::Overlay)
+        if (!gInProvider)
             if (const auto it = gProviders.find(request.id.kind); it != gProviders.end()) provider = it->second;
     }
     if (!snapshot->enabled) return {};
     const auto name = OverlayKey(normalized.id.kind, normalized.id.key);
     // The top-level overlay is merged by a manager (MO2) and probed per request,
     // only for kinds whose folder existed at Initialize. The name is canonical
-    // (relative, no '..'), so the file is inside overlay/ as written.
-    if (snapshot->mode != ResolutionMode::Standalone && (snapshot->overlayKinds & KindBit(normalized.id.kind))) {
+    // (relative, no '..'), so the file is inside overlay/ as written. Every mode
+    // reads it and the mod folders; standalone asks it last instead of first.
+    auto fromOverlay = [&]() -> std::optional<ResolvedAsset> {
+        if (!(snapshot->overlayKinds & KindBit(normalized.id.kind))) return {};
         auto overlay = (snapshot->root / FromUtf8(name)).make_preferred();
         std::error_code ec;
         if (std::filesystem::is_regular_file(overlay, ec) && !ec)
             return ResolvedAsset{normalized.id, std::move(overlay), "@overlay", 0};
-    }
-    if (snapshot->mode == ResolutionMode::Overlay) return {};
+        return {};
+    };
+    const bool overlayFirst = snapshot->mode != ResolutionMode::Standalone;
+    if (overlayFirst)
+        if (auto found = fromOverlay()) return found;
     if (provider) {
         struct Guard { Guard() { gInProvider = true; } ~Guard() { gInProvider = false; } } guard;
         try {
@@ -996,7 +989,7 @@ std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
         const auto& mod = snapshot->mods[it->second.mod];
         return ResolvedAsset{normalized.id, it->second.file, mod.id, mod.priority, it->second.offset, it->second.size};
     }
-    return {};
+    return overlayFirst ? std::nullopt : fromOverlay();
 }
 bool OpenAsset(const ResolvedAsset& asset, std::ifstream& in, uint64_t& length) {
     in.open(asset.path, std::ios::binary | std::ios::ate);

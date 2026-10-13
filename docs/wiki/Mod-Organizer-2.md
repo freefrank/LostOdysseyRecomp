@@ -172,7 +172,7 @@ To translate the game into a new language:
 - **Overlay packages** (`--layout overlay`): two mods that replace the same asset ship the same file path. MO2 shows the conflict, and the mod lower in MO2's left pane wins. An overlay file beats every mod folder.
 - **Language packs**: MO2's order does not matter. Only the pack picked in **Settings → System → Game language** is used.
 
-To let MO2's order decide everything, use overlay packages, open **Modify Executables** in MO2 and add `--mods-mode overlay` to the game's arguments. Mod folders are then ignored; language packs still show in Settings.
+Both layouts load together, whatever `--mods-mode` the game is started with. An overlay file wins over a mod folder for the same asset, so MO2's order decides wherever overlay packages overlap; `--mods-mode standalone` makes mod folders win instead.
 
 ## What stays outside MO2
 

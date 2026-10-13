@@ -43,7 +43,7 @@ Set up MO2 as described in [Mod Organizer 2](Mod-Organizer-2.md), then use two o
 1. Start the game from MO2 and check the `mods:` log line shows `overlay folder: yes`, then that the menu shows the winning mod's artwork.
 2. Swap the two mods in MO2's order and restart: the other artwork appears.
 3. Disable both and restart: the original artwork returns.
-4. Install a mod folder package through MO2 and check its id in the `mods:` line. With `--mods-mode overlay` in the executable's arguments it is ignored.
+4. Install a mod folder package through MO2 and check its id in the `mods:` line. It also loads with `--mods-mode overlay` or `standalone` in the executable's arguments.
 5. Start the game once without MO2 and check that only files really in `mods/` load.
 
 Repeat once from a game folder with a non-ASCII path. Linux and Steam Deck use copied or symlinked files instead of a virtual file system.

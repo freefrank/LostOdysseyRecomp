@@ -26,11 +26,13 @@ if (auto image = modding::ReadImageReplacement(request, width, height)) {
 
 `Initialize(defaultRoot, modList)` snapshots the mods folder: the mod folders and their `mod.ini` files, the files under each `api_version=2` mod's own `overlay/`, the order from `modList` (`mod-list.ini`), and which kind folders of the top-level `overlay/` exist. `LO_MODS_DIR` overrides the root. The game's `--mods-mode <mode>` argument sets `LO_MODS_MODE` for launchers that cannot set environment variables, such as Mod Organizer 2. Use an absolute override for reproducibility. `LO_MODS=0` or `LO_MODS=false` disables all resolution. An invalid nonempty `LO_MODS_MODE` disables resolution and emits a diagnostic.
 
+Every mode reads the top-level overlay, trusted providers and mod folders, so an installed mod is never skipped; the mode only decides which one wins when two replace the same asset.
+
 | `LO_MODS_MODE` | Lookup order before the original asset |
 | --- | --- |
 | `combined` or unset | Top-level overlay, trusted provider, mod folders in order. |
-| `standalone` | Trusted provider, mod folders in order; top-level overlay ignored. |
-| `overlay` | Top-level overlay only; mod folders and providers are not consulted. |
+| `overlay` | The same as `combined` (kept so existing launch options keep working). |
+| `standalone` | Trusted provider, mod folders in order, then the top-level overlay. |
 
 The top-level overlay (`mods/overlay/`) holds the files of overlay packages, which a manager such as Mod Organizer 2 merges in its own order. Its files are checked on each request, for the kind folders (`textures`, `images`, `text`, …) that existed at `Initialize`. Files of mod folders are listed once, on a background thread that `Initialize` starts, because listing through Mod Organizer 2's virtual file system costs about 150 µs per file (about 2.5 s for 15,000 textures). A request that comes before the listing is done waits for it; later requests are table lookups, not file-system probes. Text is listed separately, so the game's text never waits for a large texture folder.
 

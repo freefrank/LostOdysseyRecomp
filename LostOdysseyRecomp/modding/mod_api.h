@@ -69,8 +69,10 @@ public:
 
 // Snapshot replacement; decoded caches must observe Generation().
 // LO_MODS_DIR overrides root; LO_MODS=0 disables all resolution, including providers.
-// LO_MODS_MODE=overlay isolates external managers from mod folders AND providers.
-// The default combined mode keeps top-level overlay > provider > mod folders.
+// Every mode reads the top-level overlay, providers and mod folders; it only sets
+// which wins. The default combined mode (and overlay, kept for old launch
+// options) keeps top-level overlay > provider > mod folders; LO_MODS_MODE=
+// standalone asks provider > mod folders > top-level overlay.
 // Mod folders follow modList (mod-list.ini, the in-game manager's order), then
 // priority. Each api_version=2 folder's overlay/ and .loarc archives are listed once, on a thread
 // Initialize starts (MO2's VFS lists slowly); Resolve, ListTexts and ListMods

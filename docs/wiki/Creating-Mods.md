@@ -395,7 +395,7 @@ No shared manifest is included in an overlay ZIP. Competing mods deliberately pr
 
 For a portable installation, extract the ZIP beside the executable so that `mods/my-menu/mod.ini` is under the runtime's mod root. For another layout, copy the ZIP's `mods/` contents to `LO_MODS_DIR` or the application's selected mods directory.
 
-Use `LO_MODS_MODE=standalone` to ignore the top-level overlay while testing a mod folder. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's `mod.ini` and restart to verify restoration. Removing the mod folder also uninstalls it.
+Use `LO_MODS_MODE=standalone` to let the mod folder win over the top-level overlay while testing it. Restart, open the native settings menu in the chosen language, and compare an obvious artwork change. Set `enabled=false` in that mod's `mod.ini` and restart to verify restoration. Removing the mod folder also uninstalls it.
 
 To inspect an extracted payload:
 

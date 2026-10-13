@@ -22,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The MO2 export tool can export 3D models and animations as glTF (.glb) files for reference; the models can include their textures.
 - Mods can replace character, monster and moving-object models with models edited from the export, for example in Blender. See [Creating mods](docs/wiki/Creating-Mods.md#replace-a-model).
 - The MO2 export tool can export only the rows you select (Export selected).
+- Mods load in every `--mods-mode`: overlay packages and mod folders always load together, and the mode only decides which one wins when both change the same thing.
 - The MO2 export tool shows the game folder it reads and says how to fix it when it is not your LostOdysseyRecomp folder.
 - Windows: mods can replace cutscene videos with H.264 MP4 files, for example 4K at 60 fps; the game keeps the original sound and subtitles. Topaz Video AI's MP4 files work as they are. See [Creating mods](docs/wiki/Creating-Mods.md#replace-a-cutscene-video).
 - Cutscene replacements up to 1% longer or shorter than the original are fitted to its length, so they stay in time with the sound.
@@ -42,6 +43,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - MO2 导出工具可以把 3D 模型和动画导出为 glTF（.glb）文件，供参考；模型可以带上贴图。
 - Mod 可以替换角色、怪物和会动的物件的模型，模型从导出文件改出来，例如用 Blender。见[制作 Mod](docs/wiki/Creating-Mods.md#replace-a-model)。
 - MO2 导出工具可以只导出你选中的行（Export selected）。
+- 任何 `--mods-mode` 下 Mod 都会加载：overlay 包和 Mod 文件夹总是一起加载，模式只决定两者改了同一处时谁优先。
 - MO2 导出工具会显示它读取的游戏目录；目录不是你的 LostOdysseyRecomp 文件夹时，会提示怎么改。
 - Windows：Mod 可以用 H.264 MP4 替换过场影片，例如 4K 60 帧；声音和字幕仍用原版；Topaz Video AI 导出的 MP4 可以直接用。见[制作 Mod](docs/wiki/Creating-Mods.md#replace-a-cutscene-video)。
 - 比原版长或短不超过 1% 的替换影片会被拉到原版的长度，画面和声音保持同步。
