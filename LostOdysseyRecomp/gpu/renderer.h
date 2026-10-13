@@ -45,6 +45,10 @@ namespace gpu::renderer
     // thread after the movie helper has drawn its safe-area destination.
     void ClearMovieBars(uint32_t surfaceInfo, uint32_t colorInfo,
         float x, float y, float width, float height, float safeLeft, float safeRight, float safeTop, float safeBottom);
+    // Ordered host-private movie command: draws a mod's replacement frame for
+    // the session at timeUs over the guest movie quad just drawn in this rect.
+    void DrawMovieReplacement(uint32_t surfaceInfo, uint32_t colorInfo,
+        float x, float y, float width, float height, uint32_t session, int64_t timeUs);
     // Convert the guest frontbuffer content extent to this surface's physical
     // pixels (storage padding remains excluded).
     void ScaleResolvedSize(uint32_t physicalAddress, uint32_t& width, uint32_t& height);

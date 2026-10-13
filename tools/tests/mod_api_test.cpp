@@ -546,6 +546,56 @@ void Archives(const fs::path& root) {
     fs::remove_all(root / "arc");
     Reload(); assert(!HasTextureReplacements());
 }
+// Movie keys are the original file name stem; replacements are MP4 files.
+void Movies(const fs::path& root) {
+    const AssetRequest mv{{AssetKind::Movie, "mv_00v"}, {}};
+    assert(OverlayRelativePath({AssetKind::Movie, "MV_00V"}) == fs::path("overlay/movies/mv_00v.mp4"));
+    for (const auto* bad : {"../x", "mv.00v", "", "a/b", "a\\b", "a#1:b", "mv 00v", "mv-00v"})
+        assert(OverlayRelativePath({AssetKind::Movie, bad}).empty() && !Resolve({{AssetKind::Movie, bad}, {}}));
+    assert(!OverlayRelativePath({AssetKind::Movie, std::string(64, 'a')}).empty());
+    assert(OverlayRelativePath({AssetKind::Movie, std::string(65, 'a')}).empty());
+    // A manifest line, any key case.
+    Write(root / "mvm/movies/mv_00v.mp4", "mp4");
+    Write(root / "mvm/mod.ini", "api_version=1\nid=mvm\nmovie:MV_00V=movies/mv_00v.mp4\nmovie:../x=movies/mv_00v.mp4\n");
+    Initialize(root);
+    {
+        const auto resolved = Resolve({{AssetKind::Movie, "Mv_00V"}, {}});
+        assert(resolved && resolved->modId == "mvm" && resolved->id.key == "mv_00v" && resolved->size == kWholeFile);
+        assert(Find(ListMods(), "mvm")->manifestEntries == 1 && Find(ListMods(), "mvm")->problems.size() == 1);
+        assert(!Resolve({{AssetKind::Movie, "mv_01v"}, {}}));
+    }
+    fs::remove_all(root / "mvm");
+    // A loose file in an api_version=2 folder, file name in any case.
+    Write(root / "mvl/mod.ini", "api_version=2\nid=mvl\n");
+    Write(root / "mvl/overlay/Movies/MV_00V.mp4", "mp4");
+    Write(root / "mvl/overlay/movies/mv.00v.mp4", "x");
+    Write(root / "mvl/overlay/movies/mv_00v.loasset", "x");
+    Reload();
+    {
+        const auto resolved = Resolve(mv);
+        assert(resolved && resolved->modId == "mvl" && resolved->id.key == "mv_00v" && resolved->size == kWholeFile);
+        assert(Find(ListMods(), "mvl")->overlayFiles == 1);
+    }
+    fs::remove_all(root / "mvl");
+    // An archive entry.
+    const auto archive = root / "mva/overlay.loarc";
+    Write(root / "mva/mod.ini", "api_version=2\nid=mva\n");
+    Write(archive, Loarc({{"overlay/movies/mv_00v.mp4", "mp4data"}, {"overlay/movies/MV_01V.mp4", "x"}}, 1u << uint32_t(AssetKind::Movie)));
+    Reload();
+    {
+        const auto resolved = Resolve(mv);
+        assert(resolved && resolved->modId == "mva" && resolved->path == archive && resolved->size == 7);
+        assert(DescribeAsset(*resolved).ends_with(".loarc:overlay/movies/mv_00v.mp4"));
+        std::ifstream in;
+        uint64_t length = 0;
+        std::string bytes(7, '\0');
+        assert(OpenAsset(*resolved, in, length) && length == 7 && in.read(bytes.data(), 7) && bytes == "mp4data");
+        assert(!Resolve({{AssetKind::Movie, "mv_01v"}, {}})); // archive names must already be lower case
+        assert(Find(ListMods(), "mva")->overlayFiles == 1 && Find(ListMods(), "mva")->problems.size() == 1);
+    }
+    fs::remove_all(root / "mva");
+    Reload();
+}
 // LO_MOD_TEST_INDEX_FILES=<n>: time Initialize over one mod with n texture files.
 void IndexBench(const fs::path& root) {
     const char* value = std::getenv("LO_MOD_TEST_INDEX_FILES");
@@ -594,6 +644,7 @@ int main() {
     Languages(root);
     FormatV2(root, temp.path / "mod-list.ini");
     Archives(root);
+    Movies(root);
     IndexBench(root);
     Shutdown(); assert(!Resolve(request));
     std::cout << "Mod API, image, texture, text and language pack contracts, mod folders, archives and mod list, manager isolation and reload tests passed\n";

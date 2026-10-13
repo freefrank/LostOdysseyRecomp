@@ -12,6 +12,8 @@
 #include <os/user_paths.h>
 #include "render_resolution.h"
 #include "movie_clear.h"
+#include "movie_yuv_shader.h"
+#include <movie/movie_player.h>
 #include "video.h"
 #include "command_processor.h"
 #include "register_snapshot.h"
@@ -649,6 +651,10 @@ namespace gpu::renderer
                 // a distinct output while commands in the slot remain in flight.
                 std::vector<std::unique_ptr<HostTexture>> bloomPrefilterTextures;
                 size_t bloomPrefilterUsed = 0;
+                // Cutscene replacement planes read by this slot's commands, and
+                // the decoded picture they hold.
+                std::unique_ptr<HostTexture> movieLuma, movieChroma;
+                uint64_t movieSerial = 0;
                 uint64_t temporalSerial = 0, hdrTemporalSerial = 0, sceneTaaHdrSerial = 0, motionSerial = 0, aoSerial = 0;
                 std::vector<std::shared_ptr<void>> aoUses;
 #if defined(LO_RENDERER_P2_EMBEDDED_TEST)
@@ -14179,6 +14185,166 @@ void main()
                 color->sdrProducerFrame = ~0ull;
                 color->sdrLoss.Lost(frame, SdrLossTrace::Clear, 4);
             }
+
+#if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
+            std::unique_ptr<RenderShader> movieYuvPs;
+            bool movieYuvCompiled = false;
+            std::map<uint32_t, std::unique_ptr<RenderPipeline>> movieYuvPipelines;
+            uint32_t movieLoggedSession = 0;
+
+            RenderPipeline* GetMovieYuvPipeline(RenderFormat format)
+            {
+                if (!movieYuvCompiled) {
+                    movieYuvCompiled = true;
+                    auto ps = xenos::CompileCachedHlsl(gpu::movie_yuv::PixelShader, "main", "ps_6_0", binaryFormat);
+                    if (ps.ok) movieYuvPs = device->createShader(ps.bytecode.data(), ps.bytecode.size(), "main", renderFormat);
+                    else LOG_WARNING("renderer: movie replacement shader compilation failed: {}", ps.errors);
+                }
+                if (!movieYuvPs || !blitVs) return nullptr;
+                if (const auto found = movieYuvPipelines.find(uint32_t(format)); found != movieYuvPipelines.end())
+                    return found->second.get();
+                RenderGraphicsPipelineDesc desc;
+                desc.pipelineLayout = pipelineLayout.get(); desc.vertexShader = blitVs.get(); desc.pixelShader = movieYuvPs.get();
+                desc.depthEnabled = false; desc.depthWriteEnabled = false; desc.depthFunction = RenderComparisonFunction::ALWAYS;
+                desc.depthTargetFormat = RenderFormat::UNKNOWN; desc.renderTargetFormat[0] = format;
+                desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
+                desc.renderTargetBlend[0].renderTargetWriteMask = 0x7; // the guest quad's alpha stays
+                desc.renderTargetCount = 1; desc.cullMode = RenderCullMode::NONE; desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
+                auto pipeline = device->createGraphicsPipeline(desc);
+                if (!pipeline) return nullptr;
+                auto* result = pipeline.get();
+                movieYuvPipelines.emplace(uint32_t(format), std::move(pipeline));
+                return result;
+            }
+
+            // A plane of this slot; a size change retires the old one with the slot.
+            bool EnsureMoviePlane(std::unique_ptr<HostTexture>& tex, uint32_t width, uint32_t height, RenderFormat format)
+            {
+                if (tex && tex->texture && tex->width == width && tex->height == height) return true;
+                auto& slot = Gpu();
+                if (tex) slot.retiredTextures.push_back(std::move(tex));
+                slot.movieSerial = 0;
+                auto created = std::make_unique<HostTexture>();
+                created->texture = device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, format));
+                if (!created->texture) return false;
+                created->format = format;
+                created->width = created->guestWidth = created->bindingWidth = width;
+                created->height = created->guestHeight = created->bindingHeight = height;
+                tex = std::move(created);
+                return true;
+            }
+
+            bool UploadMoviePlane(HostTexture& tex, const uint8_t* data, uint32_t sourcePitch, uint32_t rowBytes, uint32_t texelBytes)
+            {
+                // Placed footprints need 256-byte rows (1920-wide luma is not).
+                const uint32_t pitch = (rowBytes + 255) & ~255u;
+                const uint64_t offset = Upload(nullptr, size_t(pitch) * tex.height, 512);
+                if (offset == UINT64_MAX) return false;
+                for (uint32_t row = 0; row < tex.height; ++row)
+                    memcpy(uploadMapped + offset + size_t(row) * pitch, data + size_t(row) * sourcePitch, rowBytes);
+                Transition(tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(tex.texture.get()),
+                    RenderTextureCopyLocation::PlacedFootprint(uploadRing, tex.format, tex.width, tex.height, 1, pitch / texelBytes, offset));
+                Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                return true;
+            }
+
+            void DrawMovieReplacement(uint32_t surfaceInfo, uint32_t colorInfo, float x, float y, float width, float height,
+                                      uint32_t session, int64_t timeUs)
+            {
+                if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) ||
+                    width <= 0.0f || height <= 0.0f)
+                    return;
+                const uint32_t pitch = surfaceInfo & 0x3FFF;
+                if (!pitch) return;
+                movie::DrawFrame picture;
+                if (!movie::FrameForDraw(session, timeUs, picture) || !picture.frame) return;
+                const movie::Nv12Frame& video = *picture.frame;
+                const uint32_t chromaWidth = (video.width + 1) / 2, chromaHeight = (video.height + 1) / 2;
+                if (!video.width || !video.height || video.lumaPitch < video.width || video.chromaPitch < chromaWidth * 2 ||
+                    video.luma.size() < size_t(video.lumaPitch) * video.height ||
+                    video.chroma.size() < size_t(video.chromaPitch) * chromaHeight)
+                    return;
+                if (!ApplyInternalResolution()) return;
+                if (!Begin()) return;
+                // Room for both planes now, so their uploads cannot rewind the
+                // ring onto the other slot after this slot's planes are chosen.
+                const size_t planeBytes = size_t((video.width + 255) & ~255u) * video.height +
+                    size_t((chromaWidth * 2 + 255) & ~255u) * chromaHeight + 2048;
+                if (((Gpu().uploadOffset + 511) & ~uint64_t(511)) + planeBytes + kUploadHeadroom > kUploadRingSize)
+                    if (!Flush() || !Begin()) return;
+                FlushMotionReplayQueue();
+                const uint32_t bottomEdge = uint32_t(std::clamp(std::lround(y + height), 0l, 0x3FFFl));
+                const uint32_t rtHeight = GuessTargetHeight(pitch, bottomEdge);
+                HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight);
+                if (!color || !color->texture || !color->guestWidth || !color->guestHeight) return;
+                RenderPipeline* pipeline = GetMovieYuvPipeline(color->format);
+                if (!pipeline) return;
+
+                const float scaleX = float(color->width) / color->guestWidth, scaleY = float(color->height) / color->guestHeight;
+                const float left = std::clamp(x * scaleX, 0.0f, float(color->width));
+                const float top = std::clamp(y * scaleY, 0.0f, float(color->height));
+                const float right = std::clamp((x + width) * scaleX, left, float(color->width));
+                const float bottom = std::clamp((y + height) * scaleY, top, float(color->height));
+                // The same pixel edges as the movie bars around it.
+                const RenderRect scissor{
+                    int32_t(std::min(gpu::movie_clear::ScaleBoundary(x, color->width, color->guestWidth), color->width)),
+                    int32_t(std::min(gpu::movie_clear::ScaleBoundary(y, color->height, color->guestHeight), color->height)),
+                    int32_t(std::min(gpu::movie_clear::ScaleBoundary(x + width, color->width, color->guestWidth), color->width)),
+                    int32_t(std::min(gpu::movie_clear::ScaleBoundary(y + height, color->height, color->guestHeight), color->height))};
+                if (right - left < 1.0f || bottom - top < 1.0f || scissor.right <= scissor.left || scissor.bottom <= scissor.top) return;
+
+                auto& slot = Gpu();
+                if (!EnsureMoviePlane(slot.movieLuma, video.width, video.height, RenderFormat::R8_UNORM) ||
+                    !EnsureMoviePlane(slot.movieChroma, chromaWidth, chromaHeight, RenderFormat::R8G8_UNORM))
+                    return;
+                if (slot.movieSerial != picture.serial) {
+                    slot.movieSerial = 0;
+                    if (!UploadMoviePlane(*slot.movieLuma, video.luma.data(), video.lumaPitch, video.width, 1) ||
+                        !UploadMoviePlane(*slot.movieChroma, video.chroma.data(), video.chromaPitch, chromaWidth * 2, 2))
+                        return;
+                    slot.movieSerial = picture.serial;
+                }
+                SharedConstants constants{};
+                constants.transfer[0] = std::bit_cast<uint32_t>(left);
+                constants.transfer[1] = std::bit_cast<uint32_t>(top);
+                constants.transfer[2] = std::bit_cast<uint32_t>(right - left);
+                constants.transfer[3] = std::bit_cast<uint32_t>(bottom - top);
+                const uint64_t offset = Upload(&constants, sizeof(constants));
+                if (offset == UINT64_MAX) return;
+                if (std::exchange(movieLoggedSession, session) != session)
+                    LOG_INFO("renderer: movie replacement session={} video={}x{} target={}x{} format={} rect=({:.1f},{:.1f} {:.1f}x{:.1f})",
+                        session, video.width, video.height, color->width, color->height, uint32_t(color->format), left, top, right - left, bottom - top);
+
+                consecutiveResolveCopies.Invalidate();
+                Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                RenderDescriptorSet* set1 = AcquireSet(1);
+                set1->setTexture(0, slot.movieLuma->texture.get(), RenderTextureLayout::SHADER_READ);
+                set1->setTexture(1, slot.movieChroma->texture.get(), RenderTextureLayout::SHADER_READ);
+                BindTargets(color, nullptr);
+                const RenderViewport viewport(left, top, right - left, bottom - top);
+                commandList->setViewports(&viewport, 1);
+                commandList->setScissors(&scissor, 1);
+                commandList->setPipeline(pipeline);
+                commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                SetConstantBuffer(offset, 0);
+                SetConstantBuffer(offset, 1);
+                SetConstantBuffer(offset, 2);
+                commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
+                commandList->setGraphicsDescriptorSet(set1, 1);
+                commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
+                commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                if (vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(), 4);
+                commandList->drawInstanced(3, 1, 0, 0);
+                color->hdrValid = false;
+#if defined(LO_GPU_PLUME)
+                HandleFsrAlphaRgbWriter(*color, "movie_replacement");
+#endif
+                color->aaProvenance.Invalidate(frame, color->allocationSerial, false);
+                color->sdrProducerFrame = ~0ull;
+                color->sdrLoss.Lost(frame, SdrLossTrace::Draw, 6);
+            }
+#endif
         };
 
         Renderer* g_renderer = nullptr;
@@ -15292,6 +15458,17 @@ void main()
 #else
         (void)surfaceInfo; (void)colorInfo; (void)x; (void)y;
         (void)width; (void)height; (void)safeLeft; (void)safeRight; (void)safeTop; (void)safeBottom;
+#endif
+    }
+
+    void DrawMovieReplacement(uint32_t surfaceInfo, uint32_t colorInfo,
+                              float x, float y, float width, float height, uint32_t session, int64_t timeUs)
+    {
+#ifdef LO_GPU_PLUME
+        if (g_renderer)
+            g_renderer->DrawMovieReplacement(surfaceInfo, colorInfo, x, y, width, height, session, timeUs);
+#else
+        (void)surfaceInfo; (void)colorInfo; (void)x; (void)y; (void)width; (void)height; (void)session; (void)timeUs;
 #endif
     }
 #endif // !LO_RENDERER_P2_EMBEDDED_TEST

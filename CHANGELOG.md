@@ -19,6 +19,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Mods can ship their files as one `overlay.loarc` archive instead of thousands of loose files; `tools/modding/lo_mod.py archive` makes it.
 - The MO2 export tool previews what it will export: a list of the textures, movies and text, with a picture, the video or the text of the selected one.
 - The MO2 export tool shows the game folder it reads and says how to fix it when it is not your LostOdysseyRecomp folder.
+- Windows: mods can replace cutscene videos with H.264 MP4 files, up to 4K at 60 fps; the game keeps the original sound and subtitles. See [Creating mods](docs/wiki/Creating-Mods.md#replace-a-cutscene-video).
 
 ### 简体中文
 
@@ -33,6 +34,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Mod 可以把文件打成一个 `overlay.loarc` 包发布，不用再带成千上万个散文件；用 `tools/modding/lo_mod.py archive` 打包。
 - MO2 导出工具可以预览要导出的内容：列出材质、影片和文本，选中一项可以看图片、播放影片或查看文本。
 - MO2 导出工具会显示它读取的游戏目录；目录不是你的 LostOdysseyRecomp 文件夹时，会提示怎么改。
+- Windows：Mod 可以用 H.264 MP4 替换过场影片，最高 4K 60 帧；声音和字幕仍用原版。见[制作 Mod](docs/wiki/Creating-Mods.md#replace-a-cutscene-video)。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 

@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -44,6 +45,11 @@ class ModToolsTest(unittest.TestCase):
                 mod.make_key(package, 0, "Object")
         self.assertEqual(mod.canonical_key(KEY.replace("#21:", "#00021:")), KEY)
         self.assertEqual(mod.overlay_path(KEY), "overlay/images/key-fnv1a64-5177565cdd08cbcf.lotex")
+        self.assertEqual(mod.overlay_path("MV_00V", "movie"), "overlay/movies/mv_00v.mp4")
+        for bad in ("", "../x", "mv.00v", "a/b", "a\b", "mv-00v", "a" * 65):
+            with self.assertRaises(ValueError, msg=bad):
+                mod.overlay_path(bad, "movie")
+        mod.overlay_path("a" * 64, "movie")
 
     def test_language_clean(self):
         menu = "bin/xenon/loc/int/menu/menu_int.dat.json"
@@ -413,14 +419,78 @@ class ModToolsTest(unittest.TestCase):
 
     def test_archive_names(self):
         for name in ("overlay/text/a/b.json", "overlay/textures/fp-0123456789abcdef.lotex2",
-                     "overlay/models/key-fnv1a64-0123456789abcdef.loasset", "overlay/text/ü.json"):
+                     "overlay/models/key-fnv1a64-0123456789abcdef.loasset", "overlay/text/ü.json",
+                     "overlay/movies/mv_00v.mp4", "overlay/movies/" + "a" * 64 + ".mp4"):
             mod.loarc_kind(name)
         for name in ("overlay/text/A.json", "overlay/text/a.JSON", "overlay/text/../a.json", "overlay/text/a//b.json",
                      "overlay/text/c:/a.json", "overlay/text/a\\b.json", "overlay/text/.json", "overlay/text/" + "a" * 1025 + ".json",
                      "overlay/textures/FP-0123456789abcdef.lotex2", "overlay/images/key-fnv1a64-0123456789abcdef.loasset",
-                     "overlay/fonts/sub/key-fnv1a64-0123456789abcdef.loasset", "other/a", "/overlay/text/a.json"):
+                     "overlay/fonts/sub/key-fnv1a64-0123456789abcdef.loasset", "other/a", "/overlay/text/a.json",
+                     "overlay/movies/MV_00V.mp4", "overlay/movies/mv.00v.mp4", "overlay/movies/.mp4",
+                     "overlay/movies/" + "a" * 65 + ".mp4", "overlay/movies/mv_00v.loasset",
+                     "overlay/movies/key-fnv1a64-0123456789abcdef.loasset", "overlay/movies/sub/mv_00v.mp4"):
             with self.assertRaises(ValueError, msg=name):
                 mod.loarc_kind(name)
+
+    @staticmethod
+    def mp4(order: tuple[bytes, ...]) -> bytes:
+        return b"".join(struct.pack(">I4s", 8 + len(body), kind) + body for kind, body in
+                        ((b"ftyp", b"isom"), *((kind, b"xx") for kind in order)))
+
+    def test_movie_atom_order(self):
+        front, back, none = self.root / "front.mp4", self.root / "back.mp4", self.root / "none.mp4"
+        front.write_bytes(self.mp4((b"moov", b"mdat")))
+        back.write_bytes(self.mp4((b"mdat", b"moov")))
+        none.write_bytes(self.mp4((b"free",)))
+        moov, mdat = mod.mp4_atom_order(front)
+        self.assertTrue(moov < mdat)
+        moov, mdat = mod.mp4_atom_order(back)
+        self.assertTrue(moov > mdat)
+        self.assertEqual(mod.mp4_atom_order(none), (None, None))
+        with self.assertRaises(ValueError):
+            mod.check_movie(none)
+        with mock.patch.object(mod.shutil, "which", return_value=None):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                mod.check_movie(front)
+            self.assertIn("ffprobe not found", err.getvalue())
+            self.assertNotIn("moov", err.getvalue())
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                mod.check_movie(back)
+            self.assertIn("faststart", err.getvalue())
+            # Archive: a movie that is not an MP4 is skipped with a warning; a valid name is stored.
+            src = self.root / "msrc"
+            for name, data in (("mv_00v.mp4", front.read_bytes()), ("MV_01V.MP4", back.read_bytes()), ("mv_02v.mp4", b"junk")):
+                (src / "overlay/movies" / name).parent.mkdir(parents=True, exist_ok=True)
+                (src / "overlay/movies" / name).write_bytes(data)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                found = mod.loarc_scan(src / "overlay")
+            self.assertEqual(sorted(found), ["overlay/movies/mv_00v.mp4", "overlay/movies/mv_01v.mp4"])
+            self.assertIn("mv_02v.mp4", err.getvalue())
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg not available")
+    def test_movie_ffprobe(self):
+        def make(name: str, rate: str, size: str, *extra: str) -> Path:
+            path = self.root / name
+            call = ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"color=c=red:s={size}:r={rate}:d=0.5", "-an",
+                    *extra, "-movflags", "+faststart", str(path)]
+            subprocess.run(call, check=True)
+            return path
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            mod.check_movie(make("good.mp4", "60000/1001", "640x360", "-c:v", "libx264", "-pix_fmt", "yuv420p"))
+            mod.check_movie(make("good60.mp4", "60", "640x360", "-c:v", "libx264", "-pix_fmt", "yuv420p"))
+        self.assertEqual(err.getvalue(), "")
+        with contextlib.redirect_stderr(err):
+            mod.check_movie(make("odd.mp4", "20", "640x480", "-c:v", "libx264", "-pix_fmt", "yuv420p"))
+        self.assertIn("frame rate", err.getvalue())
+        self.assertIn("16:9", err.getvalue())
+        with self.assertRaises(ValueError):
+            mod.check_movie(make("yuv444.mp4", "30000/1001", "640x360", "-c:v", "libx264", "-pix_fmt", "yuv444p"))
+        with self.assertRaises(ValueError):
+            mod.check_movie(make("mpeg4.mp4", "30000/1001", "640x360", "-c:v", "mpeg4", "-pix_fmt", "yuv420p"))
 
     @unittest.skipUnless(mod.DEFAULT_TEXCONV.is_file(), "texconv not available")
     def test_texture_pack_dds(self):

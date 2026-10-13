@@ -6,6 +6,8 @@
 
 （2026-10-12：替换视频的格式改为 H.264 + MP4，见下文“解码”。）
 
+（2026-10-12：Windows 版已实现：Media Foundation 解码（有硬件解码时用硬件），D3D12 和 Vulkan 都画在原版四边形上；替换期间跳过不到时的原版帧更新，CG 以游戏帧率显示。在 psvita（Proton）上验证了 1080p60 和 4K60、自然结束、跳过、替换片较短时切回原版。Linux、macOS、Android 还没有解码器，照常播原版。）
+
 可行，而且不用改游戏的存档、档案或播放逻辑：
 
 - 让游戏照常播放原版 WMV，音频、字幕、跳过、结束时机都不变。
@@ -50,7 +52,7 @@
 - **替换视频规格**（给 Mod 作者）：
   - 容器 MP4，`moov` 放在文件头（ffmpeg `-movflags +faststart`）。
   - 视频 H.264 High profile，8 bit，`yuv420p`，逐行，BT.709 limited range，恒定帧率。
-  - 帧率建议 60000/1001（原版 30000/1001 的两倍）；30000/1001 也行。
+  - 帧率不必和原版成倍数：运行时按时间选帧（MP4 时间戳对游戏的毫秒影片时钟）。原版 45 个是 30 fps、19 个是 29.97 fps、`the_end_v` 是 29.92 fps；用补帧工具时直接取原版的两倍最省事（60 或 60000/1001），统一 60000/1001 也可以，但必须按时间戳重采样，总时长不能变。
   - 分辨率保持 16:9。桌面包用 3840×2160（4K60 需要 Level 5.2）；给 Steam Deck 和手机的包用 1920×1080（Level 4.2）或 2560×1440（Level 5.1）。
   - 不带音轨：游戏照常播原版音频（多语言音轨、字幕都不变）。带了也会被忽略。
   - 时长和原版一致，从第一帧对齐。
@@ -63,12 +65,14 @@
 
 ### Mod 包格式
 
-沿用 Mod API v1：
+沿用 Mod API，movie 的键不再哈希，也不带 export 序号：
 
-- standalone：`mod.ini` 里写 `movie:bin/xenon/mov/mv_00v.wmv#0:video=movies/mv_00v.mp4`。
-- overlay：`OverlayRelativePath` 已经为 `movie` 预留了 `overlay/movies/key-fnv1a64-<hash>.loasset`。
+- 键 = 原影片文件名去掉扩展名、小写，例如 `bin/xenon/mov/mv_00v.wmv` 的键是 `mv_00v`（与 `--export-assets` 写出的 `movies/<name>.wmv` 同名）。合法键为 1–64 个 `[a-z0-9_]`，输入不区分 ASCII 大小写、统一转小写；路径分隔符、点、`#`、空串、超长一律拒绝。
+- mod.ini：`movie:mv_00v=movies/mv_00v.mp4`（路径相对 mod 文件夹）。
+- overlay / `.loarc` 条目名：`overlay/movies/<键>.mp4`；列文件夹时文件名不区分大小写，`.loarc` 里必须是小写。
+- Image / Font / Model 仍用 `key-fnv1a64-…`，Texture、Text 不变。
 
-键的写法需要在实现时定下来。影片名本身唯一且稳定，用不用 export 序号由实现决定。`lo_mod.py` 要加一个 `movie` 打包入口（检查分辨率、帧率、编码）。MO2 不用改。
+`lo_mod.py archive` 会按这个规则收 movie 文件，并在装有 `ffprobe` 时检查编码（必须 H.264、`yuv420p`、逐行），帧率不在 24–120 fps、不是 16:9、`moov` 在 `mdat` 之后只警告。MO2 不用改。
 
 ## 工作量
 

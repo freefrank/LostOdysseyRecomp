@@ -1,0 +1,258 @@
+#include "movie_player.h"
+#include <modding/mod_api.h>
+#include <os/logger.h>
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <map>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace movie {
+namespace {
+// The game's videos are 30000/1001 fps. Its update sleeps until this long
+// before a frame's time, so a frame arrives up to 5 ms early.
+constexpr double kGuestFrameMs = 1001.0 / 30.0;
+constexpr double kGuestWakeEarlyMs = 5.0;
+// Call the guest update at most this long before it would wake by itself.
+constexpr double kGuestSleepMs = 2.0;
+// Guest frame arrivals the clock offset is taken from (about two seconds).
+constexpr size_t kClockSamples = 60;
+constexpr size_t kQueueAhead = 4;
+// A stopped session stays readable this long for draws already queued.
+constexpr double kRetireMs = 2000.0;
+
+struct Decoded {
+    std::shared_ptr<Nv12Frame> frame;
+    int64_t us = 0;
+    uint64_t serial = 0;
+};
+std::atomic<uint64_t> gSerial{0};
+
+// Host time to movie time. The guest delivers a frame no earlier than 5 ms
+// before its time, so the smallest recent (arrival - pts) is the offset; late
+// arrivals only raise it. A pause raises it too, until the old samples age out:
+// the result is clamped to one guest frame past the last one shown.
+class Clock {
+public:
+    void Shown(double ptsMs, double nowMs) {
+        offsets_.push_back(nowMs - ptsMs);
+        if (offsets_.size() > kClockSamples) offsets_.pop_front();
+        minOffset_ = *std::min_element(offsets_.begin(), offsets_.end());
+        lastPts_ = ptsMs;
+    }
+    bool Due(double nowMs) const {
+        return lastPts_ < 0 || Estimate(nowMs) >= lastPts_ + kGuestFrameMs - kGuestWakeEarlyMs - kGuestSleepMs;
+    }
+    // The guest frame on screen arrived up to 5 ms before its time: allow that
+    // much before it, so the steps stay even at the game's frame rate.
+    int64_t TimeUs(double nowMs) const {
+        if (lastPts_ < 0) return 0;
+        const double t = std::clamp(Estimate(nowMs), lastPts_ - kGuestWakeEarlyMs, lastPts_ + kGuestFrameMs);
+        return int64_t(std::max(t, 0.0) * 1000.0);
+    }
+private:
+    double Estimate(double nowMs) const { return nowMs - minOffset_ - kGuestWakeEarlyMs; }
+    std::deque<double> offsets_;
+    double minOffset_ = 0.0, lastPts_ = -1.0;
+};
+
+class Session {
+public:
+    Session(std::string name, modding::ResolvedAsset asset) : name_(std::move(name)), asset_(std::move(asset)) {
+        thread_ = std::thread([this] { Run(); });
+    }
+    ~Session() {
+        RequestStop();
+        if (thread_.joinable()) thread_.join();
+    }
+    void RequestStop() {
+        { std::lock_guard lock(mutex_); stop_ = true; }
+        cv_.notify_all();
+    }
+    bool Failed() const { return failed_.load(std::memory_order_acquire); }
+
+    bool FrameAt(int64_t us, DrawFrame& out) {
+        std::lock_guard lock(mutex_);
+        bool advanced = false;
+        while (!queue_.empty() && queue_.front().us <= us) {
+            Recycle(std::move(shown_.frame));
+            shown_ = std::move(queue_.front());
+            queue_.pop_front();
+            advanced = true;
+        }
+        if (advanced) cv_.notify_all();
+        // Before the first frame's time the first frame stands in.
+        const Decoded* pick = shown_.frame ? &shown_ : queue_.empty() ? nullptr : &queue_.front();
+        if (!pick) return false;
+        // Past the end of a shorter replacement the guest's own video shows again.
+        if (ended_ && queue_.empty() && us > shown_.us + endHoldUs_) return false;
+        out.frame = pick->frame;
+        out.serial = pick->serial;
+        return true;
+    }
+
+    Clock clock; // render thread only
+
+private:
+    void Recycle(std::shared_ptr<Nv12Frame> frame) {
+        if (frame && frame.use_count() == 1 && spare_.size() < 2) spare_.push_back(std::move(frame));
+    }
+
+    void Run() {
+        std::string error;
+        Mp4Track track;
+        std::unique_ptr<MovieDecoder> decoder;
+        auto source = OpenByteSource(asset_, &error);
+        if (source && ParseMp4(*source, track, error)) {
+            decoder = CreateMovieDecoder(true);
+            if (!decoder) error = "no H.264 decoder on this platform";
+            else if (!decoder->Open(track, *source, error)) decoder.reset();
+        }
+        if (!decoder) {
+            LOG_WARNING("movie: {} keeps the original video, {} not used: {}", name_, modding::DescribeAsset(asset_), error);
+            failed_.store(true, std::memory_order_release);
+            return;
+        }
+        const double frameUs = track.frameDuration ? 1e6 * track.frameDuration / track.timescale : 1e6 / 60.0;
+        endHoldUs_ = int64_t(frameUs * 1.5);
+        bool first = true;
+        for (;;) {
+            std::shared_ptr<Nv12Frame> frame;
+            {
+                std::unique_lock lock(mutex_);
+                cv_.wait(lock, [&] { return stop_ || queue_.size() < kQueueAhead; });
+                if (stop_) return;
+                if (!spare_.empty()) { frame = std::move(spare_.back()); spare_.pop_back(); }
+            }
+            if (!frame) frame = std::make_shared<Nv12Frame>();
+            if (!decoder->Next(*frame, error)) {
+                if (!error.empty()) LOG_WARNING("movie: {} decoding stopped: {}", name_, error);
+                std::lock_guard lock(mutex_);
+                ended_ = true;
+                return;
+            }
+            if (first) {
+                first = false;
+                LOG_NOTICE("movie: {} replaced by {} ({}x{}, {:.3f} fps, {} {})", name_, modding::DescribeAsset(asset_),
+                    track.width, track.height, 1e6 / frameUs, decoder->Name(), decoder->Hardware() ? "hardware" : "software");
+            }
+            const int64_t us = track.timescale ? frame->pts * 1000000 / int64_t(track.timescale) : 0;
+            std::lock_guard lock(mutex_);
+            queue_.push_back({std::move(frame), us, ++gSerial});
+        }
+    }
+
+    const std::string name_;
+    const modding::ResolvedAsset asset_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::deque<Decoded> queue_; // display order
+    Decoded shown_;
+    std::vector<std::shared_ptr<Nv12Frame>> spare_;
+    bool stop_ = false, ended_ = false;
+    int64_t endHoldUs_ = 25000;
+    std::atomic<bool> failed_{false};
+    std::thread thread_;
+};
+
+struct Retired {
+    uint32_t id;
+    double at;
+};
+std::mutex gMutex;
+std::map<uint32_t, std::shared_ptr<Session>> gSessions; // by session id
+std::map<uint32_t, uint32_t> gByMovie;                  // guest movie object -> session id
+std::vector<Retired> gRetired;
+uint32_t gNextId = 0;
+
+std::shared_ptr<Session> Find(uint32_t id) {
+    std::lock_guard lock(gMutex);
+    const auto it = gSessions.find(id);
+    return it == gSessions.end() ? nullptr : it->second;
+}
+
+// Caller holds gMutex. Returns the sessions to destroy outside the lock.
+std::vector<std::shared_ptr<Session>> RetireLocked(uint32_t guestMovie, double nowMs) {
+    std::vector<std::shared_ptr<Session>> expired;
+    if (const auto it = gByMovie.find(guestMovie); it != gByMovie.end()) {
+        if (const auto session = gSessions.find(it->second); session != gSessions.end()) session->second->RequestStop();
+        gRetired.push_back({it->second, nowMs});
+        gByMovie.erase(it);
+    }
+    std::erase_if(gRetired, [&](const Retired& retired) {
+        if (nowMs - retired.at < kRetireMs) return false;
+        if (const auto session = gSessions.find(retired.id); session != gSessions.end()) {
+            expired.push_back(std::move(session->second));
+            gSessions.erase(session);
+        }
+        return true;
+    });
+    return expired;
+}
+}
+
+double NowMs() {
+    using namespace std::chrono;
+    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+}
+
+void StartReplacement(uint32_t guestMovie, std::string_view name) {
+    std::vector<std::shared_ptr<Session>> expired;
+    {
+        std::lock_guard lock(gMutex);
+        expired = RetireLocked(guestMovie, NowMs());
+    }
+    expired.clear();
+    if (name.empty() || !modding::Enabled()) return;
+    auto asset = modding::Resolve({{modding::AssetKind::Movie, std::string(name)}, {}});
+    if (!asset) return;
+    auto session = std::make_shared<Session>(std::string(name), std::move(*asset));
+    std::lock_guard lock(gMutex);
+    const uint32_t id = ++gNextId ? gNextId : ++gNextId;
+    gSessions.emplace(id, std::move(session));
+    gByMovie[guestMovie] = id;
+}
+
+void StopReplacement(uint32_t guestMovie) {
+    std::vector<std::shared_ptr<Session>> expired;
+    {
+        std::lock_guard lock(gMutex);
+        if (gByMovie.empty() && gRetired.empty()) return;
+        expired = RetireLocked(guestMovie, NowMs());
+    }
+}
+
+uint32_t ReplacementSession(uint32_t guestMovie) {
+    std::lock_guard lock(gMutex);
+    if (gByMovie.empty()) return 0;
+    const auto it = gByMovie.find(guestMovie);
+    if (it == gByMovie.end()) return 0;
+    const auto session = gSessions.find(it->second);
+    return session != gSessions.end() && !session->second->Failed() ? it->second : 0;
+}
+
+bool GuestUpdateDue(uint32_t session, double nowMs) {
+    const auto s = Find(session);
+    return !s || s->clock.Due(nowMs);
+}
+
+void GuestFrameShown(uint32_t session, double ptsMs, double nowMs) {
+    if (const auto s = Find(session)) s->clock.Shown(ptsMs, nowMs);
+}
+
+int64_t ReplacementTimeUs(uint32_t session, double nowMs) {
+    const auto s = Find(session);
+    return s ? s->clock.TimeUs(nowMs) : 0;
+}
+
+bool FrameForDraw(uint32_t session, int64_t timeUs, DrawFrame& out) {
+    const auto s = Find(session);
+    return s && !s->Failed() && s->FrameAt(timeUs, out);
+}
+}

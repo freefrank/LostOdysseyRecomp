@@ -145,6 +145,23 @@ if(LO_BUILD_MOD_TESTS)
         target_compile_options(LoModApiTest PRIVATE -UNDEBUG)
     endif()
     add_test(NAME LoModApiTest COMMAND LoModApiTest)
+    if(WIN32)
+        # MP4 demuxer + Media Foundation H.264 decoder; also the speed bench for replacement CG movies.
+        add_executable(LoMovieDecodeTest
+            tools/tests/movie_decode_test.cpp
+            LostOdysseyRecomp/movie/byte_source.cpp
+            LostOdysseyRecomp/movie/movie_decoder.cpp
+            LostOdysseyRecomp/movie/movie_decoder_mf.cpp
+            LostOdysseyRecomp/movie/mp4_demux.cpp
+            LostOdysseyRecomp/modding/mod_api.cpp)
+        target_include_directories(LoMovieDecodeTest PRIVATE LostOdysseyRecomp)
+        target_compile_features(LoMovieDecodeTest PRIVATE cxx_std_20)
+        target_link_libraries(LoMovieDecodeTest PRIVATE Threads::Threads)
+        add_test(NAME LoMovieDecodeTest COMMAND LoMovieDecodeTest
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/data/testsrc-64x64-bframes.mp4 --rewind-check)
+        add_test(NAME LoMovieDecodeTestSoftware COMMAND LoMovieDecodeTest
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/data/testsrc-64x64-bframes.mp4 --software --rewind-check)
+    endif()
     # The runtime's --export-assets mode without game code, GPU or SDL.
     if(EXISTS "${LO_MINIZ_DIR}/miniz.c")
         add_executable(LoAssetExport

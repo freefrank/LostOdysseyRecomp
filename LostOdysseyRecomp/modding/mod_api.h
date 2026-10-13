@@ -16,6 +16,9 @@ inline constexpr uint32_t kModApiVersion = 2;
 // Texture keys are renderer fingerprints: exactly 16 lowercase hex digits.
 // Text keys are archive member paths (bin/xenon/loc/int/menu/menu_int.dat); the
 // file is the translation JSON that --export-assets writes for that member.
+// Movie keys are the original video's file name stem in lower case (mv_00v for
+// bin/xenon/mov/mv_00v.wmv): 1-64 of [a-z0-9_], ASCII case-insensitive; the
+// file is an H.264 MP4.
 enum class AssetKind : uint32_t { Image = 1, Font = 2, Model = 3, Movie = 4, Texture = 5, Text = 6 };
 enum class ResolutionMode : uint32_t { Combined, Standalone, Overlay };
 struct AssetId { AssetKind kind = AssetKind::Image; std::string key; };
@@ -116,7 +119,8 @@ void UnregisterProvider(AssetKind kind, const AssetProvider* provider);
 // object case and UTF-8 bytes are preserved. Invalid identities return empty.
 std::string MakeManifestKey(std::string_view package, uint32_t exportIndex, std::string_view object);
 // Textures: overlay/textures/fp-<16 hex digits>.lotex2; text: overlay/text/<member
-// path>.json, the export's text/ layout; other kinds hash the key. The same
+// path>.json, the export's text/ layout; movies: overlay/movies/<key>.mp4; other
+// kinds hash the key (key-fnv1a64-<hash>.lotex for images, .loasset). The same
 // names work in a mod folder's own overlay/ (api_version=2) and, '/'-separated
 // and lower case, as the entry names of its .loarc archives.
 std::filesystem::path OverlayRelativePath(const AssetId& id);

@@ -2,6 +2,7 @@
 
 #include "gpu/renderer.h"
 #include "gpu/movie_clear.h"
+#include "gpu/movie_replace.h"
 #include "gpu/frame_plan.h"
 #include "gpu/aspect_layout.h"
 #include "settings/config.h"
@@ -383,10 +384,13 @@ PPC_FUNC(sub_8230D6B8)
     fullMenuCanvas = previous;
 }
 
+// r3 is the FLO_MOVIE scene proxy; +116 is its movie object.
 PPC_FUNC(sub_823EFC08)
 {
     MovieScope scope(IsMainOutputView(ctx.r6.u32));
+    gpu::movie_replace::ProxyBegin(LoadWord(ctx.r3.u32 + 116));
     __imp__sub_823EFC08(ctx, base);
+    gpu::movie_replace::ProxyEnd();
 }
 
 // FLO_MOVIE is the only call at this helper return address.  Compress its
@@ -419,6 +423,11 @@ PPC_FUNC(sub_823E4B50)
     }
     __imp__sub_823E4B50(ctx, base);
     if (movie && safeRight > safeLeft && safeBottom > safeTop)
+    {
+        // A mod's replacement frame goes over the guest quad, before the bars.
+        gpu::movie_replace::EmitDraw(device, LoadWord(device + 0x2880), LoadWord(device + 0x2884),
+            safeLeft, safeTop, safeRight - safeLeft, safeBottom - safeTop);
         EmitMovieBars(device, LoadWord(device + 0x2880), LoadWord(device + 0x2884),
             originalX, originalY, originalWidth, originalHeight, safeLeft, safeRight, safeTop, safeBottom);
+    }
 }

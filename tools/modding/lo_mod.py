@@ -18,6 +18,7 @@ import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from fractions import Fraction
 from pathlib import Path, PurePosixPath
 
 MAGIC = b"LOTEX1\r\n"
@@ -44,7 +45,7 @@ LOARC_ALIGN = 4096
 LOARC_MAX_INDEX = 64 << 20
 LOARC_KINDS = {"images": 1, "fonts": 2, "models": 3, "movies": 4, "textures": 5, "text": 6}
 LOARC_NAMES = {1: r"key-fnv1a64-[0-9a-f]{16}\.lotex", 2: r"key-fnv1a64-[0-9a-f]{16}\.loasset",
-               3: r"key-fnv1a64-[0-9a-f]{16}\.loasset", 4: r"key-fnv1a64-[0-9a-f]{16}\.loasset",
+               3: r"key-fnv1a64-[0-9a-f]{16}\.loasset", 4: r"[a-z0-9_]{1,64}\.mp4",
                5: r"fp-[0-9a-f]{16}\.lotex2"}
 LOARC_CHUNK = 1 << 20
 ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
@@ -94,9 +95,19 @@ def canonical_key(value: str) -> str:
     return make_key(package, int(index), name)
 
 
+def movie_key(value: str) -> str:
+    """A movie key: the original video's file name stem (mv_00v for mv_00v.wmv), 1-64 of [a-z0-9_], any ASCII case."""
+    key = text(value).translate(ASCII_LOWER)
+    if not re.fullmatch(r"[a-z0-9_]{1,64}", key):
+        raise ValueError("movie key must be 1-64 ASCII letters, digits or '_' (the original file name without .wmv)")
+    return key
+
+
 def overlay_path(key: str, kind: str = "image") -> str:
     if kind not in FOLDERS:
         raise ValueError("unknown asset kind")
+    if kind == "movie":
+        return f"overlay/movies/{movie_key(key)}.mp4"
     hash_value = 14695981039346656037
     for byte in canonical_key(key).encode("utf-8"):
         hash_value = ((hash_value ^ byte) * 1099511628211) & 0xffffffffffffffff
@@ -771,6 +782,62 @@ def warn(message: str) -> None:
     print(f"lo_mod: warning: {message}", file=sys.stderr)
 
 
+def mp4_atom_order(path: Path) -> tuple[int | None, int | None]:
+    """Offsets of the top-level moov and mdat boxes of an MP4 (None when absent); reads box headers only."""
+    found: dict[bytes, int] = {}
+    size = path.stat().st_size
+    with path.open("rb") as file:
+        pos = 0
+        while pos + 8 <= size and not {b"moov", b"mdat"} <= found.keys():
+            file.seek(pos)
+            length, kind = struct.unpack(">I4s", file.read(8))
+            if length == 1:
+                length = struct.unpack(">Q", file.read(8))[0]
+            elif length == 0:
+                length = size - pos
+            found.setdefault(kind, pos)
+            if length < 8:
+                break
+            pos += length
+    return found.get(b"moov"), found.get(b"mdat")
+
+
+def check_movie(path: Path) -> None:
+    """Check a movie replacement. ValueError when the game cannot play it; warnings for settings that are not recommended.
+    ffprobe is optional: without it only the box order is checked."""
+    moov, mdat = mp4_atom_order(path)
+    if moov is None or mdat is None:
+        raise ValueError(f"{path}: not an MP4 file (no moov and mdat boxes)")
+    if moov > mdat:
+        warn(f"{path}: moov is after mdat; re-encode with ffmpeg -movflags +faststart")
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        print(f"lo_mod: note: ffprobe not found, {path.name}: codec and frame rate were not checked", file=sys.stderr)
+        return
+    run = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-of", "json", "-show_entries",
+                          "stream=codec_name,pix_fmt,field_order,avg_frame_rate,width,height", str(path)],
+                         capture_output=True, text=True, timeout=60)
+    streams = json.loads(run.stdout or "{}").get("streams") if run.returncode == 0 else None
+    if not streams:
+        raise ValueError(f"{path}: ffprobe found no video stream")
+    video = streams[0]
+    if video.get("codec_name") != "h264":
+        raise ValueError(f"{path}: video must be H.264, not {video.get('codec_name')}")
+    if video.get("pix_fmt") != "yuv420p":
+        raise ValueError(f"{path}: pixel format must be yuv420p, not {video.get('pix_fmt')}")
+    if video.get("field_order") not in (None, "progressive", "unknown"):
+        raise ValueError(f"{path}: video must be progressive, not {video.get('field_order')}")
+    rate = video.get("avg_frame_rate", "0/1")
+    numerator, _, denominator = rate.partition("/")
+    # The game matches frames by time, so any rate works; outside 24-120 fps is likely a mistake.
+    if (not denominator.isdigit() or not numerator.isdigit() or int(denominator) == 0
+            or not 24 <= Fraction(int(numerator), int(denominator)) <= 120):
+        warn(f"{path}: frame rate {rate} is outside 24-120 fps")
+    width, height = video.get("width") or 0, video.get("height") or 0
+    if width * 9 != height * 16:
+        warn(f"{path}: {width}x{height} is not 16:9")
+
+
 def loarc_kind(name: str) -> int:
     """Kind (1-6) of a stored archive name; ValueError unless it is the runtime's canonical overlay name."""
     if not name.startswith("overlay/"):
@@ -797,7 +864,8 @@ def loarc_scan(overlay: Path) -> dict[str, Path]:
 
     def add(name: str, path: Path) -> None:
         try:
-            loarc_kind(name)
+            if loarc_kind(name) == 4:
+                check_movie(path)
         except ValueError as exc:
             warn(f"skipped {path}: {exc}")
             return

@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "command_processor.h"
 #include "movie_clear.h"
+#include "movie_replace.h"
 #include "frame_plan.h"
 #include "display_gamma.h"
 #include "video.h"
@@ -455,6 +456,36 @@ namespace gpu
                         std::bit_cast<float>(m_movieClear.safeLeft), std::bit_cast<float>(m_movieClear.safeRight),
                         std::bit_cast<float>(m_movieClear.safeTop), std::bit_cast<float>(m_movieClear.safeBottom));
                 m_movieClear = {};
+                break;
+            }
+            return;
+        }
+        if (index >= movie_replace::RegisterBase && index <= movie_replace::Commit)
+        {
+            using namespace movie_replace;
+            auto& stage = m_movieReplace;
+            switch (index)
+            {
+            case Begin:
+                stage = {};
+                stage.active = value == Magic;
+                break;
+            case SurfaceInfo: if (stage.active) stage.surfaceInfo = value; break;
+            case ColorInfo: if (stage.active) stage.colorInfo = value; break;
+            case X: if (stage.active) stage.x = value; break;
+            case Y: if (stage.active) stage.y = value; break;
+            case Width: if (stage.active) stage.width = value; break;
+            case Height: if (stage.active) stage.height = value; break;
+            case Session: if (stage.active) stage.session = value; break;
+            case TimeLow: if (stage.active) stage.timeLow = value; break;
+            case TimeHigh: if (stage.active) stage.timeHigh = value; break;
+            case Commit:
+                if (stage.active && value == Magic)
+                    renderer::DrawMovieReplacement(stage.surfaceInfo, stage.colorInfo,
+                        std::bit_cast<float>(stage.x), std::bit_cast<float>(stage.y),
+                        std::bit_cast<float>(stage.width), std::bit_cast<float>(stage.height),
+                        stage.session, int64_t(uint64_t(stage.timeHigh) << 32 | stage.timeLow));
+                stage = {};
                 break;
             }
             return;

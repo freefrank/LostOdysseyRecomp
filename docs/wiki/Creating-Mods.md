@@ -83,7 +83,7 @@ All numbers are little endian. The header is 64 bytes:
 | 32 | 4 | kind mask: bit `1 << kind` for each kind present (Image 1, Font 2, Model 3, Movie 4, Texture 5, Text 6) |
 | 36 | 28 | zero |
 
-Each file's data starts at a multiple of 4096 (at least 4096) and ends before the index offset; data ranges do not overlap. The index follows the last file's data. It holds one record per file, sorted by name bytes, names unique: `u64` offset, `u64` size, `u32` name length (1 to 1100), then the UTF-8 name. A name is the file's path inside the mod folder with `/` separators and lower case: `overlay/textures/fp-<16 hex>.lotex2`, `overlay/images/key-fnv1a64-<16 hex>.lotex`, `overlay/<fonts|models|movies>/key-fnv1a64-<16 hex>.loasset`, or `overlay/text/<path>.json`.
+Each file's data starts at a multiple of 4096 (at least 4096) and ends before the index offset; data ranges do not overlap. The index follows the last file's data. It holds one record per file, sorted by name bytes, names unique: `u64` offset, `u64` size, `u32` name length (1 to 1100), then the UTF-8 name. A name is the file's path inside the mod folder with `/` separators and lower case: `overlay/textures/fp-<16 hex>.lotex2`, `overlay/images/key-fnv1a64-<16 hex>.lotex`, `overlay/<fonts|models>/key-fnv1a64-<16 hex>.loasset`, `overlay/movies/<name>.mp4` (`<name>` is 1 to 64 of `a-z`, `0-9`, `_`), or `overlay/text/<path>.json`.
 
 ## Export the original assets
 
@@ -114,6 +114,48 @@ my-export/export-summary.txt
 `textures/index.csv` holds the mod key and the fingerprint of every texture, so no catalog is needed.
 
 Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `text/index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
+
+## Replace a cutscene video
+
+A mod can replace a cutscene with an upscaled or re-rendered video. This works in the Windows build; other platforms play the original video. The replacement takes the place of the picture only: the game keeps playing the original audio and subtitles.
+
+The video is named after the original. [Export the movies](#export-the-original-assets) to see the names: `my-export/movies/mv_00v.wmv` is replaced by the key `mv_00v`. A key has 1 to 64 characters from `a-z`, `0-9` and `_`.
+
+What the video must be:
+
+- MP4 container with the `moov` box at the front (ffmpeg `-movflags +faststart`).
+- H.264 High profile, 8-bit `yuv420p`, progressive, BT.709 limited range, constant frame rate.
+- Any frame rate from 24 to 120 fps. The game picks frames by time, so the rate does not have to match the original. Twice the original's rate is easiest when a tool doubles the frames: 60 fps for a 30 fps original, 60000/1001 for 29.97. `ffprobe` on the exported video shows its rate (most are 30 or 29.97).
+- 16:9. Use 3840x2160 for desktop packs (H.264 level 5.2) and 1920x1080 for Steam Deck and phones (level 4.2).
+- No audio track is needed. An audio track in the file is ignored.
+- The same length as the original, lined up from the first frame. If a tool changes the frame rate, check that the length did not change: a video that runs longer or shorter drifts away from the sound.
+
+Example ffmpeg command:
+
+```sh
+ffmpeg -i mv_00v_upscaled.mov -c:v libx264 -profile:v high -pix_fmt yuv420p -r 60000/1001 -crf 18 -preset slow -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -an -movflags +faststart mv_00v.mp4
+```
+
+Install it as a mod:
+
+1. Make the folder `mods/my-cutscenes/overlay/movies/` in the game folder and put `mv_00v.mp4` in it.
+2. Make `mods/my-cutscenes/mod.ini` with this text:
+
+   ```ini
+   api_version=2
+   id=my-cutscenes
+   name=My Cutscenes
+   ```
+
+3. Start the game and play the cutscene.
+
+Instead of the `overlay/movies/` folder, a `mod.ini` line can point at the file anywhere in the mod folder (`api_version=1` also works):
+
+```ini
+movie:mv_00v=movies/mv_00v.mp4
+```
+
+`python tools/modding/lo_mod.py archive` packs `overlay/movies/*.mp4` into the `.loarc` like other files. It checks each video before packing: if `ffprobe` is installed it must be H.264, `yuv420p` and progressive, or the file is skipped with a message. It warns when the frame rate is outside 24-120 fps, the picture is not 16:9, or `moov` is after the video data.
 
 ## Make a texture pack (experimental)
 

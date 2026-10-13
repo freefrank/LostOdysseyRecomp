@@ -83,7 +83,7 @@ A v1 mod lists every file in a resource line. It may not use the v2 display fiel
 
 `api_version` is mandatory. ID defaults to the directory name and must contain 1-128 ASCII letters, digits, `.`, `_` or `-`, excluding `.` and `..`. Priority defaults to zero and is a signed 32-bit integer. Enabled defaults to true; accepted values are `true`, `false`, `1`, `0`. Unknown/duplicate/invalid metadata rejects the manifest. Disabled mods do not participate. Enabled duplicate IDs reject the lexically later directory.
 
-Resource kinds are `image`, `font`, `model`, `movie`, `texture` and `text`. Invalid resource lines, and lines whose file is missing, are diagnosed and skipped. Payload paths are relative to the mod directory and may not be absolute or contain `..`. Containment is checked on the path as written, not after symlink resolution, so symlinked mod folders and a manager's virtual file system work. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod. Within the same manifest, the last line for a resource wins.
+Resource kinds are `image`, `font`, `model`, `movie`, `texture` and `text`. A movie key is the original video's file name without the extension, in lower case: `mv_00v` for `bin/xenon/mov/mv_00v.wmv` (the name `--export-assets` gives it under `movies/`). It has 1 to 64 characters from `a-z`, `0-9` and `_`; upper case is accepted and lowered, anything else is invalid. The line is `movie:mv_00v=movies/mv_00v.mp4`. Invalid resource lines, and lines whose file is missing, are diagnosed and skipped. Payload paths are relative to the mod directory and may not be absolute or contain `..`. Containment is checked on the path as written, not after symlink resolution, so symlinked mod folders and a manager's virtual file system work. Metadata is parsed before resources, so a trailing priority or enabled field applies to the whole mod. Within the same manifest, the last line for a resource wins.
 
 ### Order and `mod-list.ini`
 
@@ -137,7 +137,9 @@ Language packs follow the mods, by folder name, as read-only entries: `kind` is 
 overlay/images/key-fnv1a64-<hash>.lotex
 ```
 
-Compute FNV-1a-64 over canonical-key UTF-8 bytes only: offset basis `14695981039346656037`, xor each byte, multiply by `1099511628211` modulo 2^64. Format 16 lowercase hex digits. The type selects the directory, not the hash input. Reserved kinds use `fonts`, `models`, `movies` and `.loasset`; their payload formats are not defined yet.
+Compute FNV-1a-64 over canonical-key UTF-8 bytes only: offset basis `14695981039346656037`, xor each byte, multiply by `1099511628211` modulo 2^64. Format 16 lowercase hex digits. The type selects the directory, not the hash input. Reserved kinds use `fonts`, `models` and `.loasset`; their payload formats are not defined yet.
+
+Movies are not hashed. A movie replacement is an H.264 MP4 named after the original video's file name: `overlay/movies/<key>.mp4`, for example `overlay/movies/mv_00v.mp4`. In a mod folder's `overlay/` the file name may be in any ASCII case; in a `.loarc` archive it is lower case. The video format is described in [Creating mods](Creating-Mods.md#replace-a-cutscene-video).
 
 The filename hash is a lookup convenience, not a cryptographic identity. LOTEX1 also contains the full canonical key, which must exactly match the request. Do not rename a payload to target a different resource.
 
@@ -222,6 +224,6 @@ Text has to use characters the game's font for that language has. The English (`
 
 `RegisterProvider(kind, shared_ptr<AssetProvider>)` registers at most one provider per type. It returns false for an invalid kind, null provider or occupied slot. Providers run outside the API mutex and retain shared ownership during callbacks. Exceptions, mismatched identities and non-file results are ignored. Recursive resolution skips providers to avoid recursion. `UnregisterProvider(kind, pointer)` removes only the matching instance; destruction happens outside the mutex. Providers are trusted host extensions and may resolve outside the mods root.
 
-Font/model/movie registration, parsing and path conventions are extension points only. A future consumer must define its payload validator, integrate at an actual load/decode boundary, preserve original fallback, observe generation changes and add acceptance coverage. No TTF, GLB or movie decoder is activated merely by adding a manifest line.
+Font and model registration, parsing and path conventions are extension points only. A future consumer must define its payload validator, integrate at an actual load/decode boundary, preserve original fallback, observe generation changes and add acceptance coverage. No TTF or GLB decoder is activated merely by adding a manifest line. Movies have a consumer: the Windows build plays a resolved `movie` replacement in place of the original cutscene video and falls back to the original when the file cannot be played. Other platforms play the original video.
 
 `Root()`, `Mode()`, `Generation()`, `Diagnostics()` and `ListMods()` support host/tool diagnostics. Diagnostics also go to stderr with the `[mods]` prefix; the snapshot retains at most 256 records. This data interface is not an operating-system sandbox against a process racing filesystem changes.

@@ -179,9 +179,19 @@ std::string CanonicalTextKey(std::string_view key) {
     if (path.empty() || path.back() == '/' || path.size() > 1024) return {};
     return Lower(std::move(path));
 }
+// Movie keys are the original video's file name stem: 1-64 of [a-z0-9_], given
+// in any ASCII case and stored lower case (mv_00v for bin/xenon/mov/mv_00v.wmv).
+std::string CanonicalMovieKey(std::string_view key) {
+    if (key.empty() || key.size() > 64) return {};
+    auto lower = Lower(std::string(key));
+    const bool valid = std::all_of(lower.begin(), lower.end(),
+        [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
+    return valid ? lower : std::string{};
+}
 // Texture fingerprints are matched exactly, never normalized.
 std::string CanonicalKey(AssetKind kind, std::string_view key) {
     if (kind == AssetKind::Text) return CanonicalTextKey(key);
+    if (kind == AssetKind::Movie) return CanonicalMovieKey(key);
     if (kind != AssetKind::Texture) return CanonicalKey(key);
     return Hex16(key) ? std::string(key) : std::string{};
 }
@@ -191,6 +201,7 @@ std::string OverlayKey(AssetKind kind, const std::string& key) {
     // replace the same image collide on the same path.
     if (kind == AssetKind::Texture) return "overlay/textures/fp-" + key + ".lotex2";
     if (kind == AssetKind::Text) return "overlay/text/" + key + ".json";
+    if (kind == AssetKind::Movie) return "overlay/movies/" + key + ".mp4";
     uint64_t hash = 14695981039346656037ull;
     for (unsigned char c : key) { hash ^= c; hash *= 1099511628211ull; }
     char name[40];
@@ -207,6 +218,13 @@ std::optional<std::string_view> HashedName(AssetKind kind, std::string_view name
         name.substr(prefix.size() + 16) != suffix || !Hex16(name.substr(prefix.size(), 16))) return {};
     return name.substr(prefix.size(), 16);
 }
+// The canonical key of a movie overlay file name (<key>.mp4, lower case); empty otherwise.
+std::string MovieName(std::string_view name) {
+    if (name.size() <= 4 || name.substr(name.size() - 4) != ".mp4") return {};
+    const auto stem = name.substr(0, name.size() - 4);
+    auto key = CanonicalMovieKey(stem);
+    return key == stem ? key : std::string{};
+}
 // An archive entry is named like its loose file would be under the mod folder:
 // overlay/<kind folder>/<file>, '/'-separated and lower case.
 std::optional<AssetId> ArchiveEntryId(std::string_view name) {
@@ -222,6 +240,11 @@ std::optional<AssetId> ArchiveEntryId(std::string_view name) {
         auto key = CanonicalTextKey(member);
         if (key.empty() || key != member) return {};
         return AssetId{AssetKind::Text, std::move(key)};
+    }
+    if (*kind == AssetKind::Movie) {
+        auto key = MovieName(file);
+        if (key.empty()) return {};
+        return AssetId{AssetKind::Movie, std::move(key)};
     }
     const auto hex = HashedName(*kind, file);
     if (!hex) return {};
@@ -385,9 +408,16 @@ size_t ListKindFolder(Index& index, AssetKind kind, const std::filesystem::path&
         for (std::filesystem::directory_iterator it(folder, listError), last; !listError && it != last; it.increment(listError)) {
             std::error_code fileError;
             const auto name = Lower(Utf8(it->path().filename()));
-            const auto hex = HashedName(kind, name);
-            if (!hex || !it->is_regular_file(fileError)) continue;
-            AssetId id{kind, kind == AssetKind::Texture ? std::string(*hex) : std::string{}};
+            AssetId id{kind, {}};
+            if (kind == AssetKind::Movie) {
+                id.key = MovieName(name);
+                if (id.key.empty()) continue;
+            } else {
+                const auto hex = HashedName(kind, name);
+                if (!hex) continue;
+                if (kind == AssetKind::Texture) id.key = std::string(*hex);
+            }
+            if (!it->is_regular_file(fileError)) continue;
             index.entries.try_emplace(base + name, Entry{std::move(id), it->path(), mod});
             ++count;
         }
