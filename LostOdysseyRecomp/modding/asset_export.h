@@ -10,8 +10,8 @@
 // PNG (keyed like image mods), movies as the original WMV bytes, the game's
 // text as JSON (keyed like language packs), and on request models (LOD 0 with
 // skeleton) and animation sets as glTF binaries (.glb); an animation set
-// carries the model whose skeleton it moves. --export-model-textures embeds each
-// material's colour texture in those .glb files. --export-select names a UTF-8
+// carries the model whose skeleton it moves. --export-model-textures writes each
+// material's colour texture beside the models and links it. --export-select names a UTF-8
 // file of list.csv names, one per line, and exports only those. --export-language
 // keeps the text of one language (int, jpn...); --export-language-pack writes
 // only that text (int by default) as a language pack to translate:

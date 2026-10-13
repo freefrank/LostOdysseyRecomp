@@ -87,7 +87,7 @@ Each file's data starts at a multiple of 4096 (at least 4096) and ends before th
 
 ## Export the original assets
 
-The game can export its own textures, movies and text from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
+The game can export its own textures, movies, text, 3D models and animations from your game data as a starting point. The export is for your reference only: it comes from your copy of the game and must not be redistributed or bundled in a mod.
 
 ```sh
 LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies --export-filter UI_MAIN
@@ -95,10 +95,12 @@ LostOdysseyRecomp.exe --export-assets my-export --export-kinds textures,movies -
 
 The output folder must not exist or must be empty, and it must be outside the game data. Optional arguments:
 
-- `--export-kinds`: `textures`, `movies`, `text`, or `fingerprints` (the texture index without PNG files). The default is textures, movies and text.
+- `--export-kinds`: `textures`, `movies`, `text`, `models`, `animations`, or `fingerprints` (the texture index without PNG files). The default is textures, movies and text; models and animations are not in the default because of their size.
 - `--export-filter`: only names containing this text.
 - `--export-language`: the text of one language only: `int`, `jpn`, `deu`, `fra`, `spa`, `ita`, `kor`, `chi` or `sch`.
 - `--export-language-pack <id>`: only text, written as a language pack to translate (see [make a language pack](#make-a-language-pack-a-new-language)).
+- `--export-model-textures`: with `models`, writes each material's colour texture as a PNG file to a `textures` folder beside the models and links it from the `.glb` files.
+- `--export-select <file>`: exports only the names listed in a UTF-8 text file, one per line (see [models and animations](#models-and-animations-for-reference)).
 
 No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
 
@@ -108,10 +110,38 @@ my-export/textures/index.csv        key,file,width,height,format,fingerprint,fin
 my-export/movies/<name>.wmv         original videos, unchanged
 my-export/text/<file path>.json     {"key": "text"} for one game text file
 my-export/text/index.csv            path,language,format,source,entries,round_trip
+my-export/models/<package path>/<object>.<export index>.glb   3D models (glTF)
+my-export/models/index.csv          key,file,class,vertices,triangles,bones
+my-export/animations/<package path>/<set>.<index>.glb         animation sets (glTF)
+my-export/animations/index.csv      key,file,sequences,tracks,frames,model
 my-export/export-summary.txt
 ```
 
 `textures/index.csv` holds the mod key and the fingerprint of every texture, so no catalog is needed.
+
+### Models and animations (for reference)
+
+Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. They are for reference only: the game cannot load replacement models or animations yet, so a mod cannot replace them.
+
+1. Export the models, the animations or both. Add `--export-model-textures` to link each material's colour texture:
+
+   ```sh
+   LostOdysseyRecomp.exe --export-assets my-export --export-kinds models,animations --export-model-textures
+   ```
+
+   In the [MO2 tool](Mod-Organizer-2.md#export), tick **Models** (with **With textures**) and **Animations**. Both are off by default because they are large.
+2. Open `my-export/models/index.csv` or `my-export/animations/index.csv` to find a file by its `key`. A model file holds the highest-detail level with its skeleton, normals, UV sets, vertex colours and material slot names. An animation file holds the character model whose skeleton the set moves (without textures), and every sequence of the set as its own glTF animation; Blender lists them as Actions (use the NLA editor to combine them). Some animation sets, such as weapon props in cutscenes and camera boxes, have no matching model and are skipped; `export-summary.txt` lists them.
+3. To export only some of them, first write the list. Run the export with `--export-list` and the same kinds:
+
+   ```sh
+   LostOdysseyRecomp.exe --export-assets my-list --export-kinds models,animations --export-list
+   ```
+
+   `my-list/list.csv` has a row for each model and animation set, with its `name`. Copy the `name` values you want into a UTF-8 text file, one per line, for example `selected.txt`. Then export into a new folder:
+
+   ```sh
+   LostOdysseyRecomp.exe --export-assets my-selection --export-kinds models,animations --export-select selected.txt
+   ```
 
 Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `text/index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
 

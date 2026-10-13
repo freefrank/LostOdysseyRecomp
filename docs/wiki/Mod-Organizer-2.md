@@ -74,7 +74,7 @@ If the data folder of an instance is your game folder (step 2.6), create a new i
 
 ## Export the original assets
 
-The export tool copies the game's own textures, movies and text out of your game data. Use them as the starting point for a mod: textures to repaint or upscale, text to translate. It needs `lostodysseyrecomp_export.py` from [step 1](#1-install-the-plugins-once).
+The export tool copies the game's own textures, movies, text, 3D models and animations out of your game data. Use them as the starting point for a mod: textures to repaint or upscale, text to translate. Models and animations are for reference only. It needs `lostodysseyrecomp_export.py` from [step 1](#1-install-the-plugins-once).
 
 ### Open the tool
 
@@ -89,11 +89,14 @@ In the menu bar, choose **Tools > Tool Plugins > Export Lost Odyssey assets**.
 
      ![The Game folder warning for a folder without LostOdysseyRecomp.exe](images/mo2/export-game-folder.webp)
 
-   - **Output folder**: where the files go. The default is a new `lost-odyssey-export` folder in your MO2 instance folder. It must be a new or empty folder, outside the game folder. A full export needs about 7 GB of free space.
+   - **Output folder**: where the files go. The default is a new `lost-odyssey-export` folder in your MO2 instance folder. It must be a new or empty folder, outside the game folder. A full export needs about 7 GB of free space, and models and animations need about 6.5 GB more.
    - **Export**: tick what you need.
      - **Textures**: every texture as a PNG image (about 5.3 GB).
      - **Movies**: the CG movies as the original WMV files (about 1.7 GB).
      - **Text**: all game text as JSON files, for translations (about 33 MB).
+     - **Models**: every 3D model as a glTF `.glb` file (about 4 GB). **With textures**, on by default, also links each material's colour texture to its model.
+     - **Animations**: each animation set with the character model it moves, as a glTF `.glb` file (about 2.5 GB).
+     - Models and Animations are off by default because of their size.
    - **Filter** (optional): export only files whose path contains this text, for example `rpmenurescommon` (the menu artwork). Leave it empty to export everything.
    - **Text language**: the language of the exported text. **All languages** exports every language on your discs.
    - **Language pack**: leave it empty here. See [Make a language pack](#make-a-language-pack).
@@ -109,6 +112,7 @@ If it fails, the window shows the reason:
 | `found no game data` | The game is not set up yet, or **Game folder** is not your game folder. Start the game once from that folder and finish the first-start setup that imports your discs, or press **Change...** and choose your LostOdysseyRecomp folder. |
 | `has no LostOdysseyRecomp.exe` or `Could not start LostOdysseyRecomp.exe` | **Game folder** is not the folder that has `LostOdysseyRecomp.exe`. Press **Change...**, and fix MO2's own folder as in [If MO2 points to the wrong folder](#if-mo2-points-to-the-wrong-folder). |
 | `cannot list assets; update the game` | Your `LostOdysseyRecomp.exe` is older than the tool. Update the game. |
+| `cannot export models, animations or selections; update the game` | Your `LostOdysseyRecomp.exe` is older than the models, animations and **Export selected** options. Update the game. |
 
 ### Preview what will be exported
 
@@ -120,8 +124,10 @@ The window can list the files an export would write before you start it.
    - **Texture**: the image, with its size and format.
    - **Movie**: its name and size. Press **Play** to export that movie and open it in your video player.
    - **Text**: the first 200 lines of the JSON file.
+   - **Model** or **Animation**: its name, path and counts (vertices, triangles and bones; or sequences, tracks and frames), with an **Open model** or **Open animation** button. The button exports only that row and opens it in your default 3D viewer (Windows 3D Viewer or Blender).
    The first preview of a file takes a moment. Closing the window deletes the preview files.
 4. Double-click a row to put its path into **Filter**. **Start** then exports only that package, movie or text file.
+5. Select several rows with Ctrl or Shift, then press **Export selected (N)** to export only those rows, where N is the number selected. The button is off while **Language pack** holds an id.
 
 ![The export window after a scan, filtered to rpmenurescommon_int, with a menu texture previewed](images/mo2/export-preview.webp)
 
@@ -132,6 +138,8 @@ lost-odyssey-export/
   textures/            PNG images; index.csv lists each texture's mod key and fingerprint
   movies/              the CG movies (.wmv)
   text/                one .json file per game text file; index.csv lists them
+  models/              3D models as glTF (.glb); index.csv lists them (with Models ticked)
+  animations/          animation sets as glTF (.glb); index.csv lists them (with Animations ticked)
   export-summary.txt   how many files were exported and what was skipped
 ```
 
@@ -139,6 +147,7 @@ Next steps:
 
 - Repaint or upscale textures: [Make a texture pack](Creating-Mods.md#make-a-texture-pack-experimental).
 - Translate text: [Translate the game's text](Creating-Mods.md#translate-the-games-text-experimental).
+- Models and animations (for reference only, not replaceable yet): [Models and animations](Creating-Mods.md#models-and-animations-for-reference).
 
 The tool reads the game folder directly, not through MO2, so it exports the original game files, not your installed mods. With the DLC installed, files the DLC changes come from the DLC.
 

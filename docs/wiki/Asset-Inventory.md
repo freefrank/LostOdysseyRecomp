@@ -2,7 +2,7 @@
 
 This page describes the metadata catalog that mod developers can build from the game data. The inventory is read-only: it does not launch the game or modify imported disc data, and it runs with the native host toolchain without WSL or Docker. Reports contain metadata, hashes and classifications only; they do not redistribute original textures, models, audio, scripts or other payloads.
 
-You do not need the inventory to make a mod. The game can export its own textures, movies and text with `--export-assets` (see [Creating mods](Creating-Mods.md#export-the-original-assets)), and that export already lists each texture's mod key and fingerprint. The inventory is for counting and classifying everything on the four discs, and it can also feed the older native-menu workflow.
+You do not need the inventory to make a mod. The game can export its own textures, movies, text, 3D models and animations with `--export-assets` (see [Creating mods](Creating-Mods.md#export-the-original-assets)), and that export already lists each texture's mod key and fingerprint. The inventory is for counting and classifying everything on the four discs, and it can also feed the older native-menu workflow.
 
 ## Usage
 
@@ -48,7 +48,7 @@ The following figures are from the complete four-disc scan at source commit `fe8
 | Subtitles | 1,118 unique / 4,548 entries | Subtitle files |
 | BIN files | 703 unique / 2,860 entries | Event scripts and other binary data, counted by extension |
 
-`StaticMeshRPG` is a game-specific resource class; its export count is confirmed, but mesh geometry decoding is not. Reading the class definition confirms that `SkeletalMesh_VC` has `super_ref` pointing to `fpPawn`, so it belongs to `scene_actors`. There are 1,933 object names that do not satisfy the current mod key grammar; they retain `key_error`, which is separate from package parse failure.
+`StaticMeshRPG` is a game-specific resource class. The inventory counts its exports; `--export-assets --export-kinds models` decodes its geometry: it serializes as a `StaticMesh`, and this game's static vertices are 40 bytes. Reading the class definition confirms that `SkeletalMesh_VC` has `super_ref` pointing to `fpPawn`, so it belongs to `scene_actors`. There are 1,933 object names that do not satisfy the current mod key grammar; they retain `key_error`, which is separate from package parse failure.
 
 After updating the decoder, revalidate registered UE3 candidates and regenerate a report in a new directory:
 
@@ -107,7 +107,7 @@ The UI label is an additional usage hint from export classes or path/name heuris
 - The native settings-menu `UI_MAIN_00` atlas and the texture pages used by native menu fonts, as images by key (LOTEX1).
 - The textures the game draws, by fingerprint (LOTEX2). This path works from the `--export-assets` export, not from this catalog.
 
-See [Modding](Modding.md) for the full list. The catalog confirms only `UI_MAIN_00` as an `init` consumer; font pages remain candidates. Models, font metrics, movies and other resources still need a runtime consumer. Names containing characters unsupported by the current API retain `key_error` and an empty `mod_key`; the tool does not guess a key.
+See [Modding](Modding.md) for the full list. The catalog confirms only `UI_MAIN_00` as an `init` consumer; font pages remain candidates. Models, font metrics, movies and other resources still need a runtime consumer. Models and animations can be exported for reference as glTF with `--export-assets` (see [Creating mods](Creating-Mods.md#models-and-animations-for-reference)); the game cannot load replacements for them yet. Names containing characters unsupported by the current API retain `key_error` and an empty `mod_key`; the tool does not guess a key.
 
 An FPD offset identifies the original archive extent and must not be confused with an unpacked UE3 object offset. `Default__*` templates are kept in `default_templates`; `Model` and `Terrain` are `world_geometry`; `StaticMeshRPG` is classified as models, while `SkeletalMesh_VC` is classified as `scene_actors`.
 
