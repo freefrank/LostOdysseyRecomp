@@ -6,10 +6,26 @@ LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you
 
 1. Use MO2 2.5 or newer on Windows. It already includes the `basic_games` plugin.
 2. Download [game_lostodysseyrecomp.py](https://github.com/freefrank/LostOdysseyRecomp/blob/main/tools/modding/mo2/game_lostodysseyrecomp.py) and put it in `<MO2>/plugins/basic_games/games/`.
-3. Start MO2 and create a new instance. Pick **Lost Odyssey Recomp** and browse to the folder that holds `LostOdysseyRecomp.exe` (the extracted Windows ZIP). If that folder has no `mods/` subfolder yet, start the game once or create the folder.
+3. Start MO2 and create a new instance. Pick **Lost Odyssey Recomp** and browse to your own LostOdysseyRecomp folder: the folder you start the game from, which holds `LostOdysseyRecomp.exe` (the extracted Windows ZIP). Not the `game` folder inside it, and not a folder from someone else's guide or screenshot. If that folder has no `mods/` subfolder yet, start the game once or create the folder.
 4. Install mod archives with MO2's install button, enable them, and start the game with MO2's **Run** button. Restart the game after you change mods.
 
 Mod folders (`mods/<id>/mod.ini` with `mods/<id>/overlay/...`), older `mod.ini` packages, overlay packages (a top-level `overlay/` folder) and language packs (a folder with a `language.ini`) install as they are. The plugin removes the outer `mods/` folder of those ZIPs, so the archive's contents land in the game's `mods/`. An archive whose top holds `mod.ini` or `language.ini` itself (the inside of such a folder) is marked as invalid: put it in a folder named after the mod in MO2's manual installer. Download the plugin again if MO2 says a mod folder or language pack has no valid game data.
+
+### If MO2 points to the wrong folder
+
+MO2 keeps an instance's game folder in the instance's `ModOrganizer.ini`. To point an existing instance at your LostOdysseyRecomp folder:
+
+1. Close MO2.
+2. Open the instance's `ModOrganizer.ini` in a text editor. A global instance keeps it in `%LOCALAPPDATA%\ModOrganizer\<instance name>\` (paste that path into the File Explorer address bar, with your instance's name). A portable instance keeps it in the MO2 folder itself.
+3. Under `[General]`, change the `gamePath` line to your folder, writing every `\` twice. For `D:\Games\LostOdysseyRecomp`:
+
+   ```ini
+   gamePath=@ByteArray(D:\\Games\\LostOdysseyRecomp)
+   ```
+
+4. Save the file and start MO2.
+
+Creating a new instance for the right folder (step 3 above) works too; move your mods over by installing them again.
 
 ## Export the original assets
 
@@ -26,12 +42,13 @@ The export tool copies the game's own textures, movies and text out of your game
 1. Start MO2 with your Lost Odyssey Recomp instance.
 2. In the menu bar, choose **Tools > Tool Plugins > Export Lost Odyssey assets**.
 3. Check the window:
+   - **Game folder**: the folder the tool reads, normally MO2's game folder. If the window says it has no `LostOdysseyRecomp.exe`, press **Change...** and choose the folder you start the game from. The tool remembers it. This changes only the export tool: to play with mods, fix MO2's folder as in [If MO2 points to the wrong folder](#if-mo2-points-to-the-wrong-folder).
    - **Output folder**: where the files go. The default is a new `lost-odyssey-export` folder in your MO2 instance folder. It must be a new or empty folder, outside the game folder. A full export needs about 7 GB of free space.
    - **Export**: tick what you need.
      - **Textures**: every texture as a PNG image (about 5.3 GB).
      - **Movies**: the CG movies as the original WMV files (about 1.7 GB).
      - **Text**: all game text as JSON files, for translations (about 33 MB).
-   - **Filter** (optional): export only files whose path contains this text, for example `UI_MAIN` (the settings menu artwork). Leave it empty to export everything.
+   - **Filter** (optional): export only files whose path contains this text, for example `rpmenurescommon` (the menu artwork). Leave it empty to export everything.
    - **Text language**: the language of the exported text. **All languages** exports every language on your discs.
    - **Language pack**: leave it empty here. See [Make a language pack](#make-a-language-pack).
 4. Press **Start**. The bar shows the progress. A full export takes about a minute on an SSD.
@@ -43,8 +60,21 @@ If it fails, the window shows the reason:
 | --- | --- |
 | `output folder ... is not empty` | Choose a new or empty folder. |
 | `output folder ... is inside the game data` | Choose a folder outside the game folder. |
-| `no game data` | The game is not set up yet. Start it once from MO2 and finish the first-start setup that imports your discs. |
-| `Could not start LostOdysseyRecomp.exe` | The instance's game folder is not the folder that has `LostOdysseyRecomp.exe`. Fix it in MO2's instance settings. |
+| `found no game data` | The game is not set up yet, or **Game folder** is not your game folder. Start the game once from that folder and finish the first-start setup that imports your discs, or press **Change...** and choose your LostOdysseyRecomp folder. |
+| `has no LostOdysseyRecomp.exe` or `Could not start LostOdysseyRecomp.exe` | **Game folder** is not the folder that has `LostOdysseyRecomp.exe`. Press **Change...**, and fix MO2's own folder as in [If MO2 points to the wrong folder](#if-mo2-points-to-the-wrong-folder). |
+
+### Preview what will be exported
+
+The window can list the files an export would write before you start it. This needs version 1.2.0 of the tool: download it again if the window has no **Scan game data** button.
+
+1. Press **Scan game data**. The game lists all its textures, movies and text once. It takes about 10 seconds. The list is saved, so the next time you open the window it shows at once. After a game update, press **Scan game data** again; the old list is not used for the new version.
+2. The table shows what the current settings would export. It changes as you tick **Export** boxes or change **Filter**, **Text language** or **Language pack**. The line under it counts the files, for example `1,234 textures, 3 movies, 0 text files will be exported`.
+3. Click a row to preview it on the right:
+   - **Texture**: the image, with its size and format.
+   - **Movie**: its name and size. Press **Play** to export that movie and open it in your video player.
+   - **Text**: the first 200 lines of the JSON file.
+   The first preview of a file takes a moment. Closing the window deletes the preview files.
+4. Double-click a row to put its path into **Filter**. **Start** then exports only that package, movie or text file.
 
 ### What you get
 

@@ -352,7 +352,8 @@ std::vector<uint8_t> DecompressLzo(std::span<const uint8_t> stored, uint32_t exp
 // Top mip bytes as stored: tiled, big endian.
 struct TopMip { const Format *format = nullptr; uint32_t width = 0, height = 0, mips = 0; std::vector<uint8_t> raw; };
 
-TopMip ReadTopMip(const Package &package, const Export &e)
+// decode false (--export-list) checks the same headers and leaves raw empty.
+TopMip ReadTopMip(const Package &package, const Export &e, bool decode = true)
 {
     Require(e.size >= 4, "empty texture object");
     Reader r{package.bytes.first(size_t(e.offset) + e.size), e.offset};
@@ -393,10 +394,11 @@ TopMip ReadTopMip(const Package &package, const Export &e)
     if (!inlinePayload(top)) throw Skip("top_mip_not_stored", "mip 0 flags " + std::to_string(top.flags));
     if (top.flags & 0x82) throw Skip("unsupported_compression", "mip 0 flags " + std::to_string(top.flags));
     const auto payload = r.Take(top.size);
-    std::vector<uint8_t> raw;
-    if (top.flags & 0x10) raw = DecompressLzo(payload, top.count);
-    else { Require(top.size == top.count, "uncompressed mip size mismatch"); raw.assign(payload.begin(), payload.end()); }
     Require(r.U32() == uint32_t(width) && r.U32() == uint32_t(height), "top mip size differs from the texture size");
+    std::vector<uint8_t> raw;
+    if (!decode) Require((top.flags & 0x10) || top.size == top.count, "uncompressed mip size mismatch");
+    else if (top.flags & 0x10) raw = DecompressLzo(payload, top.count);
+    else { Require(top.size == top.count, "uncompressed mip size mismatch"); raw.assign(payload.begin(), payload.end()); }
     return {&*format, uint32_t(width), uint32_t(height), mips, std::move(raw)};
 }
 
@@ -530,10 +532,12 @@ std::string FileStem(std::string_view object)
 
 struct Row { std::string key, file; uint32_t width = 0, height = 0; const char *format = ""; uint64_t fingerprint = 0, fingerprintTiled = 0; };
 struct TextRow { std::string path, language, source; text::Format format = text::Format::None; size_t entries = 0; bool roundTrip = false; };
+struct MovieRow { std::string name, path; uint64_t bytes = 0; };
 struct Stats
 {
     std::vector<Row> rows;
     std::vector<TextRow> texts;
+    std::vector<MovieRow> movieRows;
     std::map<std::string, uint64_t> formats, skipped, examples;
     std::vector<std::string> notes;
     uint64_t textureBytes = 0, movies = 0, movieBytes = 0, packages = 0, notPackages = 0;
@@ -546,6 +550,7 @@ struct Stats
     {
         std::move(other.rows.begin(), other.rows.end(), std::back_inserter(rows));
         std::move(other.texts.begin(), other.texts.end(), std::back_inserter(texts));
+        std::move(other.movieRows.begin(), other.movieRows.end(), std::back_inserter(movieRows));
         for (const auto &[k, v] : other.formats) formats[k] += v;
         for (const auto &[k, v] : other.skipped) skipped[k] += v;
         for (auto &note : other.notes)
@@ -655,7 +660,8 @@ void ExportText(const Job &job, const fs::path &textRoot, const fs::path &refere
     stats.texts.push_back({job.path, text::Language(job.path), job.source, job.textFormat, entries.size(), roundTrip});
 }
 
-void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool pngs)
+// list: the texture's headers only, no decode, fingerprint or PNG.
+void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool pngs, bool list)
 {
     std::vector<uint8_t> bytes;
     try
@@ -689,6 +695,18 @@ void ExportPackage(const Job &job, const fs::path &textures, Stats &stats, bool 
             continue;
         }
         if (key.empty()) { stats.Skipped("invalid_key", job.path + "#" + std::to_string(index)); continue; }
+        if (list)
+        {
+            try
+            {
+                const auto top = ReadTopMip(*package, e, false);
+                stats.rows.push_back({key, job.path, top.width, top.height, top.format->name});
+                ++stats.formats[top.format->name];
+            }
+            catch (const Skip &skip) { stats.Skipped(skip.reason, key + ": " + skip.what()); }
+            catch (const std::exception &error) { stats.Skipped("decode_error", key + ": " + error.what()); }
+            continue;
+        }
         Image image;
         try { image = DecodeTexture(*package, e); }
         catch (const Skip &skip) { stats.Skipped(skip.reason, key + ": " + skip.what()); continue; }
@@ -821,6 +839,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         const std::string_view argument = argv[i];
         if (!argument.starts_with("--export-")) continue;
         option = true;
+        if (argument == "--export-list") { parsed.list = true; continue; }
         const bool known = argument == "--export-assets" || argument == "--export-kinds" || argument == "--export-filter" ||
                            argument == "--export-language" || argument == "--export-language-pack";
         if (!known) { parsed.error = "unknown option " + std::string(argument); continue; }
@@ -955,9 +974,12 @@ int Run(const Request &request, const fs::path &gameRoot)
     try
     {
         CreateDirectories(output);
-        if (request.textures) CreateDirectories(textures);
-        if (request.movies) CreateDirectories(movies);
-        if (request.text) CreateDirectories(texts);
+        if (!request.list)
+        {
+            if (request.textures) CreateDirectories(textures);
+            if (request.movies) CreateDirectories(movies);
+            if (request.text) CreateDirectories(texts);
+        }
     }
     catch (const std::exception &failure) { return Fail(failure.what()); }
 
@@ -1066,9 +1088,11 @@ int Run(const Request &request, const fs::path &gameRoot)
             Stats local;
             try
             {
-                if (jobs[index].kind == Job::Kind::Package) ExportPackage(jobs[index], textures, local, request.pngs);
-                else if (jobs[index].kind == Job::Kind::Text) ExportText(jobs[index], texts, reference, local);
-                else ExportMovie(jobs[index], movies, local);
+                const auto &job = jobs[index];
+                if (job.kind == Job::Kind::Package) ExportPackage(job, textures, local, request.pngs, request.list);
+                else if (job.kind == Job::Kind::Text) ExportText(job, request.list ? fs::path{} : texts, request.list ? fs::path{} : reference, local);
+                else if (request.list) local.movieRows.push_back({job.movieName, job.path, job.size});
+                else ExportMovie(job, movies, local);
             }
             catch (const std::exception &failure)
             {
@@ -1094,6 +1118,30 @@ int Run(const Request &request, const fs::path &gameRoot)
     for (unsigned i = 0; i < threads; ++i) pool.emplace_back(worker);
     for (auto &thread : pool) thread.join();
     if (!fatal.empty()) return Fail(fatal);
+
+    if (request.list)
+    {
+        // kind,name,path,width,height,format,language,entries,bytes: name is the
+        // texture key, the movie's output file name or the text member path.
+        std::sort(total.rows.begin(), total.rows.end(), [](const Row &a, const Row &b) { return a.key < b.key; });
+        std::sort(total.movieRows.begin(), total.movieRows.end(), [](const MovieRow &a, const MovieRow &b) { return a.path < b.path; });
+        std::sort(total.texts.begin(), total.texts.end(), [](const TextRow &a, const TextRow &b) { return a.path < b.path; });
+        std::string csv = "kind,name,path,width,height,format,language,entries,bytes\n";
+        for (const auto &row : total.rows)
+            csv += "texture," + Csv(row.key) + "," + Csv(row.file) + "," + std::to_string(row.width) + "," +
+                   std::to_string(row.height) + "," + row.format + ",,,\n";
+        for (const auto &row : total.movieRows)
+            csv += "movie," + Csv(row.name) + "," + Csv(row.path) + ",,,,,," + std::to_string(row.bytes) + "\n";
+        for (const auto &row : total.texts)
+            csv += "text," + Csv(row.path) + "," + Csv(row.path) + ",,," + text::Name(row.format) + "," + row.language + "," +
+                   std::to_string(row.entries) + ",\n";
+        try { WriteFile(output / "list.csv", csv.data(), csv.size()); }
+        catch (const std::exception &failure) { return Fail(failure.what()); }
+        std::printf("listed %zu textures, %zu movies, %zu text files, skipped %llu\n", total.rows.size(), total.movieRows.size(),
+                    total.texts.size(), static_cast<unsigned long long>(total.SkippedTotal()));
+        std::fflush(stdout);
+        return 0;
+    }
 
     try
     {

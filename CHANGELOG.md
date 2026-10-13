@@ -17,6 +17,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android: less crackling in the sound when the device is busy or hot.
 - If the graphics driver stops working, the game says so and closes instead of freezing on the last picture.
 - Mods can ship their files as one `overlay.loarc` archive instead of thousands of loose files; `tools/modding/lo_mod.py archive` makes it.
+- The MO2 export tool previews what it will export: a list of the textures, movies and text, with a picture, the video or the text of the selected one.
+- The MO2 export tool shows the game folder it reads and says how to fix it when it is not your LostOdysseyRecomp folder.
 
 ### 简体中文
 
@@ -29,6 +31,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android：设备繁忙或发热时，声音的爆音更少。
 - 显卡驱动停止工作时，游戏会弹出提示并关闭，不再停在最后一帧。
 - Mod 可以把文件打成一个 `overlay.loarc` 包发布，不用再带成千上万个散文件；用 `tools/modding/lo_mod.py archive` 打包。
+- MO2 导出工具可以预览要导出的内容：列出材质、影片和文本，选中一项可以看图片、播放影片或查看文本。
+- MO2 导出工具会显示它读取的游戏目录；目录不是你的 LostOdysseyRecomp 文件夹时，会提示怎么改。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
