@@ -1028,8 +1028,22 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         line(labelLeft, y, labelLeft + labelWidth, y, focused ? MakeColor(255, 244, 244, 239) : MakeColor(255, 145, 147, 146));
         line(labelLeft, y + rowHeight - 2, labelLeft + labelWidth, y + rowHeight - 2,
              focused ? MakeColor(255, 56, 57, 57) : MakeColor(255, 69, 71, 71));
-        text(82, y, 274, rowHeight - 2, row.name, 24,
-             !row.enabled ? disabled : focused ? selectedInk : ink, false, 0,
+        const bool pictured = (row.icon && !row.icon->pixels.empty()) || !row.iconGlyph.empty();
+        if (pictured)
+        {
+            // Achievement entry: the picture, then the name.
+            constexpr int iconSize = rowHeight - 6, iconLeft = labelLeft + 6;
+            if (row.icon && !row.icon->pixels.empty())
+                sprite(*row.icon, 0, 0, int(row.icon->width), int(row.icon->height), iconLeft, y + 2, iconSize, iconSize);
+            else
+            {
+                fill(iconLeft, y + 2, iconSize, iconSize, MakeColor(255, 30, 31, 31));
+                cell(iconLeft, y + 2, iconSize, iconSize, false);
+                text(iconLeft, y + 2, iconSize, iconSize, row.iconGlyph, 24, muted, false, 1, outline, 16);
+            }
+        }
+        text(pictured ? labelLeft + 6 + rowHeight - 6 + 8 : 82, y, pictured ? 244 : 274, rowHeight - 2, row.name,
+             pictured ? 22 : 24, !row.enabled ? disabled : focused ? selectedInk : ink, false, 0,
              focused ? MakeColor(255, 222, 223, 219) : outline, 16);
 
         if (row.sliderPercent >= 0)

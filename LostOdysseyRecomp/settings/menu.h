@@ -88,7 +88,7 @@ void PointerDrag(float x, float y, bool held);
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, debug log,
-//   achievement notifications, TAA shader collection, Mods, Import discs & DLC, Shader bundle, Save).
+//   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -99,7 +99,7 @@ void PointerDrag(float x, float y, bool held);
 //   Save on System.
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls. The pages opened from a row (Mods,
-//   Controls) may scroll.
+//   Controls, Achievements) may scroll.
 // - Graphics order: display -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
 //   frame generation -> effects -> frame rate -> HDR and brightness -> Save. A
@@ -128,7 +128,7 @@ inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
 inline constexpr int SystemDebugLogRow = 3;
-inline constexpr int SystemAchievementsRow = 4; // On / Silent / Off, applied and saved at once
+inline constexpr int SystemAchievementsRow = 4; // opens the Achievements page
 inline constexpr int SystemCollectionRow = 5;
 inline constexpr int SystemModsRow = 6; // opens the Mods page
 inline constexpr int SystemImportRow = 7;
@@ -180,6 +180,12 @@ inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // the focused mod has move up / move down cells beside the value column.
 inline constexpr int ModsCellsWidth = 240;
 inline constexpr int ModsMoveLeft = 1112, ModsMoveWidth = 64, ModsMoveGap = 8;
+// Achievements page (System → Achievements): a list page. Notifications (On /
+// Silent / Off, applied and saved at once), a summary title that is never
+// focused, then one row per achievement: icon, name, text, gamerscore and date.
+inline constexpr int AchievementsNotificationsRow = 0;
+inline constexpr int AchievementsSummaryRow = 1;
+inline constexpr int AchievementsFirstRow = 2;
 // Controls page (Gameplay → Controls): a list page. Button prompts and
 // Vibration, then a titled section per device with a row for each Xbox 360
 // input in hid/input_map.h order (the keyboard adds the left stick), then

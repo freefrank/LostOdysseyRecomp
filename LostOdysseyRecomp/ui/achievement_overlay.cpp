@@ -43,24 +43,6 @@ std::u32string Codepoints(const std::string& text) {
     return out;
 }
 
-Raster DecodeIcon(const std::vector<uint8_t>& png) {
-    Raster out;
-    if (png.empty()) return out;
-    SDL_IOStream* io = SDL_IOFromConstMem(png.data(), png.size());
-    SDL_Surface* decoded = io ? SDL_LoadPNG_IO(io, true) : nullptr;
-    if (!decoded) return out;
-    SDL_Surface* rgba = SDL_ConvertSurface(decoded, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(decoded);
-    if (!rgba) return out;
-    out.width = uint32_t(rgba->w);
-    out.height = uint32_t(rgba->h);
-    out.pixels.resize(size_t(out.width) * out.height);
-    for (uint32_t y = 0; y < out.height; ++y)
-        memcpy(&out.pixels[size_t(y) * out.width], static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * rgba->pitch, out.width * 4);
-    SDL_DestroySurface(rgba);
-    return out;
-}
-
 // One line of white text with the game font's dark edge, `height` output
 // pixels tall. Characters the game fonts lack come from Unifont.
 Raster DrawText(const menu_assets::Assets* assets, const std::string& utf8, double height) {
@@ -213,7 +195,8 @@ const Image* Update(uint32_t outputWidth, uint32_t outputHeight) {
         toast.id = *id;
         toast.info = achievements::Find(*id);
         if (!toast.info) return nullptr;
-        toast.icon = DecodeIcon(toast.info->iconPng);
+        auto icon = achievements::IconOf(toast.id);
+        toast.icon = {std::move(icon.pixels), icon.width, icon.height};
         toast.last = now;
         LOG_INFO("achievements: toast for {} ({}x{} icon)", toast.id, toast.icon.width, toast.icon.height);
         gToast = std::move(toast);

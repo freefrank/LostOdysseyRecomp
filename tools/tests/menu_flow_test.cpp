@@ -44,6 +44,10 @@ inline uint64_t BeginDisplayRevert(const settings::Config& c) { return MenuFlowB
 #include <settings/mods_page.h>
 namespace settings::mods_page { bool MenuFlowOpenFolder(const std::filesystem::path& folder); }
 #define OpenFolder MenuFlowOpenFolder
+// The Achievements page reads a fake list instead of the title data and profile.
+#include <settings/achievements_page.h>
+namespace settings::achievements_page { std::vector<Item> MenuFlowAchievementItems(bool withIcons); }
+#define LoadAchievementItems MenuFlowAchievementItems
 #define GetConfig MenuFlowGetConfig
 #define SaveConfig MenuFlowSaveConfig
 #define SaveAudioOutput MenuFlowSaveAudioOutput
@@ -63,6 +67,7 @@ namespace settings::mods_page { bool MenuFlowOpenFolder(const std::filesystem::p
 #undef SDL_PushEvent
 #undef Translate
 #undef OpenFolder
+#undef LoadAchievementItems
 #undef GetConfig
 #undef SaveConfig
 #undef SaveAudioOutput
@@ -113,6 +118,28 @@ unsigned vibrationPreviews = 0;
 uint32_t promptStyle = 0;
 unsigned modsFolderOpens = 0;
 std::filesystem::path modsFolderOpened;
+}
+std::vector<settings::achievements_page::Item> settings::achievements_page::MenuFlowAchievementItems(bool withIcons)
+{
+    const auto make = [&](uint16_t id, uint16_t score, const char* name, const char* unlocked, const char* locked, bool secret,
+                          int64_t time) {
+        Item item;
+        item.info.id = id;
+        item.info.score = score;
+        item.info.name = name;
+        item.info.unlockedText = unlocked;
+        item.info.lockedText = locked;
+        item.info.secret = secret;
+        item.earnedTime = time;
+        // RGBA pixel 0xff332211: R 0x11, G 0x22, B 0x33.
+        if (withIcons) item.icon = {std::vector<uint32_t>(4, 0xff332211u), 2, 2};
+        return item;
+    };
+    return {make(1, 10, "Oldest", "Did it", "Do it", false, 1700000000),
+            make(2, 30, "Locked one", "Done", "Do it", false, 0),
+            make(3, 20, "Newest", "Done it", "Do it", false, 2000000000),
+            make(4, 20, "Secret name", "Secret done", "Secret hint", true, 0),
+            make(5, 10, "Hidden too", "Hidden done", "Hidden hint", true, 0)};
 }
 bool settings::mods_page::MenuFlowOpenFolder(const std::filesystem::path& folder)
 {
@@ -1739,28 +1766,71 @@ int main(int argc, char** argv)
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
-            // System > Achievement notifications: On -> Silent -> Off, saved alone, Off keeps the sound value.
+            // System > Achievements opens the page; Notifications cycles On -> Silent -> Off and saves alone.
             settings::tab = 3; settings::row = settings::SystemAchievementsRow;
             settings::edit.achievementNotifications = true; settings::edit.achievementSound = true;
             const int beforeAchSaves = saves;
             Tick(base);
-            Require(settings::snapshot.rows[settings::SystemAchievementsRow].name == L"Achievement notifications" &&
-                    settings::snapshot.rows[settings::SystemAchievementsRow].choices.size() == 3 &&
-                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 0 &&
-                    settings::snapshot.help.find(L"Xbox 360-style notification") != std::wstring::npos,
-                    "Achievement notifications row: On/Silent/Off, On by default, help");
+            Require(settings::snapshot.rows[settings::SystemAchievementsRow].name == L"Achievements" &&
+                    settings::snapshot.rows[settings::SystemAchievementsRow].value == L"2/5 · 30G" &&
+                    settings::graphics_menu::IsAction(3, settings::SystemAchievementsRow) &&
+                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount),
+                    "System row shows earned/total and gamerscore");
+            settings::pending = 0x1000; Tick(base);
+            {
+                const auto &rows = settings::snapshot.rows;
+                Require(settings::achievementsOpen && settings::snapshot.pageTitle == L"Achievements" &&
+                        settings::snapshot.row == settings::AchievementsNotificationsRow &&
+                        rows.size() == size_t(settings::AchievementsFirstRow + 5) && !settings::snapshot.keyLegend.empty(),
+                        "A on System Achievements opens the page");
+                Require(rows[settings::AchievementsNotificationsRow].name == L"Notifications" &&
+                        rows[settings::AchievementsNotificationsRow].choices.size() == 3 &&
+                        rows[settings::AchievementsNotificationsRow].selectedChoice == 0 &&
+                        rows[settings::AchievementsSummaryRow].header && rows[settings::AchievementsSummaryRow].name == L"Earned 2 of 5" &&
+                        rows[settings::AchievementsSummaryRow].detail == L"30 / 90G",
+                        "Notifications row and the summary title");
+                const auto entry = [&](int i) -> const settings::MenuRow & { return rows[size_t(settings::AchievementsFirstRow + i)]; };
+                Require(entry(0).name == L"Newest" && entry(0).detail == L"Done it" &&
+                        entry(0).value == L"20G   " + settings::achievements_page::FormatDate(2000000000) && entry(0).icon &&
+                        entry(1).name == L"Oldest" && entry(1).value.rfind(L"10G   ", 0) == 0 &&
+                        entry(2).name == L"Locked one" && entry(2).detail == L"Do it" && entry(2).value == L"30G" && entry(2).icon &&
+                        entry(3).name == L"Secret achievement" && entry(3).value == L"20G" && !entry(3).icon && entry(3).iconGlyph == L"?" &&
+                        entry(3).detail == L"Keep playing to unlock this secret achievement." &&
+                        entry(4).name == L"Secret achievement" && entry(4).detail == entry(3).detail,
+                        "earned newest first, then locked by id; a locked secret hides name, text and icon");
+                // Earned icons keep colour (BGRA from RGBA); locked ones are gray and darker.
+                const uint32_t locked = entry(2).icon->pixels[0];
+                Require(entry(0).icon->pixels[0] == 0xff112233u && ((locked >> 16) & 255) == ((locked >> 8) & 255) &&
+                        (locked & 255) == ((locked >> 8) & 255) && (locked & 255) < 0x22,
+                        "icon converted to BGRA; locked icon desaturated and dimmed");
+            }
+            settings::pending = 2; Tick(base);
+            Require(settings::achievementsFocus == settings::AchievementsFirstRow, "Down skips the summary title");
+            settings::pending = 1; Tick(base);
+            Require(settings::achievementsFocus == settings::AchievementsNotificationsRow, "Up skips the summary title");
             settings::pending = 8; Tick(base);
             Require(settings::edit.achievementNotifications && !settings::edit.achievementSound &&
                     diskConfig.achievementNotifications && !diskConfig.achievementSound && saves == beforeAchSaves + 1 &&
-                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 1, "Right selects Silent and saves");
+                    settings::snapshot.rows[settings::AchievementsNotificationsRow].selectedChoice == 1, "Right selects Silent and saves");
             settings::pending = 8; Tick(base);
             Require(!settings::edit.achievementNotifications && !diskConfig.achievementNotifications &&
-                    saves == beforeAchSaves + 2 && settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 2,
+                    saves == beforeAchSaves + 2 && settings::snapshot.rows[settings::AchievementsNotificationsRow].selectedChoice == 2,
                     "Right again selects Off and saves");
             settings::pending = 8; Tick(base);
             Require(settings::edit.achievementNotifications && settings::edit.achievementSound && diskConfig.achievementSound &&
-                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 0, "Right wraps to On with sound");
-            std::puts("PASS System Achievement notifications: On / Silent / Off cycle, immediate save");
+                    settings::snapshot.rows[settings::AchievementsNotificationsRow].selectedChoice == 0, "Right wraps to On with sound");
+            settings::pending = 4; Tick(base);
+            Require(!settings::edit.achievementNotifications && saves == beforeAchSaves + 4, "Left wraps to Off");
+            settings::pending = 2; Tick(base);
+            Require(settings::snapshot.help.find(L"Newest: Done it") == 0, "help for an entry");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::achievementsOpen && settings::tab == 3 && settings::row == settings::SystemAchievementsRow &&
+                    settings::snapshot.pageTitle.empty(), "B leaves the page for the System row");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::achievementsOpen, "the page opens again");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::achievementsOpen, "and B leaves it");
+            std::puts("PASS System Achievements page: summary, order, secret hiding, icons, notifications On / Silent / Off, back");
         }
         // Controls page layouts. A, Enter or a click on a layout row starts a
         // capture; the next press binds it, a button or key already in use

@@ -82,7 +82,7 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | Audio | Stereo, 5.1 surround, or matrix surround for an AV receiver. Cutscene dialogue has its own volume. |
 | Input | Controllers, keyboard and rumble; touch controls on Android. |
 | Mods | Windows only: texture, menu and font replacements, text translations and language packs, and PlayStation button prompts, installed by hand or with Mod Organizer 2. Other platforms may load mods but are not supported. See the [modding guide](docs/wiki/Modding.md), which also has the [4x HD texture pack](docs/wiki/Modding.md#4x-hd-texture-pack). |
-| Achievements | The game's 36 Xbox 360 achievements, with an Xbox 360-style notification and sound when you unlock one. **Settings → System → Achievement notifications** turns them on, silent or off. An `achievement.wav` next to `settings.ini` replaces the sound. |
+| Achievements | The game's 36 Xbox 360 achievements, with an Xbox 360-style notification and sound when you unlock one. **Settings → System → Achievements** lists them with your unlock dates and turns the notification on, silent or off. An `achievement.wav` next to `settings.ini` replaces the sound. |
 | Debug menu | Render captures, Save Anywhere, encounter switches, teleport, fast-forward and cheats. See [Debug menu](#debug-menu). |
 
 ## Controls

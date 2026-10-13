@@ -7,7 +7,7 @@
 #include <vector>
 namespace settings
 {
-namespace menu_assets { struct Assets; }
+namespace menu_assets { struct Assets; struct Image; }
 // Visible list slots: rows start at y=150 with height 43 and clip at y=640,
 // so (640 - 150) / 43 == 11 rows fit without scrolling.
 inline constexpr int kMenuVisibleRows = 11;
@@ -40,6 +40,10 @@ struct MenuRow
     // The value is literal text, such as a key name: no PlayStation glyph
     // takes the place of a letter.
     bool literal = false;
+    // A picture at the start of the row (Achievements page): the name then
+    // starts after it. Without an image, iconGlyph is drawn on a dark square.
+    std::shared_ptr<const menu_assets::Image> icon;
+    std::wstring iconGlyph;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot

@@ -8,6 +8,7 @@
 #include <gpu/dlss_nr_state.h>
 #include "restart.h"
 #include "translations.h"
+#include "achievements_page.h"
 #include "mods_page.h"
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
@@ -128,6 +129,13 @@ int modsFocus = 0;
 bool modsDiscardPrompt = false;
 int modsDiscardChoice = 1;
 bool restartForMods = false;
+// Achievements page (System → Achievements). The list is read when it opens.
+// achievementSummary is the System row's value, read when the menu opens.
+std::atomic<bool> achievementsOpen{false};
+std::vector<achievements_page::Item> achievementItems;
+std::vector<std::shared_ptr<const menu_assets::Image>> achievementIcons;
+int achievementsFocus = 0;
+std::wstring achievementSummary;
 // Controls page (Gameplay → Controls). The layouts stay unsaved until Save;
 // Button prompts and Vibration save at once, as they did on the tab. The page
 // navigates with the default layouts (FilterInput), so a layout that leaves a
@@ -418,6 +426,81 @@ void CloseModsPage()
     modsDiscardPrompt = false;
     modsEntries.clear();
     status.clear();
+}
+// "12/36 · 240G": the System row's value.
+void RefreshAchievementSummary()
+{
+    const auto summary = achievements_page::Summarize(achievements_page::LoadAchievementItems(false));
+    achievementSummary = std::to_wstring(summary.earned) + L"/" + std::to_wstring(summary.total) + L" · " +
+                         std::to_wstring(summary.earnedScore) + L"G";
+}
+void OpenAchievementsPage()
+{
+    achievementItems = achievements_page::LoadAchievementItems(true);
+    achievements_page::Sort(achievementItems);
+    achievementIcons.clear();
+    for (const auto &item : achievementItems)
+        achievementIcons.push_back(item.Hidden() ? nullptr : achievements_page::MakeIcon(item.icon, item.Earned()));
+    achievementsFocus = AchievementsNotificationsRow;
+    status.clear();
+    achievementsOpen = true;
+    LOG_INFO("settings: achievements page opened ({} achievements)", achievementItems.size());
+}
+void CloseAchievementsPage()
+{
+    achievementsOpen = false;
+    achievementItems.clear();
+    achievementIcons.clear();
+    status.clear();
+    RefreshAchievementSummary();
+}
+// 0 On, 1 Silent (a notification without the sound), 2 Off. Off keeps the
+// sound value; On and Silent set both fields.
+uint32_t AchievementNotificationMode()
+{
+    return !edit.achievementNotifications ? 2 : edit.achievementSound ? 0 : 1;
+}
+// Like Vibration: applied and saved at once, without unsaved edits from the
+// other System rows. The game reads both fields every frame.
+void CycleAchievementNotifications(int delta)
+{
+    const uint32_t mode = uint32_t((int(AchievementNotificationMode()) + 3 + delta) % 3);
+    edit.achievementNotifications = mode != 2;
+    if (mode != 2) edit.achievementSound = mode == 0;
+    Config saved = GetConfig();
+    saved.achievementNotifications = edit.achievementNotifications;
+    saved.achievementSound = edit.achievementSound;
+    if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+}
+// An achievement entry: icon, name, one line of text, then gamerscore and, once
+// earned, the date. A locked secret shows neither its name, text nor icon.
+Row AchievementRow(const achievements_page::Item &item, std::shared_ptr<const menu_assets::Image> icon)
+{
+    const bool hidden = item.Hidden();
+    Row row;
+    row.name = hidden ? std::wstring(Tr(L"Secret achievement", L"隱藏成就")) : mods_page::Shorten(Widen(item.info.name), 26);
+    const std::wstring text = hidden ? std::wstring(Tr(L"Keep playing to unlock this secret achievement.",
+                                                       L"繼續遊戲以解鎖這個隱藏成就。"))
+                                     : Widen(item.Earned() ? item.info.unlockedText : item.info.lockedText);
+    row.detail = text.empty() ? L"—" : hidden ? text : mods_page::Shorten(text, 42);
+    row.value = std::to_wstring(item.info.score) + L"G";
+    if (item.Earned()) row.value += L"   " + achievements_page::FormatDate(item.earnedTime);
+    row.icon = std::move(icon);
+    if (!row.icon) row.iconGlyph = L"?";
+    return row;
+}
+// Help for the focused Achievements page row.
+std::wstring AchievementsHelp()
+{
+    if (achievementsFocus == AchievementsNotificationsRow)
+        return Tr(L"Shows an Xbox 360-style notification when you unlock an achievement. Silent shows it without the sound.",
+                  L"解鎖成就時顯示 Xbox 360 風格的通知。靜音則只顯示、不播放音效。");
+    const int index = achievementsFocus - AchievementsFirstRow;
+    if (index < 0 || index >= int(achievementItems.size())) return {};
+    const auto &item = achievementItems[size_t(index)];
+    if (item.Hidden())
+        return Tr(L"Keep playing to unlock this secret achievement.", L"繼續遊戲以解鎖這個隱藏成就。");
+    return mods_page::Shorten(Widen(item.info.name) + L": " + Widen(item.Earned() ? item.info.unlockedText : item.info.lockedText), 110);
 }
 // A mod row: name, then version and author (or a mark for a mod.ini problem),
 // then on / off. Rejected mods and mods off in mod.ini have one inert cell.
@@ -1079,7 +1162,7 @@ void Publish(uint8_t *base, uint32_t config)
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
-    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : row;
+    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus : row;
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -1135,6 +1218,25 @@ void Publish(uint8_t *base, uint32_t config)
         const int focused = modsRows.EntryAt(modsFocus, modsEntries.size());
         next.reorder = focused >= 0 && mods_page::IsMod(modsEntries[size_t(focused)]) &&
                        modsEntries[size_t(focused)].info.apiVersion != 0 && mods_page::ModCount(modsEntries) > 1;
+    }
+    else if (achievementsOpen)
+    {
+        next.pageTitle = Tr(L"Achievements", L"成就");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"B / Left / Right: change     A: back", L"B / 左 / 右：變更     A：返回")
+            : Tr(L"A / Left / Right: change     B: back", L"A / 左 / 右：變更     B：返回");
+        next.rows.resize(size_t(AchievementsFirstRow) + achievementItems.size());
+        next.rows[AchievementsNotificationsRow] = makeChoices(L"Notifications", L"通知",
+            {Tr(L"On", L"開"), Tr(L"Silent", L"靜音"), Tr(L"Off", L"關")}, AchievementNotificationMode());
+        const auto summary = achievements_page::Summarize(achievementItems);
+        Row title;
+        title.header = true;
+        title.name = std::wstring(Tr(L"Earned", L"已獲得")) + L" " + std::to_wstring(summary.earned) + L" " +
+                     Tr(L"of", L"/") + L" " + std::to_wstring(summary.total);
+        title.detail = std::to_wstring(summary.earnedScore) + L" / " + std::to_wstring(summary.totalScore) + L"G";
+        next.rows[AchievementsSummaryRow] = std::move(title);
+        for (size_t i = 0; i < achievementItems.size(); ++i)
+            next.rows[size_t(AchievementsFirstRow) + i] = AchievementRow(achievementItems[i], achievementIcons[i]);
     }
     else if (controlsOpen)
     {
@@ -1415,9 +1517,8 @@ void Publish(uint8_t *base, uint32_t config)
                    GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
-        addChoices(L"Achievement notifications", L"成就通知",
-                   {Tr(L"On", L"開"), Tr(L"Silent", L"靜音"), Tr(L"Off", L"關")},
-                   !edit.achievementNotifications ? 2 : edit.achievementSound ? 0 : 1);
+        if (achievementSummary.empty()) RefreshAchievementSummary();
+        addAction(L"Achievements", L"成就", achievementSummary.c_str());
         const bool logUpload = os::log_collection::Supported();
         next.rows.push_back({os::log_collection::Label(edit.uiLanguage),
             !logUpload ? Tr(L"Windows only", L"僅限 Windows") : os::log_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"),
@@ -1431,7 +1532,7 @@ void Publish(uint8_t *base, uint32_t config)
     // so returning to a long list restores its position.
     if (tab >= 0 && tab < MenuTabCount)
     {
-        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0;
+        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0;
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
@@ -1439,7 +1540,7 @@ void Publish(uint8_t *base, uint32_t config)
             if (int(i) <= next.row) visibleFocus = visibleCount;
             ++visibleCount;
         }
-        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : scrollByTab[tab];
+        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
         scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
         if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
@@ -1464,8 +1565,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
                        L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
     if (tab == 3 && row == SystemAchievementsRow)
-        next.help = Tr(L"Shows an Xbox 360-style notification when you unlock an achievement. Silent shows it without the sound.",
-                       L"解鎖成就時顯示 Xbox 360 風格的通知。靜音則只顯示、不播放音效。");
+        next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
+                       L"查看你的成就，並設定解鎖時是否顯示通知。");
     if (tab == 3 && row == SystemModsRow)
         next.help = Tr(L"Turn installed mods on or off and change their order. Changes apply after a restart.",
                        L"開關已安裝的 Mod 並調整順序。重新啟動後生效。");
@@ -1736,6 +1837,8 @@ void Publish(uint8_t *base, uint32_t config)
         pageHelp = modsOpen ? ModsHelp(modsRows) : ControlsHelp();
         next.help = pageHelp.first;
     }
+    else if (achievementsOpen)
+        next.help = AchievementsHelp();
     if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
@@ -1944,7 +2047,7 @@ bool CalibrationKey(uint32_t key)
     // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
     // On the Controls page Enter confirms like A, so it starts a capture.
     const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load() || controlsOpen.load()) && (key == 13 || key == 27)) ||
-                               (modsOpen.load() && key == 27);
+                               ((modsOpen.load() || achievementsOpen.load()) && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -2333,6 +2436,10 @@ PPC_FUNC(sub_822F19B0)
         modsDiscardPrompt = false;
         restartForMods = false;
         modsEntries.clear();
+        achievementsOpen = false;
+        achievementItems.clear();
+        achievementIcons.clear();
+        RefreshAchievementSummary();
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -2377,6 +2484,7 @@ PPC_FUNC(sub_822F19B0)
     if (int selected = mouseRow.exchange(-1); selected >= 0)
     {
         if (modsOpen) modsFocus = selected;
+        else if (achievementsOpen) achievementsFocus = selected;
         else if (controlsOpen)
         {
             // A capture keeps its row; a section title is never focused.
@@ -2401,6 +2509,7 @@ PPC_FUNC(sub_822F19B0)
         brightnessOpen = false;
         nrOpen = false;
         modsOpen = false;
+        achievementsOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -3037,6 +3146,28 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+    if (achievementsOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        // B, Back (keyboard Backspace) and Escape leave the page.
+        const bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        const int count = AchievementsFirstRow + int(achievementItems.size());
+        if (input & 0x331f) status.clear();
+        // The summary title is never focused.
+        if (input & 1)
+            do { achievementsFocus = (achievementsFocus + count - 1) % count; } while (achievementsFocus == AchievementsSummaryRow);
+        if (input & 2)
+            do { achievementsFocus = (achievementsFocus + 1) % count; } while (achievementsFocus == AchievementsSummaryRow);
+        if (back) CloseAchievementsPage();
+        else if (achievementsFocus == AchievementsNotificationsRow && (input & 0x100c))
+            CycleAchievementNotifications((input & 4) ? -1 : 1);
+        Publish(base, config);
+        return;
+    }
     if (controlsOpen.load())
     {
         std::vector<uint32_t> keys;
@@ -3516,19 +3647,6 @@ PPC_FUNC(sub_822F19B0)
                 edit.automaticUpdates = !edit.automaticUpdates;
             if (row == SystemDebugLogRow)
                 edit.debugLog = !edit.debugLog;
-            if (row == SystemAchievementsRow)
-            {
-                // Like Vibration: applied and saved at once, without unsaved edits
-                // from the other System rows. On / Silent / Off; Off keeps the sound
-                // value, On and Silent set both fields.
-                const uint32_t mode = cycle(!edit.achievementNotifications ? 2 : edit.achievementSound ? 0 : 1, 3);
-                edit.achievementNotifications = mode != 2;
-                if (mode != 2) edit.achievementSound = mode == 0;
-                Config saved = GetConfig();
-                saved.achievementNotifications = edit.achievementNotifications;
-                saved.achievementSound = edit.achievementSound;
-                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
-            }
         }
     }
     if (changed)
@@ -3648,6 +3766,12 @@ PPC_FUNC(sub_822F19B0)
         brightnessFocus = 0;
         calibrationScenePreview = true;
         brightnessOpen = true;
+        Publish(base, config);
+        return;
+    }
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemAchievementsRow)
+    {
+        OpenAchievementsPage();
         Publish(base, config);
         return;
     }

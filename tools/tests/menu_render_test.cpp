@@ -8,6 +8,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstdlib>
+#include <memory>
 static void Require(bool ok, const char *message) { if (!ok) { std::fprintf(stderr, "%s\n", message); std::exit(1); } }
 void LoMenuRenderTrace(const std::wstring &value, bool original)
 {
@@ -384,6 +385,60 @@ int main(int argc, char **argv)
             for (auto p : page) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
         }
         std::puts("Mods page: title, legend, details, narrow switches and move cells rendered at 1280x720");
+    }
+
+    // Achievements page: Notifications, the summary title, then entries with a
+    // picture (or a "?" square for a locked secret), name, text, score and date.
+    {
+        auto picture = std::make_shared<settings::menu_assets::Image>();
+        picture->width = picture->height = 64;
+        for (uint32_t y = 0; y < 64; ++y)
+            for (uint32_t x = 0; x < 64; ++x)
+                picture->pixels.push_back(0xff000000u | ((x * 4) << 16) | ((y * 4) << 8) | 0x40);
+        settings::MenuSnapshot page = snapshot;
+        page.language = 0;
+        page.tab = 3;
+        page.row = settings::AchievementsFirstRow;
+        page.pageTitle = L"Achievements";
+        page.keyLegend = L"A / Left / Right: change     B: back";
+        page.rows = {
+            {L"Notifications", L"On", true, {L"On", L"Silent", L"Off"}, 0},
+            {L"Earned 2 of 3", L"", true, {}, 0},
+            {L"Newest", L"20G   2026-10-12", true, {}, 0},
+            {L"Secret achievement", L"20G", true, {}, 0},
+            {L"Locked one", L"30G", true, {}, 0}};
+        page.rows[1].header = true;
+        page.rows[1].detail = L"40 / 90G";
+        page.rows[2].detail = L"Finish the first chapter on the hardest difficulty";
+        page.rows[2].icon = picture;
+        page.rows[3].detail = L"Keep playing to unlock this secret achievement.";
+        page.rows[3].iconGlyph = L"?";
+        page.rows[4].detail = L"Do it";
+        page.rows[4].icon = picture;
+        page.help = L"Newest: Finish the first chapter on the hardest difficulty";
+        std::vector<uint32_t> withIcons, without;
+        Require(settings::RasterizeMenu(page, 1280, 720, withIcons), "Achievements page rasterization failed");
+        auto bare = page;
+        for (auto &row : bare.rows) { row.icon.reset(); row.iconGlyph.clear(); }
+        Require(settings::RasterizeMenu(bare, 1280, 720, without), "Achievements page comparison rasterization failed");
+        const auto differs = [&](int x0, int y0, int x1, int y1) {
+            int count = 0;
+            for (int y = y0; y < y1; ++y)
+                for (int x = x0; x < x1; ++x)
+                    count += withIcons[size_t(y) * 1280 + x] != without[size_t(y) * 1280 + x];
+            return count > 100;
+        };
+        // Rows start at y=150, 43 high: Notifications, summary, then entries at slots 2, 3, 4.
+        Require(differs(70, 150 + 2 * 43, 108, 150 + 3 * 43), "entry picture is missing");
+        Require(differs(70, 150 + 3 * 43, 108, 150 + 4 * 43), "secret placeholder is missing");
+        Require(differs(70, 150 + 4 * 43, 108, 150 + 5 * 43), "locked entry picture is missing");
+        Require(!differs(70, 150, 108, 150 + 2 * 43), "picture drawn on the Notifications row or summary");
+        if (argc > 1) {
+            std::ofstream f(std::filesystem::path(argv[1]) / "achievements-page.ppm", std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : withIcons) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+        }
+        std::puts("Achievements page: summary title, pictures, secret placeholder and details rendered at 1280x720");
     }
 
     // Upscaling and FG share one divided group inside the four-tab Graphics page.

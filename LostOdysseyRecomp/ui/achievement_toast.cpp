@@ -23,10 +23,6 @@ constexpr double kDuration = 5.2;
 constexpr float kPillH = 60.f;
 constexpr float kMargin = 18.f;     // shadow / glow room around the resting box
 constexpr float kDiskR = 25.f;      // black disk radius
-constexpr float kRingOuter = 23.2f;
-constexpr float kRingInner = 17.2f;
-constexpr float kGapHalf = 2.2f;    // half width of the cross-shaped gaps in the ring
-constexpr float kCentreR = 16.f;   // orb / icon radius
 constexpr float kHalo = 14.f;       // circle sprite room beyond the pill radius
 constexpr float kTextLeft = 66.f;   // from the pill's left edge
 constexpr float kPadRight = 30.f;
@@ -193,28 +189,6 @@ void BakePill(Cache& c, float s)
     }
 }
 
-// Silver sphere, our own shading: no logo.
-PM OrbPixel(float rx, float ry, float r, float ro)
-{
-    float cov = Cov(r - ro);
-    if (cov <= 0.f) return {0, 0, 0, 0};
-    float nx = rx / ro, ny = ry / ro;
-    float n2 = std::min(1.f, nx * nx + ny * ny);
-    float nz = std::sqrt(1.f - n2);
-    float lx = -0.40f, ly = -0.55f, lz = 0.73f;
-    float ll = std::sqrt(lx * lx + ly * ly + lz * lz);
-    float diff = std::max(0.f, (nx * lx + ny * ly + nz * lz) / ll);
-    float rimDark = std::pow(nz, 0.55f);
-    float v = (0.22f + 0.62f * diff) * (0.55f + 0.45f * rimDark);
-    // soft specular blob up-left
-    float hx = nx + 0.32f, hy = ny + 0.36f;
-    float spec = std::exp(-(hx * hx + hy * hy) / 0.045f) * 0.55f;
-    // faint bounce light from below
-    float bounce = std::max(0.f, ny * 0.5f) * (1.f - nz) * 0.25f;
-    v = Clamp01(v + spec + bounce);
-    return FromStraight(v * 0.98f, v, v * 1.02f, cov);
-}
-
 PM IconPixel(const Cache&, const uint32_t* icon, uint32_t iw, uint32_t ih, float rx, float ry, float r, float ri)
 {
     float cov = Cov(r - ri);
@@ -254,57 +228,298 @@ PM IconPixel(const Cache&, const uint32_t* icon, uint32_t iw, uint32_t ih, float
     return {acc.r * cov, acc.g * cov, acc.b * cov, acc.a * cov};
 }
 
+// ---- the app icon's medallion, drawn procedurally ----------------------------------------------
+// Geometry in the icon SVG's own units (centre 512,512; frame outer radius 374, enamel radius 282); the
+// gradients follow assets/icon/icon_svgs.py (objectBoundingBox gradients of each stacked disc).
+struct Stop { float t, r, g, b; };
+constexpr float H(int v) { return (float)v / 255.f; }
+constexpr Stop kRimHi[] = {{0.f, H(0xff), H(0xf0), H(0xc2)}, {.45f, H(0xc8), H(0x96), H(0x3f)}, {1.f, H(0x4a), H(0x30), H(0x10)}};
+constexpr Stop kRimLo[] = {{0.f, H(0x5a), H(0x3c), H(0x14)}, {.55f, H(0xa7), H(0x78), H(0x2f)}, {1.f, H(0xf2), H(0xd3), H(0x8c)}};
+constexpr Stop kBand[] = {{0.f, H(0xf7), H(0xdc), H(0x98)}, {.22f, H(0xc9), H(0x98), H(0x43)}, {.45f, H(0x8a), H(0x5f), H(0x22)},
+                          {.62f, H(0xd0), H(0xa2), H(0x4e)}, {.82f, H(0x9a), H(0x6b), H(0x28)}, {1.f, H(0xe3), H(0xbf), H(0x72)}};
+constexpr Stop kEnamel[] = {{0.f, H(0x3b), H(0x78), H(0xc2)}, {.55f, H(0x1b), H(0x42), H(0x77)}, {1.f, H(0x0a), H(0x1a), H(0x33)}};
+constexpr Stop kSteel[] = {{0.f, 1.f, 1.f, 1.f}, {.42f, H(0xe2), H(0xe6), H(0xee)}, {.52f, H(0xb8), H(0xbf), H(0xcc)}, {1.f, H(0x6c), H(0x73), H(0x80)}};
+constexpr Stop kGoldH[] = {{0.f, H(0xfb), H(0xe6), H(0xad)}, {.45f, H(0xd4), H(0xa5), H(0x4c)}, {1.f, H(0x7a), H(0x52), H(0x1c)}};
+constexpr Stop kGoldBall[] = {{0.f, H(0xff), H(0xf3), H(0xc8)}, {.45f, H(0xd9), H(0xaa), H(0x4f)}, {1.f, H(0x6e), H(0x48), H(0x16)}};
+constexpr Stop kGemBlue[] = {{0.f, H(0xc9), H(0xec), H(0xff)}, {.35f, H(0x3f), H(0x9b), H(0xe6)}, {1.f, H(0x0a), H(0x2f), H(0x63)}};
+constexpr Stop kGemRed[] = {{0.f, H(0xff), H(0xd0), H(0xcc)}, {.4f, H(0xd2), H(0x3a), H(0x3a)}, {1.f, H(0x5a), H(0x0d), H(0x12)}};
+constexpr Stop kLeather[] = {{0.f, H(0x2a), H(0x17), H(0x0a)}, {.45f, H(0x5c), H(0x38), H(0x18)}, {1.f, H(0x1e), H(0x10), H(0x07)}};
+
+template <size_t N>
+inline void Grad(const Stop (&st)[N], float t, float& r, float& g, float& b)
+{
+    t = Clamp01(t);
+    size_t i = 1;
+    while (i < N - 1 && t > st[i].t) i++;
+    const Stop &a = st[i - 1], &c = st[i];
+    float k = c.t > a.t ? Clamp01((t - a.t) / (c.t - a.t)) : 0.f;
+    r = Lerp(a.r, c.r, k); g = Lerp(a.g, c.g, k); b = Lerp(a.b, c.b, k);
+}
+template <size_t N>
+inline PM GradPM(const Stop (&st)[N], float t, float a = 1.f)
+{
+    float r, g, b; Grad(st, t, r, g, b);
+    return FromStraight(r, g, b, a);
+}
+// diagonal objectBoundingBox gradient of a disc of radius R centred on (dx,dy)=0
+inline float DiagT(float dx, float dy, float R) { return 0.5f + (dx + dy) / (4.f * R); }
+
+inline float HashNoise(int x, int y)
+{
+    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return (float)((h ^ (h >> 16)) & 1023u) / 1023.f;
+}
+
+// signed distances (negative inside), SVG units
+inline float SdCircle(float x, float y, float cx, float cy, float r) { return std::hypot(x - cx, y - cy) - r; }
+inline float SdRoundRect(float x, float y, float x0, float y0, float x1, float y1, float rad)
+{
+    float hx = (x1 - x0) * 0.5f, hy = (y1 - y0) * 0.5f;
+    float qx = std::fabs(x - (x0 + x1) * 0.5f) - (hx - rad), qy = std::fabs(y - (y0 + y1) * 0.5f) - (hy - rad);
+    return std::hypot(std::max(qx, 0.f), std::max(qy, 0.f)) + std::min(std::max(qx, qy), 0.f) - rad;
+}
+inline float SdBlade(float x, float y)
+{
+    static const float P[5][2] = {{512, 110}, {548, 198}, {544, 632}, {480, 632}, {476, 198}};
+    float d = -1e9f;
+    for (int i = 0; i < 5; i++) {
+        const float *a = P[i], *b = P[(i + 1) % 5];
+        float ex = b[0] - a[0], ey = b[1] - a[1], l = std::hypot(ex, ey);
+        float nx = ey / l, ny = -ex / l;
+        if (nx * (512.f - a[0]) + ny * (400.f - a[1]) > 0.f) { nx = -nx; ny = -ny; } // outward
+        d = std::max(d, nx * (x - a[0]) + ny * (y - a[1]));
+    }
+    return d;
+}
+inline float SdGuard(float x, float y)
+{
+    float u = std::min(1.f, std::fabs(x - 512.f) / 136.f);
+    float yt = 630.f + 12.f * u * u, yb = 664.f + 4.f * u * u;
+    return std::max({yt - y, y - yb, std::fabs(x - 512.f) - 136.f});
+}
+inline float SdSegment(float x, float y, float ax, float ay, float bx, float by)
+{
+    float px = x - ax, py = y - ay, ex = bx - ax, ey = by - ay;
+    float t = Clamp01((px * ex + py * ey) / (ex * ex + ey * ey));
+    return std::hypot(px - ex * t, py - ey * t);
+}
+
+// painter helpers: draw a shape with fill + 4.5-unit dark stroke
+struct Painter {
+    float ppl; // pixels per local unit
+    PM acc{0, 0, 0, 0};
+    void Fill(float sd, PM colour) // colour is premultiplied at full coverage
+    {
+        float c = Cov(sd * ppl);
+        if (c <= 0.f) return;
+        acc = Over({colour.r * c, colour.g * c, colour.b * c, colour.a * c}, acc);
+    }
+    void Stroke(float sd, float halfWidth, PM colour)
+    {
+        float hw = halfWidth * ppl;
+        float c = Cov(std::fabs(sd) * ppl - hw) * std::min(1.f, 2.f * hw);
+        if (c <= 0.f) return;
+        acc = Over({colour.r * c, colour.g * c, colour.b * c, colour.a * c}, acc);
+    }
+    void Shape(float sd, PM fill, bool stroke = true)
+    {
+        Fill(sd, fill);
+        if (stroke) Stroke(sd, 2.25f, FromStraight(H(0x24), H(0x17), H(0x0a), 1.f));
+    }
+};
+// The sword in its own local frame (tip up). ppl = pixels per local unit.
+PM SwordSample(float x, float y, float ppl)
+{
+    Painter p{ppl};
+    auto vgrad = [&](float y0, float y1) { return (y - y0) / (y1 - y0); };
+    auto radial = [&](const auto& st, float x0, float y0, float w, float hh, float cxp, float cyp, float rp) {
+        float cx = x0 + cxp * w, cy = y0 + cyp * hh;
+        return GradPM(st, std::hypot(x - cx, y - cy) / (rp * w));
+    };
+    // blade
+    float sb = SdBlade(x, y);
+    p.Shape(sb, GradPM(kSteel, (x - 476.f) / 72.f));
+    if (sb < -2.f) {
+        p.Fill(std::max({236.f - y, y - 574.f, std::fabs(x - 512.f) - 6.f}), FromStraight(H(0x5f), H(0x66), H(0x72), 1.f));
+        float dl = std::min(SdSegment(x, y, 512, 120, 482, 200), SdSegment(x, y, 482, 200, 486, 626));
+        float dr = std::min(SdSegment(x, y, 512, 120, 542, 200), SdSegment(x, y, 542, 200, 538, 626));
+        float hl = Cov((dl - 1.75f) * ppl) * std::min(1.f, 3.5f * ppl) * 0.9f;
+        float sh = Cov((dr - 1.5f) * ppl) * std::min(1.f, 3.f * ppl) * 0.7f;
+        if (hl > 0.f) p.acc = Over(FromStraight(1, 1, 1, hl), p.acc);
+        if (sh > 0.f) p.acc = Over(FromStraight(H(0x3c), H(0x41), H(0x4b), sh), p.acc);
+    }
+    // guard, balls, grip, cuff, bands, pommel, gem
+    p.Shape(SdGuard(x, y), GradPM(kGoldH, vgrad(628.f, 668.f)));
+    p.Shape(SdCircle(x, y, 372, 655, 19), radial(kGoldBall, 353, 636, 38, 38, .38f, .32f, .70f));
+    p.Shape(SdCircle(x, y, 652, 655, 19), radial(kGoldBall, 633, 636, 38, 38, .38f, .32f, .70f));
+    float sg = SdRoundRect(x, y, 490, 672, 534, 794, 10);
+    p.Shape(sg, GradPM(kLeather, (x - 490.f) / 44.f));
+    if (sg < -2.f && y > 676.f && y < 786.f && x > 492.f && x < 532.f) {
+        float v1 = std::fmod(y - 0.5f * (x - 486.f) - 672.f + 2000.f, 20.f), v2 = std::fmod(y + 0.5f * (x - 486.f) - 672.f + 2000.f, 20.f);
+        float d1 = std::min(v1, 20.f - v1) * 0.894f, d2 = std::min(v2, 20.f - v2) * 0.894f;
+        float a = Cov((std::min(d1, d2) - 2.5f) * ppl) * std::min(1.f, 5.f * ppl) * 0.85f;
+        if (a > 0.f) p.acc = Over(FromStraight(H(0x8a), H(0x5a), H(0x2b), a), p.acc);
+    }
+    p.Shape(SdRoundRect(x, y, 482, 620, 542, 678, 16), GradPM(kGoldH, vgrad(620.f, 678.f)));
+    p.Shape(SdRoundRect(x, y, 486, 670, 538, 682, 4), GradPM(kGoldH, vgrad(670.f, 682.f)));
+    p.Shape(SdRoundRect(x, y, 486, 784, 538, 796, 4), GradPM(kGoldH, vgrad(784.f, 796.f)));
+    p.Shape(SdCircle(x, y, 512, 826, 36), radial(kGoldBall, 476, 790, 72, 72, .38f, .32f, .70f));
+    p.Shape(SdCircle(x, y, 512, 649, 18), radial(kGemBlue, 494, 631, 36, 36, .40f, .35f, .70f));
+    p.Fill(std::hypot((x - 506.f) / 6.f, (y - 642.f) / 4.f) - 1.f, FromStraight(1, 1, 1, .9f)); // blue-gem glint
+    float sr = SdCircle(x, y, 512, 826, 12);
+    p.Fill(sr, radial(kGemRed, 500, 814, 24, 24, .40f, .35f, .70f));
+    p.Stroke(sr, 1.5f, FromStraight(H(0x24), H(0x17), H(0x0a), 1.f));
+    p.Fill(std::hypot((x - 509.f) / 4.f, (y - 822.f) / 3.f) - 1.f, FromStraight(1, 1, 1, .85f));
+    return p.acc;
+}
+// Silhouette distance (local units) for the soft drop shadow.
+float SwordSilhouette(float x, float y)
+{
+    float d = SdBlade(x, y);
+    d = std::min(d, SdGuard(x, y));
+    d = std::min(d, SdCircle(x, y, 372, 655, 19));
+    d = std::min(d, SdCircle(x, y, 652, 655, 19));
+    d = std::min(d, SdRoundRect(x, y, 482, 620, 542, 678, 16));
+    d = std::min(d, SdRoundRect(x, y, 490, 672, 534, 794, 10));
+    d = std::min(d, SdCircle(x, y, 512, 826, 36));
+    return d;
+}
+
+constexpr float kTiltDeg = 20.f, kSwordScale = .74f;
+
+// The enamel disc with its gloss, sword shadow and sword (coverage cut at the enamel radius).
+PM EmblemPixel(float rx, float ry, float k /*px per SVG unit*/)
+{
+    const float X = rx / k, Y = ry / k; // relative to the centre, SVG units
+    const float rEn = 282.f;
+    float cov = Cov((std::hypot(X, Y) - rEn) * k);
+    if (cov <= 0.f) return {0, 0, 0, 0};
+    // enamel radial gradient: centre (46%, 40%) of the bbox, r 62%
+    float ex = X - (0.46f - 0.5f) * 2.f * rEn, ey = Y - (0.40f - 0.5f) * 2.f * rEn;
+    PM col = GradPM(kEnamel, std::hypot(ex, ey) / (0.62f * 2.f * rEn));
+    { // thin inner gold ring (SVG r 216) with a dark inner edge
+        float rr = std::hypot(X, Y);
+        float a1 = Cov((std::fabs(rr - 210.f) - 1.5f) * k) * std::min(1.f, 3.f * k) * 0.5f;
+        float a2 = Cov((std::fabs(rr - 216.f) - 2.5f) * k) * std::min(1.f, 5.f * k) * 0.9f;
+        col = Over(FromStraight(H(0x06), H(0x12), H(0x23), a1), col);
+        col = Over(FromStraight(H(0xe7), H(0xc7), H(0x7d), a2), col);
+    }
+    // gloss: ellipse (0,-120) 250x170, radial from the top-centre of its bbox, white .22 -> 0
+    {
+        float gx = X / 250.f, gy = (Y + 120.f) / 170.f; // inside the ellipse when |.|<1
+        float e = std::hypot(gx, gy);
+        if (e < 1.f + 1.f / (k * 170.f)) {
+            float ec = Clamp01(0.5f - (e - 1.f) * 170.f * k);
+            float tg = std::hypot(X / 500.f, (Y + 120.f + 170.f) / 340.f);
+            float a = 0.22f * (1.f - Clamp01(tg)) * ec;
+            col = Over(FromStraight(1, 1, 1, a), col);
+        }
+    }
+    // sword frame: world -> local
+    const float S = kSwordScale, ca = std::cos(kTiltDeg * (float)kPi / 180.f), sa = std::sin(kTiltDeg * (float)kPi / 180.f);
+    auto toLocal = [&](float wx, float wy, float& qx, float& qy) { // inverse of rotate(+tilt) about the centre, then 1/S
+        qx = 512.f + (wx * ca + wy * sa) / S;
+        qy = 512.f + (-wx * sa + wy * ca) / S;
+    };
+    // soft drop shadow: sword silhouette offset by (18,22), blur sigma ~9 world units, opacity .6
+    {
+        float qx, qy;
+        toLocal(X - 18.f, Y - 22.f, qx, qy);
+        float d = SwordSilhouette(qx, qy) * S;
+        if (d < 40.f) {
+            float a = 0.6f * 0.5f * std::erfc(d / (9.f * 1.41421356f));
+            col = Over(FromStraight(0, 0, 0, a), col);
+        }
+    }
+    {
+        float qx, qy;
+        toLocal(X, Y, qx, qy);
+        if (qy > 60.f && qy < 900.f && qx > 330.f && qx < 700.f) {
+            PM sw = SwordSample(qx, qy, k * S);
+            col = Over(sw, col);
+        }
+    }
+    return {col.r * cov, col.g * cov, col.b * cov, col.a * cov};
+}
+
 void BakeCircle(Cache& c, const Content& content, float s)
 {
     const int CW = c.CW;
     c.base.Init(CW, CW); c.lit.Init(CW, CW); c.orb.Init(CW, CW); c.icon.Init(CW, CW);
     const float cc = (float)CW * 0.5f;
-    const float rd = kDiskR * s, ro = kRingOuter * s, ri = kRingInner * s, gap = kGapHalf * s, rc = kCentreR * s;
+    const float rd = kDiskR * s;            // frame outer radius (SVG 374)
+    const float k = rd / 374.f;             // pixels per SVG unit
+    const float rEn = 282.f * k;
+    const bool fine = s >= 1.5f;
     for (int y = 0; y < CW; y++) {
         for (int x = 0; x < CW; x++) {
             float rx = (float)x + 0.5f - cc, ry = (float)y + 0.5f - cc;
             float r = std::hypot(rx, ry);
+            float X = rx / k, Y = ry / k; // SVG units from the centre
             size_t i = (size_t)y * CW + x;
 
-            // ring segments (4 arcs, cross-shaped gaps), top-left lit green
-            float ringCov = std::min(Cov(r - ro), Cov(ri - r));
-            float inGap = Cov(std::min(std::fabs(rx), std::fabs(ry)) - gap);
-            float ringA = ringCov * (1.f - inGap);
-            float diskA = Cov(r - rd);
-
-            PM base = FromStraight(0.02f, 0.02f, 0.02f, diskA);
-            if (ringA > 0.f) {
-                PM seg;
-                if (rx < 0.f && ry < 0.f) {
-                    float k = Clamp01(0.5f + (-(rx + ry)) / (2.f * 1.41421356f * ro) * 1.0f);
-                    seg = FromStraight(Lerp(0.35f, 0.43f, k), Lerp(0.72f, 0.78f, k), Lerp(0.09f, 0.13f, k), ringA);
-                } else {
-                    float g = 0.45f + 0.05f * Clamp01(0.5f - ry / (2.f * ro));
-                    seg = FromStraight(g, g, g, ringA);
-                }
-                base = Over(seg, base);
+            // soft drop shadow of the frame (SVG: 18 down, blur 22, opacity .55)
+            float dsh = (std::hypot(X, Y - 18.f) - 374.f) * k;
+            PM base = {0, 0, 0, 0.55f * 0.5f * (float)std::erfc(dsh / (22.f * k * 1.41421356f))};
+            // stacked discs, each with its own diagonal bounding-box gradient
+            auto disc = [&](float R, PM colour) {
+                float cv = Cov(r - R * k);
+                if (cv > 0.f) base = Over({colour.r * cv, colour.g * cv, colour.b * cv, colour.a * cv}, base);
+            };
+            disc(374.f, GradPM(kRimHi, DiagT(X, Y, 374.f)));
+            disc(364.f, GradPM(kRimLo, DiagT(X, Y, 364.f)));
+            {
+                PM band = GradPM(kBand, DiagT(X, Y, 356.f));
+                float n = HashNoise(x, y);
+                float dark = 1.f - 0.16f * n; // cheap grain
+                band = {band.r * dark, band.g * dark, band.b * dark, 1.f};
+                disc(356.f, band);
             }
+            // gold diamonds on the band (rotated squares, half-size 13; tiny ones 6 at +-38 / +-142 deg)
+            auto diamond = [&](float cx, float cy, float hsz) {
+                float d = (std::fabs(X - cx) + std::fabs(Y - cy)) * 0.70710678f - hsz;
+                float cvf = Cov(d * k);
+                if (cvf <= 0.f) return;
+                float bx = X - cx, by = Y - cy;
+                PM g = GradPM(kGoldBall, std::hypot(bx / (2.f * hsz) + 0.12f, by / (2.f * hsz) + 0.18f) / 0.7f);
+                float st = Cov((std::fabs(d) - 1.5f) * k) * std::min(1.f, 3.f * k);
+                base = Over({g.r * cvf, g.g * cvf, g.b * cvf, cvf}, base);
+                if (st > 0.f) base = Over(FromStraight(H(0x3a), H(0x24), H(0x0b), st), base);
+            };
+            if (r < 340.f * k && r > 306.f * k) {
+                diamond(323.f, 0.f, 13.f); diamond(-323.f, 0.f, 13.f);
+                if (fine) {
+                    const float cs = 323.f * 0.78801075f, sn = 323.f * 0.61566148f; // cos/sin 38 deg
+                    diamond(cs, sn, 6.f); diamond(-cs, sn, 6.f); diamond(cs, -sn, 6.f); diamond(-cs, -sn, 6.f);
+                }
+            }
+            disc(294.f, GradPM(kRimLo, DiagT(X, Y, 294.f)));
+            disc(288.f, GradPM(kRimHi, DiagT(X, Y, 288.f)));
+            disc(282.f, FromStraight(0.02f, 0.03f, 0.05f, 1.f)); // dark behind the flipping centre
             c.base.px[i] = Pack(base);
 
-            // lit ring + outward glow, faded in by the pulse
-            PM lit = FromStraight(0.62f, 1.0f, 0.26f, ringA);
-            if (r > rd - 2.f * s) {
-                float ga = 0.75f * std::exp(-((r - rd) / (4.f * s)) * ((r - rd) / (4.f * s)));
-                ga *= Clamp01((r - (rd - 2.f * s)) / (2.f * s)); // keep it off the ring interior
-                PM glow = FromStraight(0.33f, 1.0f, 0.12f, ga);
-                lit = Over(lit, glow);
+            // pulse overlay: warm gold glow around the frame and a brightened band
+            PM lit = {0, 0, 0, 0};
+            {
+                float bandCov = std::min(Cov(r - 374.f * k), Cov(282.f * k - r));
+                lit = FromStraight(1.0f, 0.86f, 0.42f, 0.5f * bandCov);
+                if (r > rd - 2.f * s) {
+                    float gA = 0.8f * std::exp(-((r - rd) / (4.f * s)) * ((r - rd) / (4.f * s)));
+                    gA *= Clamp01((r - (rd - 2.f * s)) / (2.f * s));
+                    lit = Over(lit, FromStraight(1.0f, 0.72f, 0.22f, gA));
+                }
             }
             c.lit.px[i] = Pack(lit);
 
-            c.orb.px[i] = Pack(OrbPixel(rx, ry, r, rc));
+            c.orb.px[i] = Pack(EmblemPixel(rx, ry, k));
         }
     }
     if (content.icon && content.iconWidth && content.iconHeight) {
-        const float rci = rc + 0.5f * s;
         for (int y = 0; y < CW; y++)
             for (int x = 0; x < CW; x++) {
                 float rx = (float)x + 0.5f - cc, ry = (float)y + 0.5f - cc;
-                c.icon.px[(size_t)y * CW + x] = Pack(IconPixel(c, content.icon, content.iconWidth, content.iconHeight, rx, ry, std::hypot(rx, ry), rci));
+                c.icon.px[(size_t)y * CW + x] = Pack(IconPixel(c, content.icon, content.iconWidth, content.iconHeight, rx, ry, std::hypot(rx, ry), rEn));
             }
     } else {
         c.icon.px = c.orb.px;

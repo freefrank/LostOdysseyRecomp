@@ -3,10 +3,12 @@
 #include <os/user_paths.h>
 #include <settings/config.h>
 #include <xdbf_wrapper.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
@@ -24,6 +26,7 @@ bool gListBuilt = false;
 std::map<uint16_t, int64_t> gEarned; // id -> unix time
 bool gEarnedLoaded = false;
 std::deque<uint16_t> gAnnouncements;
+std::map<uint16_t, Icon> gIcons;
 // Checked every presented frame before taking the lock.
 std::atomic<uint32_t> gAnnouncementCount{0};
 const bool gTestAnnouncements = [] { const char* ids = std::getenv("LO_TEST_ACHIEVEMENTS"); return ids && *ids; }();
@@ -129,6 +132,14 @@ void BuildListLocked() {
     XDBFWrapper spa(gSpa.data(), gSpa.size());
     const auto local = spa.GetAchievements(SpaLanguage(game));
     const auto english = spa.GetAchievements(XDBF_LANGUAGE_ENGLISH);
+    // XACH flag 0x8 (show unachieved) is clear on secret achievements.
+    std::map<uint16_t, uint32_t> flags;
+    if (const auto block = spa.GetResource(XDBF_SPA_NAMESPACE_METADATA, XACH_SIGNATURE); block && block.BufferSize >= sizeof(XACHHeader)) {
+        const auto* header = reinterpret_cast<const XACHHeader*>(block.pBuffer);
+        const auto* entry = reinterpret_cast<const XACHEntry*>(block.pBuffer + sizeof(XACHHeader));
+        const size_t count = std::min<size_t>(header->AchievementCount, (block.BufferSize - sizeof(XACHHeader)) / sizeof(XACHEntry));
+        for (size_t i = 0; i < count; ++i) flags[entry[i].AchievementID] = entry[i].Flags;
+    }
     for (size_t i = 0; i < english.size(); ++i) {
         const auto& en = english[i];
         const auto* lo = i < local.size() && local[i].ID == en.ID ? &local[i] : nullptr;
@@ -143,6 +154,7 @@ void BuildListLocked() {
         info.unlockedText = pick(lo ? lo->UnlockedDesc : std::string{}, en.UnlockedDesc);
         info.lockedText = pick(lo ? lo->LockedDesc : std::string{}, en.LockedDesc);
         if (en.pImageBuffer && en.ImageBufferSize) info.iconPng.assign(en.pImageBuffer, en.pImageBuffer + en.ImageBufferSize);
+        info.secret = flags.contains(en.ID) && !(flags[en.ID] & 8);
         gList.push_back(std::move(info));
     }
     LOG_INFO("achievements: {} in the title data, language {}", gList.size(), game);
@@ -209,6 +221,36 @@ bool Earned(uint16_t id) {
     std::lock_guard lock(gMutex);
     LoadEarnedLocked();
     return gEarned.contains(id);
+}
+
+int64_t EarnedTime(uint16_t id) {
+    std::lock_guard lock(gMutex);
+    LoadEarnedLocked();
+    const auto it = gEarned.find(id);
+    return it == gEarned.end() ? 0 : it->second;
+}
+
+Icon IconOf(uint16_t id) {
+    std::lock_guard lock(gMutex);
+    if (const auto it = gIcons.find(id); it != gIcons.end()) return it->second;
+    BuildListLocked();
+    Icon icon;
+    const auto info = std::find_if(gList.begin(), gList.end(), [&](const Info& i) { return i.id == id; });
+    if (info != gList.end() && !info->iconPng.empty()) {
+        SDL_IOStream* io = SDL_IOFromConstMem(info->iconPng.data(), info->iconPng.size());
+        if (SDL_Surface* decoded = io ? SDL_LoadPNG_IO(io, true) : nullptr) {
+            if (SDL_Surface* rgba = SDL_ConvertSurface(decoded, SDL_PIXELFORMAT_RGBA32)) {
+                icon.width = uint32_t(rgba->w);
+                icon.height = uint32_t(rgba->h);
+                icon.pixels.resize(size_t(icon.width) * icon.height);
+                for (uint32_t y = 0; y < icon.height; ++y)
+                    std::memcpy(&icon.pixels[size_t(y) * icon.width], static_cast<const uint8_t*>(rgba->pixels) + size_t(y) * rgba->pitch, icon.width * 4);
+                SDL_DestroySurface(rgba);
+            }
+            SDL_DestroySurface(decoded);
+        }
+    }
+    return gIcons[id] = std::move(icon);
 }
 
 std::optional<uint16_t> NextAnnouncement() {
