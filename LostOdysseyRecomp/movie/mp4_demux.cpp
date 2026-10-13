@@ -8,6 +8,7 @@ namespace {
 constexpr uint32_t kMaxSamples = 1u << 24;
 constexpr uint32_t kMaxSampleBytes = 128u << 20;
 constexpr uint64_t kMaxMoovBytes = 256u << 20;
+constexpr uint64_t kMaxMoofBytes = 16u << 20;
 constexpr uint32_t kMaxDimension = 16384;
 
 constexpr uint32_t Fourcc(char a, char b, char c, char d) {
@@ -197,6 +198,12 @@ struct Tables {
     std::vector<uint32_t> sync;
     bool hasSizes = false, hasStss = false, hasStco = false;
     std::vector<Edit> edits;
+    uint32_t trackId = 0;
+};
+
+// Fragmented MP4 (moov/mvex, then moof + mdat pairs; Topaz Video AI writes these).
+struct Trex {
+    uint32_t trackId = 0, duration = 0, size = 0, flags = 0;
 };
 
 void ParseAvc1(Span entry, Mp4Track& t) {
@@ -252,7 +259,12 @@ bool ParseTrak(Span trak, Mp4Track& t, Tables& tab) {
     Mp4Track local;
     Tables ltab;
     while (NextBox(r, box)) {
-        if (box.type == Fourcc('e', 'd', 't', 's')) {
+        if (box.type == Fourcc('t', 'k', 'h', 'd')) {
+            Reader h(box.payload);
+            const uint8_t v = Version(h);
+            h.Skip(v == 1 ? 16 : 8);
+            ltab.trackId = h.U32();
+        } else if (box.type == Fourcc('e', 'd', 't', 's')) {
             Reader e(box.payload);
             Box eb;
             while (NextBox(e, eb)) {
@@ -371,8 +383,8 @@ bool ParseTrak(Span trak, Mp4Track& t, Tables& tab) {
     return true;
 }
 
-void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize, uint32_t movieTimescale) {
-    if (t.timescale == 0) throw Fail{"media timescale is zero"};
+// Samples listed in the moov sample tables.
+void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize) {
     if (!tab.hasSizes || !tab.hasStco || tab.stsc.empty() || tab.stts.empty()) throw Fail{"missing sample table box"};
     const size_t n = tab.sampleSizes.size();
     if (n == 0) throw Fail{"video track has no samples"};
@@ -399,11 +411,7 @@ void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize, uint32_t movieTim
     // Timing.
     size_t sample = 0;
     int64_t dts = 0;
-    uint32_t firstDelta = 0;
-    bool constant = true;
     for (const auto& [count, delta] : tab.stts) {
-        if (firstDelta == 0 && sample == 0) firstDelta = delta;
-        if (delta != firstDelta) constant = false;
         for (uint32_t k = 0; k < count && sample < n; ++k, ++sample) {
             t.samples[sample].dts = dts;
             t.samples[sample].duration = delta;
@@ -411,7 +419,6 @@ void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize, uint32_t movieTim
         }
     }
     if (sample < n) throw Fail{"stts covers fewer samples than stsz"};
-    t.frameDuration = constant ? firstDelta : 0;
     sample = 0;
     for (const auto& [count, offset] : tab.ctts) {
         for (uint32_t k = 0; k < count && sample < n; ++k, ++sample) t.samples[sample].pts = t.samples[sample].dts + offset;
@@ -426,6 +433,102 @@ void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize, uint32_t movieTim
             if (number >= 1 && number <= n) t.samples[number - 1].keyframe = true;
         }
     }
+}
+
+// One moof: the runs of trackId's fragments, appended in order. nextDts carries
+// the decode time between fragments that have no tfdt.
+void ParseMoof(Span moof, uint64_t moofOffset, uint64_t fileSize, uint32_t trackId, const Trex& trex,
+               int64_t& nextDts, Mp4Track& t) {
+    Reader r(moof);
+    Box box;
+    while (NextBox(r, box)) {
+        if (box.type != Fourcc('t', 'r', 'a', 'f')) continue;
+        Reader tr(box.payload);
+        Box tb;
+        bool mine = false;
+        uint64_t base = moofOffset, dataEnd = 0;
+        bool haveDataEnd = false;
+        uint32_t defDuration = trex.duration, defSize = trex.size, defFlags = trex.flags;
+        while (NextBox(tr, tb)) {
+            Reader q(tb.payload);
+            if (tb.type == Fourcc('t', 'f', 'h', 'd')) {
+                const uint32_t flags = q.U32() & 0xFFFFFF;
+                const uint32_t id = q.U32();
+                mine = trackId == 0 || id == trackId;
+                if (flags & 0x01) base = q.U64();
+                if (flags & 0x02) q.U32();
+                if (flags & 0x08) defDuration = q.U32();
+                if (flags & 0x10) defSize = q.U32();
+                if (flags & 0x20) defFlags = q.U32();
+            } else if (!mine) {
+                continue;
+            } else if (tb.type == Fourcc('t', 'f', 'd', 't')) {
+                const uint8_t v = Version(q);
+                nextDts = int64_t(v == 1 ? q.U64() : q.U32());
+            } else if (tb.type == Fourcc('t', 'r', 'u', 'n')) {
+                const uint32_t flags = q.U32() & 0xFFFFFF;
+                const uint32_t count = q.U32();
+                if (count > kMaxSamples || t.samples.size() + count > kMaxSamples) throw Fail{"too many samples"};
+                uint64_t data = haveDataEnd ? dataEnd : base;
+                if (flags & 0x01) data = base + int64_t(int32_t(q.U32()));
+                uint32_t firstFlags = defFlags;
+                const bool hasFirstFlags = (flags & 0x04) != 0;
+                if (hasFirstFlags) firstFlags = q.U32();
+                for (uint32_t i = 0; i < count; ++i) {
+                    Mp4Sample s;
+                    s.duration = (flags & 0x100) ? q.U32() : defDuration;
+                    s.size = (flags & 0x200) ? q.U32() : defSize;
+                    const uint32_t sampleFlags = (flags & 0x400) ? q.U32() : (i == 0 && hasFirstFlags ? firstFlags : defFlags);
+                    // Signed in either version, as FFmpeg reads it.
+                    const int64_t offset = (flags & 0x800) ? int64_t(int32_t(q.U32())) : 0;
+                    if (s.size > kMaxSampleBytes) throw Fail{"absurd sample size"};
+                    if (data > fileSize || s.size > fileSize - data) throw Fail{"sample lies past the end of the file"};
+                    s.offset = data;
+                    data += s.size;
+                    s.dts = nextDts;
+                    nextDts += s.duration;
+                    s.pts = s.dts + offset;
+                    s.keyframe = (sampleFlags & 0x10000) == 0; // sample_is_non_sync_sample
+                    t.samples.push_back(s);
+                }
+                dataEnd = data;
+                haveDataEnd = true;
+            }
+        }
+    }
+}
+
+bool ReadBox(ByteSource& src, uint64_t offset, uint64_t end, uint32_t& type, uint64_t& header, uint64_t& size);
+
+// Samples of every moof in the file, after any listed in the moov. A
+// truncated last fragment (an interrupted export) ends the list.
+void AppendFragments(ByteSource& src, uint64_t fileSize, uint32_t trackId, const Trex& trex, Mp4Track& t) {
+    int64_t nextDts = t.samples.empty() ? 0 : t.samples.back().dts + t.samples.back().duration;
+    std::vector<uint8_t> moof;
+    for (uint64_t offset = 0; offset < fileSize;) {
+        uint32_t type = 0;
+        uint64_t header = 0, size = 0;
+        if (!ReadBox(src, offset, fileSize, type, header, size) || size < header || size > fileSize - offset) {
+            t.warnings.push_back("the file ends inside a box; later fragments ignored");
+            break;
+        }
+        if (type == Fourcc('m', 'o', 'o', 'f')) {
+            if (size - header > kMaxMoofBytes) throw Fail{"moof is absurdly large"};
+            moof.resize(size_t(size - header));
+            if (!src.ReadAt(offset + header, moof.data(), moof.size())) throw Fail{"cannot read moof"};
+            ParseMoof(Span{moof.data(), moof.size()}, offset, fileSize, trackId, trex, nextDts, t);
+        }
+        offset += size;
+    }
+}
+
+// Frame duration, edit list and count, once every sample is known.
+void FinishSamples(Mp4Track& t, const Tables& tab, uint32_t movieTimescale) {
+    const size_t n = t.samples.size();
+    if (n == 0) throw Fail{"video track has no samples"};
+    t.frameDuration = t.samples[0].duration;
+    for (const auto& s : t.samples)
+        if (s.duration != t.frameDuration) { t.frameDuration = 0; break; }
 
     // Edit list: only a leading empty edit and/or a start media_time.
     int64_t shift = 0;
@@ -445,6 +548,12 @@ void BuildSamples(Mp4Track& t, Tables& tab, uint64_t fileSize, uint32_t movieTim
         } else {
             t.warnings.push_back("unsupported edit list; ignored");
         }
+    } else {
+        // No edit list (fragmented files from FFmpeg, Topaz): the first frame
+        // shown starts the video, as a replacement lines up from it.
+        int64_t first = t.samples[0].pts;
+        for (const auto& s : t.samples) first = std::min(first, s.pts);
+        shift = -first;
     }
     if (shift != 0) {
         for (auto& s : t.samples) {
@@ -494,8 +603,26 @@ bool ParseMp4(ByteSource& source, Mp4Track& track, std::string& error) {
                 Box box;
                 uint32_t movieTimescale = 0;
                 Tables tab;
+                std::vector<Trex> trex;
+                bool fragmented = false;
                 while (NextBox(r, box)) {
-                    if (box.type == Fourcc('m', 'v', 'h', 'd')) {
+                    if (box.type == Fourcc('m', 'v', 'e', 'x')) {
+                        fragmented = true;
+                        Reader m(box.payload);
+                        Box mb;
+                        while (NextBox(m, mb)) {
+                            if (mb.type != Fourcc('t', 'r', 'e', 'x')) continue;
+                            Reader q(mb.payload);
+                            Version(q);
+                            Trex x;
+                            x.trackId = q.U32();
+                            q.U32(); // default_sample_description_index
+                            x.duration = q.U32();
+                            x.size = q.U32();
+                            x.flags = q.U32();
+                            trex.push_back(x);
+                        }
+                    } else if (box.type == Fourcc('m', 'v', 'h', 'd')) {
                         Reader h(box.payload);
                         const uint8_t v = Version(h);
                         h.Skip(v == 1 ? 16 : 8);
@@ -506,7 +633,15 @@ bool ParseMp4(ByteSource& source, Mp4Track& track, std::string& error) {
                     }
                 }
                 if (!found) throw Fail{"no H.264 (avc1/avc3) video track"};
-                BuildSamples(track, tab, fileSize, movieTimescale);
+                if (track.timescale == 0) throw Fail{"media timescale is zero"};
+                if (!fragmented || (tab.hasSizes && !tab.sampleSizes.empty())) BuildSamples(track, tab, fileSize);
+                if (fragmented) {
+                    Trex defaults;
+                    for (const auto& x : trex)
+                        if (x.trackId == tab.trackId) defaults = x;
+                    AppendFragments(source, fileSize, tab.trackId, defaults, track);
+                }
+                FinishSamples(track, tab, movieTimescale);
             }
             offset += size;
         }

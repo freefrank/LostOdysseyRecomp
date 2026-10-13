@@ -123,7 +123,7 @@ The video is named after the original. [Export the movies](#export-the-original-
 
 What the video must be:
 
-- MP4 container with the `moov` box at the front (ffmpeg `-movflags +faststart`).
+- MP4 container with the `moov` box at the front (ffmpeg `-movflags +faststart`). Fragmented MP4, which Topaz Video AI writes, also works.
 - H.264 High profile, 8-bit `yuv420p`, progressive, BT.709 limited range, constant frame rate.
 - Any frame rate from 24 to 120 fps. The game picks frames by time, so the rate does not have to match the original. Twice the original's rate is easiest when a tool doubles the frames: 60 fps for a 30 fps original, 60000/1001 for 29.97. `ffprobe` on the exported video shows its rate (most are 30 or 29.97).
 - 16:9. Use 3840x2160 for desktop packs (H.264 level 5.2) and 1920x1080 for Steam Deck and phones (level 4.2).

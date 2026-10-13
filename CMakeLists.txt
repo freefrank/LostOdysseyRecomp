@@ -161,6 +161,8 @@ if(LO_BUILD_MOD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/data/testsrc-64x64-bframes.mp4 --rewind-check)
         add_test(NAME LoMovieDecodeTestSoftware COMMAND LoMovieDecodeTest
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/data/testsrc-64x64-bframes.mp4 --software --rewind-check)
+        add_test(NAME LoMovieDecodeTestFragmented COMMAND LoMovieDecodeTest
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/data/testsrc-64x64-bframes-frag.mp4 --software --rewind-check)
     endif()
     # The runtime's --export-assets mode without game code, GPU or SDL.
     if(EXISTS "${LO_MINIZ_DIR}/miniz.c")
