@@ -83,6 +83,7 @@ struct Package
 {
     std::span<const uint8_t> bytes;
     std::vector<std::string> names, imports;
+    std::vector<int32_t> importOuters; // object reference of each import's outer
     std::vector<Export> exports;
     std::string Name(Reader &r) const
     {
@@ -105,7 +106,7 @@ struct Package
         r = {data.first(importOffset), nameOffset};
         for (uint32_t i = 0; i < nameCount; ++i) { names.push_back(r.String()); r.Take(8); }
         r = {data.first(exportOffset), importOffset};
-        for (uint32_t i = 0; i < importCount; ++i) { Name(r); Name(r); r.I32(); imports.push_back(Name(r)); }
+        for (uint32_t i = 0; i < importCount; ++i) { Name(r); Name(r); importOuters.push_back(r.I32()); imports.push_back(Name(r)); }
         r = {data.first(dependsOffset), exportOffset};
         for (uint32_t i = 0; i < exportCount; ++i)
         {

@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <bit>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -130,10 +131,14 @@ Original ReadOriginal(const Package &package, const ue3::Export &e)
 
 // ---- The model from the .glb, in Unreal space ------------------------------
 
+constexpr size_t kMaxUvSets = 8;
+using Uv = std::array<float, 2>;
 struct Vertex
 {
     Vec3 position{}, normal{}, tangent{}, binormal{};
-    std::array<float, 2> uv{};
+    std::array<Uv, kMaxUvSets> uvs{}; // skeletal meshes have one set
+    uint32_t color = 0xffffffffu;     // ARGB, static meshes
+    uint16_t borrowed = 0;            // static meshes: UV sets (bit n) and colour (bit 8) the file lacks
     std::array<uint16_t, 4> bones{};  // skeleton indices
     std::array<float, 4> weights{};   // largest first, sum 1
 };
@@ -163,23 +168,118 @@ std::string MaterialName(std::string name)
     return Lower(name);
 }
 
+// The original material slot a primitive's material names.
+uint16_t SlotOf(const gltf::Document &doc, const std::vector<std::string> &materials, int material)
+{
+    if (material < 0 && materials.size() == 1) return 0;
+    Require(material >= 0 && size_t(material) < doc.materials.size(), "a mesh part has no material; give it one of the original material names");
+    const auto name = MaterialName(doc.materials[size_t(material)]);
+    for (size_t i = 0; i < materials.size(); ++i)
+        if (MaterialName(materials[i]) == name) return uint16_t(i);
+    std::string names;
+    for (const auto &m : materials) names += (names.empty() ? "" : ", ") + m;
+    throw std::runtime_error("material \"" + doc.materials[size_t(material)] + "\" is not one of the original's (" + names + ")");
+}
+
+// A primitive's triangles, its vertices starting at base; degenerate ones dropped.
+void AppendTriangles(const gltf::Document &doc, const gltf::Primitive &primitive, size_t count, uint32_t base, uint16_t slot, Model &model)
+{
+    std::vector<uint32_t> indices;
+    if (primitive.indices >= 0) indices = doc.Integers(primitive.indices, 1);
+    else for (uint32_t i = 0; i < count; ++i) indices.push_back(i);
+    Require(indices.size() % 3 == 0, "a mesh part's index count is not a multiple of 3");
+    for (size_t t = 0; t < indices.size(); t += 3)
+    {
+        Triangle triangle{{indices[t], indices[t + 1], indices[t + 2]}, slot};
+        for (auto &i : triangle.v) { Require(i < count, "an index is outside its mesh part"); i += base; }
+        if (triangle.v[0] == triangle.v[1] || triangle.v[1] == triangle.v[2] || triangle.v[0] == triangle.v[2]) continue;
+        model.triangles.push_back(triangle);
+    }
+}
+
+// Primitives that share their vertex accessors (the exporter's sections do)
+// share their vertices: the first vertex read for a node's attribute set.
+using ReadVertices = std::map<std::pair<size_t, std::map<std::string, int>>, uint32_t>;
+
+// Removes vertices no triangle uses, keeping the order of the rest.
+void DropUnused(Model &model)
+{
+    std::vector<uint32_t> remap(model.vertices.size(), UINT32_MAX);
+    for (const auto &t : model.triangles) for (const auto i : t.v) remap[i] = 0;
+    uint32_t next = 0;
+    for (size_t i = 0; i < remap.size(); ++i)
+        if (remap[i] == 0) { remap[i] = next; model.vertices[next++] = model.vertices[i]; }
+    model.vertices.resize(next);
+    for (auto &t : model.triangles) for (auto &i : t.v) i = remap[i];
+}
+
+// Splits mirrored UV seams and fills in normals, tangents and binormals from UV set 0.
+void FinishModel(Model &model)
+{
+    // A vertex on a mirrored UV seam serves triangles of both UV handedness; their
+    // tangents would cancel, so the mirrored side gets its own copy.
+    std::vector<uint8_t> sides(model.vertices.size());
+    std::vector<bool> mirrored(model.triangles.size());
+    for (size_t t = 0; t < model.triangles.size(); ++t)
+    {
+        const auto &tri = model.triangles[t];
+        const auto &a = model.vertices[tri.v[0]].uvs[0], &b = model.vertices[tri.v[1]].uvs[0], &c = model.vertices[tri.v[2]].uvs[0];
+        mirrored[t] = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]) < 0;
+        for (const auto i : tri.v) sides[i] |= mirrored[t] ? 2 : 1;
+    }
+    std::map<uint32_t, uint32_t> copies;
+    for (size_t t = 0; t < model.triangles.size(); ++t)
+        if (mirrored[t])
+            for (auto &i : model.triangles[t].v)
+                if (sides[i] == 3)
+                {
+                    const auto [it, added] = copies.emplace(i, uint32_t(model.vertices.size()));
+                    if (added) model.vertices.push_back(model.vertices[i]);
+                    i = it->second;
+                }
+
+    // Unreal-space faces wind the other way from glTF's (the axis swap mirrors them).
+    auto faceNormal = [&](const Triangle &t) {
+        const auto &a = model.vertices[t.v[0]].position, &b = model.vertices[t.v[1]].position, &c = model.vertices[t.v[2]].position;
+        return Cross(Sub(c, a), Sub(b, a));
+    };
+    std::vector<Vec3> faceSum(model.vertices.size()), tangents(model.vertices.size()), binormals(model.vertices.size());
+    for (const auto &t : model.triangles)
+    {
+        const auto &a = model.vertices[t.v[0]], &b = model.vertices[t.v[1]], &c = model.vertices[t.v[2]];
+        const auto e1 = Sub(b.position, a.position), e2 = Sub(c.position, a.position);
+        const float du1 = b.uvs[0][0] - a.uvs[0][0], dv1 = b.uvs[0][1] - a.uvs[0][1];
+        const float du2 = c.uvs[0][0] - a.uvs[0][0], dv2 = c.uvs[0][1] - a.uvs[0][1];
+        const float det = du1 * dv2 - du2 * dv1;
+        const auto face = faceNormal(t);
+        for (const auto i : t.v) faceSum[i] = Add(faceSum[i], face);
+        if (std::abs(det) < 1e-12f) continue;
+        // The stored tangent follows dP/du and the binormal dP/dv (checked on the discs' meshes).
+        const auto tangent = Scale(Sub(Scale(e1, dv2), Scale(e2, dv1)), 1 / det);
+        const auto binormal = Scale(Sub(Scale(e2, du1), Scale(e1, du2)), 1 / det);
+        for (const auto i : t.v) { tangents[i] = Add(tangents[i], tangent); binormals[i] = Add(binormals[i], binormal); }
+    }
+    for (size_t i = 0; i < model.vertices.size(); ++i)
+    {
+        auto &v = model.vertices[i];
+        // Parts without normals (zero after reading) take their faces'.
+        if (Dot(v.normal, v.normal) < 0.5f) v.normal = Normalize(faceSum[i]);
+        const auto &n = v.normal;
+        auto t = Sub(tangents[i], Scale(n, Dot(n, tangents[i])));
+        const auto fallback = Normalize(Cross(n, std::abs(n[2]) < 0.9f ? Vec3{0, 0, 1} : Vec3{1, 0, 0}));
+        v.tangent = Normalize(t, fallback);
+        auto b = Sub(Sub(binormals[i], Scale(n, Dot(n, binormals[i]))), Scale(v.tangent, Dot(v.tangent, binormals[i])));
+        v.binormal = Normalize(b, Cross(n, v.tangent));
+    }
+}
+
 Model ReadModel(const gltf::Document &doc, const Original &original)
 {
-    std::map<std::string, uint16_t> bones, slots;
+    std::map<std::string, uint16_t> bones;
     for (size_t i = 0; i < original.bones.size(); ++i) bones.emplace(Lower(original.bones[i]), uint16_t(i));
-    for (size_t i = 0; i < original.materials.size(); ++i) slots.emplace(MaterialName(original.materials[i]), uint16_t(i));
     auto boneOf = [&](const std::string &name) -> int {
         const auto it = bones.find(Lower(name));
         return it == bones.end() ? -1 : it->second;
-    };
-    auto slotOf = [&](int material) -> uint16_t {
-        if (material < 0 && original.materials.size() == 1) return 0;
-        Require(material >= 0 && size_t(material) < doc.materials.size(), "a mesh part has no material; give it one of the original material names");
-        const auto it = slots.find(MaterialName(doc.materials[size_t(material)]));
-        if (it != slots.end()) return it->second;
-        std::string names;
-        for (const auto &m : original.materials) names += (names.empty() ? "" : ", ") + m;
-        throw std::runtime_error("material \"" + doc.materials[size_t(material)] + "\" is not one of the original's (" + names + ")");
     };
 
     Model model;
@@ -218,7 +318,7 @@ Model ReadModel(const gltf::Document &doc, const Original &original)
             const int position = attribute("POSITION"), normal = attribute("NORMAL"), uv = attribute("TEXCOORD_0");
             Require(position >= 0, "a mesh part has no positions");
             Require(uv >= 0, "a mesh part has no UV map; the game needs one");
-            const uint16_t slot = slotOf(primitive.material);
+            const uint16_t slot = SlotOf(doc, original.materials, primitive.material);
             const auto positions = doc.Floats(position, 3);
             const auto uvs = doc.Floats(uv, 2);
             const auto normals = normal >= 0 ? doc.Floats(normal, 3) : std::vector<float>{};
@@ -284,79 +384,15 @@ Model ReadModel(const gltf::Document &doc, const Original &original)
                 }
                 v.position = ToUnreal(placed, kCentimetres);
                 v.normal = Normalize(ToUnreal(turned, 1), {0, 0, 0});
-                v.uv = {uvs[i * 2], uvs[i * 2 + 1]};
+                v.uvs[0] = {uvs[i * 2], uvs[i * 2 + 1]};
                 for (const auto f : v.position) Require(std::isfinite(f), "a vertex position is not a number");
                 model.vertices.push_back(v);
             }
-            std::vector<uint32_t> indices;
-            if (primitive.indices >= 0) indices = doc.Integers(primitive.indices, 1);
-            else for (uint32_t i = 0; i < count; ++i) indices.push_back(i);
-            Require(indices.size() % 3 == 0, "a mesh part's index count is not a multiple of 3");
-            for (size_t t = 0; t < indices.size(); t += 3)
-            {
-                Triangle triangle{{indices[t], indices[t + 1], indices[t + 2]}, slot};
-                for (auto &i : triangle.v) { Require(i < count, "an index is outside its mesh part"); i += base; }
-                if (triangle.v[0] == triangle.v[1] || triangle.v[1] == triangle.v[2] || triangle.v[0] == triangle.v[2]) continue;
-                model.triangles.push_back(triangle);
-            }
+            AppendTriangles(doc, primitive, count, base, slot, model);
         }
     }
     Require(!model.triangles.empty(), "the file has no triangles");
-
-    // A vertex on a mirrored UV seam serves triangles of both UV handedness; their
-    // tangents would cancel, so the mirrored side gets its own copy.
-    std::vector<uint8_t> sides(model.vertices.size());
-    std::vector<bool> mirrored(model.triangles.size());
-    for (size_t t = 0; t < model.triangles.size(); ++t)
-    {
-        const auto &tri = model.triangles[t];
-        const auto &a = model.vertices[tri.v[0]].uv, &b = model.vertices[tri.v[1]].uv, &c = model.vertices[tri.v[2]].uv;
-        mirrored[t] = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]) < 0;
-        for (const auto i : tri.v) sides[i] |= mirrored[t] ? 2 : 1;
-    }
-    std::map<uint32_t, uint32_t> copies;
-    for (size_t t = 0; t < model.triangles.size(); ++t)
-        if (mirrored[t])
-            for (auto &i : model.triangles[t].v)
-                if (sides[i] == 3)
-                {
-                    const auto [it, added] = copies.emplace(i, uint32_t(model.vertices.size()));
-                    if (added) model.vertices.push_back(model.vertices[i]);
-                    i = it->second;
-                }
-
-    // Unreal-space faces wind the other way from glTF's (the axis swap mirrors them).
-    auto faceNormal = [&](const Triangle &t) {
-        const auto &a = model.vertices[t.v[0]].position, &b = model.vertices[t.v[1]].position, &c = model.vertices[t.v[2]].position;
-        return Cross(Sub(c, a), Sub(b, a));
-    };
-    std::vector<Vec3> faceSum(model.vertices.size()), tangents(model.vertices.size()), binormals(model.vertices.size());
-    for (const auto &t : model.triangles)
-    {
-        const auto &a = model.vertices[t.v[0]], &b = model.vertices[t.v[1]], &c = model.vertices[t.v[2]];
-        const auto e1 = Sub(b.position, a.position), e2 = Sub(c.position, a.position);
-        const float du1 = b.uv[0] - a.uv[0], dv1 = b.uv[1] - a.uv[1], du2 = c.uv[0] - a.uv[0], dv2 = c.uv[1] - a.uv[1];
-        const float det = du1 * dv2 - du2 * dv1;
-        const auto face = faceNormal(t);
-        for (const auto i : t.v) faceSum[i] = Add(faceSum[i], face);
-        if (std::abs(det) < 1e-12f) continue;
-        // The stored tangent follows dP/du and the binormal dP/dv (checked on the discs' meshes).
-        const auto tangent = Scale(Sub(Scale(e1, dv2), Scale(e2, dv1)), 1 / det);
-        const auto binormal = Scale(Sub(Scale(e2, du1), Scale(e1, du2)), 1 / det);
-        for (const auto i : t.v) { tangents[i] = Add(tangents[i], tangent); binormals[i] = Add(binormals[i], binormal); }
-    }
-    for (size_t i = 0; i < model.vertices.size(); ++i)
-    {
-        auto &v = model.vertices[i];
-        // Parts without normals (zero after reading) take their faces'.
-        if (Dot(v.normal, v.normal) < 0.5f) v.normal = Normalize(faceSum[i]);
-        const auto &n = v.normal;
-        auto t = Sub(tangents[i], Scale(n, Dot(n, tangents[i])));
-        const auto fallback = Normalize(Cross(n, std::abs(n[2]) < 0.9f ? Vec3{0, 0, 1} : Vec3{1, 0, 0}));
-        v.tangent = Normalize(t, fallback);
-        auto b = Sub(Sub(binormals[i], Scale(n, Dot(n, binormals[i]))), Scale(v.tangent, Dot(v.tangent, binormals[i])));
-        v.binormal = Normalize(b, Cross(n, v.tangent));
-    }
+    FinishModel(model);
     return model;
 }
 
@@ -509,7 +545,7 @@ void WriteLod(Writer &w, size_t exportBase, const Model &model, const Lod &lod, 
         const auto &chunk = *std::find_if(lod.chunks.rbegin(), lod.chunks.rend(), [&](const Chunk &c) { return c.first <= i; });
         for (const auto f : v.position) w.F32(f);
         w.U32(PackNormal(v.tangent)); w.U32(PackNormal(v.binormal)); w.U32(PackNormal(v.normal));
-        w.F32(v.uv[0]); w.F32(v.uv[1]);
+        w.F32(v.uvs[0][0]); w.F32(v.uvs[0][1]);
         for (int k = 0; k < 4; ++k)
         {
             const auto it = std::lower_bound(chunk.bones.begin(), chunk.bones.end(), influence.bones[size_t(k)]);
@@ -558,9 +594,470 @@ std::vector<uint8_t> WriteExport(const Package &package, const Original &o, cons
     w.Raw(bytes.subspan(o.tailBegin, o.end - o.tailBegin));
     return std::move(w.bytes);
 }
+
+// ---- StaticMesh and the game's StaticMeshRPG ---------------------------------
+// As asset_export.cpp ReadStaticMesh reads them: properties, Bounds, BodySetup,
+// the kDOP collision tree, InternalVersion 15 and one LOD (every mesh on the
+// discs has one): an empty bulk array, sections of 28 bytes, the vertex stream
+// (40 bytes and 8 per UV set past the first), the vertex count, u16 indices,
+// then empty wireframe indices, edges and fEC. The 24 or 32 bytes after the
+// LOD are kept as they are.
+
+struct StaticOriginal
+{
+    size_t propertiesBegin = 0, propertiesEnd = 0;
+    std::array<float, 7> bounds{};
+    int32_t bodySetup = 0;
+    uint32_t version = 0;
+    // The distinct section materials in first-use order, as the exporter numbers
+    // them, with the collision flags of their first section.
+    std::vector<int32_t> materialRefs;
+    std::vector<std::string> materials;
+    std::vector<std::pair<uint32_t, uint32_t>> collision;
+    uint32_t uvSets = 0;
+    std::vector<Vertex> vertices; // LOD 0: position, normal, UV sets, colour
+    size_t tailBegin = 0, end = 0;
+};
+
+Vec3 UnpackNormal(uint32_t packed)
+{
+    auto axis = [&](int shift) { return float(packed >> shift & 0xff) / 127.5f - 1; };
+    return {axis(0), axis(8), axis(16)};
 }
 
-Result RebuildPackage(std::span<const uint8_t> bytes, const std::vector<Replacement> &replacements)
+StaticOriginal ReadStaticOriginal(const Package &package, const ue3::Export &e)
+{
+    StaticOriginal o;
+    auto r = ue3::ObjectReader(package, e);
+    o.propertiesBegin = r.pos;
+    ue3::Properties(package, r, true, [](auto &&...) {});
+    o.propertiesEnd = r.pos;
+    for (auto &f : o.bounds) f = r.F32();
+    o.bodySetup = r.I32();
+    ue3::SkipArray(r, 36); ue3::SkipArray(r, 16); // kDOP nodes and triangles.
+    o.version = r.U32();
+    Require(o.version < 17, "unexpected static mesh version " + std::to_string(o.version));
+    Require(ue3::Count(r, 4) == 1, "the original has more than one LOD");
+    const auto flags = r.U32(); r.U32(); const auto stored = r.U32(); r.U32();
+    if (!(flags & 0x21)) r.Take(stored);
+    for (uint32_t i = 0, n = ue3::Count(r, 28); i < n; ++i)
+    {
+        const auto material = r.I32();
+        const auto collision = r.U32(), oldCollision = r.U32();
+        r.Take(16); // FirstIndex, NumTriangles, MinVertexIndex, MaxVertexIndex.
+        if (std::find(o.materialRefs.begin(), o.materialRefs.end(), material) != o.materialRefs.end()) continue;
+        o.materialRefs.push_back(material);
+        o.materials.push_back(package.RefName(material));
+        o.collision.emplace_back(collision, oldCollision);
+    }
+    Require(!o.materials.empty(), "the original has no sections");
+    o.uvSets = r.U32();
+    const auto itemSize = r.U32(), vertices = r.U32();
+    Require(o.uvSets >= 1 && o.uvSets <= kMaxUvSets && itemSize == 32 + 8 * o.uvSets, "unexpected static vertex layout");
+    Require(ue3::Count(r, itemSize) == vertices && vertices, "vertex count mismatch");
+    o.vertices.resize(vertices);
+    for (auto &v : o.vertices)
+    {
+        v.position = {r.F32(), r.F32(), r.F32()};
+        r.U32(); r.U32(); r.U32(); // Padding, tangent, binormal.
+        v.normal = UnpackNormal(r.U32());
+        v.color = r.U32();
+        for (uint32_t s = 0; s < o.uvSets; ++s) v.uvs[s] = {r.F32(), r.F32()};
+    }
+    Require(r.U32() == vertices, "vertex count mismatch");
+    ue3::SkipArray(r, 2); ue3::SkipArray(r, 2); ue3::SkipArray(r, 16); ue3::SkipArray(r, 1); // Indices, wireframe, edges, fEC.
+    o.tailBegin = r.pos;
+    o.end = size_t(e.offset) + e.size;
+    return o;
+}
+
+// The original vertex closest to a point: a k-d tree over the original positions.
+// Among vertices at the same spot (hard edges, UV seams) it takes the one whose
+// normal and first UV agree best.
+class NearestVertex
+{
+public:
+    explicit NearestVertex(const std::vector<Vertex> &vertices) : vertices_(vertices), order_(vertices.size())
+    {
+        for (uint32_t i = 0; i < order_.size(); ++i) order_[i] = i;
+        Build(0, order_.size(), 0);
+    }
+    uint32_t Find(const Vertex &v) const
+    {
+        float best = std::numeric_limits<float>::infinity();
+        Search(0, order_.size(), 0, v.position, best);
+        // Within a hair of the nearest: the best normal, then the closest UV.
+        const float reach = best + 1e-4f;
+        uint32_t found = 0;
+        float score = -std::numeric_limits<float>::infinity();
+        Visit(0, order_.size(), 0, v.position, reach, [&](uint32_t i) {
+            const auto &o = vertices_[i];
+            const float du = o.uvs[0][0] - v.uvs[0][0], dv = o.uvs[0][1] - v.uvs[0][1];
+            const float s = Dot(o.normal, v.normal) * 4 - std::sqrt(du * du + dv * dv);
+            if (s > score) { score = s; found = i; }
+        });
+        return found;
+    }
+
+private:
+    static constexpr size_t kLeaf = 8;
+    float Distance(uint32_t i, const Vec3 &p) const
+    {
+        const auto d = Sub(vertices_[i].position, p);
+        return Dot(d, d);
+    }
+    void Build(size_t begin, size_t end, int axis)
+    {
+        if (end - begin <= kLeaf) return;
+        const size_t middle = begin + (end - begin) / 2;
+        std::nth_element(order_.begin() + std::ptrdiff_t(begin), order_.begin() + std::ptrdiff_t(middle), order_.begin() + std::ptrdiff_t(end),
+                         [&](uint32_t a, uint32_t b) { return vertices_[a].position[size_t(axis)] < vertices_[b].position[size_t(axis)]; });
+        Build(begin, middle, (axis + 1) % 3);
+        Build(middle + 1, end, (axis + 1) % 3);
+    }
+    void Search(size_t begin, size_t end, int axis, const Vec3 &p, float &best) const
+    {
+        if (end - begin <= kLeaf)
+        {
+            for (size_t i = begin; i < end; ++i) best = std::min(best, Distance(order_[i], p));
+            return;
+        }
+        const size_t middle = begin + (end - begin) / 2;
+        best = std::min(best, Distance(order_[middle], p));
+        const float delta = p[size_t(axis)] - vertices_[order_[middle]].position[size_t(axis)];
+        const int next = (axis + 1) % 3;
+        if (delta < 0) { Search(begin, middle, next, p, best); if (delta * delta < best) Search(middle + 1, end, next, p, best); }
+        else { Search(middle + 1, end, next, p, best); if (delta * delta < best) Search(begin, middle, next, p, best); }
+    }
+    template <typename Each> void Visit(size_t begin, size_t end, int axis, const Vec3 &p, float reach, Each &&each) const
+    {
+        if (end - begin <= kLeaf)
+        {
+            for (size_t i = begin; i < end; ++i) if (Distance(order_[i], p) <= reach) each(order_[i]);
+            return;
+        }
+        const size_t middle = begin + (end - begin) / 2;
+        if (Distance(order_[middle], p) <= reach) each(order_[middle]);
+        const float delta = p[size_t(axis)] - vertices_[order_[middle]].position[size_t(axis)];
+        const int next = (axis + 1) % 3;
+        if (delta < 0 || delta * delta <= reach) Visit(begin, middle, next, p, reach, each);
+        if (delta >= 0 || delta * delta <= reach) Visit(middle + 1, end, next, p, reach, each);
+    }
+
+    const std::vector<Vertex> &vertices_;
+    std::vector<uint32_t> order_;
+};
+
+// The file's meshes as one static model in Unreal space. UV sets and the colour
+// the file lacks come from the nearest original vertex; nearest[i] is the
+// original vertex closest to model vertex i.
+Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original, std::vector<uint32_t> &nearest)
+{
+    Model model;
+    ReadVertices read;
+    for (size_t n = 0; n < doc.nodes.size(); ++n)
+    {
+        const auto &node = doc.nodes[n];
+        if (node.mesh < 0) continue;
+        const auto world = doc.World(int(n));
+        for (const auto &primitive : doc.meshes[size_t(node.mesh)])
+        {
+            const auto attribute = [&](const std::string &name) {
+                const auto it = primitive.attributes.find(name);
+                return it == primitive.attributes.end() ? -1 : it->second;
+            };
+            const int position = attribute("POSITION"), normal = attribute("NORMAL"), color = attribute("COLOR_0");
+            Require(position >= 0, "a mesh part has no positions");
+            Require(attribute("TEXCOORD_0") >= 0, "a mesh part has no UV map; the game needs one");
+            const uint16_t slot = SlotOf(doc, original.materials, primitive.material);
+            const auto [seen, added] = read.try_emplace({n, primitive.attributes}, uint32_t(model.vertices.size()));
+            if (!added)
+            {
+                AppendTriangles(doc, primitive, doc.Count(position), seen->second, slot, model);
+                continue;
+            }
+            const auto positions = doc.Floats(position, 3);
+            const size_t count = positions.size() / 3;
+            const auto normals = normal >= 0 ? doc.Floats(normal, 3) : std::vector<float>{};
+            Require(normals.empty() || normals.size() == count * 3, "a mesh part's attributes differ in length");
+            std::vector<std::vector<float>> uvs(original.uvSets);
+            for (uint32_t s = 0; s < original.uvSets; ++s)
+                if (const int uv = attribute("TEXCOORD_" + std::to_string(s)); uv >= 0)
+                {
+                    uvs[s] = doc.Floats(uv, 2);
+                    Require(uvs[s].size() == count * 2, "a mesh part's attributes differ in length");
+                }
+            const int colorComponents = color >= 0 ? doc.accessors.at(size_t(color)).components : 0;
+            Require(color < 0 || colorComponents == 3 || colorComponents == 4, "COLOR_0 needs 3 or 4 components");
+            const auto colors = color >= 0 ? doc.Floats(color, colorComponents) : std::vector<float>{};
+            Require(colors.empty() || colors.size() == count * size_t(colorComponents), "a mesh part's attributes differ in length");
+
+            const auto base = uint32_t(model.vertices.size());
+            for (size_t i = 0; i < count; ++i)
+            {
+                Vertex v;
+                const Vec3 p{positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]};
+                const Vec3 nrm = normals.empty() ? Vec3{0, 0, 0} : Vec3{normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]};
+                v.position = ToUnreal(gltf::TransformPoint(world, p), kCentimetres);
+                v.normal = Normalize(ToUnreal(gltf::TransformVector(world, nrm), 1), {0, 0, 0});
+                for (const auto f : v.position) Require(std::isfinite(f), "a vertex position is not a number");
+                for (uint32_t s = 0; s < original.uvSets; ++s)
+                    if (uvs[s].empty()) v.borrowed |= uint16_t(1u << s);
+                    else v.uvs[s] = {uvs[s][i * 2], uvs[s][i * 2 + 1]};
+                if (colors.empty()) v.borrowed |= 1u << 8;
+                else
+                {
+                    auto byte = [&](int c) { return uint32_t(std::clamp(std::lround(colors[i * size_t(colorComponents) + size_t(c)] * 255), 0L, 255L)); };
+                    v.color = (colorComponents == 4 ? byte(3) : 255u) << 24 | byte(0) << 16 | byte(1) << 8 | byte(2);
+                }
+                model.vertices.push_back(v);
+            }
+            AppendTriangles(doc, primitive, count, base, slot, model);
+        }
+    }
+    Require(!model.triangles.empty(), "the file has no triangles");
+    DropUnused(model);
+    FinishModel(model);
+    const NearestVertex finder(original.vertices);
+    nearest.resize(model.vertices.size());
+    for (size_t i = 0; i < model.vertices.size(); ++i)
+    {
+        auto &v = model.vertices[i];
+        nearest[i] = finder.Find(v);
+        const auto &from = original.vertices[nearest[i]];
+        for (uint32_t s = 0; s < original.uvSets; ++s) if (v.borrowed & (1u << s)) v.uvs[s] = from.uvs[s];
+        if (v.borrowed & (1u << 8)) v.color = from.color;
+    }
+    return model;
+}
+
+// UE3's kDOP tree build (TkDOPTree::Build): a node splits its triangles at the
+// mean centroid on the axis where the centroids vary most, until five or fewer
+// remain. Same nodes and the same triangles per leaf as the discs' trees.
+struct KdopNode { std::array<float, 6> box{}; uint32_t leaf = 0, a = 0, b = 0; }; // a, b: children, or count and first triangle
+struct KdopTriangle { std::array<uint32_t, 3> v{}; uint32_t section = 0; };
+
+std::vector<KdopNode> BuildKdop(const std::vector<Vertex> &vertices, std::vector<KdopTriangle> &triangles)
+{
+    constexpr uint32_t kMaxTrianglesPerLeaf = 5;
+    std::vector<Vec3> centroids;
+    for (const auto &t : triangles)
+    {
+        const auto &a = vertices[t.v[0]].position, &b = vertices[t.v[1]].position, &c = vertices[t.v[2]].position;
+        centroids.push_back({(a[0] + b[0] + c[0]) / 3.0f, (a[1] + b[1] + c[1]) / 3.0f, (a[2] + b[2] + c[2]) / 3.0f});
+    }
+    std::vector<uint32_t> order(triangles.size());
+    for (uint32_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::vector<KdopNode> nodes(1);
+    // Depth first, left before right, as the recursive original allocates them.
+    struct Job { uint32_t node, start, count; };
+    std::vector<Job> jobs{{0, 0, uint32_t(triangles.size())}};
+    while (!jobs.empty())
+    {
+        const auto job = jobs.back();
+        jobs.pop_back();
+        KdopNode node;
+        node.box = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                    -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()};
+        for (uint32_t i = job.start; i < job.start + job.count; ++i)
+            for (const auto v : triangles[order[i]].v)
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    node.box[k] = std::min(node.box[k], vertices[v].position[k]);
+                    node.box[k + 3] = std::max(node.box[k + 3], vertices[v].position[k]);
+                }
+        if (job.count <= kMaxTrianglesPerLeaf)
+        {
+            node.leaf = 1; node.a = job.count; node.b = job.start;
+            nodes[job.node] = node;
+            continue;
+        }
+        size_t plane = 0;
+        float bestMean = 0, bestVariance = 0;
+        for (size_t k = 0; k < 3; ++k)
+        {
+            float mean = 0, variance = 0;
+            for (uint32_t i = job.start; i < job.start + job.count; ++i) mean += centroids[order[i]][k];
+            mean /= float(job.count);
+            for (uint32_t i = job.start; i < job.start + job.count; ++i)
+            {
+                const float d = centroids[order[i]][k] - mean;
+                variance += d * d;
+            }
+            variance /= float(job.count);
+            if (variance >= bestVariance) { plane = k; bestVariance = variance; bestMean = mean; }
+        }
+        int64_t left = int64_t(job.start) - 1, right = int64_t(job.start) + job.count;
+        while (left < right)
+        {
+            float d;
+            do d = centroids[order[size_t(++left)]][plane]; while (d < bestMean && left < right);
+            do d = centroids[order[size_t(--right)]][plane]; while (d >= bestMean && right > 0 && left < right);
+            if (left < right) std::swap(order[size_t(left)], order[size_t(right)]);
+        }
+        if (left == int64_t(job.start) + job.count || right == int64_t(job.start)) left = int64_t(job.start) + job.count / 2;
+        node.a = uint32_t(nodes.size()); node.b = node.a + 1;
+        nodes[job.node] = node;
+        nodes.resize(nodes.size() + 2);
+        const auto split = uint32_t(left);
+        jobs.push_back({node.b, split, job.start + job.count - split});
+        jobs.push_back({node.a, job.start, split - job.start});
+    }
+    std::vector<KdopTriangle> sorted;
+    for (const auto i : order) sorted.push_back(triangles[i]);
+    triangles = std::move(sorted);
+    return nodes;
+}
+
+struct StaticSection { uint16_t slot = 0; uint32_t firstIndex = 0, triangles = 0, minVertex = 0, maxVertex = 0; };
+
+std::vector<uint8_t> WriteStaticExport(const Package &package, const StaticOriginal &o, const Model &model, size_t exportBase,
+                                       std::string &summary)
+{
+    Require(model.vertices.size() <= kMaxVertices, "the model has " + std::to_string(model.vertices.size()) + " vertices; the game takes 65535");
+    // One section per material, in the original's order.
+    std::vector<StaticSection> sections;
+    std::vector<uint16_t> indices;
+    for (uint16_t slot = 0; slot < o.materials.size(); ++slot)
+    {
+        StaticSection s{slot, uint32_t(indices.size()), 0, std::numeric_limits<uint32_t>::max(), 0};
+        for (const auto &t : model.triangles)
+            if (t.slot == slot)
+            {
+                for (const auto i : t.v) { indices.push_back(uint16_t(i)); s.minVertex = std::min(s.minVertex, i); s.maxVertex = std::max(s.maxVertex, i); }
+                ++s.triangles;
+            }
+        if (s.triangles) sections.push_back(s);
+    }
+    std::vector<KdopTriangle> collision;
+    for (uint32_t s = 0; s < sections.size(); ++s)
+        if (o.collision[sections[s].slot].first)
+            for (uint32_t t = 0; t < sections[s].triangles; ++t)
+            {
+                const auto at = sections[s].firstIndex + 3 * t;
+                collision.push_back({{indices[at], indices[at + 1], indices[at + 2]}, s});
+            }
+    const auto nodes = collision.empty() ? std::vector<KdopNode>{} : BuildKdop(model.vertices, collision);
+
+    Writer w;
+    w.Raw(package.bytes.subspan(o.propertiesBegin, o.propertiesEnd - o.propertiesBegin));
+    // Bounds around the original and the new model, so the game culls no earlier than before.
+    Vec3 low = model.vertices[0].position, high = low;
+    auto extend = [&](const Vec3 &p) { for (size_t k = 0; k < 3; ++k) { low[k] = std::min(low[k], p[k]); high[k] = std::max(high[k], p[k]); } };
+    for (const auto &v : model.vertices) extend(v.position);
+    for (const auto &v : o.vertices) extend(v.position);
+    const Vec3 origin = Scale(Add(low, high), 0.5f), extent = Scale(Sub(high, low), 0.5f);
+    float radius = 0;
+    for (const auto *list : {&model.vertices, &o.vertices})
+        for (const auto &v : *list) { const auto d = Sub(v.position, origin); radius = std::max(radius, Dot(d, d)); }
+    for (const auto f : origin) w.F32(f);
+    for (const auto f : extent) w.F32(f);
+    w.F32(std::sqrt(radius));
+    w.U32(uint32_t(o.bodySetup));
+    w.U32(uint32_t(nodes.size()));
+    for (const auto &n : nodes) { for (const auto f : n.box) w.F32(f); w.U32(n.leaf); w.U32(n.a); w.U32(n.b); }
+    w.U32(uint32_t(collision.size()));
+    for (const auto &t : collision) { for (const auto v : t.v) w.U32(v); w.U32(t.section); }
+    w.U32(o.version);
+    w.U32(1);
+    // Raw triangles: an empty bulk array whose offset is the byte after its header, as on the discs.
+    w.U32(0); w.U32(0); w.U32(0); w.U32(uint32_t(exportBase + w.bytes.size() + 4));
+    w.U32(uint32_t(sections.size()));
+    for (const auto &s : sections)
+    {
+        w.U32(uint32_t(o.materialRefs[s.slot]));
+        w.U32(o.collision[s.slot].first); w.U32(o.collision[s.slot].second);
+        w.U32(s.firstIndex); w.U32(s.triangles); w.U32(s.minVertex); w.U32(s.maxVertex);
+    }
+    const auto vertices = uint32_t(model.vertices.size());
+    w.U32(o.uvSets); w.U32(32 + 8 * o.uvSets); w.U32(vertices); w.U32(vertices);
+    for (const auto &v : model.vertices)
+    {
+        for (const auto f : v.position) w.F32(f);
+        w.U32(0);
+        w.U32(PackNormal(v.tangent)); w.U32(PackNormal(v.binormal)); w.U32(PackNormal(v.normal));
+        w.U32(v.color);
+        for (uint32_t s = 0; s < o.uvSets; ++s) { w.F32(v.uvs[s][0]); w.F32(v.uvs[s][1]); }
+    }
+    w.U32(vertices);
+    w.U32(uint32_t(indices.size()));
+    for (const auto i : indices) w.U16(i);
+    w.U32(0); w.U32(0); w.U32(0); // Wireframe indices, edges, fEC: empty on the discs.
+    w.Raw(package.bytes.subspan(o.tailBegin, o.end - o.tailBegin));
+    summary = std::to_string(vertices) + " vertices, " + std::to_string(indices.size() / 3) + " triangles, " +
+              std::to_string(sections.size()) + " sections, " + std::to_string(nodes.size()) + " collision nodes";
+    return std::move(w.bytes);
+}
+
+// ---- Baked lighting of the placements -----------------------------------------
+// A StaticMeshComponent is TemplateOwnerClass, its properties (StaticMesh: the
+// mesh it places), then per LOD: shadow maps, ShadowMap1D vertex buffers and a
+// light map (type 0 none; 1 per vertex: light GUIDs, owner, the samples as an
+// inline bulk array of 12 bytes each, three scale vectors; 2 textures: light
+// GUIDs, three texture references with scale vectors, coordinate scale and
+// bias). A ShadowMap1D is its properties, one float per vertex, a light GUID.
+
+constexpr size_t kLightSample = 12;
+
+struct ComponentLod
+{
+    std::vector<int32_t> shadowBuffers;
+    size_t samplesHeader = 0, samplesEnd = 0; // 0: no per-vertex light map
+    uint32_t samples = 0;
+};
+
+std::vector<ComponentLod> ReadComponent(const Package &package, const ue3::Export &e, int32_t &mesh)
+{
+    auto r = ue3::ObjectReader(package, e);
+    r.I32(); // TemplateOwnerClass.
+    ue3::Properties(package, r, true, [&](const std::string &name, const std::string &type, Reader &value, uint32_t) {
+        if (name == "StaticMesh" && type == "ObjectProperty") mesh = value.I32();
+    });
+    std::vector<ComponentLod> lods(ue3::Count(r, 12));
+    for (auto &lod : lods)
+    {
+        ue3::SkipArray(r, 4); // Shadow maps.
+        for (uint32_t i = 0, n = ue3::Count(r, 4); i < n; ++i) lod.shadowBuffers.push_back(r.I32());
+        const auto type = r.U32();
+        if (type == 0) continue;
+        Require(type <= 2, "unknown light map type " + std::to_string(type));
+        ue3::SkipArray(r, 16); // Light GUIDs.
+        if (type == 2) { r.Take(64); continue; }
+        r.I32(); // Owner.
+        lod.samplesHeader = r.pos;
+        const auto flags = r.U32();
+        lod.samples = r.U32();
+        const auto size = r.U32();
+        r.U32();
+        Require(!(flags & 0x21) && size == lod.samples * kLightSample, "unexpected light map samples");
+        r.Take(size);
+        lod.samplesEnd = r.pos;
+        r.Take(36); // Scale vectors.
+    }
+    return lods;
+}
+
+// The replaced-mesh key of an object reference: "<package stem>.<object>" in lower case.
+std::string MeshKey(const Package &package, int32_t ref, const std::string &stem)
+{
+    if (ref > 0) return Lower(stem + "." + package.RefName(ref));
+    if (ref == 0 || uint64_t(-int64_t(ref)) > package.imports.size()) return {};
+    const auto index = size_t(-int64_t(ref)) - 1;
+    // The outermost import above it is the package it lives in.
+    const auto valid = [&](int32_t r) { return r < 0 && uint64_t(-int64_t(r)) <= package.imports.size(); };
+    int32_t outer = package.importOuters[index];
+    for (size_t depth = 0; valid(outer) && depth < 16; ++depth)
+    {
+        const auto above = package.importOuters[size_t(-int64_t(outer)) - 1];
+        if (!valid(above)) break;
+        outer = above;
+    }
+    if (!valid(outer)) return {};
+    return Lower(package.imports[size_t(-int64_t(outer)) - 1] + "." + package.imports[index]);
+}
+}
+
+Result RebuildPackage(std::span<const uint8_t> bytes, const std::string &stem, const std::vector<Replacement> &replacements)
 {
     Result result;
     std::unique_ptr<Package> package;
@@ -576,22 +1073,39 @@ Result RebuildPackage(std::span<const uint8_t> bytes, const std::vector<Replacem
             // Archive entry names are lower case.
             Require(Lower(ue3::FileStem(e.name)) == Lower(replacement.object),
                     "export " + std::to_string(replacement.exportIndex) + " is " + e.name + ", not " + replacement.object);
-            Require(package->ClassName(e) == "SkeletalMesh", e.name + " is a " + package->ClassName(e) + "; only SkeletalMesh can be replaced");
-            const auto original = ReadOriginal(*package, e);
+            const auto type = package->ClassName(e);
+            const bool skeletal = type == "SkeletalMesh";
+            Require(skeletal || type == "StaticMesh" || type == "StaticMeshRPG",
+                    e.name + " is a " + type + "; only SkeletalMesh, StaticMesh and StaticMeshRPG can be replaced");
             const auto doc = gltf::ReadGlb(replacement.glb);
-            const auto model = ReadModel(doc, original);
-            const auto lod = BuildLod(model);
             while (out.size() % 16) out.push_back(0);
             const size_t base = out.size();
             Require(base < 0xffffffffu, "package too large");
-            const auto data = WriteExport(*package, original, model, lod, base);
+            std::vector<uint8_t> data;
+            std::string summary;
+            VertexMap vertexMap;
+            if (skeletal)
+            {
+                const auto original = ReadOriginal(*package, e);
+                const auto model = ReadModel(doc, original);
+                const auto lod = BuildLod(model);
+                data = WriteExport(*package, original, model, lod, base);
+                summary = std::to_string(lod.vertices.size()) + " vertices, " + std::to_string(lod.indices.size() / 3) +
+                          " triangles, " + std::to_string(lod.sections.size()) + " sections";
+            }
+            else
+            {
+                const auto original = ReadStaticOriginal(*package, e);
+                const auto model = ReadStaticModel(doc, original, vertexMap.nearest);
+                data = WriteStaticExport(*package, original, model, base, summary);
+                vertexMap.originalVertices = uint32_t(original.vertices.size());
+            }
             out.insert(out.end(), data.begin(), data.end());
             PutBe32(out, e.record + 32, uint32_t(data.size()));
             PutBe32(out, e.record + 36, uint32_t(base));
             ++result.replaced;
-            result.notes.push_back(e.name + ": " + std::to_string(lod.vertices.size()) + " vertices, " +
-                                   std::to_string(lod.indices.size() / 3) + " triangles, " + std::to_string(lod.sections.size()) +
-                                   " sections");
+            result.notes.push_back(e.name + ": " + summary);
+            if (!skeletal) result.vertexMaps[Lower(stem + "." + e.name)] = std::move(vertexMap);
         }
         catch (const std::exception &error)
         {
@@ -599,6 +1113,100 @@ Result RebuildPackage(std::span<const uint8_t> bytes, const std::vector<Replacem
         }
     }
     if (result.replaced) result.package = std::move(out);
+    return result;
+}
+
+Result RemapLighting(std::span<const uint8_t> bytes, const std::string &stem, const VertexMaps &maps)
+{
+    Result result;
+    std::unique_ptr<Package> package;
+    try { package = std::make_unique<Package>(bytes); }
+    catch (const std::exception &error) { result.notes.push_back(std::string("package unreadable: ") + error.what()); return result; }
+    // Only packages that place one of the meshes: an import of it, or the mesh itself.
+    bool places = false;
+    for (size_t i = 0; !places && i < package->imports.size(); ++i) places = maps.count(MeshKey(*package, -int32_t(i) - 1, stem)) != 0;
+    for (size_t i = 0; !places && i < package->exports.size(); ++i) places = maps.count(MeshKey(*package, int32_t(i) + 1, stem)) != 0;
+    if (!places) return result;
+
+    std::vector<uint8_t> out(bytes.begin(), bytes.end());
+    auto align = [&] {
+        while (out.size() % 16) out.push_back(0);
+        Require(out.size() < 0xffffffffu, "package too large");
+        return out.size();
+    };
+    auto place = [&](const ue3::Export &e, size_t base, const std::vector<uint8_t> &data) {
+        out.insert(out.end(), data.begin(), data.end());
+        PutBe32(out, e.record + 32, uint32_t(data.size()));
+        PutBe32(out, e.record + 36, uint32_t(base));
+    };
+    std::map<int32_t, const VertexMap *> shadowBuffers; // ShadowMap1D reference -> its mesh's map
+    size_t lightMaps = 0, skipped = 0;
+    for (const auto &e : package->exports)
+    {
+        if (package->ClassName(e) != "StaticMeshComponent") continue;
+        try
+        {
+            int32_t mesh = 0;
+            const auto lods = ReadComponent(*package, e, mesh);
+            const auto it = maps.find(MeshKey(*package, mesh, stem));
+            if (it == maps.end() || lods.empty()) continue;
+            const auto &map = it->second;
+            const auto &lod = lods[0]; // the replaced mesh has one LOD
+            for (const auto ref : lod.shadowBuffers) if (ref > 0) shadowBuffers.emplace(ref, &map);
+            if (!lod.samplesHeader) continue;
+            Require(lod.samples == map.originalVertices, "its light map has " + std::to_string(lod.samples) + " samples for " +
+                                                            std::to_string(map.originalVertices) + " vertices");
+            const size_t base = align();
+            const auto vertices = uint32_t(map.nearest.size());
+            Writer w;
+            w.Raw(bytes.subspan(e.offset, lod.samplesHeader - e.offset));
+            w.U32(0); w.U32(vertices); w.U32(uint32_t(vertices * kLightSample)); w.U32(uint32_t(base + w.bytes.size() + 4));
+            for (const auto from : map.nearest) w.Raw(bytes.subspan(lod.samplesHeader + 16 + size_t(from) * kLightSample, kLightSample));
+            w.Raw(bytes.subspan(lod.samplesEnd, size_t(e.offset) + e.size - lod.samplesEnd));
+            place(e, base, w.bytes);
+            ++lightMaps;
+        }
+        catch (const std::exception &error)
+        {
+            ++skipped;
+            result.notes.push_back(e.name + " kept its lighting: " + error.what());
+        }
+    }
+    size_t shadows = 0;
+    for (const auto &[ref, map] : shadowBuffers)
+    {
+        const auto *e = package->ExportAt(ref);
+        try
+        {
+            Require(e && package->ClassName(*e) == "ShadowMap1D", "not a ShadowMap1D");
+            auto r = ue3::ObjectReader(*package, *e);
+            ue3::Properties(*package, r, true, [](auto &&...) {});
+            const size_t at = r.pos;
+            const auto samples = ue3::Count(r, 4);
+            Require(samples == map->originalVertices, "it has " + std::to_string(samples) + " samples for " +
+                                                         std::to_string(map->originalVertices) + " vertices");
+            const size_t after = at + 4 + size_t(samples) * 4;
+            Writer w;
+            w.Raw(bytes.subspan(e->offset, at - e->offset));
+            w.U32(uint32_t(map->nearest.size()));
+            for (const auto from : map->nearest) w.Raw(bytes.subspan(at + 4 + size_t(from) * 4, 4));
+            w.Raw(bytes.subspan(after, size_t(e->offset) + e->size - after));
+            place(*e, align(), w.bytes);
+            ++shadows;
+        }
+        catch (const std::exception &error)
+        {
+            ++skipped;
+            result.notes.push_back((e ? e->name : "shadow buffer " + std::to_string(ref)) + " kept: " + error.what());
+        }
+    }
+    result.replaced = lightMaps + shadows;
+    if (result.replaced)
+    {
+        result.notes.push_back(std::to_string(lightMaps) + " vertex light maps and " + std::to_string(shadows) +
+                               " vertex shadow buffers follow the new vertices" + (skipped ? " (" + std::to_string(skipped) + " kept)" : ""));
+        result.package = std::move(out);
+    }
     return result;
 }
 }

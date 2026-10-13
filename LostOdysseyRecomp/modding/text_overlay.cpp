@@ -12,6 +12,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <set>
 #include <tuple>
 
 namespace modding::text_overlay
@@ -129,8 +130,18 @@ struct Counts
     size_t files = 0, texts = 0, unknownKeys = 0, failed = 0, models = 0;
 };
 
-// The package with its model replacements, or empty to keep it.
-std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<uint8_t> &package, Counts &counts)
+// A member path's folder and file name without extension.
+std::string FolderOf(const std::string &path) { return path.substr(0, path.rfind('/') + 1); }
+std::string StemOf(const std::string &path)
+{
+    const auto name = path.substr(path.rfind('/') + 1);
+    return name.substr(0, name.rfind('.'));
+}
+
+// The package with its model replacements, or empty to keep it. Replaced static
+// meshes add their vertex maps to maps.
+std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<uint8_t> &package, Counts &counts,
+                                   model_import::VertexMaps &maps)
 {
     std::vector<model_import::Replacement> replacements;
     for (const auto &asset : gModels.at(path))
@@ -156,28 +167,46 @@ std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<ui
         }
         replacements.push_back(std::move(r));
     }
-    auto result = model_import::RebuildPackage(package, replacements);
+    auto result = model_import::RebuildPackage(package, StemOf(path), replacements);
     for (const auto &note : result.notes)
         if (result.replaced) LOG_NOTICE("[mods] model {}: {}", path, note);
         else LOG_WARNING("[mods] model {}: {}", path, note);
     counts.models += result.replaced;
+    maps.merge(result.vertexMaps);
     return std::move(result.package);
 }
 
-// Rebuilds the translated files one index points to. index: the file's first
-// IndexSize() bytes, patched in place; tails: per archive file name.
+// Rebuilds the translated files and model packages one index points to, then
+// the packages beside a replaced static mesh's that place it (their baked
+// lighting follows its new vertices). index: the file's first IndexSize()
+// bytes, patched in place; tails: per archive file name.
 void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &names, std::vector<uint8_t> &index,
                 std::map<std::string, std::pair<uint64_t, std::vector<uint8_t>>> &tails, Counts &counts)
 {
     const auto parsed = fpi::Read(index);
     // In archive order, so the reads run forward through each file (slow disks).
+    auto byOffset = [](const fpi::File *a, const fpi::File *b) { return std::tie(a->archive, a->offset) < std::tie(b->archive, b->offset); };
     std::vector<const fpi::File *> files;
     for (const auto &file : parsed.files)
         if ((gTexts.count(file.path) && text::Detect(file.path) != text::Format::None) || gModels.count(file.path))
             files.push_back(&file);
-    std::sort(files.begin(), files.end(), [](const fpi::File *a, const fpi::File *b) {
-        return std::tie(a->archive, a->offset) < std::tie(b->archive, b->offset);
-    });
+    std::sort(files.begin(), files.end(), byOffset);
+
+    struct Member { std::vector<uint8_t> stored, bytes; bool packed = false; };
+    auto load = [&](const fpi::File &file) {
+        const auto archive = names.find(parsed.archives.at(file.archive));
+        if (archive == names.end()) throw std::runtime_error("archive " + parsed.archives[file.archive] + " missing");
+        Member member;
+        member.stored = ReadAt(archive->second, file.offset, file.size);
+        member.packed = member.stored.size() >= 3 && std::equal(member.stored.begin(), member.stored.begin() + 3, "cpx");
+        if (member.packed && !cpx::Decode(member.stored, member.bytes)) throw std::runtime_error("invalid CPX data");
+        if (!member.packed) member.bytes = member.stored;
+        return member;
+    };
+    struct Rebuilt { Member member; std::vector<uint8_t> bytes; bool model = false; };
+    std::map<const fpi::File *, Rebuilt> rebuilt;
+    model_import::VertexMaps maps;
+    std::set<std::string> relight; // folders of packages whose static meshes were replaced
     for (const auto *entry : files)
     {
         const auto &file = *entry;
@@ -186,25 +215,63 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         const auto format = text::Detect(file.path);
         try
         {
-            const auto archive = names.find(parsed.archives.at(file.archive));
-            if (archive == names.end()) throw std::runtime_error("archive " + parsed.archives[file.archive] + " missing");
             const auto *translation = model ? nullptr : Translation(text->second);
             if (!model && !translation) continue;
-            const auto stored = ReadAt(archive->second, file.offset, file.size);
-            const bool packed = stored.size() >= 3 && std::equal(stored.begin(), stored.begin() + 3, "cpx");
-            std::vector<uint8_t> member;
-            if (packed && !cpx::Decode(stored, member)) throw std::runtime_error("invalid CPX data");
-            const auto &original = packed ? member : stored;
-            std::vector<uint8_t> rebuilt;
-            if (model) rebuilt = RebuildModels(file.path, original, counts);
+            auto member = load(file);
+            std::vector<uint8_t> bytes;
+            if (model)
+            {
+                const auto before = maps.size();
+                bytes = RebuildModels(file.path, member.bytes, counts, maps);
+                if (maps.size() != before) relight.insert(FolderOf(file.path));
+            }
             else
             {
                 size_t unknown = 0;
-                rebuilt = text::Rebuild(format, original, *translation, &unknown);
+                bytes = text::Rebuild(format, member.bytes, *translation, &unknown);
                 counts.unknownKeys += unknown;
             }
-            if (rebuilt.empty() || rebuilt == original) continue;
-            const auto payload = packed ? StoreCpx(rebuilt, stored) : rebuilt;
+            if (bytes.empty() || bytes == member.bytes) continue;
+            rebuilt[&file] = {std::move(member), std::move(bytes), model};
+        }
+        catch (const std::exception &error)
+        {
+            ++counts.failed;
+            LOG_WARNING("[mods] {} {} kept original in {}: {}", model ? "model" : "text", file.path, Utf8(folder), error.what());
+        }
+    }
+    for (const auto &file : parsed.files)
+    {
+        if (!relight.count(FolderOf(file.path)) || !file.path.ends_with(".xxx")) continue;
+        try
+        {
+            const auto it = rebuilt.find(&file);
+            Member member;
+            if (it == rebuilt.end()) member = load(file);
+            auto result = model_import::RemapLighting(it != rebuilt.end() ? it->second.bytes : member.bytes, StemOf(file.path), maps);
+            for (const auto &note : result.notes) LOG_NOTICE("[mods] model lighting {}: {}", file.path, note);
+            if (result.package.empty()) continue;
+            if (it != rebuilt.end()) it->second.bytes = std::move(result.package);
+            else rebuilt[&file] = {std::move(member), std::move(result.package), true};
+        }
+        catch (const std::exception &error)
+        {
+            ++counts.failed;
+            LOG_WARNING("[mods] model lighting {} kept original in {}: {}", file.path, Utf8(folder), error.what());
+        }
+    }
+
+    std::vector<const fpi::File *> order;
+    for (const auto &[file, item] : rebuilt) order.push_back(file);
+    std::sort(order.begin(), order.end(), byOffset);
+    for (const auto *entry : order)
+    {
+        const auto &file = *entry;
+        auto &item = rebuilt.at(entry);
+        try
+        {
+            const auto archive = names.find(parsed.archives.at(file.archive));
+            const auto payload = item.member.packed ? StoreCpx(item.bytes, item.member.stored) : item.bytes;
 
             auto &[base, tail] = tails.try_emplace(archive->first, 0, std::vector<uint8_t>{}).first->second;
             if (!base)
@@ -224,14 +291,14 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
             for (int i = 0; i < 4; ++i) sector |= uint32_t(index[file.record + 8 + i]) << (8 * i);
             PutLe32(index, file.record + 8, (sector & 0xff000000u) | uint32_t(offset / fpi::kSector));
             PutLe32(index, file.record + 16, uint32_t(payload.size()));
-            if (packed) PutLe32(index, file.record + 20, uint32_t(rebuilt.size()));
+            if (item.member.packed) PutLe32(index, file.record + 20, uint32_t(item.bytes.size()));
             ++counts.files;
-            counts.texts += !model;
+            counts.texts += !item.model;
         }
         catch (const std::exception &error)
         {
             ++counts.failed;
-            LOG_WARNING("[mods] {} {} kept original in {}: {}", model ? "model" : "text", file.path, Utf8(folder), error.what());
+            LOG_WARNING("[mods] {} {} kept original in {}: {}", item.model ? "model" : "text", file.path, Utf8(folder), error.what());
         }
     }
 }

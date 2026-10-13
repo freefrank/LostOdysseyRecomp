@@ -72,7 +72,8 @@ int Run(std::map<std::string, std::string> &args)
         replacement.object = args.at("--object");
         replacement.glb = ReadFile(args.at("--glb"));
         replacement.source = args.at("--glb");
-        const auto result = modding::model_import::RebuildPackage(ReadFile(args.at("--package")), {replacement});
+        const auto result = modding::model_import::RebuildPackage(ReadFile(args.at("--package")),
+                                                                  fs::path(args.at("--package")).stem().string(), {replacement});
         for (const auto &note : result.notes) std::printf("%s\n", note.c_str());
         if (!result.replaced) return 2;
         WriteFile(args.at("--out"), result.package);
