@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <map>
 #include <span>
@@ -23,12 +24,19 @@ struct Replacement
     std::vector<uint8_t> glb;
     std::string source;       // for messages
 };
-// A replaced static mesh: for each new vertex, the original vertex nearest to
-// it. The mesh's placements keep baked lighting per original vertex.
+// A replaced static mesh: for each new vertex, the point of the original
+// surface nearest to it, as three original vertices and their weights. The
+// mesh's placements keep baked lighting per original vertex; a new vertex gets
+// it interpolated there, as the GPU did across the original triangle.
+struct SurfacePoint
+{
+    std::array<uint32_t, 3> vertices{};
+    std::array<float, 3> weights{1, 0, 0};
+};
 struct VertexMap
 {
     uint32_t originalVertices = 0;
-    std::vector<uint32_t> nearest;
+    std::vector<SurfacePoint> points;
 };
 // Key: "<package file stem>.<object>", lower case (u3b_0_map.staticmesh_467).
 using VertexMaps = std::map<std::string, VertexMap>;
@@ -45,7 +53,7 @@ Result RebuildPackage(std::span<const uint8_t> package, const std::string &stem,
 
 // The StaticMeshComponents of a package that place a mesh in maps: their
 // per-vertex light maps and ShadowMap1D buffers rebuilt for the new vertices,
-// each taking the samples of its nearest original vertex. result.replaced
-// counts the components changed; the package is empty when none was.
+// interpolated at each one's surface point. result.replaced counts the light
+// maps and buffers changed; the package is empty when none was.
 Result RemapLighting(std::span<const uint8_t> package, const std::string &stem, const VertexMaps &maps);
 }

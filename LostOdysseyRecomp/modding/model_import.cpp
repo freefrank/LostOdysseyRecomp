@@ -615,7 +615,8 @@ struct StaticOriginal
     std::vector<std::string> materials;
     std::vector<std::pair<uint32_t, uint32_t>> collision;
     uint32_t uvSets = 0;
-    std::vector<Vertex> vertices; // LOD 0: position, normal, UV sets, colour
+    std::vector<Vertex> vertices;    // LOD 0: position, normal, UV sets, colour
+    std::vector<Triangle> triangles; // LOD 0, with material slots
     size_t tailBegin = 0, end = 0;
 };
 
@@ -640,15 +641,23 @@ StaticOriginal ReadStaticOriginal(const Package &package, const ue3::Export &e)
     Require(ue3::Count(r, 4) == 1, "the original has more than one LOD");
     const auto flags = r.U32(); r.U32(); const auto stored = r.U32(); r.U32();
     if (!(flags & 0x21)) r.Take(stored);
+    struct Section { uint16_t slot; uint32_t first, triangles; };
+    std::vector<Section> sections;
     for (uint32_t i = 0, n = ue3::Count(r, 28); i < n; ++i)
     {
         const auto material = r.I32();
         const auto collision = r.U32(), oldCollision = r.U32();
-        r.Take(16); // FirstIndex, NumTriangles, MinVertexIndex, MaxVertexIndex.
-        if (std::find(o.materialRefs.begin(), o.materialRefs.end(), material) != o.materialRefs.end()) continue;
-        o.materialRefs.push_back(material);
-        o.materials.push_back(package.RefName(material));
-        o.collision.emplace_back(collision, oldCollision);
+        const auto first = r.U32(), triangles = r.U32();
+        r.Take(8); // MinVertexIndex, MaxVertexIndex.
+        auto slot = std::find(o.materialRefs.begin(), o.materialRefs.end(), material);
+        if (slot == o.materialRefs.end())
+        {
+            o.materialRefs.push_back(material);
+            o.materials.push_back(package.RefName(material));
+            o.collision.emplace_back(collision, oldCollision);
+            slot = o.materialRefs.end() - 1;
+        }
+        sections.push_back({uint16_t(slot - o.materialRefs.begin()), first, triangles});
     }
     Require(!o.materials.empty(), "the original has no sections");
     o.uvSets = r.U32();
@@ -665,15 +674,26 @@ StaticOriginal ReadStaticOriginal(const Package &package, const ue3::Export &e)
         for (uint32_t s = 0; s < o.uvSets; ++s) v.uvs[s] = {r.F32(), r.F32()};
     }
     Require(r.U32() == vertices, "vertex count mismatch");
-    ue3::SkipArray(r, 2); ue3::SkipArray(r, 2); ue3::SkipArray(r, 16); ue3::SkipArray(r, 1); // Indices, wireframe, edges, fEC.
+    std::vector<uint32_t> indices(ue3::Count(r, 2));
+    for (auto &i : indices) i = r.U16();
+    for (const auto &section : sections)
+        for (uint32_t t = 0; t < section.triangles; ++t)
+        {
+            const size_t at = size_t(section.first) + 3 * size_t(t);
+            Require(at + 3 <= indices.size(), "section outside the indices");
+            Triangle triangle{{indices[at], indices[at + 1], indices[at + 2]}, section.slot};
+            for (const auto i : triangle.v) Require(i < vertices, "index outside the vertices");
+            o.triangles.push_back(triangle);
+        }
+    ue3::SkipArray(r, 2); ue3::SkipArray(r, 16); ue3::SkipArray(r, 1); // Wireframe indices, edges, fEC.
     o.tailBegin = r.pos;
     o.end = size_t(e.offset) + e.size;
     return o;
 }
 
-// The original vertex closest to a point: a k-d tree over the original positions.
-// Among vertices at the same spot (hard edges, UV seams) it takes the one whose
-// normal and first UV agree best.
+// An original vertex at the same spot as a new one: a k-d tree over the
+// original positions. Among vertices there (hard edges, UV seams, overlapping
+// pieces) it takes the one whose normal and first UV agree best.
 class NearestVertex
 {
 public:
@@ -682,13 +702,16 @@ public:
         for (uint32_t i = 0; i < order_.size(); ++i) order_[i] = i;
         Build(0, order_.size(), 0);
     }
-    uint32_t Find(const Vertex &v) const
+    static constexpr uint32_t kNone = UINT32_MAX;
+    // reach: the largest distance that counts as the same spot.
+    uint32_t Find(const Vertex &v, float reach) const
     {
         float best = std::numeric_limits<float>::infinity();
         Search(0, order_.size(), 0, v.position, best);
+        if (best > reach * reach) return kNone;
         // Within a hair of the nearest: the best normal, then the closest UV.
-        const float reach = best + 1e-4f;
-        uint32_t found = 0;
+        reach = best + 1e-4f;
+        uint32_t found = kNone;
         float score = -std::numeric_limits<float>::infinity();
         Visit(0, order_.size(), 0, v.position, reach, [&](uint32_t i) {
             const auto &o = vertices_[i];
@@ -748,13 +771,192 @@ private:
     std::vector<uint32_t> order_;
 };
 
-// The file's meshes as one static model in Unreal space. UV sets and the colour
-// the file lacks come from the nearest original vertex; nearest[i] is the
-// original vertex closest to model vertex i.
-Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original, std::vector<uint32_t> &nearest)
+// Barycentric weights of the point of triangle abc closest to p (Ericson,
+// Real-Time Collision Detection 5.1.5).
+std::array<float, 3> ClosestOnTriangle(const Vec3 &p, const Vec3 &a, const Vec3 &b, const Vec3 &c)
+{
+    const auto ab = Sub(b, a), ac = Sub(c, a), ap = Sub(p, a);
+    const float d1 = Dot(ab, ap), d2 = Dot(ac, ap);
+    if (d1 <= 0 && d2 <= 0) return {1, 0, 0};
+    const auto bp = Sub(p, b);
+    const float d3 = Dot(ab, bp), d4 = Dot(ac, bp);
+    if (d3 >= 0 && d4 <= d3) return {0, 1, 0};
+    const float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0 && d1 >= 0 && d3 <= 0) { const float v = d1 / (d1 - d3); return {1 - v, v, 0}; }
+    const auto cp = Sub(p, c);
+    const float d5 = Dot(ab, cp), d6 = Dot(ac, cp);
+    if (d6 >= 0 && d5 <= d6) return {0, 0, 1};
+    const float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0 && d2 >= 0 && d6 <= 0) { const float w = d2 / (d2 - d6); return {1 - w, 0, w}; }
+    const float va = d3 * d6 - d5 * d4;
+    if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { const float w = (d4 - d3) / ((d4 - d3) + (d5 - d6)); return {0, 1 - w, w}; }
+    const float scale = 1 / (va + vb + vc), v = vb * scale, w = vc * scale;
+    return {1 - v - w, v, w};
+}
+
+// The original surface as a bounding-box tree over its triangles. Find gives
+// the point of it nearest to a new vertex. A point whose original normal faces
+// away from the vertex's counts up to kFacing farther, so the two sides of a
+// thin wall, and of a hard edge, keep their own lighting.
+class OriginalSurface
+{
+public:
+    static constexpr float kFacing = 50.0f; // centimetres
+    struct Hit { SurfacePoint point; uint32_t triangle = 0; };
+
+    explicit OriginalSurface(const StaticOriginal &original) : o_(original)
+    {
+        for (uint32_t t = 0; t < o_.triangles.size(); ++t)
+        {
+            const auto &tri = o_.triangles[t].v;
+            const auto &a = o_.vertices[tri[0]], &b = o_.vertices[tri[1]], &c = o_.vertices[tri[2]];
+            const auto face = Cross(Sub(c.position, a.position), Sub(b.position, a.position));
+            if (Dot(face, face) < 1e-12f) continue; // no area: never the nearest point alone
+            triangleOf_.push_back(t);
+            normals_.push_back(Normalize(Add(Add(a.normal, b.normal), c.normal), Normalize(face)));
+            centroids_.push_back(Scale(Add(Add(a.position, b.position), c.position), 1.0f / 3));
+        }
+        Require(!triangleOf_.empty(), "the original has no faces");
+        order_.resize(triangleOf_.size());
+        for (uint32_t i = 0; i < order_.size(); ++i) order_[i] = i;
+        Build(0, order_.size());
+    }
+
+    Hit Find(const Vec3 &p, const Vec3 &normal) const
+    {
+        Hit best;
+        float score = std::numeric_limits<float>::infinity();
+        const bool facing = Dot(normal, normal) > 0.5f;
+        std::array<uint32_t, 128> stack{};
+        size_t depth = 0;
+        stack[depth++] = 0;
+        while (depth)
+        {
+            const auto &node = nodes_[stack[--depth]];
+            if (BoxDistance(node, p) >= score) continue;
+            if (node.count)
+            {
+                for (uint32_t i = node.first; i < node.first + node.count; ++i)
+                {
+                    const auto item = order_[i];
+                    const auto t = triangleOf_[item];
+                    const auto &tri = o_.triangles[t].v;
+                    const auto &a = o_.vertices[tri[0]].position, &b = o_.vertices[tri[1]].position, &c = o_.vertices[tri[2]].position;
+                    const auto w = ClosestOnTriangle(p, a, b, c);
+                    const auto q = Add(Add(Scale(a, w[0]), Scale(b, w[1])), Scale(c, w[2]));
+                    const auto d = Sub(p, q);
+                    float s = std::sqrt(Dot(d, d));
+                    if (facing)
+                    {
+                        // The original's own normal there: at a hard edge each side has its vertices.
+                        const auto &na = o_.vertices[tri[0]].normal, &nb = o_.vertices[tri[1]].normal, &nc = o_.vertices[tri[2]].normal;
+                        const auto there = Normalize(Add(Add(Scale(na, w[0]), Scale(nb, w[1])), Scale(nc, w[2])), normals_[item]);
+                        s += kFacing * 0.5f * (1 - Dot(normal, there));
+                    }
+                    if (s < score) { score = s; best = {{tri, w}, t}; }
+                }
+                continue;
+            }
+            // Nearer child last, so it is searched first.
+            const uint32_t left = uint32_t(&node - nodes_.data()) + 1, right = node.right;
+            const bool leftFirst = BoxDistance(nodes_[left], p) <= BoxDistance(nodes_[right], p);
+            Require(depth + 2 <= stack.size(), "surface tree too deep");
+            stack[depth++] = leftFirst ? right : left;
+            stack[depth++] = leftFirst ? left : right;
+        }
+        return best;
+    }
+
+private:
+    struct Node { Vec3 low{}, high{}; uint32_t first = 0, count = 0, right = 0; }; // left child follows its parent
+
+    static float BoxDistance(const Node &node, const Vec3 &p)
+    {
+        float d = 0;
+        for (size_t k = 0; k < 3; ++k)
+        {
+            const float out = std::max({node.low[k] - p[k], 0.0f, p[k] - node.high[k]});
+            d += out * out;
+        }
+        return std::sqrt(d);
+    }
+    uint32_t Build(size_t begin, size_t end)
+    {
+        const auto index = uint32_t(nodes_.size());
+        nodes_.emplace_back();
+        Node node;
+        node.low = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+        node.high = Scale(node.low, -1);
+        Vec3 low = node.low, high = node.high;
+        for (size_t i = begin; i < end; ++i)
+        {
+            for (const auto v : o_.triangles[triangleOf_[order_[i]]].v)
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    node.low[k] = std::min(node.low[k], o_.vertices[v].position[k]);
+                    node.high[k] = std::max(node.high[k], o_.vertices[v].position[k]);
+                }
+            for (size_t k = 0; k < 3; ++k)
+            {
+                low[k] = std::min(low[k], centroids_[order_[i]][k]);
+                high[k] = std::max(high[k], centroids_[order_[i]][k]);
+            }
+        }
+        if (end - begin <= 4)
+        {
+            node.first = uint32_t(begin);
+            node.count = uint32_t(end - begin);
+            nodes_[index] = node;
+            return index;
+        }
+        size_t axis = 0;
+        for (size_t k = 1; k < 3; ++k) if (high[k] - low[k] > high[axis] - low[axis]) axis = k;
+        const size_t middle = begin + (end - begin) / 2;
+        std::nth_element(order_.begin() + std::ptrdiff_t(begin), order_.begin() + std::ptrdiff_t(middle), order_.begin() + std::ptrdiff_t(end),
+                         [&](uint32_t a, uint32_t b) { return centroids_[a][axis] < centroids_[b][axis]; });
+        Build(begin, middle);
+        node.right = Build(middle, end);
+        nodes_[index] = node;
+        return index;
+    }
+
+    const StaticOriginal &o_;
+    std::vector<uint32_t> order_, triangleOf_; // tree order -> item; item -> original triangle
+    std::vector<Vec3> normals_, centroids_;    // per item
+    std::vector<Node> nodes_;
+};
+
+// A colour or a UV set at a surface point.
+uint32_t BlendColor(const std::vector<Vertex> &vertices, const SurfacePoint &p)
+{
+    uint32_t out = 0;
+    for (int shift = 0; shift < 32; shift += 8)
+    {
+        float value = 0;
+        for (size_t k = 0; k < 3; ++k) value += p.weights[k] * float(vertices[p.vertices[k]].color >> shift & 0xff);
+        out |= uint32_t(std::clamp(std::lround(value), 0L, 255L)) << shift;
+    }
+    return out;
+}
+Uv BlendUv(const std::vector<Vertex> &vertices, const SurfacePoint &p, uint32_t set)
+{
+    Uv out{};
+    for (size_t k = 0; k < 3; ++k)
+        for (size_t c = 0; c < 2; ++c) out[c] += p.weights[k] * vertices[p.vertices[k]].uvs[set][c];
+    return out;
+}
+
+// The file's meshes as one static model in Unreal space; points[i] is where
+// model vertex i lies on the original surface (or the original vertex it sits on). UV sets and the colour the file
+// lacks are the original's at that point. Triangles whose material is missing
+// or not one of the original's take the material of the original triangle
+// nearest to them (note says how many).
+constexpr uint16_t kNoSlot = 0xffff;
+Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original, std::vector<SurfacePoint> &points, std::string &note)
 {
     Model model;
     ReadVertices read;
+    std::set<std::string> unmatched;
     for (size_t n = 0; n < doc.nodes.size(); ++n)
     {
         const auto &node = doc.nodes[n];
@@ -769,7 +971,13 @@ Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original,
             const int position = attribute("POSITION"), normal = attribute("NORMAL"), color = attribute("COLOR_0");
             Require(position >= 0, "a mesh part has no positions");
             Require(attribute("TEXCOORD_0") >= 0, "a mesh part has no UV map; the game needs one");
-            const uint16_t slot = SlotOf(doc, original.materials, primitive.material);
+            uint16_t slot = kNoSlot;
+            const auto name = primitive.material >= 0 && size_t(primitive.material) < doc.materials.size()
+                                  ? MaterialName(doc.materials[size_t(primitive.material)]) : std::string();
+            for (size_t i = 0; i < original.materials.size(); ++i)
+                if (MaterialName(original.materials[i]) == name) slot = uint16_t(i);
+            if (original.materials.size() == 1) slot = 0;
+            if (slot == kNoSlot) unmatched.insert(name.empty() ? "(none)" : doc.materials[size_t(primitive.material)]);
             const auto [seen, added] = read.try_emplace({n, primitive.attributes}, uint32_t(model.vertices.size()));
             if (!added)
             {
@@ -818,15 +1026,38 @@ Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original,
     Require(!model.triangles.empty(), "the file has no triangles");
     DropUnused(model);
     FinishModel(model);
-    const NearestVertex finder(original.vertices);
-    nearest.resize(model.vertices.size());
+    const OriginalSurface surface(original);
+    size_t reassigned = 0;
+    for (auto &t : model.triangles)
+    {
+        if (t.slot != kNoSlot) continue;
+        const auto &a = model.vertices[t.v[0]].position, &b = model.vertices[t.v[1]].position, &c = model.vertices[t.v[2]].position;
+        const auto centre = Scale(Add(Add(a, b), c), 1.0f / 3);
+        t.slot = original.triangles[surface.Find(centre, Normalize(Cross(Sub(c, a), Sub(b, a)), {0, 0, 0})).triangle].slot;
+        ++reassigned;
+    }
+    // A vertex on an original vertex keeps that vertex's lighting exactly (the
+    // original has coinciding vertices of different surfaces, where the nearest
+    // surface point is ambiguous); the others take the surface point.
+    constexpr float kSameSpot = 0.05f; // centimetres
+    const NearestVertex corners(original.vertices);
+    points.resize(model.vertices.size());
     for (size_t i = 0; i < model.vertices.size(); ++i)
     {
         auto &v = model.vertices[i];
-        nearest[i] = finder.Find(v);
-        const auto &from = original.vertices[nearest[i]];
-        for (uint32_t s = 0; s < original.uvSets; ++s) if (v.borrowed & (1u << s)) v.uvs[s] = from.uvs[s];
-        if (v.borrowed & (1u << 8)) v.color = from.color;
+        if (const auto corner = corners.Find(v, kSameSpot); corner != NearestVertex::kNone)
+            points[i] = {{corner, corner, corner}, {1, 0, 0}};
+        else
+            points[i] = surface.Find(v.position, v.normal).point;
+        for (uint32_t s = 0; s < original.uvSets; ++s) if (v.borrowed & (1u << s)) v.uvs[s] = BlendUv(original.vertices, points[i], s);
+        if (v.borrowed & (1u << 8)) v.color = BlendColor(original.vertices, points[i]);
+    }
+    if (reassigned)
+    {
+        std::string names;
+        for (const auto &m : unmatched) names += (names.empty() ? "" : ", ") + m;
+        note = "; " + std::to_string(reassigned) + " triangles took the material of the original surface beneath them (" + names +
+               " is not one of the original's)";
     }
     return model;
 }
@@ -1096,8 +1327,10 @@ Result RebuildPackage(std::span<const uint8_t> bytes, const std::string &stem, c
             else
             {
                 const auto original = ReadStaticOriginal(*package, e);
-                const auto model = ReadStaticModel(doc, original, vertexMap.nearest);
+                std::string note;
+                const auto model = ReadStaticModel(doc, original, vertexMap.points, note);
                 data = WriteStaticExport(*package, original, model, base, summary);
+                summary += note;
                 vertexMap.originalVertices = uint32_t(original.vertices.size());
             }
             out.insert(out.end(), data.begin(), data.end());
@@ -1157,11 +1390,19 @@ Result RemapLighting(std::span<const uint8_t> bytes, const std::string &stem, co
             Require(lod.samples == map.originalVertices, "its light map has " + std::to_string(lod.samples) + " samples for " +
                                                             std::to_string(map.originalVertices) + " vertices");
             const size_t base = align();
-            const auto vertices = uint32_t(map.nearest.size());
+            const auto vertices = uint32_t(map.points.size());
+            const auto samples = bytes.subspan(lod.samplesHeader + 16, size_t(lod.samples) * kLightSample);
             Writer w;
             w.Raw(bytes.subspan(e.offset, lod.samplesHeader - e.offset));
             w.U32(0); w.U32(vertices); w.U32(uint32_t(vertices * kLightSample)); w.U32(uint32_t(base + w.bytes.size() + 4));
-            for (const auto from : map.nearest) w.Raw(bytes.subspan(lod.samplesHeader + 16 + size_t(from) * kLightSample, kLightSample));
+            // Three colours of four bytes per sample, interpolated byte by byte.
+            for (const auto &point : map.points)
+                for (size_t b = 0; b < kLightSample; ++b)
+                {
+                    float value = 0;
+                    for (size_t k = 0; k < 3; ++k) value += point.weights[k] * float(samples[size_t(point.vertices[k]) * kLightSample + b]);
+                    w.U8(uint8_t(std::clamp(std::lround(value), 0L, 255L)));
+                }
             w.Raw(bytes.subspan(lod.samplesEnd, size_t(e.offset) + e.size - lod.samplesEnd));
             place(e, base, w.bytes);
             ++lightMaps;
@@ -1188,8 +1429,16 @@ Result RemapLighting(std::span<const uint8_t> bytes, const std::string &stem, co
             const size_t after = at + 4 + size_t(samples) * 4;
             Writer w;
             w.Raw(bytes.subspan(e->offset, at - e->offset));
-            w.U32(uint32_t(map->nearest.size()));
-            for (const auto from : map->nearest) w.Raw(bytes.subspan(at + 4 + size_t(from) * 4, 4));
+            w.U32(uint32_t(map->points.size()));
+            Reader values{bytes.subspan(at + 4, size_t(samples) * 4)};
+            std::vector<float> shadow(samples);
+            for (auto &f : shadow) f = values.F32();
+            for (const auto &point : map->points)
+            {
+                float value = 0;
+                for (size_t k = 0; k < 3; ++k) value += point.weights[k] * shadow[point.vertices[k]];
+                w.F32(value);
+            }
             w.Raw(bytes.subspan(after, size_t(e->offset) + e->size - after));
             place(*e, align(), w.bytes);
             ++shadows;

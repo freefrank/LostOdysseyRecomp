@@ -21,6 +21,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The MO2 export tool previews what it will export: a list of the textures, movies, text, models and animations, with a picture, the video, the text or the model's counts of the selected one.
 - The MO2 export tool can export 3D models and animations as glTF (.glb) files for reference; the models can include their textures.
 - Mods can replace character, monster and moving-object models with models edited from the export, for example in Blender. See [Creating mods](docs/wiki/Creating-Mods.md#replace-a-model).
+- Mods can replace buildings, ground and other map pieces too, for example with more detailed versions; the map's light and shadow follow the new shape.
 - The MO2 export tool can export only the rows you select (Export selected).
 - Mods load in every `--mods-mode`: overlay packages and mod folders always load together, and the mode only decides which one wins when both change the same thing.
 - The MO2 export tool shows the game folder it reads and says how to fix it when it is not your LostOdysseyRecomp folder.
@@ -42,6 +43,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - MO2 导出工具可以预览要导出的内容：列出材质、影片、文本、模型和动画，选中一项可以看图片、播放影片、查看文本或模型的数量信息。
 - MO2 导出工具可以把 3D 模型和动画导出为 glTF（.glb）文件，供参考；模型可以带上贴图。
 - Mod 可以替换角色、怪物和会动的物件的模型，模型从导出文件改出来，例如用 Blender。见[制作 Mod](docs/wiki/Creating-Mods.md#replace-a-model)。
+- Mod 也可以替换建筑、地面等地图模型，例如换成更精细的版本；地图的光照和阴影会跟着新模型走。
 - MO2 导出工具可以只导出你选中的行（Export selected）。
 - 任何 `--mods-mode` 下 Mod 都会加载：overlay 包和 Mod 文件夹总是一起加载，模式只决定两者改了同一处时谁优先。
 - MO2 导出工具会显示它读取的游戏目录；目录不是你的 LostOdysseyRecomp 文件夹时，会提示怎么改。

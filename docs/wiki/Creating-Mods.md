@@ -121,7 +121,7 @@ my-export/export-summary.txt
 
 ### Models and animations (for reference)
 
-Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. Character, monster and moving-object models can be edited and put back with a mod (see [Replace a model](#replace-a-model)); map pieces and animations are for reference only.
+Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. Models, map pieces included, can be edited and put back with a mod (see [Replace a model](#replace-a-model)); animations are for reference only.
 
 1. Export the models, the animations or both. Add `--export-model-textures` to link each material's colour texture:
 
@@ -189,7 +189,7 @@ movie:mv_00v=movies/mv_00v.mp4
 
 ## Replace a model
 
-A mod can replace the 3D model of a character, monster or moving object (a `SkeletalMesh`) with one you edited. The new model keeps the original's skeleton and materials, so it moves with the game's own animations and uses the original textures, or those of a [texture pack](#make-a-texture-pack-experimental). Map pieces and other static models cannot be replaced yet.
+A mod can replace a 3D model with one you edited: a character, monster or moving object (a `SkeletalMesh`), or a map piece or other fixed object (`StaticMesh`, `StaticMeshRPG`), such as a building or a stretch of ground made more detailed. The new model keeps the original's materials, so it uses the original textures, or those of a [texture pack](#make-a-texture-pack-experimental). A character model also keeps the original's skeleton, so it moves with the game's own animations. Map pieces have more to keep in mind; see [Map pieces](#map-pieces-and-other-static-models).
 
 1. Export the model. In the [MO2 tool](Mod-Organizer-2.md#export), select its row and press **Open model**, or run:
 
@@ -200,7 +200,7 @@ A mod can replace the 3D model of a character, monster or moving object (a `Skel
    The file is `my-export/models/<package path>/<object>.<export index>.glb`. Kaim's is `my-export/models/bin/xenon/chr/pc/pc_000a0_m.xxx/pc_000a0_m.0.glb`.
 2. In Blender, choose **File → Import → glTF 2.0** and open the file.
 3. Edit the mesh: move, add or delete vertices and faces, change the UV map, paint the weights. Keep these as they are:
-   - The armature and its bone names. Weight the mesh only to bones that are already there. Do not add, rename or delete bones.
+   - Character models: the armature and its bone names. Weight the mesh only to bones that are already there. Do not add, rename or delete bones.
    - The material names. Every face needs one of the original materials, such as `MAT_pc_000a0_bodyMT`. New materials do not work. Names that Blender gives a `.001` ending are fine.
    - A UV map.
 4. Choose **File → Export → glTF 2.0**, set **Format** to **glTF Binary (.glb)**, and export. The other options can stay as they are. Textures and animations in the file are not used.
@@ -222,12 +222,29 @@ A mod can replace the 3D model of a character, monster or moving object (a `Skel
    - `[mods] model bin/xenon/chr/pc/pc_000a0_m.xxx: pc_000a0_m: … vertices` means the model was replaced.
    - `kept original` means it was not, followed by the reason (for example a bone or material the original does not have).
 
-Limits:
+Limits of character models:
 
 - At most 65,535 vertices. The game splits the model into parts of up to 75 bones, and vertices on the seams count twice.
 - Up to 4 bone weights per vertex. Extra weights are dropped and the largest 4 are kept.
 - The replacement is shown at every distance; the original's lower-detail versions are not used.
 - A few models are in more than one package, such as a boss in its battle and event packages. Export and replace each copy.
+
+### Map pieces and other static models
+
+Buildings, ground, walls and other fixed parts of a map are in the map's `_map.xxx` package. A magic car in Uhra, for example, is `my-export/models/bin/xenon/field/u3b_0/u3b_0_map.xxx/StaticMesh_467.61.glb`. The file names do not say what a piece is: export a whole map with `--export-filter u3b_0_map` and open the files in Blender to find the one you want.
+
+The steps are the same as above. In addition:
+
+- Keep the model where the original is. The map's light and shadow were worked out in advance for each vertex of the original. When the game starts, each vertex of your model takes them from the point of the original's surface nearest to it, so a more detailed version of the same shape is lit like the original. Parts far from the original's surface take the light of the nearest original part.
+- Faces with a material that is not one of the original's, or with none, take the material of the original surface beneath them. This keeps the materials of a model that an upscaling tool merged or renamed.
+- In Blender's glTF export, open **Data → Mesh** and set **Vertex Color** to **Active**. With the default, some models are exported with white vertex colours.
+- Where characters can walk and where they stop is set by the map's own collision, which stays as it was. Keep floors and walls where they were, or characters will walk through the new shapes or float above them.
+- `[mods] model lighting … follow the new vertices` in the log means the light and shadow were carried over.
+
+Limits of map pieces:
+
+- At most 65,535 vertices per model. Most map pieces have a few hundred to a few thousand, so there is room for many times more detail.
+- Each package with a replaced model is rebuilt when the game starts. A mod that replaces the pieces of many maps makes the start slower.
 
 `python tools/modding/lo_mod.py archive` packs `overlay/models/` into the `.loarc` like other files.
 
