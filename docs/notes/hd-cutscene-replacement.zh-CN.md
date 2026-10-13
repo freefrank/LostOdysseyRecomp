@@ -4,6 +4,8 @@
 
 ## 结论
 
+（2026-10-12：替换视频的格式改为 H.264 + MP4，见下文“解码”。）
+
 可行，而且不用改游戏的存档、档案或播放逻辑：
 
 - 让游戏照常播放原版 WMV，音频、字幕、跳过、结束时机都不变。
@@ -43,17 +45,27 @@
 
 ### 解码
 
-- **格式**：AV1，8 bit 4:2:0，只要视频轨，放在 MKV/WebM 或 IVF 里。AV1 免专利费；H.264/HEVC 自带解码器有专利风险。
-- **解码器**：dav1d（BSD-2，带 AVX2/NEON 汇编，约 0.5–1 MB）。容器先支持 IVF（几十行代码）；需要 MKV 时再加 libwebm 的 mkvparser（BSD）。不扩展项目里那份 FFmpeg：它是 Xenia 的 4.4 分支，自带的 `av1` 只有硬件解码，扩源码表的工作量更大。
-- **线程与上传**：工作线程上用 dav1d 帧线程解码，提前 2–3 帧排队，线程数要限制（游戏受渲染线程限制，Steam Deck/手机 2–4 个）。Y 作为 R8、UV 作为 R8G8 上传到持久映射的环形缓冲，着色器里按 BT.709 limited range 转 RGB。4K 每帧约 12 MB，60 fps 约 750 MB/s。
-- **性能预估（未实测，来自公开基准推算）**：dav1d 4K60 在 6–8 核桌面 CPU 上约占 20–40%；Steam Deck 跑 4K60 勉强，1440p60 没问题。手机建议 1080p 或 1440p。
+2026-10-12 决定：用 **H.264 + MP4**，不用 AV1。原方案用 dav1d 在 CPU 上软件解码 AV1，4K60 对 Steam Deck 太重；H.264 的硬件解码覆盖最广（Windows、Steam Deck、macOS、较老的手机都有），制作工具也最通用。
+
+- **替换视频规格**（给 Mod 作者）：
+  - 容器 MP4，`moov` 放在文件头（ffmpeg `-movflags +faststart`）。
+  - 视频 H.264 High profile，8 bit，`yuv420p`，逐行，BT.709 limited range，恒定帧率。
+  - 帧率建议 60000/1001（原版 30000/1001 的两倍）；30000/1001 也行。
+  - 分辨率保持 16:9。桌面包用 3840×2160（4K60 需要 Level 5.2）；给 Steam Deck 和手机的包用 1920×1080（Level 4.2）或 2560×1440（Level 5.1）。
+  - 不带音轨：游戏照常播原版音频（多语言音轨、字幕都不变）。带了也会被忽略。
+  - 时长和原版一致，从第一帧对齐。
+  - 码率参考：4K60 约 40–60 Mbit/s，1080p60 约 12–20 Mbit/s。
+- **解码器**：扩展项目里那份 FFmpeg（Xenia 的 4.4 分支，`thirdparty/ffmpeg.cmake` 的手写源码表，目前只编音频）：加 `h264` 解码器和 `mov` 解封装器，所有平台走同一套代码。硬件解码按平台用 FFmpeg 的 hwaccel：Windows `d3d11va`、Linux / Steam Deck `vaapi`（运行时加载 libva）、macOS `videotoolbox`、Android `mediacodec`；都不可用时软件解码。从 `.loarc` 归档读影片用 FFmpeg 的自定义 IO（`OpenAsset` 给出的偏移和长度）。
+- **线程与上传**：解码线程提前 2–3 帧排队。硬件帧用 `av_hwframe_transfer_data` 取回 NV12，Y 作为 R8、UV 作为 R8G8 上传到持久映射的环形缓冲，着色器里按 BT.709 limited range 转 RGB。4K 每帧约 12 MB，60 fps 约 750 MB/s；1080p 约 190 MB/s。以后可以改成直接共享硬件帧，省掉取回。
+- **性能预估（未实测）**：有硬件解码时 CPU 开销主要是取回和上传。软件解码 4K60 H.264 在桌面 CPU 上可行，在 Steam Deck 上不行，所以给 Deck 的包用 1080p60。
+- **专利**：H.264 解码器有专利许可问题；硬件解码由系统和驱动提供，软件回退是 FFmpeg 的 LGPL 解码器。发布前再确认一次要不要保留软件回退。
 - **原版解码照常运行**：方案 A 下游戏的 WMV 解码仍在跑（720p、CPU）。以后可以把视频轨设成 -1（挂 `sub_82815060`，播放器本来就接受 -1），只留音频，省掉原版视频解码；那样要同时跳过纹理创建和上传，并由主机自己画。这一步作为后续优化，中等难度。
 
 ### Mod 包格式
 
 沿用 Mod API v1：
 
-- standalone：`mod.ini` 里写 `movie:bin/xenon/mov/mv_00v.wmv#0:video=movies/mv_00v.ivf`。
+- standalone：`mod.ini` 里写 `movie:bin/xenon/mov/mv_00v.wmv#0:video=movies/mv_00v.mp4`。
 - overlay：`OverlayRelativePath` 已经为 `movie` 预留了 `overlay/movies/key-fnv1a64-<hash>.loasset`。
 
 键的写法需要在实现时定下来。影片名本身唯一且稳定，用不用 export 序号由实现决定。`lo_mod.py` 要加一个 `movie` 打包入口（检查分辨率、帧率、编码）。MO2 不用改。
@@ -62,7 +74,7 @@
 
 | 阶段 | 内容 | 估计 |
 |---|---|---|
-| 1 | dav1d 接入 CMake（Windows clang-cl + nasm、Linux、macOS、Android 的汇编源码表）、IVF 读取、解码线程和帧队列 | 2–3 天 |
+| 1 | FFmpeg 源码表加 `h264`、`mov` 和各平台 hwaccel（含每个平台的 `config.h`），解码线程和帧队列 | 3–4 天 |
 | 2 | 五个挂钩、私有寄存器包、D3D12/Vulkan/Metal 的 Y/UV 上传和 YUV→RGB 绘制 | 2–3 天 |
 | 3 | `lo_mod.py` 打包 `movie`、Wiki、日志 | 半天 |
 | 4 | 在 psvita 上用自制的 `mv_00v` 4K60 替换版做冒烟测试（不发布） | 半天 |
