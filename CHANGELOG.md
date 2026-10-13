@@ -15,6 +15,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android: CTRL → Saves and logs exports the logs to a ZIP for bug reports.
 - Settings → Gameplay → Controls changes the controller buttons and keyboard keys; Button prompts and Vibration moved there.
 - Android: less crackling in the sound when the device is busy or hot.
+- If the graphics driver stops working, the game says so and closes instead of freezing on the last picture.
 
 ### 简体中文
 
@@ -25,6 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android：CTRL → Saves and logs 可以把日志导出成 ZIP，用于反馈问题。
 - 设置 → 游戏 → 按键设置可以更改手柄按键和键盘按键；按键提示和震动也移到了这里。
 - Android：设备繁忙或发热时，声音的爆音更少。
+- 显卡驱动停止工作时，游戏会弹出提示并关闭，不再停在最后一帧。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 
