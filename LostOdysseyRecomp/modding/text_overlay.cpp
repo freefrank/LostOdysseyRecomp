@@ -205,6 +205,8 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     };
     struct Rebuilt { Member member; std::vector<uint8_t> bytes; bool model = false; };
     std::map<const fpi::File *, Rebuilt> rebuilt;
+    // Per index: each disc folder has one (LO.fpi), so a mesh package and the
+    // world packages beside it are rebuilt together.
     model_import::VertexMaps maps;
     std::set<std::string> relight; // folders of packages whose static meshes were replaced
     for (const auto *entry : files)
