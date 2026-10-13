@@ -35,8 +35,9 @@ constexpr double kGrowEnd = 0.46;
 constexpr double kSettleEnd = 0.60;
 constexpr double kPulseStart = 4.60, kPulseEnd = 4.80;
 constexpr double kCollapseStart = 4.90;
-constexpr double kFlipCentres[] = {1.0, 1.5, 2.5, 3.1, 3.9, 4.55};
-constexpr double kFlipHalf = 0.05;
+// One flip from the emblem to the achievement's icon, which then stays.
+constexpr double kFlipCentres[] = {1.0};
+constexpr double kFlipHalf = 0.15;
 
 // ---- small helpers -----------------------------------------------------------------------------
 inline float Clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }

@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <vector>
 
-// CPU renderer for the "Achievement unlocked" toast: a dark pill that grows out of a
-// ring-of-light circle whose centre flips between an orb and the achievement icon, then
+// CPU renderer for the "Achievement unlocked" toast: a dark pill that grows out of the
+// app's medallion, whose centre flips once from the emblem to the achievement icon, then
 // collapses again. No GPU, game or SDL dependency; the caller uploads Frame::pixels as an
 // overlay every presented frame. All shapes are our own drawing.
 namespace ui::achievement_toast {
