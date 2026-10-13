@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Achievements: unlocking one of the game's 36 achievements shows an Xbox 360-style notification with a sound. Settings → System → Achievement notifications turns it on, silent or off.
 - New app icon.
 - Vulkan is now the default renderer on Windows too. Existing settings keep their renderer.
 - Settings → System → Shader bundle downloads the shader bundle again.
@@ -24,6 +25,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 成就：解锁游戏的 36 个成就之一时，会显示 Xbox 360 风格的通知并播放提示音。设置 → 系统 → 成就通知可以选择开启、静音或关闭。
 - 新的应用图标。
 - Windows 版也默认使用 Vulkan。已有设置保留原来的渲染器。
 - 设置 → 系统 → 着色器包可以重新下载着色器包。

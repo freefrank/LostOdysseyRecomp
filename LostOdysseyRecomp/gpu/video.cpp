@@ -46,6 +46,7 @@
 #include <settings/menu.h>
 #include <settings/restart.h>
 #include <settings/title_entry.h>
+#include <ui/achievement_overlay.h>
 #include <kernel/memory.h>
 #include <os/main_thread.h>
 #include <os/platform.h>
@@ -535,6 +536,12 @@ namespace gpu::video
             std::unique_ptr<plume::RenderBuffer> upload;
             uint64_t revision = 0;
         } g_titleHint;
+        // The achievement-unlocked toast (DrawAchievementToast).
+        struct AchievementToastResources {
+            std::unique_ptr<plume::RenderTexture> texture;
+            std::unique_ptr<plume::RenderBuffer> upload;
+            uint32_t width = 0, height = 0;
+        } g_achievementToast;
         // The background pipeline preparation bar (DrawPreparationBar).
         struct PreparationBarResources {
             std::unique_ptr<plume::RenderTexture> texture;
@@ -2075,6 +2082,7 @@ namespace gpu::video
         g_captureCopy = {};
         g_cpuFrame.reset(); g_cpuWidth = g_cpuHeight = 0;
         g_titleHint = {};
+        g_achievementToast = {};
         g_preparationBar = {};
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0; g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         g_hdrCalibrationCache = {};
@@ -4217,6 +4225,46 @@ namespace gpu::video
 #endif
     }
 
+    // The achievement-unlocked toast over game frames (ui/achievement_overlay.cpp),
+    // uploaded every frame while it animates. The previous present has
+    // completed, so the upload buffer can be rewritten.
+    static void DrawAchievementToast(plume::RenderTexture* backBuffer)
+    {
+#ifdef LO_GPU_PLUME
+        if (!g_presentation) return;
+        const uint32_t outputWidth = g_swapChain->getWidth(), outputHeight = g_swapChain->getHeight();
+        const auto* toast = ui::achievement_overlay::Update(outputWidth, outputHeight);
+        auto& r = g_achievementToast;
+        if (!toast) {
+            if (r.texture) r = {};
+            return;
+        }
+        const uint32_t rowPitch = (toast->width * 4 + 255) & ~255u;
+        if (!r.texture || r.width != toast->width || r.height != toast->height) {
+            r.texture = g_device->createTexture(plume::RenderTextureDesc::Texture2D(toast->width, toast->height, 1,
+                plume::RenderFormat::R8G8B8A8_UNORM));
+            r.upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(rowPitch) * toast->height));
+            if (!r.texture || !r.upload) { r = {}; return; }
+            r.width = toast->width;
+            r.height = toast->height;
+        }
+        auto* mapped = static_cast<uint8_t*>(r.upload->map());
+        if (!mapped) return;
+        for (uint32_t y = 0; y < toast->height; ++y)
+            memcpy(mapped + size_t(y) * rowPitch, &toast->pixels[size_t(y) * toast->width], size_t(toast->width) * 4);
+        r.upload->unmap();
+        g_commandList->barriers(plume::RenderBarrierStage::COPY,
+            plume::RenderTextureBarrier(r.texture.get(), plume::RenderTextureLayout::COPY_DEST));
+        g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(r.texture.get()),
+            plume::RenderTextureCopyLocation::PlacedFootprint(r.upload.get(), plume::RenderFormat::R8G8B8A8_UNORM,
+                toast->width, toast->height, 1, rowPitch / 4), 0, 0, 0, nullptr);
+        g_presentation->DrawOverlay(g_commandList.get(), r.texture.get(), backBuffer, uint32_t(toast->x), uint32_t(toast->y),
+            toast->width, toast->height, outputWidth, outputHeight, 1.0f);
+#else
+        (void)backBuffer;
+#endif
+    }
+
     // Startup pipeline preparation running in the background (renderer): a thin
     // translucent bar along the bottom edge, filled done/total, fading out once
     // done. Only game frames draw it, so the host menus and prompts hide it. The
@@ -4780,6 +4828,7 @@ namespace gpu::video
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
                     DrawTitleHint(backBuffer);
                     DrawPreparationBar(backBuffer);
+                    DrawAchievementToast(backBuffer);
                 }
                 else {
                     g_commandList->barriers(plume::RenderBarrierStage::COPY, plume::RenderTextureBarrier(backBuffer, plume::RenderTextureLayout::COPY_DEST));

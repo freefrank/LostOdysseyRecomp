@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "heap.h"
 #include <kernel/io/file_system.h>
+#include <achievements/achievements.h>
 #include <os/logger.h>
 #include <file.h>
 #include <image.h>
@@ -81,6 +82,24 @@ uint32_t XexLoader::Load(const std::filesystem::path& xexPath)
     s_entryPoint = uint32_t(image.entry_point);
 
     memcpy(g_memory.Translate(image.base), image.data.get(), image.size);
+    // The title's SPA (achievements) is the XEX resource named after the title ID.
+    if (const auto* info = reinterpret_cast<const uint8_t*>(getOptHeaderPtr(file.data(), XEX_HEADER_RESOURCE_INFO)))
+    {
+        const uint32_t headerSize = uint32_t(info[0]) << 24 | info[1] << 16 | info[2] << 8 | info[3];
+        for (uint32_t at = 4; at + 16 <= headerSize; at += 16)
+        {
+            const auto* entry = reinterpret_cast<const Xex2ResourceInfo*>(info + at - 4);
+            const uint32_t address = entry->offset, size = entry->sizeOfData;
+            if (address < image.base || address - image.base > image.size || size > image.size - (address - image.base))
+                continue;
+            const uint8_t* data = image.data.get() + (address - image.base);
+            if (size >= 4 && memcmp(data, "XDBF", 4) == 0)
+            {
+                achievements::SetTitleData(std::vector<uint8_t>(data, data + size));
+                break;
+            }
+        }
+    }
     LOG_INFO("image loaded at {:#x} size {:#x} entry {:#x}", image.base, image.size, image.entry_point);
     // Import binding below writes host-assigned addresses into this prefix.
     g_unboundIdentityPrefix.assign(image.data.get(),

@@ -289,6 +289,10 @@ Config Read()
             value.fxaa = number == 1;
         else if (key == "skip_shader_prebuild")
             value.skipShaderPrebuild = number == 1;
+        else if (key == "achievement_notifications" && number <= 1)
+            value.achievementNotifications = number == 1;
+        else if (key == "achievement_sound" && number <= 1)
+            value.achievementSound = number == 1;
         else if (key == "save_anywhere" && number <= 1)
             value.saveAnywhere = number == 1;
         else if (key == "no_random_encounters" && number <= 1)
@@ -459,6 +463,8 @@ static bool WriteConfig(const Config &value)
            << "\naudio_matrix_rear=" << value.audioMatrixRear
            << "\nvoice_volume=" << value.voiceVolume
            << "\nskip_shader_prebuild=" << (value.skipShaderPrebuild ? 1 : 0)
+           << "\nachievement_notifications=" << (value.achievementNotifications ? 1 : 0)
+           << "\nachievement_sound=" << (value.achievementSound ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
            << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)

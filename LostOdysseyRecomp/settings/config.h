@@ -169,6 +169,9 @@ struct Config
     uint32_t audioMatrixRear = 110; // Matrix surround rear angle, 90-150 degrees in 10 degree steps. Applied live.
     uint32_t voiceVolume = 100; // Cutscene dialogue, 0-100, in place of the Sound effects volume. Applied live.
     bool skipShaderPrebuild = false;
+    // Achievement-unlocked toast and its chime (ui/achievement_overlay.cpp). Applied live.
+    bool achievementNotifications = true;
+    bool achievementSound = true;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
     // Debug-menu fast-forward, persisted like saveAnywhere: switch, 0 Hold / 1 Toggle,

@@ -266,6 +266,17 @@ namespace apu
         g_testSignalUntil = on ? until.time_since_epoch().count() : 0;
     }
 
+    std::mutex g_uiSoundMutex;
+    std::shared_ptr<const std::vector<float>> g_uiSound;
+    size_t g_uiSoundPosition = 0;
+
+    void PlayUiSound(std::shared_ptr<const std::vector<float>> samples)
+    {
+        std::lock_guard lock(g_uiSoundMutex);
+        g_uiSound = std::move(samples);
+        g_uiSoundPosition = 0;
+    }
+
     float TestSignalPosition()
     {
         return g_testPosition;
@@ -311,6 +322,17 @@ namespace apu
         const bool test = std::chrono::steady_clock::now().time_since_epoch().count() < g_testSignalUntil;
         if (test && !testOn) pan.Reset(); // each test starts at front left
         testOn = test;
+        std::shared_ptr<const std::vector<float>> ui;
+        size_t uiPosition = 0;
+        {
+            std::lock_guard lock(g_uiSoundMutex);
+            if (g_uiSound && g_uiSoundPosition < g_uiSound->size())
+            {
+                ui = g_uiSound;
+                uiPosition = g_uiSoundPosition;
+                g_uiSoundPosition += XAUDIO_NUM_SAMPLES;
+            }
+        }
         float peak = 0;
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
         {
@@ -321,6 +343,11 @@ namespace apu
                 channel[c] = std::isfinite(value) ? value : 0;
             }
             if (testOn) pan.Next(channel);
+            if (ui && uiPosition + i < ui->size())
+            {
+                channel[0] += (*ui)[uiPosition + i];
+                channel[1] += (*ui)[uiPosition + i];
+            }
             for (uint32_t c = 0; c < 6; ++c)
                 surround[i * 6 + c] = std::clamp(channel[c], -1.0f, 1.0f);
             float left, right;

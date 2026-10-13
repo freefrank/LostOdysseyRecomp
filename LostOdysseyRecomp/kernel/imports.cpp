@@ -26,6 +26,7 @@
 #include <os/shader_log.h>
 #include <os/user_paths.h>
 #include <host_ui/host_ui.h>
+#include <achievements/achievements.h>
 #include <csetjmp>
 
 // Kernel HLE for xboxkrnl.exe / xam.xex imports. Reference behaviour: Xenia
@@ -1768,6 +1769,17 @@ static uint32_t XamUserCreateAchievementEnumerator(uint32_t titleId, uint32_t us
 static uint32_t XMsgStartIORequest(uint32_t App, uint32_t Message, XXOVERLAPPED* overlapped, void* Buffer, uint32_t szBuffer)
 {
     LOG_KERNEL("app={:#x} msg={:#x}", App, Message);
+    // XGI (0xFB) XGIUserWriteAchievements: {count, X_XUSER_ACHIEVEMENT* {user, id}}.
+    if (App == 0xFB && Message == 0xB0008 && Buffer && szBuffer >= 8)
+    {
+        const auto* args = static_cast<const be<uint32_t>*>(Buffer);
+        const uint32_t count = args[0], list = args[1];
+        for (uint32_t i = 0; i < std::min(count, 64u) && list; ++i)
+        {
+            const auto* entry = static_cast<const be<uint32_t>*>(g_memory.Translate(list + i * 8));
+            achievements::Unlock(uint16_t(entry[1]));
+        }
+    }
     if (overlapped)
     {
         overlapped->Error = 0;

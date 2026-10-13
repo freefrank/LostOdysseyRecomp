@@ -1739,6 +1739,28 @@ int main(int argc, char** argv)
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
+            // System > Achievement notifications: On -> Silent -> Off, saved alone, Off keeps the sound value.
+            settings::tab = 3; settings::row = settings::SystemAchievementsRow;
+            settings::edit.achievementNotifications = true; settings::edit.achievementSound = true;
+            const int beforeAchSaves = saves;
+            Tick(base);
+            Require(settings::snapshot.rows[settings::SystemAchievementsRow].name == L"Achievement notifications" &&
+                    settings::snapshot.rows[settings::SystemAchievementsRow].choices.size() == 3 &&
+                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 0 &&
+                    settings::snapshot.help.find(L"Xbox 360-style notification") != std::wstring::npos,
+                    "Achievement notifications row: On/Silent/Off, On by default, help");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.achievementNotifications && !settings::edit.achievementSound &&
+                    diskConfig.achievementNotifications && !diskConfig.achievementSound && saves == beforeAchSaves + 1 &&
+                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 1, "Right selects Silent and saves");
+            settings::pending = 8; Tick(base);
+            Require(!settings::edit.achievementNotifications && !diskConfig.achievementNotifications &&
+                    saves == beforeAchSaves + 2 && settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 2,
+                    "Right again selects Off and saves");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.achievementNotifications && settings::edit.achievementSound && diskConfig.achievementSound &&
+                    settings::snapshot.rows[settings::SystemAchievementsRow].selectedChoice == 0, "Right wraps to On with sound");
+            std::puts("PASS System Achievement notifications: On / Silent / Off cycle, immediate save");
         }
         // Controls page layouts. A, Enter or a click on a layout row starts a
         // capture; the next press binds it, a button or key already in use

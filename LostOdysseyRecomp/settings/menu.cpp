@@ -1415,6 +1415,9 @@ void Publish(uint8_t *base, uint32_t config)
                    GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
+        addChoices(L"Achievement notifications", L"成就通知",
+                   {Tr(L"On", L"開"), Tr(L"Silent", L"靜音"), Tr(L"Off", L"關")},
+                   !edit.achievementNotifications ? 2 : edit.achievementSound ? 0 : 1);
         const bool logUpload = os::log_collection::Supported();
         next.rows.push_back({os::log_collection::Label(edit.uiLanguage),
             !logUpload ? Tr(L"Windows only", L"僅限 Windows") : os::log_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"),
@@ -1460,6 +1463,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemDebugLogRow)
         next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
                        L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
+    if (tab == 3 && row == SystemAchievementsRow)
+        next.help = Tr(L"Shows an Xbox 360-style notification when you unlock an achievement. Silent shows it without the sound.",
+                       L"解鎖成就時顯示 Xbox 360 風格的通知。靜音則只顯示、不播放音效。");
     if (tab == 3 && row == SystemModsRow)
         next.help = Tr(L"Turn installed mods on or off and change their order. Changes apply after a restart.",
                        L"開關已安裝的 Mod 並調整順序。重新啟動後生效。");
@@ -3510,6 +3516,19 @@ PPC_FUNC(sub_822F19B0)
                 edit.automaticUpdates = !edit.automaticUpdates;
             if (row == SystemDebugLogRow)
                 edit.debugLog = !edit.debugLog;
+            if (row == SystemAchievementsRow)
+            {
+                // Like Vibration: applied and saved at once, without unsaved edits
+                // from the other System rows. On / Silent / Off; Off keeps the sound
+                // value, On and Silent set both fields.
+                const uint32_t mode = cycle(!edit.achievementNotifications ? 2 : edit.achievementSound ? 0 : 1, 3);
+                edit.achievementNotifications = mode != 2;
+                if (mode != 2) edit.achievementSound = mode == 0;
+                Config saved = GetConfig();
+                saved.achievementNotifications = edit.achievementNotifications;
+                saved.achievementSound = edit.achievementSound;
+                if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            }
         }
     }
     if (changed)

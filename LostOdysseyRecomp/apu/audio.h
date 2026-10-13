@@ -11,6 +11,9 @@
 #define XAUDIO_NUM_CHANNELS 6
 #define XAUDIO_NUM_SAMPLES 256
 
+#include <memory>
+#include <vector>
+
 namespace apu
 {
     // Output layouts, numbered like settings::AudioOutput*. Surround passes
@@ -38,6 +41,9 @@ namespace apu
     // 0 front left ... 4 left surround, fractions while gliding), or a
     // negative value while no test plays.
     float TestSignalPosition();
+    // A short host sound (mono, 48 kHz, such as the achievement chime) added
+    // to the game's front left and right channels. Replaces one still playing.
+    void PlayUiSound(std::shared_ptr<const std::vector<float>> samples);
     // Channels of the open device: 6 (5.1), 2 (stereo), or 0 without a device
     // or while a change is pending.
     uint32_t OutputChannels();

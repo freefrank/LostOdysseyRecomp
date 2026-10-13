@@ -87,8 +87,8 @@ void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
-//   frame rate, HDR), 3 System (interface and game language, updates, TAA
-//   shader collection, Mods, Import discs & DLC, Shader bundle, Save).
+//   frame rate, HDR), 3 System (interface and game language, updates, debug log,
+//   achievement notifications, TAA shader collection, Mods, Import discs & DLC, Shader bundle, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -128,12 +128,13 @@ inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
 inline constexpr int SystemDebugLogRow = 3;
-inline constexpr int SystemCollectionRow = 4;
-inline constexpr int SystemModsRow = 5; // opens the Mods page
-inline constexpr int SystemImportRow = 6;
-inline constexpr int SystemShaderBundleRow = 7; // downloads the shader bundle again on the next start
-inline constexpr int SystemSaveRow = 8;
-inline constexpr int SystemRowCount = 9;
+inline constexpr int SystemAchievementsRow = 4; // On / Silent / Off, applied and saved at once
+inline constexpr int SystemCollectionRow = 5;
+inline constexpr int SystemModsRow = 6; // opens the Mods page
+inline constexpr int SystemImportRow = 7;
+inline constexpr int SystemShaderBundleRow = 8; // downloads the shader bundle again on the next start
+inline constexpr int SystemSaveRow = 9;
+inline constexpr int SystemRowCount = 10;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
