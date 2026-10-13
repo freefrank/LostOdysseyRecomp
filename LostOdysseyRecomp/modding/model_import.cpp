@@ -23,6 +23,7 @@ using Vec3 = std::array<float, 3>;
 // The game's GPU skinning takes 75 bones per draw (the largest chunk on the discs).
 constexpr size_t kMaxChunkBones = 75;
 constexpr size_t kMaxVertices = 0xffff, kMaxSectionTriangles = 0xffff;
+constexpr size_t kMaxStaticVertices = 0x10000; // 16-bit indices, one vertex buffer
 constexpr float kCentimetres = 100.0f;
 
 void Require(bool ok, const std::string &message) { if (!ok) throw std::runtime_error(message); }
@@ -213,8 +214,10 @@ void DropUnused(Model &model)
     for (auto &t : model.triangles) for (auto &i : t.v) i = remap[i];
 }
 
-// Splits mirrored UV seams and fills in normals, tangents and binormals from UV set 0.
-void FinishModel(Model &model)
+// Splits mirrored UV seams and fills in normals, tangents and binormals from UV
+// set 0. A split that would take the model past maxVertices is left out: the
+// seam's tangents are averaged instead.
+void FinishModel(Model &model, size_t maxVertices = std::numeric_limits<size_t>::max())
 {
     // A vertex on a mirrored UV seam serves triangles of both UV handedness; their
     // tangents would cancel, so the mirrored side gets its own copy.
@@ -227,8 +230,11 @@ void FinishModel(Model &model)
         mirrored[t] = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]) < 0;
         for (const auto i : tri.v) sides[i] |= mirrored[t] ? 2 : 1;
     }
+    size_t seams = 0;
+    for (const auto side : sides) seams += side == 3;
+    const bool split = model.vertices.size() + seams <= maxVertices;
     std::map<uint32_t, uint32_t> copies;
-    for (size_t t = 0; t < model.triangles.size(); ++t)
+    for (size_t t = 0; split && t < model.triangles.size(); ++t)
         if (mirrored[t])
             for (auto &i : model.triangles[t].v)
                 if (sides[i] == 3)
@@ -1025,7 +1031,7 @@ Model ReadStaticModel(const gltf::Document &doc, const StaticOriginal &original,
     }
     Require(!model.triangles.empty(), "the file has no triangles");
     DropUnused(model);
-    FinishModel(model);
+    FinishModel(model, kMaxStaticVertices);
     const OriginalSurface surface(original);
     size_t reassigned = 0;
     for (auto &t : model.triangles)
@@ -1145,7 +1151,8 @@ struct StaticSection { uint16_t slot = 0; uint32_t firstIndex = 0, triangles = 0
 std::vector<uint8_t> WriteStaticExport(const Package &package, const StaticOriginal &o, const Model &model, size_t exportBase,
                                        std::string &summary)
 {
-    Require(model.vertices.size() <= kMaxVertices, "the model has " + std::to_string(model.vertices.size()) + " vertices; the game takes 65535");
+    Require(model.vertices.size() <= kMaxStaticVertices,
+            "the model has " + std::to_string(model.vertices.size()) + " vertices; the game takes 65536");
     // One section per material, in the original's order.
     std::vector<StaticSection> sections;
     std::vector<uint16_t> indices;

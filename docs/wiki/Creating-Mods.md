@@ -243,7 +243,7 @@ The steps are the same as above. In addition:
 
 Limits of map pieces:
 
-- At most 65,535 vertices per model. Most map pieces have a few hundred to a few thousand, so there is room for many times more detail.
+- At most 65,536 vertices per model. Most map pieces have a few hundred to a few thousand, so there is room for many times more detail.
 - Each package with a replaced model is rebuilt when the game starts. A mod that replaces the pieces of many maps makes the start slower.
 
 `python tools/modding/lo_mod.py archive` packs `overlay/models/` into the `.loarc` like other files.
