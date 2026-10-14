@@ -3185,7 +3185,7 @@ namespace gpu::video
             const auto stage=PreparationStage((progress>>56)&15);
             const auto unit=PreparationUnit(progress>>60);
             g_preparationShown.store(progress);
-            std::string title = "Lost Odyssey Recompiled";
+            std::string title = lo_version::WindowTitle;
             if (total) {
                 const std::wstring status = std::wstring(PreparationTitle(stage)) + L" " + std::to_wstring(done) + L"/" +
                     std::to_wstring(total) + PreparationSuffix(unit);
