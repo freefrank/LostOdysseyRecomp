@@ -1,0 +1,20 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Lost Odyssey",
+  "wikidata": "Q558753",
+  "system": "Xbox 360",
+  "type": "recomp",
+  "project": "LostOdysseyRecomp",
+  "status": "released",
+  "targets": ["Windows", "Linux", "macOS", "Android"],
+  "toolchain": ["XenonRecomp", "XenosRecomp", "plume"],
+  "approach": "Static recompilation of the Xbox 360 game into a native build; players supply their own copy of the game.",
+  "notes": "Downloads and install guides are on the releases page.",
+  "maintainers": [{ "name": "freefrank", "link": "https://github.com/freefrank" }],
+  "links": [
+    { "label": "Releases", "url": "https://github.com/freefrank/LostOdysseyRecomp/releases" },
+    { "label": "Installation guide", "url": "https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/INSTALLING.md" },
+    { "label": "Wiki", "url": "https://github.com/freefrank/LostOdysseyRecomp/wiki" },
+    { "label": "Discord", "url": "https://discord.gg/z2yPct6z2w" }
+  ]
+}

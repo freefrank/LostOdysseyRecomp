@@ -257,7 +257,7 @@ public final class GameFolderActivity extends Activity {
             .setTitle("Allow file access")
             .setMessage("The game reads its files directly, so disc images and folders outside "
                 + "the app folder need the \"All files access\" permission. Android opens the "
-                + "setting now; turn it on for Lost Odyssey and come back.")
+                + "setting now; turn it on for Lost Odyssey Recomp and come back.")
             .setPositiveButton("Open setting", (dialog, which) -> requestStorage(next))
             .setNegativeButton("Cancel", null)
             .show();

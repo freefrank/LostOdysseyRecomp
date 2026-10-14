@@ -11,11 +11,13 @@
 #include "gpu/indirect_buffer_guard.h"
 #include <os/guest_code_thread.h>
 
-// Minimal Xenos command processor: consumes the primary ring buffer, executes
-// the PM4 packets the CPU synchronises against (memory writes, fences, waits,
-// indirect buffers, swaps, interrupts) and skips everything that would draw.
+// Xenos command processor: consumes the primary ring buffer and executes the PM4
+// packets: the ones the CPU synchronises against (memory writes, fences, waits,
+// indirect buffers, swaps, interrupts) and the state/draw stream for the renderer.
 // Register semantics follow Xenia's gpu/command_processor.cc (BSD-3).
-// Draw/state packets are the hook point for the future plume renderer.
+// State packets (SET_CONSTANT, IM_LOAD...) land in the register file and the
+// active-shader snapshots; DRAW_INDX calls renderer::Draw (gpu/renderer.cpp),
+// which reads the registers and GetActiveShader. Swaps present through renderer::Flush.
 
 namespace gpu
 {

@@ -92,8 +92,7 @@ namespace gpu
 
     // -----------------------------------------------------------------------
     // Draw statistics and shader capture (LO_GPU_STATS=1, LO_SHADER_DUMP_DIR).
-    // Purely diagnostic: tells us what the title screen actually draws before
-    // a renderer exists.
+    // Purely diagnostic: logs what the title issues, independent of the renderer.
     // -----------------------------------------------------------------------
     struct FrameStats
     {
@@ -1751,7 +1750,7 @@ namespace gpu
         }
 
         default:
-            // Remaining state packets: no renderer yet. Count unhandled opcodes
+            // Packets with no handler are ignored. Count unhandled opcodes
             // only when draw statistics are requested.
             if (g_gpuStats) g_frame.unknownOpcode[opcode & 127]++;
             {

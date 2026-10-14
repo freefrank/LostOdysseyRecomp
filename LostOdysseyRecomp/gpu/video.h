@@ -123,8 +123,10 @@ namespace gpu::video
     uint64_t BeginDisplayRevert(const settings::Config& config);
     DisplayChangeResult QueryDisplayChange(uint64_t ticket);
     // Updates the title on the window owner thread. total=0 restores the title.
-    enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan, CachedShaders };
-    enum class PreparationUnit : uint32_t { Shaders, Pipelines, Files, MiB, Entries };
+    // Mods / GameFiles: the mods rebuild (modding/rebuild_progress.h), shown by
+    // the window itself and in the settings language; it cannot be skipped.
+    enum class PreparationStage : uint32_t { Shaders, Pipelines, CacheValidation, IndexedExtraction, FallbackScan, CachedShaders, Mods };
+    enum class PreparationUnit : uint32_t { Shaders, Pipelines, Files, MiB, Entries, GameFiles };
     void SetShaderPreparationProgress(uint32_t completed, uint32_t total,
         PreparationStage stage = PreparationStage::Shaders, PreparationUnit unit = PreparationUnit::Shaders);
     bool ShaderPreparationSkipped();

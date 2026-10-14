@@ -14,6 +14,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → System → Shader bundle downloads the shader bundle again.
 - Nintendo-layout controllers used through Steam Input follow Steam's button layout setting again instead of having A/B and X/Y swapped.
 - Android: CTRL → Saves and logs exports the logs to a ZIP for bug reports.
+- Android: the app is now named Lost Odyssey Recomp instead of Lost Odyssey (development).
 - Settings → Gameplay → Controls changes the controller buttons and keyboard keys; Button prompts and Vibration moved there.
 - Android: less crackling in the sound when the device is busy or hot.
 - If the graphics driver stops working, the game says so and closes instead of freezing on the last picture.
@@ -31,6 +32,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Cutscene replacements up to 1% longer or shorter than the original are fitted to its length, so they stay in time with the sound.
 - Android: the game starts on devices whose graphics driver refused the display setup (#477).
 - Replaced character models no longer lose parts of their body in game (11 party characters).
+- While the game files for new or changed mods are being prepared at startup, the window shows "Preparing mods" with a progress bar instead of staying black.
 - Android (experimental): phones and tablets with a Mali-G57, G68, G77, G78 or Mali-G610 and newer GPU can run the game with the open-source PanVK driver, which the GPU driver page recommends and downloads.
 
 ### 简体中文
@@ -41,6 +43,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 系统 → 着色器包可以重新下载着色器包。
 - 通过 Steam Input 使用的任天堂布局手柄重新按 Steam 的按键布局设置工作，A/B 和 X/Y 不再对调。
 - Android：CTRL → Saves and logs 可以把日志导出成 ZIP，用于反馈问题。
+- Android：应用名称由 Lost Odyssey (development) 改为 Lost Odyssey Recomp。
 - 设置 → 游戏 → 按键设置可以更改手柄按键和键盘按键；按键提示和震动也移到了这里。
 - Android：设备繁忙或发热时，声音的爆音更少。
 - 显卡驱动停止工作时，游戏会弹出提示并关闭，不再停在最后一帧。
@@ -58,6 +61,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 比原版长或短不超过 1% 的替换影片会被拉到原版的长度，画面和声音保持同步。
 - Android：显卡驱动拒绝显示设置的设备现在可以正常启动（#477）。
 - 替换后的角色模型不再缺少身体部件（队伍中的 11 个角色）。
+- 启动时为新增或改动的 Mod 准备游戏文件期间，窗口会显示“正在准备 Mod”和进度条，不再一直黑屏。
 - Android（实验性）：使用 Mali-G57、G68、G77、G78 或 Mali-G610 及更新 GPU 的手机和平板可以用开源 PanVK 驱动运行游戏，GPU driver 页面会推荐并下载它。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
