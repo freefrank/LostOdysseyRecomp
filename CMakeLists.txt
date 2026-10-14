@@ -65,7 +65,7 @@ option(LO_BUILD_TOOLS "Build XenonRecomp / XenosRecomp (use tools/build_tools.ba
 option(LO_BUILD_RECOMP_LIB "Build the recompiled game code library from LostOdysseyRecompLib/ppc" ON)
 option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
 option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
-option(LO_BUILD_ANDROID_RUNTIME "Enable the experimental Android game runtime shared library" OFF)
+option(LO_BUILD_ANDROID_RUNTIME "Enable the Android game runtime shared library" OFF)
 
 if(ANDROID)
     if(NOT LO_TARGET_ISA STREQUAL "aarch64")
@@ -75,7 +75,7 @@ if(ANDROID)
         message(FATAL_ERROR "Android builds use host-generated PPC sources; build XenonRecomp/XenosRecomp separately for the host")
     endif()
     if(LO_BUILD_RUNTIME AND NOT LO_BUILD_ANDROID_RUNTIME)
-        message(FATAL_ERROR "The Android game runtime is experimental; explicitly set -DLO_BUILD_ANDROID_RUNTIME=ON, or use -DLO_BUILD_ANDROID_PROBE=ON for diagnostics")
+        message(FATAL_ERROR "The Android game runtime needs an explicit opt-in; set -DLO_BUILD_ANDROID_RUNTIME=ON, or use -DLO_BUILD_ANDROID_PROBE=ON for diagnostics")
     endif()
     # These archives will be linked into the Android runtime shared library.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)

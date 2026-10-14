@@ -1,16 +1,16 @@
 # Android ARM64 development builds
 
-This directory builds the Android development probe and experimental full
-runtime for the Lost Odyssey Recomp Android port. The probe is a diagnostic APK
-that reports host memory-page behavior and Vulkan device limits, formats and
-heaps, and exercises one clear/present frame per check run. The runtime is an
-arm64 development APK path and is not a published Android release.
+This directory builds the Android probe and the full runtime for the Lost
+Odyssey Recomp Android port. The probe is a diagnostic APK that reports host
+memory-page behavior and Vulkan device limits, formats and heaps, and exercises
+one clear/present frame per check run. The runtime is the arm64 APK that
+ships with each release.
 
 The targets use **arm64-v8a** with API 26+, compile/target SDK
 35, Android Gradle Plugin 8.9.3, Gradle 8.11.1 and NDK 28.2.13676358. The
 source CMake entry accepts `Android` for the probe and for the explicitly
-opt-in `LO_BUILD_ANDROID_RUNTIME=ON` runtime path. The runtime remains
-experimental and requires host-generated PPC sources plus the Android FFmpeg,
+opt-in `LO_BUILD_ANDROID_RUNTIME=ON` runtime path. The runtime requires
+host-generated PPC sources plus the Android FFmpeg,
 DXC and staged native-library inputs described below.
 
 ## Prerequisites
@@ -130,7 +130,7 @@ FFmpeg, DXC and other native libraries; the development build has passed the
 runtime library link and focused host checks. It does not yet establish APK
 installation, resource loading or a playable game flow.
 
-## Experimental full runtime
+## Full runtime
 
 From the repository root, generate PPC sources on the host and stage the
 Android native dependencies before invoking the runtime CMake path:

@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.libsdl.app.SDLActivity;
 
-/** Experimental game runtime. User-supplied discs live in app-owned storage. */
+/** Game runtime. User-supplied discs live in app-owned storage. */
 public final class RuntimeActivity extends SDLActivity {
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";

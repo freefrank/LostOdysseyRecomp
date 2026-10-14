@@ -14,6 +14,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → System → Shader bundle downloads the shader bundle again.
 - Nintendo-layout controllers used through Steam Input follow Steam's button layout setting again instead of having A/B and X/Y swapped.
 - Android: CTRL → Saves and logs exports the logs to a ZIP for bug reports.
+- Android: the app is now named Lost Odyssey instead of Lost Odyssey (development).
 - Settings → Gameplay → Controls changes the controller buttons and keyboard keys; Button prompts and Vibration moved there.
 - Android: less crackling in the sound when the device is busy or hot.
 - If the graphics driver stops working, the game says so and closes instead of freezing on the last picture.
@@ -40,6 +41,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 系统 → 着色器包可以重新下载着色器包。
 - 通过 Steam Input 使用的任天堂布局手柄重新按 Steam 的按键布局设置工作，A/B 和 X/Y 不再对调。
 - Android：CTRL → Saves and logs 可以把日志导出成 ZIP，用于反馈问题。
+- Android：应用名称由 Lost Odyssey (development) 改为 Lost Odyssey。
 - 设置 → 游戏 → 按键设置可以更改手柄按键和键盘按键；按键提示和震动也移到了这里。
 - Android：设备繁忙或发热时，声音的爆音更少。
 - 显卡驱动停止工作时，游戏会弹出提示并关闭，不再停在最后一帧。
