@@ -9,7 +9,7 @@
   "targets": ["Windows", "Linux", "macOS", "Android"],
   "toolchain": ["XenonRecomp", "XenosRecomp", "plume"],
   "approach": "Static recompilation of the Xbox 360 game into a native build; players supply their own copy of the game.",
-  "notes": "A native port for Windows, Linux, macOS and Android. You need your own copy of the game. Downloads and install guides are on the releases page and in the repository.",
+  "notes": "Downloads and install guides are on the releases page.",
   "maintainers": [{ "name": "freefrank", "link": "https://github.com/freefrank" }],
   "links": [
     { "label": "Releases", "url": "https://github.com/freefrank/LostOdysseyRecomp/releases" },
