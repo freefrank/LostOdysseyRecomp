@@ -1,11 +1,13 @@
+> **历史归档 / Historical snapshot — 2026-10-14.** 本文为已修复缺陷的历史记录，保留原时点证据；现行状态见[当前状态](../../STATUS.md)。
+
 # Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy
 
-> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../STATUS.md) and [ROADMAP](../ROADMAP.md).
+> **Historical checkpoint.** Version, issue, process and pending-work statements below describe their original date. Recheck current delivery and acceptance in [STATUS](../../STATUS.md) and [ROADMAP](../../ROADMAP.md).
 
 **Status (2026-09-09):** root cause established from two exception-time captures on the unmodified
 official v0.4.2 executable plus an instrumented diagnostic build; the merged host-side mitigation is
 validated below in the diagnostic build (run-13 reproduces the race in an instrumented build, run-14 shows the mitigation closes it) and in the bounded production hand-in path (run-15). Source 0.4.20 records this validation/version milestone; the GC implementation was already merged and backed up, while the version and validation records remain uncommitted; the frozen validation EXE retains source 0.4.18 identity (SHA prefix `7ccfdea7…`). This note supersedes the open questions in the
-[investigation log](../archive/notes/issue12-funeral-crash.md) and the [archived Claude handoff](../archive/issue12-claude-handoff-2026-09-09.md).
+[investigation log](issue12-funeral-crash.md) and the [archived Claude handoff](../issue12-claude-handoff-2026-09-09.md).
 All guest addresses refer to the original XEX image (base `0x82000000`); host tooling lives in
 `tools/diagnostics/issue12/` (removed in #409; the README is in git history).
 

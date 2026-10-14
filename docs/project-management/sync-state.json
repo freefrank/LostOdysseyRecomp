@@ -162,7 +162,7 @@
         "Source key": "gpu-resolve-resource-lifetime"
       },
       "title": "Move resolves to the GPU and bound renderer caches",
-      "body_sha256": "c9e6b4c6e9109f6006297478d34f6b78af44dc574358ab3105959adddfedacdf"
+      "body_sha256": "87fbd35b8d752c8933c64e0c43f8144b61bc9b603b5ce2757db4d9049d6de27e"
     },
     "guest-timebase-frequency": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56crE",
@@ -222,7 +222,7 @@
         "Source key": "physical-memory-render-aliases"
       },
       "title": "Restore character materials through physical memory aliases",
-      "body_sha256": "d91b05afe0ff384a755b8d5b8364321bf756a733d4f72d8d8c70ff161c2a643b"
+      "body_sha256": "050daacc0f8e3880c998fcb200f067418068ade53d8a4c6fc95458eb536b3f5f"
     },
     "lighting-stencil-depth-clear": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cvQ",
@@ -252,7 +252,7 @@
         "Source key": "post-battle-whiteout"
       },
       "title": "Restore post-battle effects across EDRAM formats",
-      "body_sha256": "9912a9244f896a5166ea863bd0ffb49f75cc5665edb3a4ad397541a02b100360"
+      "body_sha256": "346ebfa2ae25fba66251ce1985abe0ec80922b639885e42240c3d3d884e7ad29"
     },
     "title-packed-mip-background": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56cyI",
@@ -267,7 +267,7 @@
         "Source key": "title-packed-mip-background"
       },
       "title": "Restore the animated title background",
-      "body_sha256": "7f395faa3dc97a66a4dc64fdb3e380ef357aa51ea49d2f21ea97eb029e587d66"
+      "body_sha256": "80b48b728e11080105ebb15e51dfdd7310bd137fa8ca3b11cec9994949703dbd"
     },
     "xma-dialogue-playback": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56czw",
@@ -297,7 +297,7 @@
         "Source key": "manual-save-overwrite-reload"
       },
       "title": "Repair manual save, overwrite and reload",
-      "body_sha256": "9de54dcbd173f0974cd23d5d9850675c77103147c065ba38c1dbb9735acf1bdd"
+      "body_sha256": "0140c7810692e93dd93143c95e578053864458f29d8c8c417bbb51fd59e74ab6"
     },
     "encounter-animation-progression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56c20",
@@ -1530,7 +1530,7 @@
         "Source key": "save-content-compatibility"
       },
       "title": "Validate broader save and content compatibility",
-      "body_sha256": "a204b4ad57a8346203322e1412ddd3470f0584602b29c417aa73c91ef4aa0bdc"
+      "body_sha256": "75743d021a6db226712c5594c039395f045b0531353bb3a22358b5bf77812629"
     },
     "chapter-disc-save-regression": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56e0Y",
@@ -1732,14 +1732,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Mod support",
-        "Status": "In Progress",
+        "Status": "Done",
         "Delivery": "Released",
         "Source key": "texture-replacement-mod-loader",
-        "Release": "v0.7.0",
-        "Evidence": "PR #68 / 457ba24 shipped Mod API v1, deterministic manifest resolution, reload/disabled fallback, LOTEX1/PNG packer and native menu atlas/font replacement in v0.7.0. Mod API and Wiki CI 36228382565 and 36228744475 succeeded. v0.9.52 (2026-10-14, not accepted): character models (#473) and static map models (#475) replaced from glTF exports (#472); overlay.loarc packages (#463, #474); Windows cutscene replacement with H.264 MP4 (#467 to #469; Linux, macOS and Android pending); rebuilt-file cache (#476, #486); party-model material fix (#480). Remaining scope: other guest texture and model consumers, the 4 GiB archive limit for full-map model mods (maintainer decision pending), and real external-manager/game acceptance; do not call the delivered framework Not started."
+        "Release": "v0.9.52",
+        "Evidence": "Closed by the maintainer 2026-10-14 as Done; released in v0.9.52 (published 2026-10-14). Shipped in v0.7.0: Mod API v1, manifest resolution, reload/disable fallback, LOTEX1/PNG packer, native menu atlas/font replacement (PR #68 / 457ba24). In v0.9.52, all merged: #463 overlay.loarc; #467-#469 H.264 MP4 cutscenes (Windows; Linux, macOS, Android pending); #472 glTF export; #473 character models; #474 overlay loading; #475 static map models; #476 rebuilt-file cache; #480 party-model material fix; #486 rebuild progress screen. Known limit: 4 GiB per-disc rebuilt-archive limit (21 sector bits); no item unless a mod author hits it. Not a player or external-manager acceptance record."
       },
       "title": "Support texture replacement and a mod loader",
-      "body_sha256": "8061a994bedbe56a8eacf856176ae3c2b1c0b72269abc1fa873b37fa1537a080"
+      "body_sha256": "3fad5851b0b3ed9743b457c8c2a3da81acd267f6c9f6dc36c3f1feacaa72ac71"
     },
     "switch-platform-alignment": {
       "id": "PVTI_lAHOAAsUY84Biy1azg56fA0",
@@ -2427,7 +2427,7 @@
         "Delivery": "In progress",
         "Start date": "2026-09-12",
         "Source key": "issue14-cage-crash-investigation",
-        "Evidence": "Investigation active. The original attached log is historical source v0.5.0 (LR 829DFDCC, CTR 829DFEF0). A second reporter log is historical source v0.4.2 (LR 823CB53C, CTR 0), with a virtual call at guest 823CB538 matching a call site discussed in docs/notes/issue12-root-cause.md, but without an object-freeing capture. Neither log establishes a current-version reproduction or a shared root cause. The current gc_render_flush.cpp repair exists at 17e3ab7. Local commit 2019cd017ab939d0b728cec340f7835c2082e615 records this task's current work and is integrated with main locally, unpushed and unreleased; no new runtime validation or reporter acceptance is recorded.",
+        "Evidence": "Investigation active. The original attached log is historical source v0.5.0 (LR 829DFDCC, CTR 829DFEF0). A second reporter log is historical source v0.4.2 (LR 823CB53C, CTR 0), with a virtual call at guest 823CB538 matching a call site discussed in docs/archive/notes/issue12-root-cause.md, but without an object-freeing capture. Neither log establishes a current-version reproduction or a shared root cause. The current gc_render_flush.cpp repair exists at 17e3ab7. Local commit 2019cd017ab939d0b728cec340f7835c2082e615 records this task's current work and is integrated with main locally, unpushed and unreleased; no new runtime validation or reporter acceptance is recorded.",
         "Release": "v0.5.6"
       }
     },
@@ -4237,11 +4237,11 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Release": "v1.0.0",
-        "Evidence": "Acceptance changed by the maintainer on 2026-10-12 (p95 60 fps is enough): hot frame-interval p95 at or below about 18 ms at the factory 720p in hot Uhra on the TB321FU; the cool full-60 baseline measures p95 17.4-17.6 ms from timer jitter. p99 is no longer the gate. Shipped in v0.9.32: #443 game threads on the performance cores (hot Uhra 53.1 to 54.4 fps, p95 25.8 to 22.5 ms), #444 -Bsymbolic-functions for libmain, #445 render-thread CPU batch 5, #447 vertex/index write generations (render CPU about -16%, hot about 58 fps). Current: hot Uhra p95 21.3-22.6 ms at 55-58 fps, about 4 ms short. Limits: thermal caps on cpu2-4 and the prime core, the render thread (about 14-15 ms/frame hot) and the game's UE3 render thread (about 15 ms/frame hot). Next: cut the UE3 render thread's work and total energy. ADPF was measured and rejected (worse); the render-pass merge dependency no longer applies.",
+        "Evidence": "Gate (maintainer, 2026-10-12): hot Uhra frame-interval p95 at or below about 18 ms at 720p on the TB321FU; p99 no longer gates. Shipped in v0.9.32 (#443, #444, #445, #447): hot Uhra p95 25.8 to 22.5 ms. Last recorded hot p95 21.3-22.6 ms, about 4 ms short. 2026-10-14: #495 (e6bd76f4, on main, not released) cut transfer passes from 1.19 to 0.68 ms GPU, whole frame flat. Checkpoint 2: the hot p95 tail is CPU scheduling under thermal caps, not GPU; a render-thread priority experiment is running, no result. Gate still open. Android resume fixes #496 and #498 are tracked on #491 and #492.",
         "Source key": "android-frame-time-v100"
       },
       "title": "v1.0.0: Faster Android frames with the same image",
-      "body_sha256": "5952516a2db1301c138da062f9d686afb64df485ef0c98e48cae476fc5c65d6d"
+      "body_sha256": "2442b923f1997d7faaa64dfa1724dc431a5c3ca45e73cfaf1492a8fa4865d3e6"
     },
     "render-pass-merging-v100": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_6qcw",
@@ -4251,11 +4251,11 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Release": "v1.0.0",
-        "Evidence": "Active again 2026-10-14: the maintainer asked to continue. Branch perf/constant-edram-transfer (GitHub, Gitea and local) carries constant-EDRAM transfers; no PR yet. Shipped step: PR #414 (merged 2026-10-11, in v0.9.32; TB321FU render passes per frame 291 to 172; phase 1 measured about 0.2 ms; tablet 720p 41.4 to 41.8 FPS). Baseline 2026-10-14 hot 720p: frame p95 21.4-21.6 ms vs the 18 ms Android gate (android-frame-time-v100). Measurement checkpoint running on the TB321FU: the two big main-view passes, the Z-prepass, the p95 tail and a Turnip driver comparison. No pass-merge result is accepted yet.",
+        "Evidence": "Active again 2026-10-14: the maintainer asked to continue. Branch perf/constant-edram-transfer (GitHub, Gitea and local) carries constant-EDRAM transfers; merged to main as PR #495 (e6bd76f4, not released; transfer passes 1.19 to 0.68 ms GPU, whole frame flat). Shipped step: PR #414 (merged 2026-10-11, in v0.9.32; TB321FU render passes per frame 291 to 172; phase 1 measured about 0.2 ms; tablet 720p 41.4 to 41.8 FPS). Baseline 2026-10-14 hot 720p: frame p95 21.4-21.6 ms vs the 18 ms Android gate (android-frame-time-v100). Measurement checkpoint running on the TB321FU: the two big main-view passes, the Z-prepass, the p95 tail and a Turnip driver comparison. No pass-merge result is accepted yet.",
         "Source key": "render-pass-merging-v100"
       },
       "title": "Merge render passes so tile-based GPUs keep work on chip",
-      "body_sha256": "2039d3a0cb1aa0fc94d36d8f396304c2216509f1375721a60e4d327b65b11cf2"
+      "body_sha256": "6d24edb8f9a15a478061710a54d894ffd4161e3ec200d105941b1bd0cba78b1e"
     },
     "release-v0-9-52": {
       "id": "PVTI_lAHOAAsUY84Biy1azhAnf7I",
@@ -4304,10 +4304,10 @@
       "fields": {
         "Kind": "Bug",
         "Area": "Platforms",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
         "Start date": "2026-10-14",
-        "Evidence": "Open (created 2026-10-14). The reporter's game audio stops after switching to another app and returning; a log is attached. Analysis in progress; no fix is recorded for this report. PR #461 (Android audio pacing under a busy CPU) is not claimed as its fix.",
+        "Evidence": "Closed as completed 2026-10-14 06:27Z by PR #496 (\"Fixes #491\"; merged to main as 758dd93d; not in a release). Fix: the audio driver reopens the device when it has not drained 300 ms after the return to the foreground. Not run on a device by the project. The reporter has not confirmed; closure is not verification. PR #461 is not claimed as the fix. Reopen only on recurrence.",
         "Source key": "issue-491-android-no-sound-after-app-switch"
       }
     },
@@ -4343,7 +4343,7 @@
         "Status": "In Progress",
         "Delivery": "In progress",
         "Start date": "2026-10-14",
-        "Evidence": "Open (created 2026-10-14). The reporter sees black rectangular artifacts over the character and environment after the phone screen turns off or the app is switched and returned to; intermittent, sometimes the whole screen. Log and screenshots attached to the Issue. Same reporter as #491. Analysis in progress together with #491; no fix is recorded for this report.",
+        "Evidence": "Open (created 2026-10-14); same reporter as #491; log and screenshots on the Issue. Partial mitigations on main, not released, not run on a device: PR #496 keeps the frame-plan size for 1 s after a surface change (refs #492); PR #498 locks landscape and moves pause handling to an event watcher (refs #492). Neither PR claims to close #492; a portrait period longer than 1 s still resets the plan twice. Stays open; no fix is accepted.",
         "Source key": "issue-492-android-black-artifacts-app-switch"
       }
     }

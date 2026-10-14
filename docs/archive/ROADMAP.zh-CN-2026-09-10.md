@@ -14,7 +14,7 @@
 
 - **版本与交付：**[v0.5.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.1) 已正式公开，为 latest、非 draft、非 prerelease，于 2026-09-10T05:31:57Z 发布。此前 v0.5.0 发布保留为历史检查点。当前源码改动目标为 `v0.5.2`，已在 `updater` 本地提交为 `ed59f4402b421207456a8530a369b2ac9c6a2a89`，尚未发布；source-0.5.0 候选证据不建立 v0.5.2 游戏运行结论。
 - **v0.5.0 工作：**Map16 性能、DPI 呈现、独立 shader 日志、可选 shader 收集和稀疏相机时序收集已有界定验证。`0.5.0-position-evidence-1` 在每个 VS 仅运行一次保守 HLSL 位置数据流分析，并在 `UnknownShader` 返回前独立记录相机、视口、深度和矩阵有限值检查的结果；它不自动授权 jitter。Worker 同时接受 schema 1 和 schema 2；2026-09-10 只读快照包含 768 条 schema 2 观察，但不扩展画面验收。四条 c7 路径已在同一 D 盘 slot 02 Ghost Town — City of Ruins 场景获用户认可为修复成功：六张间隔 presented 帧覆盖约 11.37 秒，未见闪烁。这不是连续视频或更广场景覆盖；shader 家族回归、全屏、Alt+Enter、物体／骨骼 MV 和全游戏性能仍待完成。
-- **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](../notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
+- **P1——已实现；等待报告者反馈：**[Issue #12](https://github.com/freefrank/LostOdysseyRecomp/issues/12) 已确定为 GC 与渲染对象生命周期竞争；源码修复已从 `claude-issue12` 本地合并到 `0.5.0`，提交 `9cefb0d`。生产验证使用冻结的 source-0.4.18 EXE，无 probe、overlay、人工延迟或 skip-stale，保留 `poll_wait` 与 `17e3ab7` GC 修复。原生 10 花存档独立载入；普通 A 在 serial 16 后从确认推进到树枝后续剧情及 Kaim 自由移动，均发生在持续 148 秒无崩溃、无长卡的观察窗内。seed 与 EXE 未变。本验证不测精确 GC 耗时，也不覆盖全游戏。GC 代码 `17e3ab7` 已在此前提交并备份；source 0.4.20 版本递增及验证记录已在 `51b0cf0` 提交。目标仍为 v0.5.0。Issue 保持 open，因为报告者尚未收到修复 binary 或确认。见[根因报告](notes/issue12-root-cause.md)和[交接文档](notes/issue12-handoff-2026-09-09.md)。
 - **下一步——开发：**Direct3D 11 可行性和后端保留为 v0.5.0 之外的未来工作，未指定下个版本或日期。用户已确认 CPU Vulkan 对照通过；此前停止的采集未保留配对指标，不补写新的 benchmark 数字。
 - **下一步——证据或验收：**原版风格设置及字体／返回／保存修正已完成有界验证，新用户反馈另行记录；冻结安装器与 DPI 覆盖仍开放；两项保留的 shader compiler error 已被缓存，并未修复。玩家验收单独保留。
 - **保持挂起或等待证据：**Issue #9 已按项目用户验收关闭，不声称原报告者确认或两个症状存在共同根因。AMD 阴影调查和敌人消散闪烁保留原有待办或暂停状态，本次整理不自动恢复。Issue #10 记录 v0.5.0 之外未来的 FSR 工作；Issue #11 已完成用户确认的 Xenia → recomp 直接复制读取；反向兼容与转换不在此边界内。
@@ -172,7 +172,7 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 
 ## 阶段 2：进入主菜单
 
-- [x] 修正小纹理 level-0 packed-mip 偏移，恢复动态标题背景。见[记录](../notes/title-packed-mips.md)。
+- [x] 修正小纹理 level-0 packed-mip 偏移，恢复动态标题背景。见[记录](notes/title-packed-mips.md)。
 - [x] 实现线程、同步、内存、文件系统和 XAM 用户档案 HLE；标题循环实跑通过，60 fps swap 不代表游戏逻辑已解锁帧率。
 - [x] 接通 plume/D3D12，正确显示 Press START。见 [GPU](notes/gpu.md)。
 - [x] 接通 Xenia FFmpeg XMAFRAMES 与 SDL 48 kHz 双声道音频；修复循环终点、游标归属、文件读取竞争、命令寄存器和对白跳帧。共享句柄测试从 8,000 次读取中 932 次错误降为零，连续 32 次 MMIO kick/clear 通过；用户确认语音问题解决。其他场景继续常规回归，开场 WMV 播放单独待修。见[音频](../notes/audio-output.md)。
@@ -187,15 +187,15 @@ v0.1 保留为首个 Windows 发布里程碑，包含导入器、首次设置、
 - [x] Windows debug 判胜调用原游戏胜利阶段和结果初始化，用户确认可跳过战斗。
 - [ ] 火焰受击异常需原机参考；Xenia 同样异常，不能单独作为目标。
 - [ ] Debug menu 增加可恢复、不写入存档的主角攻击力／伤害调整。见[需求](debug-menu-requirements.md)。
-- [~] 修复异步存档完成、缩略图 ABI、持久化枚举、NT 写入和 CREATE_ALWAYS；手动保存、覆盖及独立进程读回通过，完整兼容性待验。见[存储](../notes/save-storage.md)。
+- [~] 修复异步存档完成、缩略图 ABI、持久化枚举、NT 写入和 CREATE_ALWAYS；手动保存、覆盖及独立进程读回通过，完整兼容性待验。见[存储](notes/save-storage.md)。
 - [x] 自动读取已导入盘并重载原索引；两版存储路径和原管理器换盘测试均通过。见[证据](../notes/disc-selection.md)。
 - [ ] 验证两版真实章节交界剧情及之后存档读回；受控管理器测试不代表完整推进。
 - [ ] 逐一验证过场、战斗、千年之梦和大地图。
 - [~] 独立存档按攻略推进：Hypocenter 残骸／Ram、戒指教学、自然胜利、早期 Wasteland 遇敌、Gorge 营地、装甲车剧情和城门控制已有局部证据；用户已到 Map 13，尚未通关。见[攻略测试](notes/walkthrough-testing.md)与[戒指](notes/battle-ring-resource.md)。
-- [x] 修正物理地址别名，恢复开场人物材质：A/C 共享，E 偏移一页；Windows/Linux 别名测试及场景验证通过。见[记录](../notes/physical-alias-rendering.md)。
+- [x] 修正物理地址别名，恢复开场人物材质：A/C 共享，E 偏移一页；Windows/Linux 别名测试及场景验证通过。见[记录](notes/physical-alias-rendering.md)。
 - [x] 修正 16 位索引对齐、resolve 尺寸和纹理解码，解决开场破面、后续轮廓偏移及 gamma 缺失；数值测试和场景对照通过。见[记录](notes/rendering-index-and-resolve.md)。
 - [x] 接通 stencil、修复 D3D12 参考值和 D24 清理，恢复高光。见[记录](notes/lighting-stencil-depth-clear.md)。
-- [x] 绘制前转换 EDRAM，修复首战后白屏，恢复场景和炮口火焰，进入重型坦克战斗。见[记录](../notes/post-battle-whiteout.md)。
+- [x] 绘制前转换 EDRAM，修复首战后白屏，恢复场景和炮口火焰，进入重型坦克战斗。见[记录](notes/post-battle-whiteout.md)。
 - [ ] 修复其余崩溃并完整通关；此前 RPBattle__Scene memset 截断崩溃已修复。见[重编译](../notes/recomp.md)与[交接](notes/handoff.md)。
 - [x] 同地图传送、坐标记录／返回和轴向调整；原生传送、恢复行走及游戏菜单中拒绝操作已测。见[传送](../notes/debug-teleport.md)。
 - [x] 自动枚举当前地图存档、出口、机关和拾取 POI；Hypocenter 落点、出口附近及旧编号拒绝已测。见[传送](../notes/debug-teleport.md)。

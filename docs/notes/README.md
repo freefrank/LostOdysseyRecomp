@@ -59,12 +59,12 @@
 | [Experimental HDR output](hdr-output.md) | 参考 |
 | [Linux/Vulkan HDR research — 2026-10-02](linux-vulkan-hdr.md) | 调查 |
 | [Host GPU occlusion queries (#118)](occlusion-queries.md) | 参考 |
-| [角色黑色剪影：物理地址别名与遮挡查询（2026-09-04）](physical-alias-rendering.md) | 历史 |
-| [战后演出白屏与 EDRAM 格式切换（2026-09-04）](post-battle-whiteout.md) | 历史 |
+| [角色黑色剪影：物理地址别名与遮挡查询（2026-09-04）](../archive/notes/physical-alias-rendering.md) | 历史 |
+| [战后演出白屏与 EDRAM 格式切换（2026-09-04）](../archive/notes/post-battle-whiteout.md) | 历史 |
 | [Debug Menu render-state capture](render-state-capture.md) | 参考 |
 | [渲染验证（2026-09-04）](rendering-validation.md) | 历史 |
 | [Tall and non-standard aspect layout — 2026-10-01](tall-aspect-layout.md) | 参考 |
-| [标题动态背景恢复（2026-09-04）](title-packed-mips.md) | 历史 |
+| [标题动态背景恢复（2026-09-04）](../archive/notes/title-packed-mips.md) | 历史 |
 | [Shadow resolution and screen-space ambient occlusion](shadow-ambient-occlusion.md) | 参考 |
 
 ## 性能与帧率
@@ -109,12 +109,12 @@
 | [Automatic selection of imported discs](disc-selection.md) | 参考 |
 | [USA/Europe edition support](europe-support.md) | 参考 |
 | [Issue #74：分队期间随时存档后无法换人（2026-09-29 调查）](issue-74-save-anywhere-party-split.md) | 调查 |
-| [Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy](issue12-root-cause.md) | 历史 |
+| [Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy](../archive/notes/issue12-root-cause.md) | 历史 |
 | [Issue #114: field interaction during a pending battle request](ISSUE_114_FIELD_INTERACTION_20261001.md) | 调查 |
 | [重编译配置笔记](recomp.md) | 参考 |
 | [Recompiler width and control-flow audit](recompiler-width-audit.md) | 参考 |
 | [随时存档：菜单权限与验证](save-anywhere.md) | 参考 |
-| [手动存档失败（2026-09-04）](save-storage.md) | 历史 |
+| [手动存档失败（2026-09-04）](../archive/notes/save-storage.md) | 历史 |
 | [游戏数据来源与 XEX](xex.md) | 参考 |
 
 ## Mod、语言包与资源替换

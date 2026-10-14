@@ -60,3 +60,54 @@ Live GitHub checks before writing: `gh pr list --state all` (PR states and merge
 - The 4 GiB archive limit for full-map model mods on discs 3 and 4 (decision pending). Note only; no record until decided.
 - The README table has no row for the 2026-10-12 receipt. It was not backfilled here.
 - The sync-state.json file was rewritten by the apply and is uncommitted, as are items.json, this receipt and the README row. The main agent reviews and ships them.
+
+## Round 3: mod-loader closure, Android checkpoint, archive links
+
+Applied in the worktree `pm-sync-20261014b` (branch `docs/pm-sync-20261014b`, base `origin/main` 150d94a2). Scope: the maintainer's closure of `texture-replacement-mod-loader`, the Android frame-time checkpoint, the Android resume state of #491 and #492, and the links to five archived fixed-bug notes.
+
+Run:
+
+- Plan 1 before edits: 315 unchanged, 1 conflict. `issue-491` Status was Done in the Project (GitHub closed the Issue when PR #496 merged) and In Progress in the manifest. The conflict was cleared by copying the readback value into `sync-state.json`, then setting the desired Status to Awaiting validation (see judgment call 1).
+- Plan 2 after the manifest edits: `{"created": 0, "updated": 12, "unchanged": 303, "conflicts": 0, "operations": 19}`.
+- `--apply`: 12 updated, exit 0.
+- Readback (`gh project item-list 3`, 316 items): every touched item matched its Status, Delivery, Release, Evidence (all under 1,024 characters) and draft body. The new body text was found in the readback.
+- Plan 3: `{"created": 0, "updated": 0, "unchanged": 315, "conflicts": 0, "operations": 0}`, exit 0.
+
+Live GitHub checks before writing: `gh issue view` for #491 (closed COMPLETED 06:27Z by PR #496), #492 (open), #477 (closed); `gh pr list --state all` for #461, #463, #467 to #469, #472 to #476, #480, #486, #495, #496 and #498 (all merged); `git merge-base --is-ancestor` for the eleven mod-loader PRs against `v0.9.52` (all contained). `e6bd76f4` (#495) is on `origin/main` but not in `v0.9.52`. PR #496 says "Fixes #491, refs #492"; PR #498 says "Refs #492".
+
+Changed records:
+
+| Record | Before | After |
+| --- | --- | --- |
+| `texture-replacement-mod-loader` | In Progress / Released / v0.7.0 | Done / Released / v0.9.52, on the maintainer's decision. Body has a "2026-10-14 (closed)" section with the eleven shipped PRs, the 4 GiB limit as a known limitation with no new item, and the statement that closing is not acceptance. "stage_detail: Not started" is removed. The original scope checkboxes are kept and marked as superseded. Evidence is rewritten to 685 characters. |
+| `android-frame-time-v100` | In Progress / In progress / v1.0.0 | Fields unchanged. A "Status — 2026-10-14" section records #495 (merged to main, not released; transfer passes 1.19 to 0.68 ms GPU, whole frame flat, per the maintainer's report; device, scene and sample count not recorded), checkpoint 2 (hot p95 tail is CPU scheduling under thermal caps, not GPU; render-thread priority experiment running, no result), and #496 and #498 as related resume work, not gate evidence. The gate is still open. Sources add #495, #496 and #498. |
+| `render-pass-merging-v100` | Evidence and body said "no PR yet" | Evidence and body say the constant-EDRAM transfer work is merged as PR #495 (not released). Status and the "no pass-merge result accepted" statement are unchanged. |
+| `issue-491-android-no-sound-after-app-switch` | Project Done (automatic close); manifest In Progress / In progress | Awaiting validation / Implemented / no Release. Evidence: closed 06:27Z by PR #496, merged to main as 758dd93d, not in a release, not run on a device, reporter has not confirmed, closure is not verification. |
+| `issue-492-android-black-artifacts-app-switch` | In Progress / In progress | Fields unchanged. Evidence: PR #496 (1 s frame-plan hold) and PR #498 (landscape lock, event watcher) reference #492 and are partial; a portrait period longer than 1 s still resets the plan twice; the Issue stays open. |
+| `issue14-cage-crash-investigation` | Evidence linked `docs/notes/issue12-root-cause.md` | Link changed to `docs/archive/notes/issue12-root-cause.md`. Other fields unchanged. |
+| Six drafts and the Kalm Issue record (`gpu-resolve-resource-lifetime`, `physical-memory-render-aliases`, `post-battle-whiteout`, `title-packed-mip-background`, `manual-save-overwrite-reload`, `save-content-compatibility`, `issue12-kalm-daughter-funeral-flower-crash`) | Source and body links to `docs/notes/<one of the five>` | Links point to `docs/archive/notes/<same name>`. Pinned permalinks to commit `147bffb` are kept, because that revision still contains the file. The Kalm Issue body is not synced, so its change is in the manifest only. |
+
+Archive links:
+
+- Five files to move with `git mv` into `docs/archive/notes/` in the same docs PR:
+  1. `docs/notes/issue12-root-cause.md`
+  2. `docs/notes/physical-alias-rendering.md`
+  3. `docs/notes/post-battle-whiteout.md`
+  4. `docs/notes/save-storage.md`
+  5. `docs/notes/title-packed-mips.md`
+- Selection: the `docs/notes/README.md` labels each one 历史 (dated record of a fixed bug), each has a Done linked item, and each fix is recorded as shipped in v0.1 or v0.5.0. For `save-storage.md`, the linked `save-content-compatibility` stays Awaiting validation for the wider storage combinations; the manual-save fix itself is recorded as confirmed by the user in the note.
+- Not moved: `critical-section-endian.md` (参考; it is linked from `gpu-query-pointer-corruption`, which is In Progress and states that this fix does not close it), `fire-hit-rendering.md` (the note says not fixed), `audio-output.md` (its linked audio regression is Awaiting validation), and `disc-selection.md` (its linked chapter-disc regression is In progress).
+
+Judgment calls:
+
+1. `issue-491` is Awaiting validation, not Done. The #454 and #477 precedent uses Done for maintainer-closed Issues, but #491 was closed by the PR's automatic reference and the reporter has not confirmed. A parent decision can change this to Done.
+2. `texture-replacement-mod-loader` Release is v0.9.52, following the closure instruction. The first delivery, v0.7.0, stays in Evidence and the body.
+3. The archive path is `docs/archive/notes/`, the location named in `docs/notes/README.md` and used by the archive links already in `items.json`, not the literal `docs/archive/` in the request.
+4. #492 keeps Delivery In progress, because the merged PRs only reference the Issue.
+
+Not changed:
+
+- `docs/ROADMAP.md` and `docs/ROADMAP.zh-CN.md` lines 41 and 56 still describe the mod scope as open ("broader guest texture/model consumers ... remain"). The mod-loader item's `source_lines` points to line 206, but the roadmap has 121 lines at this commit. Not edited here; the parent or docs_sync should reconcile both language files.
+- Non-pinned `docs/notes/` references that still do not resolve after the moves: `fps-0.5.4.md`, `issue12-claude-handoff.md`, `native-migration-boundaries.md`, `native-migration-first-draw.json`, `native-renderer-front-end.md` and `progressive-native-migration-plan.md` (found in neither `docs/notes/` nor `docs/archive/notes/`), and five `jitter-*-2026-10-01.md` notes that are archived but still linked from `docs/notes/`. The jitter notes are not clearly fixed and were left alone.
+- `issue-14` is Status Done with Delivery In progress and an "Investigation active" Evidence. This pairing is inconsistent and was left for the maintainer.
+- The Android resume fixes are not on the frame-time gate. Their issue records are `issue-491` and `issue-492`.

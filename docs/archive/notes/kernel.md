@@ -6,9 +6,9 @@
 
 | 范围 | 当前状态 / 入口 |
 |---|---|
-| 物理内存 | A/C共享、E偏移一页，见[别名验证](../../notes/physical-alias-rendering.md) |
+| 物理内存 | A/C共享、E偏移一页，见[别名验证](physical-alias-rendering.md) |
 | 线程/时钟 | 客体线程、通知和时间基转换已支持当前早期流程；未验证所有内核调用 |
-| 存档/档案 | 用户确认手动保存；异步完成、枚举及覆盖读回见[存档笔记](../../notes/save-storage.md)，部分细节仍是本地改动 |
+| 存档/档案 | 用户确认手动保存；异步完成、枚举及覆盖读回见[存档笔记](save-storage.md)，部分细节仍是本地改动 |
 | XMA/XAudio | 已有真解码及SDL PCM输出，部分声音丢失仍未解决，见[音频笔记](../../notes/audio-output.md) |
 | 资源字符串 | 宽printf与戒指switch修正在本地通过局部战斗回归，见[戒指调查](battle-ring-resource.md) |
 | 日志 | stderr同时默认写入工作目录logs，每次运行独立文件；GPU停帧有阶段和线程信息 |

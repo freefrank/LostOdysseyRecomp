@@ -6,11 +6,11 @@
 
 | 已验证的修复范围 | 依据 |
 |---|---|
-| 开场角色黑色剪影、物理别名 | [内存别名](../../notes/physical-alias-rendering.md) |
+| 开场角色黑色剪影、物理别名 | [内存别名](physical-alias-rendering.md) |
 | 索引对齐、后期尺寸、gamma/swizzle | [几何与resolve](rendering-index-and-resolve.md) |
 | stencil、高光及D24清理端点 | [光影](lighting-stencil-depth-clear.md) |
-| 战后实时演出白屏 | [格式转换](../../notes/post-battle-whiteout.md) |
-| 标题动态背景 | [packed mip](../../notes/title-packed-mips.md) |
+| 战后实时演出白屏 | [格式转换](post-battle-whiteout.md) |
+| 标题动态背景 | [packed mip](title-packed-mips.md) |
 
 **未解决：**人物自阴影闪烁、遇敌影子缺失/闪烁、火焰黑红格子、Ring外环、箱子破坏黑色特效。缺失polygon offset是代码线索，尚无对应修复/视觉验证。遮挡计数默认改由主机 GPU 查询测得（D3D12/Vulkan，晚一两帧且永不为零，不改变剔除），`LO_ZPD_MODE=strict` 为精确结果，见[遮挡查询](../../notes/occlusion-queries.md)；不宣称与硬件逐样本一致。
 

@@ -9,7 +9,7 @@
 | 快照 | 归档原因 | 当前入口 |
 |---|---|---|
 | [GPU 调查](2026-09-04/gpu.md) | 旧缓存版本、后端未开始等阶段描述，以及已被推翻的根因假设 | [当前状态](../STATUS.md)；后续简版说明 [GPU](notes/gpu.md) 也已归档 |
-| [内核调查](2026-09-04/kernel.md) | XMA 未实现、静音占位和旧存档状态 | [存档](../notes/save-storage.md) / [音频](../notes/audio-output.md) / [XEX](../notes/xex.md)；后续简版说明 [内核](notes/kernel.md) 也已归档 |
+| [内核调查](2026-09-04/kernel.md) | XMA 未实现、静音占位和旧存档状态 | [存档](notes/save-storage.md) / [音频](../notes/audio-output.md) / [XEX](../notes/xex.md)；后续简版说明 [内核](notes/kernel.md) 也已归档 |
 | [旧交接](2026-09-04/handoff.md) | 旧攻略范围、音频状态及已撤销的前台操作限制 | [当前状态](../STATUS.md) / [路线图](../ROADMAP.zh-CN.md)；后续的 [接手入口](notes/handoff.md) 也已归档 |
 | [STATUS-2026-09-10](STATUS-2026-09-10.md) | 详细状态账本已由当前精简状态取代 | [当前状态](../STATUS.md) |
 | [STATUS-2026-09-29](STATUS-2026-09-29.md) | 保留整理前逾 1,100 行发布、实验和验收账本；旧“未发布”和失败门禁只对应当时 checkpoint | [当前状态](../STATUS.md) |
@@ -18,7 +18,7 @@
 | [RELEASE-v0.1-historical](RELEASE-v0.1-historical.md) | 首个 Windows 版本说明，保留历史兼容性边界 | [更新日志](../../CHANGELOG.md) |
 | [WORK_REPORT_2026-09-05](WORK_REPORT_2026-09-05.md) | 日期工作报告，已由当前状态和专项笔记取代 | [当前状态](../STATUS.md) |
 | [ROADMAP-2026-09-10](ROADMAP-2026-09-10.md) / [中文](ROADMAP.zh-CN-2026-09-10.md) | 旧路线图快照，保留当时需求和锚点 | [当前路线图](../ROADMAP.md) / [中文](../ROADMAP.zh-CN.md) |
-| [Issue #12 Claude 交接](issue12-claude-handoff-2026-09-09.md) | 临时调查交接已由 Issue #12 调查记录和根因记录取代，保留原始复现边界与探针证据 | [Issue #12 调查记录](notes/issue12-funeral-crash.md) / [根因记录](../notes/issue12-root-cause.md) |
+| [Issue #12 Claude 交接](issue12-claude-handoff-2026-09-09.md) | 临时调查交接已由 Issue #12 调查记录和根因记录取代，保留原始复现边界与探针证据 | [Issue #12 调查记录](notes/issue12-funeral-crash.md) / [根因记录](notes/issue12-root-cause.md) |
 | [Clang/PGO 与线程优化研究](clang-pgo-benchmark-2026-09-17.md) | 2026-09-16—17 的构建矩阵与基准准备记录；该次城市实景基准未完成，不能作为性能收益或用户验收依据 | [CPU 性能优化指南](../notes/cpu-performance-optimization-guide.md) / [当前状态](../STATUS.md) |
 | [Clang 优化与测试基准交接](clang-optimization-and-benchmark-handoff-2026-09-17.md) | 2026-09-17 的 Strix Halo 设备基准与 PR 05—09 推进临时交接记录 | [CPU 性能优化指南](../notes/cpu-performance-optimization-guide.md) |
 | [Clang 优化、线程拆分与测试指南](clang-optimization-and-threading-plan-2026-09-16.md) | 2026-09-16 的 Clang 优化与线程拆分对照测试提案（未实施） | [CPU 性能优化指南](../notes/cpu-performance-optimization-guide.md) |
@@ -157,14 +157,14 @@ docs/archive/ 下的根目录文档和 audits/。原先的 RELEASE-v0.1/v0.2/v0.
 | [Issue #53 Disc 2 loading investigation](notes/ISSUE_53_DISC2_HANG_FIX_REPORT.md) | Issue #53 Disc 2 加载卡住的验证报告，根因未确认 | — |
 | [戒指战斗资源名缺少语言后缀（2026-09-04）](notes/battle-ring-resource.md) | 戒指战斗资源名后缀问题的逐轮日志，已修复 | — |
 | [DLC 目录枚举与 `FindNext` pattern 诊断](notes/dlc-directory-enumeration.md) | DLC 目录枚举 FindNext 问题，已修复 | — |
-| [Issue #12: funeral flower hand-in investigation](notes/issue12-funeral-crash.md) | Issue #12 交花崩溃的调查日志 | [Issue #12 根因](../notes/issue12-root-cause.md) |
-| [Issue #12 交接（2026-09-09）：根因已定位，生产交花路径已通过](notes/issue12-handoff-2026-09-09.md) | Issue #12 的交接，修复已完成 | [Issue #12 根因](../notes/issue12-root-cause.md) |
+| [Issue #12: funeral flower hand-in investigation](notes/issue12-funeral-crash.md) | Issue #12 交花崩溃的调查日志 | [Issue #12 根因](notes/issue12-root-cause.md) |
+| [Issue #12 交接（2026-09-09）：根因已定位，生产交花路径已通过](notes/issue12-handoff-2026-09-09.md) | Issue #12 的交接，修复已完成 | [Issue #12 根因](notes/issue12-root-cause.md) |
 | [Issue #7: cutscene closure and missing crash diagnostics](notes/issue7-cutscene-crash.md) | Issue #7 过场崩溃及发布时间线 | [重编译宽度审计](../notes/recompiler-width-audit.md) |
 | [Issues #54 / #55: audio follow-up and validation](notes/issue-54-55-audio-followup.md) | Issue #54／#55 音频诊断后续，自述未确立修复 | [音频输出](../notes/audio-output.md) |
 | [Issue #70 DX12/Vulkan optimization](notes/issue-70-dx12-vulkan-optimization.md) | v0.7.3 版本的 DX12／Vulkan 优化快照 | — |
 | [Issue #14–#16 triage — 2026-09-12](notes/issues14-16-triage.md) | Issue #14–#16 的分诊，均已关闭 | — |
-| [内核 HLE 当前说明（2026-09-05）](notes/kernel.md) | 2026-09-05 内核 HLE 说明：语言、音频等描述已过期 | [存档](../notes/save-storage.md) / [音频输出](../notes/audio-output.md) / [XEX](../notes/xex.md) |
-| [Unicode startup and save paths (2026-09-06)](notes/save-path-unicode.md) | Issue #4 启动与存档路径的 Unicode 问题，已修复 | [存档](../notes/save-storage.md) |
+| [内核 HLE 当前说明（2026-09-05）](notes/kernel.md) | 2026-09-05 内核 HLE 说明：语言、音频等描述已过期 | [存档](notes/save-storage.md) / [音频输出](../notes/audio-output.md) / [XEX](../notes/xex.md) |
+| [Unicode startup and save paths (2026-09-06)](notes/save-path-unicode.md) | Issue #4 启动与存档路径的 Unicode 问题，已修复 | [存档](notes/save-storage.md) |
 | [第三地图卡住调查（2026-09-04）](notes/third-map-hang.md) | 2026-09-04 第三地图卡住调查，看门狗与日志已进入代码 | — |
 | [窗口消息停摆：独立事件线程](notes/window-event-pump.md) | 窗口消息停摆的修复，事件线程已落地 | — |
 | [攻略路线与后台推进测试（2026-09-04）](notes/walkthrough-testing.md) | 2026-09-04 攻略路线测试计划 | — |
@@ -206,5 +206,10 @@ docs/archive/ 下的根目录文档和 audits/。原先的 RELEASE-v0.1/v0.2/v0.
 | [运行时纹理导入（含 4× 放大）：设计与可行性](notes/texture-import-research.zh-CN.md) | 2026-10-09 的设计与可行性研究，相关功能已有现行 Mod 文档 | [Mod 指南（4× 纹理包）](../wiki/Modding.md#4x-hd-texture-pack) / [运行时纹理替换](../wiki/Runtime-Texture-Replacement.md) |
 | [Project review fixes — 2026-09-30](notes/PROJECT_REVIEW_FIXES_20260930.md) | 2026-09-30 项目审查的 13 项修复记录，修复已随 v0.7.25 发布 | [当前状态](../STATUS.md) / [测试目录](../../tools/tests/README.md) |
 | [Settings menu interaction and redraw — 2026-09-24](notes/settings-menu-interaction.md) | 2026-09-24 设置菜单交互与重绘修复的检查点 | [设置菜单与显示选项](../notes/settings-menu.md) |
+| [Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy](notes/issue12-root-cause.md) | 已修复缺陷的根因报告（英文），保留原时点证据 | [当前状态](../STATUS.md) |
+| [角色黑色剪影：物理地址别名与遮挡查询（2026-09-04）](notes/physical-alias-rendering.md) | 已修复缺陷的历史记录 | [当前状态](../STATUS.md) |
+| [战后演出白屏与 EDRAM 格式切换（2026-09-04）](notes/post-battle-whiteout.md) | 已修复缺陷的历史记录 | [当前状态](../STATUS.md) |
+| [手动存档失败（2026-09-04）](notes/save-storage.md) | 手动存档问题的逐轮取证记录，部分细节仍是原时点状态 | [当前状态](../STATUS.md) |
+| [标题动态背景恢复（2026-09-04）](notes/title-packed-mips.md) | 已修复缺陷的历史记录 | [当前状态](../STATUS.md) |
 
 各快照保留其记录日期和当时内容，归档提示与相对链接按当前位置调整；新结论写入当前文档或专项笔记。

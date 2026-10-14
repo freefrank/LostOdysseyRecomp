@@ -296,7 +296,7 @@ CPU 因此清除了角色可见性位，材质 base pass 根本没有提交。
 
 新增 `kernel/guest_address_space.cpp`：A/C 使用同一 backing，E 按 Xenia 语义偏移 4 KiB；
 物理分配器限制在 A 区，避免经别名重复分配。没有在正式程序中禁用遮挡剔除。
-详见 [物理别名与渲染修复](../../notes/physical-alias-rendering.md)，其中记录 Ghidra 函数地址与查询布局。
+详见 [物理别名与渲染修复](../notes/physical-alias-rendering.md)，其中记录 Ghidra 函数地址与查询布局。
 
 Windows 运行时构建通过；独立别名回归测试在 Windows 和 WSL Manjaro 均通过。
 `out/render-alias-fixed/shot_2400.png` 和 `shot_9300.png` 已目视检查：Kaim、士兵材质和光圈恢复。

@@ -6,7 +6,7 @@
 
 当前 tracker 核验时间为 2026-09-18T07:33:59Z：Issue #12 已 **CLOSED / Done**。报告者确认、自然退出和全游戏覆盖仍按本页原始证据边界处理。
 
-接手人请先读本文，再按需读 [根因报告](../../notes/issue12-root-cause.md)（英文，含完整证据链）。
+接手人请先读本文，再按需读 [根因报告](issue12-root-cause.md)（英文，含完整证据链）。
 本分支 `claude-issue12` 基于 `0.5.0` 的 `7919a9b`，只新增文件，不改动任何已有源码。
 
 **版本口径：** Issue #12 修复的交付目标仍为 **v0.5.0**；`0.4.xx` 是开发编号，每项 feature 实现完成并通过必要验证后，按集成时的当前 source 版本递增 `+0.0.1`。本文出现的 `0.5.1` 仅指历史冻结 host／诊断 artifact 编号，不是新的里程碑；本轮文档不要求 Release、tag、commit 或 push。
@@ -45,7 +45,7 @@ flush 渲染线程）已在人为放大时序的诊断构建及 run-15 有界生
 | 路径 | 作用 |
 |---|---|
 | `LostOdysseyRecomp/cpu/gc_render_flush.cpp` | **修复**。hook `sub_8249A568`（CollectGarbage）和 `sub_822FD0A8`（IncrementalPurgeGarbage，仅当 `0x83315F40` 有待清理时），在 `GIsThreadedRendering`（`0x83318040`）为 1 时先调用 guest `FlushRenderingCommands`（`sub_82485C18`）。保存/恢复 r3–r7、f1、LR、CTR。`LO_GC_RENDER_FLUSH=0` 关闭。CMake 用 GLOB 收集运行时源码，加入即生效。 |
-| `docs/notes/issue12-root-cause.md` | 根因报告：证据链、线程角色、GC 触发链、主机差异分析、修复说明、运行索引 |
+| `docs/archive/notes/issue12-root-cause.md` | 根因报告：证据链、线程角色、GC 触发链、主机差异分析、修复说明、运行索引 |
 | `tools/diagnostics/issue12/README.md` | 工具说明与关键地址速查 |
 | `tools/diagnostics/issue12/issue12_probe.cpp` | 宿主探针 TU：记录 0xE0 分配/释放、GC/BeginDestroy/fence/重挂/proxy 事件；绘制前校验每条材质记录；`LO_ISSUE12_SKIP_STALE=1` 跳过悬空绘制；`LO_ISSUE12_RT_DELAY_US`/`LO_ISSUE12_RT_DELAY_ARMED_US`+`LO_ISSUE12_ARM_ON_SWAP` 放大渲染线程时序 |
 | `tools/diagnostics/issue12/gc_render_flush.cpp` | 修复文件的副本；`-DISSUE12_EXTERNAL_GC_HOOKS` 下与探针链式配合 |
