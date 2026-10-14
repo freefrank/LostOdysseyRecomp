@@ -31,7 +31,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows: mods can replace cutscene videos with H.264 MP4 files, for example 4K at 60 fps; the game keeps the original sound and subtitles. Topaz Video AI's MP4 files work as they are. See [Creating mods](docs/wiki/Creating-Mods.md#replace-a-cutscene-video).
 - Cutscene replacements up to 1% longer or shorter than the original are fitted to its length, so they stay in time with the sound.
 - Android: the game starts on devices whose graphics driver refused the display setup (#477).
-- Replaced character models no longer lose parts of their body in game (11 party characters).
 - While the game files for new or changed mods are being prepared at startup, the window shows "Preparing mods" with a progress bar instead of staying black.
 - Android (experimental): phones and tablets with a Mali-G57, G68, G77, G78 or Mali-G610 and newer GPU can run the game with the open-source PanVK driver, which the GPU driver page recommends and downloads.
 
@@ -60,7 +59,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows：Mod 可以用 H.264 MP4 替换过场影片，例如 4K 60 帧；声音和字幕仍用原版；Topaz Video AI 导出的 MP4 可以直接用。见[制作 Mod](docs/wiki/Creating-Mods.md#replace-a-cutscene-video)。
 - 比原版长或短不超过 1% 的替换影片会被拉到原版的长度，画面和声音保持同步。
 - Android：显卡驱动拒绝显示设置的设备现在可以正常启动（#477）。
-- 替换后的角色模型不再缺少身体部件（队伍中的 11 个角色）。
 - 启动时为新增或改动的 Mod 准备游戏文件期间，窗口会显示“正在准备 Mod”和进度条，不再一直黑屏。
 - Android（实验性）：使用 Mali-G57、G68、G77、G78 或 Mali-G610 及更新 GPU 的手机和平板可以用开源 PanVK 驱动运行游戏，GPU driver 页面会推荐并下载它。
 
