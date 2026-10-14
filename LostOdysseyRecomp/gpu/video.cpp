@@ -116,12 +116,47 @@ namespace plume {
 #include <jni.h>
 #endif
 
-// LO_VK_CUSTOM_DRIVER=<soname>: load a custom Vulkan driver (Mesa Turnip) from
-// LO_CUSTOM_DRIVER_DIR through libadrenotools before plume initialises volk.
-// The Android app sets these from the player's choice on the GPU driver page;
-// the Qualcomm proprietary driver drops the highlighted menu row's text.
+// LO_VK_CUSTOM_DRIVER=<soname>: load a custom Vulkan driver from
+// LO_CUSTOM_DRIVER_DIR before plume initialises volk. The Android app sets these
+// from the player's choice on the GPU driver page: Mesa Turnip on Qualcomm (the
+// proprietary driver drops the highlighted menu row's text), Mesa PanVK on Mali
+// (the proprietary driver lacks shaderInt64 and a fifth descriptor set).
+// LO_VK_CUSTOM_DRIVER_MODE picks how the library is loaded:
+//   adrenotools (default) - libadrenotools swaps it in under the system Vulkan
+//                           loader, which keeps providing the surface and swap chain;
+//   icd                   - the library is opened directly as a Vulkan ICD and
+//                           presents through its own VK_KHR_android_surface.
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
 static bool g_customVulkanDriver = false;
+// The stage at which a custom driver gave way to the system driver, for the failure reason.
+static const char* g_customVulkanDriverFailedAt = nullptr;
+
+// Direct ICD loading: the package's library in the app's own linker namespace,
+// entered through vk_icdGetInstanceProcAddr. Null when the library cannot be
+// opened that way, so the caller can fall back to libadrenotools.
+static PFN_vkGetInstanceProcAddr OpenCustomVulkanIcd(const std::string& path, const char* driver)
+{
+    void* handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!handle) {
+        const char* error = dlerror();
+        LOG_WARNING("vulkan: custom driver '{}' could not be opened as a Vulkan ICD ({}); trying libadrenotools", driver,
+            error ? error : "unknown error");
+        return nullptr;
+    }
+    auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(handle, "vk_icdGetInstanceProcAddr"));
+    if (!gipa) {
+        LOG_WARNING("vulkan: custom driver '{}' exports no vk_icdGetInstanceProcAddr; trying libadrenotools", driver);
+        dlclose(handle);
+        return nullptr;
+    }
+    // The Khronos loader negotiates before any other call; Mesa only records it.
+    using NegotiateFn = VkResult(VKAPI_PTR*)(uint32_t*);
+    if (auto negotiate = reinterpret_cast<NegotiateFn>(dlsym(handle, "vk_icdNegotiateLoaderICDInterfaceVersion"))) {
+        uint32_t version = 7;
+        negotiate(&version);
+    }
+    return gipa;
+}
 #endif
 
 static void LoadCustomVulkanDriver()
@@ -135,6 +170,16 @@ static void LoadCustomVulkanDriver()
     setenv("tu_dont_reserve_descriptor_set", "true", 0);
     const char* hookDir = getenv("LO_NATIVE_LIB_DIR");
     const char* driverDir = getenv("LO_CUSTOM_DRIVER_DIR");
+    const char* mode = getenv("LO_VK_CUSTOM_DRIVER_MODE");
+    if (mode && strcmp(mode, "icd") == 0) {
+        if (auto gipa = OpenCustomVulkanIcd(std::string(driverDir ? driverDir : "") + driver, driver)) {
+            volkInitializeCustom(gipa);
+            g_customVulkanDriver = true;
+            LOG_INFO("vulkan: custom driver '{}' opened directly as a Vulkan ICD, instance version {:#x}",
+                driver, volkGetInstanceVersion());
+            return;
+        }
+    }
     void* handle = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, nullptr,
         hookDir ? hookDir : "", driverDir ? driverDir : "", driver, nullptr, nullptr);
     if (!handle) {
@@ -164,6 +209,7 @@ static bool RetryWithSystemVulkanDriver(const char* stage)
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
     if (!g_customVulkanDriver) return false;
     g_customVulkanDriver = false;
+    g_customVulkanDriverFailedAt = stage;
     if (volkInitialize() != VK_SUCCESS) {
         LOG_ERROR("vulkan: custom driver failed at {} and the system loader could not be reopened", stage);
         return false;
@@ -175,6 +221,12 @@ static bool RetryWithSystemVulkanDriver(const char* stage)
     return false;
 #endif
 }
+
+#ifdef __ANDROID__
+// The GPU the last Vulkan attempt ran on, for the failure reason the GPU driver
+// page shows (it tells a Mali GPU no driver can help from one PanVK supports).
+static std::string g_lastVulkanGpuName;
+#endif
 
 #if defined(__ANDROID__) || (defined(_WIN32) && defined(LO_GPU_PLUME) && !defined(LO_VIDEO_SUBMISSION_UNIT))
 // Every GPU the instance reports, before device creation can fail or crash:
@@ -192,6 +244,9 @@ static void LogVulkanPhysicalDevices(VkInstance instance)
     for (const auto device : devices) {
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(device, &properties);
+#ifdef __ANDROID__
+        if (device == devices.front()) g_lastVulkanGpuName = properties.deviceName;
+#endif
         const uint32_t driver = properties.driverVersion;
         LOG_INFO("vulkan gpu: name='{}' type={} vendor={:#06x} device={:#010x} api={}.{}.{} driver_raw={:#x} driver_decoded={}.{}.{}",
             properties.deviceName, uint32_t(properties.deviceType), properties.vendorID, properties.deviceID,
@@ -219,7 +274,8 @@ static void LogVulkanPhysicalDevices(VkInstance instance)
 #if defined(__ANDROID__) && !defined(LO_VIDEO_SUBMISSION_UNIT)
 // A driver the renderer cannot use fails the same way on every start. When the
 // native main returns, the activity shows this reason (on the GPU driver page
-// on Qualcomm devices, in a dialog elsewhere) instead of closing (#185).
+// on Qualcomm and Mali devices, in a dialog elsewhere) instead of closing (#185).
+// The reason starts with the GPU name, e.g. "Mali-G52 MC2: ...".
 static void ReportGraphicsFailureToActivity(const std::string& reason)
 {
     auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
@@ -228,7 +284,12 @@ static void ReportGraphicsFailureToActivity(const std::string& reason)
     jclass type = env->GetObjectClass(activity);
     jmethodID method = type ? env->GetMethodID(type, "reportGraphicsFailure", "(Ljava/lang/String;)V") : nullptr;
     if (method) {
-        jstring text = env->NewStringUTF(reason.c_str());
+        std::string described = g_lastVulkanGpuName.empty() ? reason : g_lastVulkanGpuName + ": " + reason;
+#ifdef LO_HAS_ADRENOTOOLS
+        if (g_customVulkanDriverFailedAt)
+            described += std::string(" (system driver; the custom driver failed at ") + g_customVulkanDriverFailedAt + ")";
+#endif
+        jstring text = env->NewStringUTF(described.c_str());
         if (text) {
             env->CallVoidMethod(activity, method, text);
             env->DeleteLocalRef(text);
@@ -2468,6 +2529,9 @@ namespace gpu::video
                     LOG_NOTICE("video device: backend={} name={} driver_raw={} vendor_enum={} type_enum={} reported_device_memory_bytes={}",
                         backend::Name(candidate), description.name, description.driverVersion,
                         uint32_t(description.vendor), uint32_t(description.type), description.dedicatedVideoMemory);
+#ifdef __ANDROID__
+                    g_lastVulkanGpuName = description.name;
+#endif
                 }
                 return backend::Inspect(candidate, g_device.get());
             };

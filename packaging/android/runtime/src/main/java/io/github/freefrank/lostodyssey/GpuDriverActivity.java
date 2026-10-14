@@ -31,26 +31,35 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * GPU driver page: pick the system Vulkan driver or an installed Mesa Turnip
- * package, and download packages from the sources in {@link GpuDriverCatalog}.
+ * GPU driver page: pick the system Vulkan driver or an installed Mesa package
+ * (Turnip on Qualcomm, PanVK on Mali), choose how it loads, and download
+ * packages from the device's sources in {@link GpuDriverCatalog}.
  *
- * It is the launcher activity. On a Qualcomm device it shows once, before the
- * first game start, and again after a start with a custom driver that never
- * reached the game; otherwise it hands straight over to the game. The CTRL
- * dialog's "GPU driver" button opens it while playing; changing the driver then
- * restarts the process, because the driver is bound before the Vulkan instance.
+ * It is the launcher activity. On a Qualcomm or Mali device it shows once,
+ * before the first game start, and again after a start with a custom driver
+ * that never reached the game; otherwise it hands straight over to the game.
+ * The CTRL dialog's "GPU driver" button opens it while playing; changing the
+ * driver or its loading mode then restarts the process, because the driver is
+ * bound before the Vulkan instance.
  */
 public final class GpuDriverActivity extends Activity {
     static final String EXTRA_FROM_GAME = "from_game";
     /** The renderer could not start with the selected driver; the value is the reason. */
     static final String EXTRA_GRAPHICS_FAILURE = "graphics_failure";
     private static final int REQUEST_OPEN_PACKAGE = 1;
+    private static final String MALI_GPUS = "Mali-G57, G68, G77, G78 and Mali-G610 or newer (including Immortalis)";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean fromGame;
     private String originalSelection;
+    /** Loading mode of the driver the game runs with, to tell a mode change that needs a restart. */
+    private String originalMode;
     private String failedDriver;
     private String graphicsFailure;
+    private GpuDriverStore.Vendor vendor;
+    /** For Mali: the GPU name, from sysfs or from the reported failure; null when unknown. */
+    private String gpuName;
+    private GpuDriverCatalog.MaliSupport maliSupport = GpuDriverCatalog.MaliSupport.UNKNOWN;
     private LinearLayout installedSection, sourcesSection;
     private Button primaryButton;
     private TextView statusLine;
@@ -66,6 +75,13 @@ public final class GpuDriverActivity extends Activity {
         GameStorage.prepare(this);
         fromGame = getIntent().getBooleanExtra(EXTRA_FROM_GAME, false);
         graphicsFailure = getIntent().getStringExtra(EXTRA_GRAPHICS_FAILURE);
+        vendor = GpuDriverStore.vendor();
+        gpuName = GpuDriverStore.gpuModel();
+        if (vendor == GpuDriverStore.Vendor.MALI) {
+            // The failure reason starts with the GPU name the renderer saw.
+            if (GpuDriverCatalog.maliArch(gpuName) == 0) gpuName = GpuDriverCatalog.maliName(graphicsFailure);
+            maliSupport = GpuDriverCatalog.maliSupport(GpuDriverCatalog.maliArch(gpuName));
+        }
         if (!fromGame) {
             // Shows the previous run's logs over USB, complete even after a crash.
             PlayerLogs.publish(this);
@@ -83,9 +99,24 @@ public final class GpuDriverActivity extends Activity {
         }
         originalSelection = GpuDriverStore.selected(this);
         pendingSelection = originalSelection;
+        GpuDriverStore.Installed active = GpuDriverStore.selectedDriver(this);
+        originalMode = active != null ? GpuDriverStore.loadMode(this, active) : null;
+        // Mali has one source: show its releases with the recommended one at once.
+        for (GpuDriverCatalog.Source source : GpuDriverCatalog.sourcesFor(vendor)) {
+            if (source.recommendedTag != null) expandedSources.add(source.path);
+        }
         setContentView(buildPage());
         refreshInstalled();
-        loadFeeds(false);
+        if (maliSupport != GpuDriverCatalog.MaliSupport.UNSUPPORTED) loadFeeds(false);
+    }
+
+    private boolean isMali() { return vendor == GpuDriverStore.Vendor.MALI; }
+
+    /** Whether the driver the game runs with now loads in another mode than when the page opened. */
+    private boolean activeModeChanged() {
+        GpuDriverStore.Installed active = GpuDriverStore.selectedDriver(this);
+        return active != null && active.id().equals(originalSelection) && originalMode != null
+            && !originalMode.equals(GpuDriverStore.loadMode(this, active));
     }
 
     private void showUnsupportedDriver() {
@@ -133,27 +164,41 @@ public final class GpuDriverActivity extends Activity {
         page.setPadding(padding, padding, padding, padding);
 
         page.addView(text("GPU driver", 24f, true));
-        String model = GpuDriverStore.gpuModel();
-        int number = GpuDriverCatalog.adrenoModel(model);
-        StringBuilder about = new StringBuilder("GPU: ").append(model != null ? model : "unknown");
-        if (number > 0) about.append(" · Eden recommends: ").append(GpuDriverCatalog.edenRecommendation(number));
-        about.append("\nVerified with this game on Adreno 750: ").append(GpuDriverStore.VERIFIED_DRIVER);
-        page.addView(dim(about.toString()));
-        page.addView(dim("The Qualcomm driver drops the text on the highlighted menu row. "
-            + "A Mesa Turnip package fixes it. Downloads come from the same GitHub "
-            + "sources as the Eden emulator; the game restarts when the driver changes."));
+        if (isMali()) {
+            addMaliIntroduction(page);
+        } else {
+            String model = gpuName;
+            int number = GpuDriverCatalog.adrenoModel(model);
+            StringBuilder about = new StringBuilder("GPU: ").append(model != null ? model : "unknown");
+            if (number > 0) about.append(" · Eden recommends: ").append(GpuDriverCatalog.edenRecommendation(number));
+            about.append("\nVerified with this game on Adreno 750: ").append(GpuDriverStore.VERIFIED_DRIVER);
+            page.addView(dim(about.toString()));
+            page.addView(dim("The Qualcomm driver drops the text on the highlighted menu row. "
+                + "A Mesa Turnip package fixes it. Downloads come from the same GitHub "
+                + "sources as the Eden emulator; the game restarts when the driver changes."));
+        }
         String notice = null;
         if (graphicsFailure != null) {
             GpuDriverStore.Installed selected = GpuDriverStore.selectedDriver(this);
-            notice = selected == null
-                ? "The system GPU driver cannot run the game: " + graphicsFailure
-                    + ". Download a Turnip driver below, select it and start the game."
-                : "The last start with \"" + selected.metadata.name + "\" could not start the renderer: "
-                    + graphicsFailure + ". Select another driver.";
+            if (selected != null) {
+                notice = "The last start with \"" + selected.metadata.name + "\" could not start the renderer: "
+                    + graphicsFailure + (isMali() ? ". Switch its loading mode or select another driver."
+                                                  : ". Select another driver.");
+            } else if (!isMali()) {
+                notice = "The system GPU driver cannot run the game: " + graphicsFailure
+                    + ". Download a Turnip driver below, select it and start the game.";
+            } else {
+                notice = "The Mali system driver cannot run the game: " + graphicsFailure + ". "
+                    + (maliSupport == GpuDriverCatalog.MaliSupport.UNSUPPORTED
+                        ? "No driver can run the game on this GPU."
+                        : "Download PanVK-kbase below, select it and start the game.");
+            }
         } else if (failedDriver != null) {
             notice = "The last start with \"" + failedDriver + "\" did not reach the game."
                 + (failedDriver.equals(GpuDriverStore.SYSTEM_DRIVER_NAME) ? ""
-                                                                   : " The system driver is selected again.");
+                                                                   : " The system driver is selected again.")
+                + (isMali() && !failedDriver.equals(GpuDriverStore.SYSTEM_DRIVER_NAME)
+                    ? " To try again, switch the driver's loading mode or pick another release." : "");
         }
         if (notice != null) {
             TextView warning = text(notice, 14f, true);
@@ -184,10 +229,12 @@ public final class GpuDriverActivity extends Activity {
         statusLine = dim("");
         page.addView(statusLine);
 
-        page.addView(text("Download", 18f, true));
         sourcesSection = new LinearLayout(this);
         sourcesSection.setOrientation(LinearLayout.VERTICAL);
-        page.addView(sourcesSection);
+        if (maliSupport != GpuDriverCatalog.MaliSupport.UNSUPPORTED) {
+            page.addView(text("Download", 18f, true));
+            page.addView(sourcesSection);
+        }
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.rgb(18, 24, 30));
@@ -195,6 +242,33 @@ public final class GpuDriverActivity extends Activity {
         scroll.addView(page, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         return scroll;
+    }
+
+    private void addMaliIntroduction(LinearLayout page) {
+        String gpu = gpuName != null ? gpuName : "Mali (model unknown)";
+        if (maliSupport == GpuDriverCatalog.MaliSupport.UNSUPPORTED) {
+            String name = GpuDriverCatalog.maliName(gpuName);
+            page.addView(dim("GPU: " + gpu));
+            TextView none = text("No usable driver for this GPU" + (name != null ? " (" + name + ")" : "") + ".", 15f, true);
+            none.setTextColor(Color.rgb(255, 196, 80));
+            page.addView(none);
+            page.addView(dim("The game needs a " + MALI_GPUS + ". The system driver stays selectable, "
+                + "but the game does not start with it on this GPU."));
+            return;
+        }
+        StringBuilder about = new StringBuilder("GPU: ").append(gpu)
+            .append("\nRecommended: PanVK-kbase ").append(GpuDriverCatalog.PANVK_RECOMMENDED_TAG);
+        if (maliSupport == GpuDriverCatalog.MaliSupport.UNTESTED) about.append(" (not yet tested on this GPU by its author)");
+        page.addView(dim(about.toString()));
+        page.addView(dim("Arm's Mali driver lacks features the game needs, so the game does not start with the "
+            + "system driver; it stays selectable. PanVK-kbase is an experimental open-source Mesa driver for "
+            + MALI_GPUS + ". Its author supports Android 15 and newer; Android 13 and 14 may not work"
+            + (android.os.Build.VERSION.SDK_INT < GpuDriverStore.PANVK_LOWEST_API
+                ? ", and this device's Android is too old for it." : ".")
+            + " Downloads come from its GitHub releases; the game restarts when the driver changes."));
+        page.addView(dim("Loading mode: \"direct\" opens the driver on its own and lets it show the picture; "
+            + "\"libadrenotools\" puts it under Android's Vulkan loader. If the game does not start with one, "
+            + "try the other."));
     }
 
     private void refreshInstalled() {
@@ -205,7 +279,8 @@ public final class GpuDriverActivity extends Activity {
         for (GpuDriverStore.Installed driver : installed) pendingExists |= driver.id().equals(pendingSelection);
         if (!pendingExists) pendingSelection = GpuDriverStore.SYSTEM_DRIVER;
         addChoice(GpuDriverStore.SYSTEM_DRIVER, GpuDriverStore.SYSTEM_DRIVER_NAME,
-            "The Vulkan driver shipped with this device", null);
+            isMali() ? "The device's own Mali driver; the game does not start with it"
+                     : "The Vulkan driver shipped with this device", null);
         for (GpuDriverStore.Installed driver : installed) {
             addChoice(driver.id(), driver.metadata.name, driver.metadata.summary(), driver);
         }
@@ -232,6 +307,21 @@ public final class GpuDriverActivity extends Activity {
         labels.setOnClickListener(v -> radio.performClick());
         row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         if (driver != null) {
+            // Loading mode: PanVK packages (and any package on Mali) can load
+            // directly or through libadrenotools; Turnip keeps libadrenotools only.
+            if (isMali() || driver.metadata.isPanVk()) {
+                Button mode = new Button(this);
+                mode.setAllCaps(false);
+                boolean direct = GpuDriverStore.LOAD_ICD.equals(GpuDriverStore.loadMode(this, driver));
+                mode.setText(direct ? "Mode: direct" : "Mode: libadrenotools");
+                mode.setOnClickListener(v -> {
+                    boolean nowDirect = GpuDriverStore.LOAD_ICD.equals(GpuDriverStore.loadMode(this, driver));
+                    GpuDriverStore.setLoadMode(this, driver,
+                        nowDirect ? GpuDriverStore.LOAD_ADRENOTOOLS : GpuDriverStore.LOAD_ICD);
+                    refreshInstalled();
+                });
+                row.addView(mode);
+            }
             Button remove = new Button(this);
             remove.setText("Remove");
             remove.setOnClickListener(v -> {
@@ -245,9 +335,14 @@ public final class GpuDriverActivity extends Activity {
         installedSection.addView(row);
     }
 
+    /** From the game, nothing to apply: the same driver in the same loading mode. */
+    private boolean unchanged() {
+        return pendingSelection.equals(originalSelection) && !activeModeChanged();
+    }
+
     private void updatePrimary() {
         if (!fromGame) primaryButton.setText("Start game");
-        else if (pendingSelection.equals(originalSelection)) primaryButton.setText("Back to game");
+        else if (unchanged()) primaryButton.setText("Back to game");
         else primaryButton.setText("Apply and restart");
     }
 
@@ -257,7 +352,7 @@ public final class GpuDriverActivity extends Activity {
             launchGame();
             return;
         }
-        if (pendingSelection.equals(originalSelection)) { finish(); return; }
+        if (unchanged()) { finish(); return; }
         new AlertDialog.Builder(this)
             .setTitle("Restart the game?")
             .setMessage("The driver is chosen when the game starts, so the game restarts now. "
@@ -285,8 +380,9 @@ public final class GpuDriverActivity extends Activity {
         feeds.clear();
         renderSources();
         final File cacheDir = getCacheDir();
+        final List<GpuDriverCatalog.Source> sources = GpuDriverCatalog.sourcesFor(vendor);
         new Thread(() -> {
-            for (GpuDriverCatalog.Source source : GpuDriverCatalog.SOURCES) {
+            for (GpuDriverCatalog.Source source : sources) {
                 GpuDriverCatalog.Feed feed = GpuDriverCatalog.fetch(cacheDir, source, forceRefresh);
                 mainHandler.post(() -> {
                     if (isFinishing()) return;
@@ -301,11 +397,27 @@ public final class GpuDriverActivity extends Activity {
         }, "gpu-driver-catalog").start();
     }
 
-    /** Sources whose release list is unfolded; every source starts collapsed. */
+    /** Sources whose release list is unfolded; only one with a recommended release starts unfolded. */
     private final Set<String> expandedSources = new HashSet<>();
 
     private void renderSources() {
         sourcesSection.removeAllViews();
+        // The recommended package first, as one button (PanVK on Mali).
+        for (GpuDriverCatalog.Feed feed : feeds) {
+            for (GpuDriverCatalog.Release release : feed.releases) {
+                if (!release.recommended) continue;
+                for (GpuDriverCatalog.Asset asset : release.assets) {
+                    if (GpuDriverStore.isInstalled(this, asset.name)) continue;
+                    Button button = new Button(this);
+                    button.setAllCaps(false);
+                    button.setText("Download recommended: " + release.title
+                        + (asset.size > 0 ? String.format(Locale.ROOT, " (%.1f MB)", asset.size / 1048576.0) : ""));
+                    button.setOnClickListener(v -> download(asset));
+                    sourcesSection.addView(button, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                }
+            }
+        }
         for (GpuDriverCatalog.Feed feed : feeds) {
             final boolean expanded = expandedSources.contains(feed.source.path);
             String header = (expanded ? "▾ " : "▸ ") + feed.source.name + " (" + feed.source.path + ")"
@@ -327,8 +439,8 @@ public final class GpuDriverActivity extends Activity {
             if (!expanded) continue;
             if (feed.releases.isEmpty() && feed.error == null) sourcesSection.addView(dim("No driver packages."));
             for (GpuDriverCatalog.Release release : feed.releases) {
-                String title = release.title + (release.latest ? " · Latest" : "")
-                    + (release.prerelease ? " · pre-release" : "");
+                String title = release.title + (release.recommended ? " · Recommended" : "")
+                    + (release.latest ? " · Latest" : "") + (release.prerelease ? " · pre-release" : "");
                 TextView releaseTitle = text(title, 14f, false);
                 releaseTitle.setPadding(dp(12), dp(6), 0, 0);
                 sourcesSection.addView(releaseTitle);

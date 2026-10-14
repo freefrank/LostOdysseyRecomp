@@ -211,6 +211,9 @@ public final class RuntimeActivity extends SDLActivity {
         if (driver != null) {
             nativeSetenv("LO_CUSTOM_DRIVER_DIR", driver.directory.getAbsolutePath() + "/");
             nativeSetenv("LO_VK_CUSTOM_DRIVER", driver.metadata.libraryName);
+            nativeSetenv("LO_VK_CUSTOM_DRIVER_MODE", GpuDriverStore.loadMode(this, driver));
+            // PanVK refuses the Mali GPUs Mesa marks experimental without this.
+            if (driver.metadata.isPanVk()) nativeSetenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER", "1");
         }
         // Debug launches can select an isolated fixture without changing saves.
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {

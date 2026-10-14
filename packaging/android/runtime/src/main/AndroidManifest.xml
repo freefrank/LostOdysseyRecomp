@@ -22,7 +22,7 @@
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:hardwareAccelerated="true"
         android:requestLegacyExternalStorage="true">
-        <!-- Launcher: the GPU driver page on Qualcomm devices, then the game (or the game folder page without game data). -->
+        <!-- Launcher: the GPU driver page on Qualcomm and Mali devices, then the game (or the game folder page without game data). -->
         <activity android:name=".GpuDriverActivity"
             android:exported="true"
             android:screenOrientation="sensorLandscape"

@@ -426,7 +426,7 @@ final class TouchControlsView extends View {
         ctrlAutoHide.setChecked(ctrl.enabled());
         content.addView(ctrlAutoHide);
 
-        // Qualcomm devices: open the GPU driver page (download / switch Turnip).
+        // Qualcomm and Mali devices: open the GPU driver page (download / switch Turnip or PanVK).
         Button driverButton = null;
         if (GpuDriverStore.supported()) {
             driverButton = new Button(activity);

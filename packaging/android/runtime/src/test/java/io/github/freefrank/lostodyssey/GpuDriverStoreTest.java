@@ -109,6 +109,57 @@ public class GpuDriverStoreTest {
         }
     }
 
+    /** meta.json of the PanVK-kbase 0.1.0-rc3 Android package (trimmed). */
+    private static final String PANVK_META = "{\"schemaVersion\":1,\"name\":\"PanVK Kbase G615\","
+        + "\"author\":\"panvk-kbase-android\",\"packageVersion\":\"0.1.0-rc3\",\"vendor\":\"Mesa\","
+        + "\"driverVersion\":\"Mesa 26.3.0-devel\",\"minApi\":35,\"description\":\"Experimental\","
+        + "\"libraryName\":\"libvulkan_panfrost.so\",\"abi\":\"android-aarch64-bionic\",\"backend\":\"panvk-kbase\"}";
+
+    @Test
+    public void panvkMetadataLoadsDirectlyAndAllowsAndroid13() throws Exception {
+        GpuDriverStore.Metadata panvk = GpuDriverStore.Metadata.parse(PANVK_META);
+        assertTrue(panvk.isPanVk());
+        assertEquals(GpuDriverStore.LOAD_ICD, panvk.defaultLoadMode());
+        assertEquals(33, panvk.requiredApi());
+        assertFalse(panvk.isForOtherSystem());
+        assertEquals("0.1.0-rc3 · Mesa 26.3.0-devel · panvk-kbase-android\nExperimental", panvk.summary());
+
+        GpuDriverStore.Metadata turnip = GpuDriverStore.Metadata.parse(META.replace("\"minApi\":0", "\"minApi\":27"));
+        assertFalse(turnip.isPanVk());
+        assertEquals(GpuDriverStore.LOAD_ADRENOTOOLS, turnip.defaultLoadMode());
+        assertEquals(27, turnip.requiredApi());
+        assertEquals("", turnip.displayVersion()); // Turnip's "1" is a format counter
+        assertEquals(30, GpuDriverStore.Metadata.parse(PANVK_META.replace("\"minApi\":35", "\"minApi\":30")).requiredApi());
+    }
+
+    @Test
+    public void readsTheEntryNamedMetaJsonAmongOtherJsonFiles() throws Exception {
+        // PanVK packages carry MANIFEST.json, SOURCE.json and others next to meta.json.
+        GpuDriverStore.Installed driver = install(zip(new String[][] {
+            { "libvulkan_panfrost.so", "ELF" }, { "MANIFEST.json", "{\"files\":[]}" },
+            { "meta.json", PANVK_META.replace("\"minApi\":35", "\"minApi\":0") },
+            { "runtime-feature-matrix.json", "{}" }, { "SHA256SUMS.txt", "x" } }), "panvk");
+        assertEquals("PanVK Kbase G615", driver.metadata.name);
+        assertTrue(driver.library().isFile());
+        assertEquals("PanVK Kbase G615", GpuDriverStore.read(driver.directory).metadata.name);
+        // Packages without an entry of that name still use their first .json entry.
+        GpuDriverStore.Installed other = install(zip(new String[][] {
+            { "driver.json", META }, { "vulkan.ad07xx.so", "ELF" } }), "other");
+        assertEquals("Turnip R8", other.metadata.name);
+    }
+
+    @Test
+    public void rejectsGlibcBuilds() throws Exception {
+        String glibc = PANVK_META.replace("android-aarch64-bionic", "linux-aarch64-glibc").replace("\"minApi\":35", "\"minApi\":0");
+        try {
+            install(zip(new String[][] { { "meta.json", glibc }, { "libvulkan_panfrost.so", "ELF" } }), "glibc");
+            fail();
+        } catch (GpuDriverStore.InvalidPackageException expected) {
+            assertTrue(expected.getMessage().contains("not for Android"));
+        }
+        assertFalse(new File(temporary.getRoot(), "glibc").exists());
+    }
+
     @Test
     public void slugsAreFilesystemSafe() {
         assertEquals("Turnip_v26.0.0_R8", GpuDriverStore.slug("Turnip_v26.0.0_R8.zip"));

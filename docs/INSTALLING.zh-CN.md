@@ -132,7 +132,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
    - **在设备上导入：** **Game folder → Import disc images…** 会打开 Android 的文件选择器。在内部存储、SD 卡或 U 盘上选一个光盘镜像（`.iso`），同一文件夹里的其他光盘会一起导入，完成后直接启动游戏。已解出的光盘请选 `default.xex`。需要“所有文件访问”权限，页面会先请求。
    - **从电脑复制：** 先用电脑版导入游戏，再用 USB 文件传输模式连接设备，把 `disc1`–`disc4`（和 `dlc/`）复制到上面的 `game` 文件夹，使 `game/disc1/default.xex` 存在。
    - **使用其他文件夹：** 设备上的文件管理器一般写不进 `Android/data`，可以用它把光盘复制到其他任意位置，再在 **Game folder → Choose folder…** 选中包含 `disc1` 的文件夹。同样需要“所有文件访问”权限。
-3. 打开应用。高通设备会先显示 **GPU driver** 页面，因为手机自带的驱动会让部分菜单文字不可见：在这里下载 Turnip 驱动（页面会显示推荐给你机型的版本），然后按 **Start game**。之后可从 **CTRL → GPU driver** 再进入。如果某个驱动无法运行游戏，游戏会回到这个页面并说明原因。
+3. 打开应用。高通设备会先显示 **GPU driver** 页面，因为手机自带的驱动会让部分菜单文字不可见：在这里下载 Turnip 驱动（页面会显示推荐给你机型的版本），然后按 **Start game**。之后可从 **CTRL → GPU driver** 再进入。如果某个驱动无法运行游戏，游戏会回到这个页面并说明原因。Mali 设备同样会先显示这个页面，因为手机自带的驱动无法运行游戏：下载推荐的 PanVK 驱动（需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU）。它的作者支持 Android 15 及以上；Android 13 和 14 不一定能用。如果用它启动不了游戏，按驱动旁的 **Mode** 按钮在直接加载和 libadrenotools 之间切换，或者换一个版本。
 4. 用屏幕上的 **A** 键接受着色器下载。**B** 跳过并在设备上编译，需要几分钟。
 
 游戏画面上有触摸按键。**CTRL** 可以调整触摸按键的大小、透明度和布局，也能进入 Saves、Game folder 和 GPU driver 页面。连接 USB 或蓝牙手柄后触摸按键自动隐藏。设置在游戏内的设置页面修改。
