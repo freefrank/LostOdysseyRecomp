@@ -4087,16 +4087,16 @@
     "sr-motion-replay-moving-only": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_eJNo",
       "fields": {
-        "Status": "Todo",
-        "Delivery": "Not started",
+        "Status": "In Progress",
+        "Delivery": "In progress",
         "Kind": "Feature",
-        "Release": "After v1.0.0",
+        "Release": "v1.0.0",
         "Area": "Graphics performance",
         "Source key": "sr-motion-replay-moving-only",
-        "Evidence": "Not a v1.0.0 gate (maintainer, 2026-10-12). It may still land before v1.0.0 if done. Not started. Scheduled for before v1.0.0 on 2026-10-08 after the #172 reporter's v0.8.61 numbers (FSR Performance at 4K about 50 FPS); that schedule is superseded."
+        "Evidence": "Started 2026-10-14 by maintainer decision: In Progress, Release v1.0.0. Branch perf/mv-moving-only, worktree mv-moving-only, at origin/main 88f56454; no commits beyond main, no PR and no measurement recorded at sync time. History: scheduled before v1.0.0 on 2026-10-08 after the #172 reporter's v0.8.61 numbers (FSR Performance at 4K about 50 FPS). On 2026-10-12 the maintainer said it was not a v1.0.0 gate and might still land before v1.0.0 if done; the 2026-10-14 decision supersedes that."
       },
       "title": "Replay upscaler motion only for geometry that moved",
-      "body_sha256": "9cb1618bc3472f4b492b71421f35bedd1782b7963881a01564c94e7de4777f73"
+      "body_sha256": "869a4edf6597e1822cff6d266875ceabe8589e48b7434663d6ac77c3e16fa723"
     },
     "aspect-ratio-setting": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_ebdI",
@@ -4234,28 +4234,28 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "Awaiting validation",
-        "Delivery": "Implemented",
+        "Status": "Done",
+        "Delivery": "Validated",
         "Release": "v1.0.0",
-        "Evidence": "Gate measured met on TB321FU, not accepted. main c258491a (APK 0.9.52-gate1, factory 720p, frame_rate 60, History occlusion, hot, AC). Hot app p95 at 60.0 fps: Uhra 17.8-18.1, Queen's Room 18.0-18.5, Jansen 17.9-18.3, battle 165 18.2-18.8, RT_028A 18.2-18.4 ms. Displayed intervals >20 ms: Uhra not measured clean; Queen's Room 0, Jansen 0, battle 1/3415, RT_028A 6/5198. Conditions: Uhra DDR peaks 88.4 C vs a 90 C trip; an overlay or extra poller trips it. Later main changes not in the build. Not released. Proposed, not adopted: 60.0 fps plus displayed intervals >20 ms in place of present-call p95. Open: first-visit shader stutter, full-party battles, DDR margin.",
+        "Evidence": "Accepted by the maintainer 2026-10-14 (Done, Validated; not released, Release stays v1.0.0). Criterion changed by the maintainer: 60.0 fps hot plus a count of displayed intervals over 20 ms, replacing present-call p95 (retired: present-call jitter alone gives 17.8-18.8 ms on a steady 16.67 ms display). Build: main c258491a, APK 0.9.52-gate1, factory 720p, frame_rate 60, hot, AC. Hot 60.0 fps; displayed intervals over 20 ms: Queen's Room 0, Jansen 0, battle 165 1 of 3415, RT_028A 6 of 5198; Uhra no clean count. The maintainer reports no Android stutter, so first-visit shader stutter is not a remaining item. Not measured in this record: full-party battles, DDR thermal margin in other profiles, fixed-view screenshot identity.",
         "Source key": "android-frame-time-v100"
       },
       "title": "v1.0.0: Faster Android frames with the same image",
-      "body_sha256": "c5cee300a3dcc505acab0b306f77c913118e5f5f2ec02a86e5cde2df2e5eb68f"
+      "body_sha256": "2b61fb983754c494243b5cf02687319847608295804880d9e9750d7d16c77c09"
     },
     "render-pass-merging-v100": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_6qcw",
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Done",
+        "Delivery": "Implemented",
         "Release": "v1.0.0",
-        "Evidence": "Active again 2026-10-14: the maintainer asked to continue. Branch perf/constant-edram-transfer (GitHub, Gitea and local) carries constant-EDRAM transfers; merged to main as PR #495 (e6bd76f4, not released; transfer passes 1.19 to 0.68 ms GPU, whole frame flat). Shipped step: PR #414 (merged 2026-10-11, in v0.9.32; TB321FU render passes per frame 291 to 172; phase 1 measured about 0.2 ms; tablet 720p 41.4 to 41.8 FPS). Baseline 2026-10-14 hot 720p: frame p95 21.4-21.6 ms vs the 18 ms Android gate (android-frame-time-v100). Measurement checkpoint running on the TB321FU: the two big main-view passes, the Z-prepass, the p95 tail and a Turnip driver comparison. No pass-merge result is accepted yet.",
+        "Evidence": "Closed as Done 2026-10-14 by maintainer decision. The remaining passes are dropped, not deferred: phase 1b (about 0.21 ms GPU) and A3 (about 0.1 ms) are too small to matter, because the hot frame is CPU/thermal-bound, not GPU-bound (checkpoint 2). Shipped: phase 1, deferred EDRAM clears, PR #414 (first in v0.9.32; about 0.2 ms at hot 720p; TB321FU render passes 291 to 172). Constant-EDRAM transfers, PR #495 (e6bd76f4, merged to main, not released; transfer passes 1.19 to 0.68 ms GPU, frame flat). Delivery is Implemented because #495 is not in a release. Desktop and Metal checks for #495 are not in this record.",
         "Source key": "render-pass-merging-v100"
       },
       "title": "Merge render passes so tile-based GPUs keep work on chip",
-      "body_sha256": "6d24edb8f9a15a478061710a54d894ffd4161e3ec200d105941b1bd0cba78b1e"
+      "body_sha256": "8599f736934b254f06a4ce828fbe2995cabaf9bdcb70ddbb5f9139d4bda5f120"
     },
     "release-v0-9-52": {
       "id": "PVTI_lAHOAAsUY84Biy1azhAnf7I",
@@ -4315,25 +4315,29 @@
       "id": "PVTI_lAHOAAsUY84Biy1azhAngKY",
       "fields": {
         "Kind": "Bug",
-        "Area": "Settings",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "dlss-nr-settings-preview-blank"
+        "Area": "Graphics/Settings",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Source key": "dlss-nr-settings-preview-blank",
+        "Release": "v1.0.0",
+        "Evidence": "Started 2026-10-14 (maintainer brief): In Progress, Release v1.0.0. An agent is fixing it now. Local branch fix/nr-preview-fg-multiplier exists and is checked out in a worktree; no PR visible at sync time; no fix or verification recorded yet. The DLSS-NR preview bug is separate from the FG multiplier item. Not the declined request to enable Vulkan FG without a restart."
       },
       "title": "DLSS-NR settings preview renders nothing",
-      "body_sha256": "04bdb3932e2dfb28a50982e0a0efb1e42783863fff602bc921d83bd65c6df7be"
+      "body_sha256": "16f9ee9b636b7d26abf2be915dc854d4a0f4e3d5fb3c51eee7d7314fb6608d6b"
     },
     "fg-multiplier-restart-required": {
       "id": "PVTI_lAHOAAsUY84Biy1azhAngM0",
       "fields": {
         "Kind": "Bug",
-        "Area": "Frame generation",
-        "Status": "Todo",
-        "Delivery": "Not started",
-        "Source key": "fg-multiplier-restart-required"
+        "Area": "Graphics/Settings",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Source key": "fg-multiplier-restart-required",
+        "Release": "v1.0.0",
+        "Evidence": "Started 2026-10-14 (maintainer brief): In Progress, Release v1.0.0. An agent is fixing it now. Local branch fix/nr-preview-fg-multiplier exists and is checked out in a worktree; no PR visible at sync time; no fix or verification recorded yet. The multiplier item is separate from the DLSS-NR preview bug. Not the declined request to enable Vulkan FG without a restart."
       },
       "title": "Frame generation multiplier change needs a restart",
-      "body_sha256": "f58908b1ef4f42bafc4c5ca629d72441d0ae2d9f20ad2e334438d0413f122cee"
+      "body_sha256": "ac5988709d367485d6dad43604d7b6e377fa2fabe11a8e885fb5dc0efa017a98"
     },
     "issue-492-android-black-artifacts-app-switch": {
       "id": "PVTI_lAHOAAsUY84Biy1azhAniBA",

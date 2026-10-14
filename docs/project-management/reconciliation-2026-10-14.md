@@ -111,3 +111,44 @@ Not changed:
 - Non-pinned `docs/notes/` references that still do not resolve after the moves: `fps-0.5.4.md`, `issue12-claude-handoff.md`, `native-migration-boundaries.md`, `native-migration-first-draw.json`, `native-renderer-front-end.md` and `progressive-native-migration-plan.md` (found in neither `docs/notes/` nor `docs/archive/notes/`), and five `jitter-*-2026-10-01.md` notes that are archived but still linked from `docs/notes/`. The jitter notes are not clearly fixed and were left alone.
 - `issue-14` is Status Done with Delivery In progress and an "Investigation active" Evidence. This pairing is inconsistent and was left for the maintainer.
 - The Android resume fixes are not on the frame-time gate. Their issue records are `issue-491` and `issue-492`.
+
+## Round 4: maintainer decisions of 2026-10-14
+
+Applied in the worktree `pm-sync-20261014d` (branch `docs/pm-sync-20261014d`, base `origin/main` 88f56454). Scope: the maintainer's 2026-10-14 decisions on the v1.0.0 items, the Android acceptance, the render-pass closure, the motion replay start and the DLSS-NR and FG drafts. Nothing was committed or pushed.
+
+Run:
+
+- Plan before edits: `{"created": 0, "updated": 0, "unchanged": 318, "conflicts": 0, "operations": 0}`. The manifest matched the Project.
+- Plan after edits: `{"created": 0, "updated": 5, "unchanged": 313, "conflicts": 0, "operations": 25}`.
+- `python -B tools/project_management/sync.py --apply`: the same five records updated, exit 0. The report went to the scratchpad, not `out/`.
+- Plan after the apply: `{"created": 0, "updated": 0, "unchanged": 318, "conflicts": 0, "operations": 0}`, exit 0.
+- Readback (`gh project item-list 3 --owner freefrank --format json`): 319 items (318 managed records plus the keyless Issue #17 link). The five touched items matched Status, Delivery, Release, Area and their Evidence (all under 1,024 characters), and their body sections were present.
+- Live checks: `perf/mv-moving-only` is at `origin/main` 88f56454 with a clean worktree. `fix/nr-preview-fg-multiplier` exists and is checked out in another worktree. No pull request for either branch was visible at sync time.
+- Project: <https://github.com/users/freefrank/projects/3>
+
+Changed records:
+
+| Record | Before | After |
+| --- | --- | --- |
+| `android-frame-time-v100` | Awaiting validation / Implemented / v1.0.0 | Done / Validated / v1.0.0. Evidence and body record the 2026-10-14 acceptance under the new criterion (60.0 fps hot plus displayed intervals over 20 ms); the p95 gate is retired. |
+| `render-pass-merging-v100` | In Progress / In progress / v1.0.0 | Done / Implemented / v1.0.0. Remaining phases dropped, not deferred. |
+| `sr-motion-replay-moving-only` | Todo / Not started / After v1.0.0 | In Progress / In progress / v1.0.0. The 2026-10-12 "not a v1.0.0 gate" sentence stays as history and is marked superseded. |
+| `dlss-nr-settings-preview-blank` | Todo / Not started / no Release / Settings | In Progress / In progress / v1.0.0 / Graphics/Settings |
+| `fg-multiplier-restart-required` | Todo / Not started / no Release / Frame generation | In Progress / In progress / v1.0.0 / Graphics/Settings |
+
+Judgment calls:
+
+1. Render-pass merging is Delivery Implemented, not Released. PR #495 is merged to `main` but is not in v0.9.52, and Released would claim a release that does not contain it. PR #414 shipped in v0.9.32.
+2. The DLSS-NR and FG request is recorded in the two existing drafts from Round 1, which came from the same 2026-10-13 note, not as a third record. The two bugs stay separate. The brief asked for "Graphics/Settings" for the item, so both drafts use that Area; the FG draft's previous Area was "Frame generation" (revert if the maintainer wants the provider area).
+3. `v100-ui-separation-production-handoff` and `linux-aarch64-platform` need no field change. Both are already Paused / Deferred / After v1.0.0 in the manifest and in the Project (readback). They were not edited.
+4. The full-map edge model mod has no record, as instructed. The `texture-replacement-mod-loader` Evidence still lists the 4 GiB archive limit as a pending maintainer decision from Round 3; it was not changed in this round.
+
+Open v1.0.0 items after this round (readback, Release "v1.0.0" and Status not Done or Cancelled):
+
+- `sr-motion-replay-moving-only`: In Progress / In progress.
+- `dlss-nr-settings-preview-blank`: In Progress / In progress.
+- `fg-multiplier-restart-required`: In Progress / In progress.
+
+Roadmap: `docs/ROADMAP.md` and `docs/ROADMAP.zh-CN.md` were updated in the same change. The Android item is `[x]` and the render-pass item is `[x]`. The motion replay and DLSS-NR/FG items are `[~]` in the v1.0.0 section, and the #172 clause was removed from the later backlog in both languages.
+
+Not verified here: the Android acceptance rests on the 2026-10-14 maintainer decision and the recorded measurements, not on a new run. No build, game or test was run in this round.
