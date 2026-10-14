@@ -10,11 +10,14 @@ LostOdysseyRecomp has a Mod Organizer 2 (MO2) game plugin. MO2 maps the mods you
 
 ## 1. Install the plugins (once)
 
-1. Open [game_lostodysseyrecomp.py](https://github.com/freefrank/LostOdysseyRecomp/blob/main/tools/modding/mo2/game_lostodysseyrecomp.py), press **Download raw file** (the download icon above the code) and put the file in `<MO2 folder>\plugins\basic_games\games\`.
-2. Optional, for exporting the game's textures, movies and text: download [lostodysseyrecomp_export.py](https://github.com/freefrank/LostOdysseyRecomp/blob/main/tools/modding/mo2/lostodysseyrecomp_export.py) the same way and put it in `<MO2 folder>\plugins\`. Not in `plugins\basic_games\`.
-3. Restart MO2 if it is running.
+1. Open your LostOdysseyRecomp folder and then its `mo2` folder. It holds `game_lostodysseyrecomp.py` and `lostodysseyrecomp_export.py`.
+2. Copy `game_lostodysseyrecomp.py` into `<MO2 folder>\plugins\basic_games\games\`.
+3. Optional, for exporting the game's textures, movies and text: copy `lostodysseyrecomp_export.py` into `<MO2 folder>\plugins\`. Not into `plugins\basic_games\`.
+4. Restart MO2 if it is running.
 
-Download the files again when a new game version comes out; MO2 loads them when it starts.
+After you update the game, copy the two files again and replace the old ones; MO2 loads them when it starts.
+
+No `mo2` folder? Your game is from before it was added. Update the game, or download the files from [GitHub](https://github.com/freefrank/LostOdysseyRecomp/tree/main/tools/modding/mo2) (open a file, then press **Download raw file**).
 
 ## 2. Create an instance for the game
 
@@ -44,7 +47,7 @@ Download the files again when a new game version comes out; MO2 loads them when 
 
 3. The mod appears in the left list. Tick its box to enable it.
 
-What installs as is: mod folders (`mods/<id>/mod.ini` with `mods/<id>/overlay/...` or `mods/<id>/overlay.loarc`), older `mod.ini` packages, overlay packages (a top-level `overlay/` folder) and language packs (a folder with a `language.ini`). The plugin removes the outer `mods/` folder of those archives, so their contents land in the game's `mods/`. An archive whose top holds `mod.ini` or `language.ini` itself (the inside of such a folder) is marked as invalid: put it in a folder named after the mod in MO2's manual installer. Download the game plugin again if MO2 says a mod folder or language pack has no valid game data.
+What installs as is: mod folders (`mods/<id>/mod.ini` with `mods/<id>/overlay/...` or `mods/<id>/overlay.loarc`), older `mod.ini` packages, overlay packages (a top-level `overlay/` folder) and language packs (a folder with a `language.ini`). The plugin removes the outer `mods/` folder of those archives, so their contents land in the game's `mods/`. An archive whose top holds `mod.ini` or `language.ini` itself (the inside of such a folder) is marked as invalid: put it in a folder named after the mod in MO2's manual installer. Copy the game plugin again (step 1) if MO2 says a mod folder or language pack has no valid game data.
 
 ## 4. Play
 

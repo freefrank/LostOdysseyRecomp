@@ -129,6 +129,11 @@ def main():
         shutil.copy2(ROOT / 'LostOdysseyRecomp/install/FONT-PROVENANCE.md', licenses / 'FONT-PROVENANCE.md')
         shutil.copy2(ROOT / 'thirdparty/SDL/test/unifont-15.1.05-license.txt',
                      licenses / 'Unifont-OFL-1.1.txt')
+        # Mod Organizer 2 plugins; the user copies them into their MO2 folder.
+        mo2 = package / 'mo2'
+        mo2.mkdir()
+        for plugin in ('game_lostodysseyrecomp.py', 'lostodysseyrecomp_export.py'):
+            shutil.copy2(ROOT / 'tools/modding/mo2' / plugin, mo2 / plugin)
         for dll in ('dxcompiler.dll', 'dxil.dll'):
             shutil.copy2(runtime.parent / dll, package / dll)
         # Intel XeSS SR/FG runtimes, staged by the build when XeSS is enabled.
