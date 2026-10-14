@@ -31,6 +31,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Cutscene replacements up to 1% longer or shorter than the original are fitted to its length, so they stay in time with the sound.
 - Android: the game starts on devices whose graphics driver refused the display setup (#477).
 - Replaced character models no longer lose parts of their body in game (11 party characters).
+- While the game files for new or changed mods are being prepared at startup, the window shows "Preparing mods" with a progress bar instead of staying black.
 
 ### 简体中文
 
@@ -57,6 +58,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 比原版长或短不超过 1% 的替换影片会被拉到原版的长度，画面和声音保持同步。
 - Android：显卡驱动拒绝显示设置的设备现在可以正常启动（#477）。
 - 替换后的角色模型不再缺少身体部件（队伍中的 11 个角色）。
+- 启动时为新增或改动的 Mod 准备游戏文件期间，窗口会显示“正在准备 Mod”和进度条，不再一直黑屏。
 
 ## [v0.9.32](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.32) — 2026-10-12
 

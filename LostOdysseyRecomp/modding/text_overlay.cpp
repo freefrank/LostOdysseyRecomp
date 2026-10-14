@@ -3,6 +3,7 @@
 #include "fpi_index.h"
 #include "mod_api.h"
 #include "model_import.h"
+#include "rebuild_progress.h"
 #include "static_mesh_placements.h"
 #include "text_format.h"
 
@@ -221,11 +222,14 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         groups[FolderOf(user->first)].placers.push_back(user->second);
     }
     std::vector<std::pair<const std::string, Group> *> order;
+    size_t members = 0;
     for (auto &group : groups)
     {
         std::sort(group.second.members.begin(), group.second.members.end(), byOffset);
         order.push_back(&group);
+        members += group.second.members.size();
     }
+    rebuild_progress::AddTotal(uint32_t(members));
     std::stable_sort(order.begin(), order.end(), [&](const auto *a, const auto *b) {
         if (a->second.shared != b->second.shared) return a->second.shared;
         if (a->second.members.empty() || b->second.members.empty()) return !a->second.members.empty() && b->second.members.empty();
@@ -299,6 +303,8 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
         const auto before = maps.size();
         for (const auto *member : group.members)
         {
+            // Counted when done with; members that place static meshes once stored below.
+            struct Count { bool later = false; ~Count() { if (!later) rebuild_progress::Advance(); } } count;
             const auto &file = *member;
             const auto text = gTexts.find(file.path);
             const bool model = gModels.count(file.path) != 0;
@@ -328,7 +334,11 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 }
                 if (bytes.empty() || bytes == loaded.bytes) continue;
                 Rebuilt item{std::move(loaded), std::move(bytes), model};
-                if (model && model_import::PlacesStaticMeshes(item.bytes)) rebuilt[member] = std::move(item);
+                if (model && model_import::PlacesStaticMeshes(item.bytes))
+                {
+                    rebuilt[member] = std::move(item);
+                    count.later = true;
+                }
                 else put(file, item);
             }
             catch (const std::exception &error)
@@ -367,6 +377,7 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 if (!result.package.empty()) it->second.bytes = std::move(result.package);
                 put(file, it->second);
                 rebuilt.erase(it);
+                rebuild_progress::Advance();
             }
             catch (const std::exception &error)
             {
@@ -375,7 +386,11 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
             }
         }
         // Members that place static meshes but had none of theirs replaced.
-        for (auto &[file, item] : rebuilt) put(*file, item);
+        for (auto &[file, item] : rebuilt)
+        {
+            put(*file, item);
+            rebuild_progress::Advance();
+        }
     };
 
     // Shared mesh folders (sorted first) one by one, as the others need their
@@ -518,6 +533,9 @@ Folder Build(const fs::path &folder)
         LOG_NOTICE("[mods] rebuilt files for {} read from {}", Utf8(folder), Utf8(cache));
         return result;
     }
+
+    // PatchIndex counts the packages for the window until the files are in place.
+    struct Finished { ~Finished() { rebuild_progress::Finish(); } } finished;
 
     // Build into <cache>.new, then put it in place of the old one.
     fs::path building = cache.empty() ? fs::path() : fs::path(cache).concat(".new");

@@ -287,6 +287,13 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
          L"모드 목록을 저장했습니다. 변경 사항을 적용하려면 게임을 다시 시작하세요.",
          L"Mod 列表已保存。请重启游戏以应用更改。"},
         {L"Mod list saved.", L"MOD リストを保存しました。", L"모드 목록을 저장했습니다.", L"Mod 列表已保存。"},
+        // The startup screen while the game files are rebuilt for the mods (gpu/video.cpp).
+        {L"Preparing mods", L"MOD を準備しています", L"모드 준비 중", L"正在准备 Mod"},
+        {L" game files", L" ゲームファイル", L"개 게임 파일", L" 个游戏文件"},
+        {L"The game will continue automatically.\nLater launches reuse the prepared files.",
+         L"完了するとゲームは自動的に続行します。\n次回以降の起動では準備済みのファイルを使います。",
+         L"완료되면 게임이 자동으로 계속됩니다.\n다음 실행부터는 준비된 파일을 사용합니다.",
+         L"完成后游戏会自动继续。\n之后启动时会直接使用已准备好的文件。"},
         {L"Could not save the mod list.", L"MOD リストを保存できませんでした。", L"모드 목록을 저장하지 못했습니다.",
          L"无法保存 Mod 列表。"},
         {L"Could not open the mods folder.", L"mods フォルダーを開けませんでした。", L"mods 폴더를 열지 못했습니다.",

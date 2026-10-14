@@ -41,11 +41,13 @@
 #include "deadline_wait.h"
 #include "frame_plan.h"
 #include "pipeline_prepare_progress.h"
+#include <modding/rebuild_progress.h>
 #include <settings/config.h>
 #include "frame_generation_settings.h"
 #include <settings/menu.h>
 #include <settings/restart.h>
 #include <settings/title_entry.h>
+#include <settings/translations.h>
 #include <ui/achievement_overlay.h>
 #include <kernel/memory.h>
 #include <os/main_thread.h>
@@ -333,6 +335,16 @@ namespace gpu::video
         std::atomic<uint64_t> g_deviceEpoch{0};
         constexpr uint64_t kProgressMask = (1ull << 28) - 1;
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
+        uint64_t PackPreparation(uint32_t completed, uint32_t total, PreparationStage stage, PreparationUnit unit) {
+            return (std::min<uint64_t>(total,kProgressMask) << 28) | std::min<uint64_t>(completed,kProgressMask) |
+                (uint64_t(stage) << 56) | (uint64_t(unit) << 60);
+        }
+        // What the preparation screen shows: g_shaderProgress, or the mods rebuild.
+        std::atomic<uint64_t> g_preparationShown{0};
+        // Guest frames handed to presentation (written by the command processor
+        // only); the mods screen gives way to them.
+        std::atomic<uint64_t> g_guestFrames{0};
+        // The mods texts follow the settings language; the shader stages are English.
         const wchar_t* PreparationTitle(PreparationStage stage) {
             switch (stage) {
             case PreparationStage::CacheValidation: return L"Validating shader cache";
@@ -340,17 +352,8 @@ namespace gpu::video
             case PreparationStage::IndexedExtraction: return L"Extracting indexed shaders";
             case PreparationStage::FallbackScan: return L"Scanning game resources";
             case PreparationStage::Pipelines: return L"Preparing pipelines";
+            case PreparationStage::Mods: return settings::Translate(settings::GetConfig().uiLanguage, L"Preparing mods", L"正在準備 Mod");
             default: return L"Preparing shaders";
-            }
-        }
-        const char* PreparationTitleNarrow(PreparationStage stage) {
-            switch (stage) {
-            case PreparationStage::CacheValidation: return "Validating shader cache";
-            case PreparationStage::CachedShaders: return "Loading cached shaders";
-            case PreparationStage::IndexedExtraction: return "Extracting indexed shaders";
-            case PreparationStage::FallbackScan: return "Scanning game resources";
-            case PreparationStage::Pipelines: return "Preparing pipelines";
-            default: return "Preparing shaders";
             }
         }
         const wchar_t* PreparationSuffix(PreparationUnit unit) {
@@ -359,17 +362,16 @@ namespace gpu::video
             case PreparationUnit::MiB: return L" MiB";
             case PreparationUnit::Entries: return L" entries";
             case PreparationUnit::Pipelines: return L" pipelines";
+            case PreparationUnit::GameFiles: return settings::Translate(settings::GetConfig().uiLanguage, L" game files", L" 個遊戲檔案");
             default: return L" shaders";
             }
         }
-        const char* PreparationSuffixNarrow(PreparationUnit unit) {
-            switch (unit) {
-            case PreparationUnit::Files: return " files";
-            case PreparationUnit::MiB: return " MiB";
-            case PreparationUnit::Entries: return " entries";
-            case PreparationUnit::Pipelines: return " pipelines";
-            default: return " shaders";
-            }
+        const wchar_t* PreparationHint(PreparationStage stage) {
+            if (stage == PreparationStage::Mods)
+                return settings::Translate(settings::GetConfig().uiLanguage,
+                    L"The game will continue automatically.\nLater launches reuse the prepared files.",
+                    L"完成後遊戲會自動繼續。\n之後啟動時會直接使用已準備好的檔案。");
+            return L"The game will continue automatically.\nFuture launches reuse the shader cache.\nPress ESC, Space, or Controller (B) to skip.";
         }
         std::atomic<int> g_displayMode{-1};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
@@ -402,7 +404,7 @@ namespace gpu::video
         LRESULT CALLBACK PreparationWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
         {
             if (message == WM_ERASEBKGND) return 1;
-            if (message == WM_KEYDOWN) {
+            if (message == WM_KEYDOWN && g_shaderProgress.load() != 0) {
                 if (wparam == VK_ESCAPE || wparam == VK_SPACE || wparam == 'B' || wparam == 'b') {
                     RequestSkipShaderPreparation();
                     return 0;
@@ -425,7 +427,7 @@ namespace gpu::video
                 auto oldBitmap=SelectObject(dc,bitmap);
                 HBRUSH background=CreateSolidBrush(RGB(20,24,31));
                 FillRect(dc,&bounds,background); DeleteObject(background);
-                const uint64_t state=g_shaderProgress.load();
+                const uint64_t state=g_preparationShown.load();
                 const uint32_t total=uint32_t((state>>28)&kProgressMask), done=uint32_t(state&kProgressMask);
                 const auto stage=PreparationStage((state>>56)&15);
                 const auto unit=PreparationUnit(state>>60);
@@ -446,7 +448,7 @@ namespace gpu::video
                 HBRUSH fill=CreateSolidBrush(RGB(111,177,218)); FillRect(dc,&bar,fill); DeleteObject(fill);
                 SetTextColor(dc,RGB(157,168,184));
                 RECT hint{20,bounds.bottom/2+45,bounds.right-20,bounds.bottom/2+120};
-                DrawTextW(dc,L"The game will continue automatically.\nFuture launches reuse the shader cache.\nPress ESC, Space, or Controller (B) to skip.",-1,&hint,DT_CENTER);
+                DrawTextW(dc,PreparationHint(stage),-1,&hint,DT_CENTER);
                 SelectObject(dc,old); DeleteObject(font);
                 BitBlt(target,0,0,bounds.right,bounds.bottom,dc,0,0,SRCCOPY);
                 SelectObject(dc,oldBitmap); DeleteObject(bitmap); DeleteDC(dc);
@@ -2934,8 +2936,7 @@ namespace gpu::video
 
     void SetShaderPreparationProgress(uint32_t completed, uint32_t total, PreparationStage stage, PreparationUnit unit)
     {
-        g_shaderProgress.store((std::min<uint64_t>(total,kProgressMask) << 28) |
-            std::min<uint64_t>(completed,kProgressMask) | (uint64_t(stage) << 56) | (uint64_t(unit) << 60));
+        g_shaderProgress.store(PackPreparation(completed, total, stage, unit));
     }
     static std::atomic<bool> g_skipShaderPreparation{false};
     bool ShaderPreparationSkipped() { return g_skipShaderPreparation.load(); }
@@ -3038,16 +3039,15 @@ namespace gpu::video
         if (fillW > 0)
             r.FillRect(barX, barY, fillW, barHeight, host_ui::MakeColor(255, 111, 177, 218));
 
-        const std::wstring line1 = L"The game will continue automatically.";
-        const std::wstring line2 = L"Future launches reuse the shader cache.";
-        const std::wstring line3 = L"Press ESC, Space, or Controller (B) to skip.";
         const uint32_t hintColor = host_ui::MakeColor(255, 157, 168, 184);
-        const int hint1W = r.MeasureWString(line1, 1.0f);
-        const int hint2W = r.MeasureWString(line2, 1.0f);
-        const int hint3W = r.MeasureWString(line3, 1.0f);
-        r.DrawWString((int(width) - hint1W) / 2, centerY + 45, line1, hintColor, 1.0f);
-        r.DrawWString((int(width) - hint2W) / 2, centerY + 68, line2, hintColor, 1.0f);
-        r.DrawWString((int(width) - hint3W) / 2, centerY + 91, line3, hintColor, 1.0f);
+        const std::wstring_view hint = PreparationHint(stage);
+        int lineY = centerY + 45;
+        for (size_t start = 0; start <= hint.size(); lineY += 23) {
+            const size_t end = std::min(hint.find(L'\n', start), hint.size());
+            const std::wstring line(hint.substr(start, end - start));
+            r.DrawWString((int(width) - r.MeasureWString(line, 1.0f)) / 2, lineY, line, hintColor, 1.0f);
+            start = end + 1;
+        }
 
         return UploadAndPresentPixels(s_prepPixels, width, height, true, 0, PresentationOptions{}, nullptr, nullptr);
     }
@@ -3117,6 +3117,25 @@ namespace gpu::video
     }
 #endif
 
+    // The mods rebuild as preparation progress while the game draws nothing:
+    // the screen would cover game frames or a host menu (Windows) or alternate
+    // with them, and moving frames already show the game has not stopped.
+    static uint64_t ModsPreparationProgress(std::chrono::steady_clock::time_point now)
+    {
+        const uint64_t mods = modding::rebuild_progress::g_progress.load(std::memory_order_relaxed);
+        const uint32_t total = modding::rebuild_progress::Total(mods);
+        if (!total) return 0;
+        static uint64_t seenFrames = 0;
+        static auto lastFrame = std::chrono::steady_clock::time_point{};
+        if (const uint64_t frames = g_guestFrames.load(std::memory_order_relaxed); frames != seenFrames) {
+            seenFrames = frames;
+            lastFrame = now;
+        }
+        if (IsHostOverlayActive() || now - lastFrame < std::chrono::milliseconds(500)) return 0;
+        return PackPreparation(std::min(modding::rebuild_progress::Done(mods), total), total,
+            PreparationStage::Mods, PreparationUnit::GameFiles);
+    }
+
     void PumpWindowEvents()
     {
         g_windowPumpBeat.store(SteadyMilliseconds(), std::memory_order_relaxed);
@@ -3147,8 +3166,9 @@ namespace gpu::video
 #else
         const bool surfaceChangePending = false;
 #endif
-        const uint64_t progress = g_shaderProgress.load();
+        const uint64_t shaderProgress = g_shaderProgress.load();
         const auto now = std::chrono::steady_clock::now();
+        const uint64_t progress = ((shaderProgress >> 28) & kProgressMask) ? shaderProgress : ModsPreparationProgress(now);
         // Scanning can publish hundreds of updates per second. Keep UI updates
         // at 10 Hz, but show phase transitions and completion immediately.
         const bool phaseChanged = (progress >> 56) != (shownProgress >> 56);
@@ -3156,7 +3176,7 @@ namespace gpu::video
         const uint32_t done = uint32_t(progress & kProgressMask);
 #if defined(__ANDROID__)
         // The virtual pad publishes JNI snapshots, not SDL controller events.
-        if (total && !ShaderPreparationSkipped() &&
+        if (((shaderProgress >> 28) & kProgressMask) && !ShaderPreparationSkipped() &&
             (hid::android_touch::Snapshot().buttons & XAMINPUT_GAMEPAD_B))
             RequestSkipShaderPreparation();
 #endif
@@ -3164,9 +3184,16 @@ namespace gpu::video
             (phaseChanged || done == total || now-lastProgressPaint >= std::chrono::milliseconds(100))) {
             const auto stage=PreparationStage((progress>>56)&15);
             const auto unit=PreparationUnit(progress>>60);
-            const auto title = total ? fmt::format("Lost Odyssey Recompiled - {} {}/{}{}",
-                PreparationTitleNarrow(stage), done, total, PreparationSuffixNarrow(unit))
-                                     : std::string("Lost Odyssey Recompiled");
+            g_preparationShown.store(progress);
+            std::string title = "Lost Odyssey Recompiled";
+            if (total) {
+                const std::wstring status = std::wstring(PreparationTitle(stage)) + L" " + std::to_wstring(done) + L"/" +
+                    std::to_wstring(total) + PreparationSuffix(unit);
+                if (char* utf8 = SDL_iconv_wchar_utf8(status.c_str())) {
+                    (title += " - ") += utf8;
+                    SDL_free(utf8);
+                }
+            }
             SDL_SetWindowTitle(g_window, title.c_str());
 #ifdef _WIN32
             // The window thread owns the preparation overlay and stays responsive
@@ -4537,6 +4564,7 @@ namespace gpu::video
                 });
             }
         } captureExit{capture, captureResult};
+        g_guestFrames.store(g_guestFrames.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
         if (width == 0 || height == 0 || width > kMaxWidth || height > kMaxHeight)
             return;
 
