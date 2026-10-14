@@ -2561,7 +2561,7 @@
         "Status": "Done",
         "Delivery": "Validated",
         "Start date": "2026-09-14",
-        "Evidence": "Deployed Issue-opened and @codex reply workflow; previously passed 19 triage/mention and 7 retrieval checks. Real public @codex response now verified at https://github.com/freefrank/LostOdysseyRecomp/issues/21#issuecomment-5669773986 (per-comment deduplication marker 5669768211); real Issue-opened bot replies also visible on #28/#29/#30/#40. Future answer quality and bug repairs are separate work.",
+        "Evidence": "Deployed Issue-opened and @codex reply workflow; previously passed 19 triage/mention and 7 retrieval checks. Real public @codex response now verified at https://github.com/freefrank/LostOdysseyRecomp/issues/21#issuecomment-5669773986 (per-comment deduplication marker 5669768211); real Issue-opened bot replies also visible on #28/#29/#30/#40. Future answer quality and bug repairs are separate work. 2026-10-14: PR #500 (2f01fb6b, merged to main, not released) adds related-issue candidates and attached-log digests to the triage prompt, with unit tests and a local context-only check. No hosted triage run on a real Issue is recorded for it.",
         "Source key": "openai-compatible-issue-triage-automation"
       },
       "title": "Automate new GitHub Issue analysis and replies",
@@ -4234,14 +4234,14 @@
       "fields": {
         "Kind": "Feature",
         "Area": "Graphics performance",
-        "Status": "In Progress",
-        "Delivery": "In progress",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
         "Release": "v1.0.0",
-        "Evidence": "Gate (maintainer, 2026-10-12): hot Uhra frame-interval p95 at or below about 18 ms at 720p on the TB321FU; p99 no longer gates. Shipped in v0.9.32 (#443, #444, #445, #447): hot Uhra p95 25.8 to 22.5 ms. Last recorded hot p95 21.3-22.6 ms, about 4 ms short. 2026-10-14: #495 (e6bd76f4, on main, not released) cut transfer passes from 1.19 to 0.68 ms GPU, whole frame flat. Checkpoint 2: the hot p95 tail is CPU scheduling under thermal caps, not GPU; a render-thread priority experiment is running, no result. Gate still open. Android resume fixes #496 and #498 are tracked on #491 and #492.",
+        "Evidence": "Gate measured met on TB321FU, not accepted. main c258491a (APK 0.9.52-gate1, factory 720p, frame_rate 60, History occlusion, hot, AC). Hot app p95 at 60.0 fps: Uhra 17.8-18.1, Queen's Room 18.0-18.5, Jansen 17.9-18.3, battle 165 18.2-18.8, RT_028A 18.2-18.4 ms. Displayed intervals >20 ms: Uhra not measured clean; Queen's Room 0, Jansen 0, battle 1/3415, RT_028A 6/5198. Conditions: Uhra DDR peaks 88.4 C vs a 90 C trip; an overlay or extra poller trips it. Later main changes not in the build. Not released. Proposed, not adopted: 60.0 fps plus displayed intervals >20 ms in place of present-call p95. Open: first-visit shader stutter, full-party battles, DDR margin.",
         "Source key": "android-frame-time-v100"
       },
       "title": "v1.0.0: Faster Android frames with the same image",
-      "body_sha256": "2442b923f1997d7faaa64dfa1724dc431a5c3ca45e73cfaf1492a8fa4865d3e6"
+      "body_sha256": "c5cee300a3dcc505acab0b306f77c913118e5f5f2ec02a86e5cde2df2e5eb68f"
     },
     "render-pass-merging-v100": {
       "id": "PVTI_lAHOAAsUY84Biy1azg_6qcw",
@@ -4345,6 +4345,42 @@
         "Start date": "2026-10-14",
         "Evidence": "Open (created 2026-10-14); same reporter as #491; log and screenshots on the Issue. Partial mitigations on main, not released, not run on a device: PR #496 keeps the frame-plan size for 1 s after a surface change (refs #492); PR #498 locks landscape and moves pause handling to an event watcher (refs #492). Neither PR claims to close #492; a portrait period longer than 1 s still resets the plan twice. Stays open; no fix is accepted.",
         "Source key": "issue-492-android-black-artifacts-app-switch"
+      }
+    },
+    "issue-497-cutscene-audio-missing": {
+      "id": "PVTI_lAHOAAsUY84Biy1azhAx9Tg",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
+        "Start date": "2026-10-14",
+        "Evidence": "Open (created 2026-10-14). Fixes on main, not released, not run on the reporter's device: #503 (retries stream stop and release requests that a full sound queue dropped; the slot leak in the log), #504 (drops Xenia's XMP sleeps; worker 82 to 951 passes/s on psvita), #505 (fast-forward frees a stream slot in 1.4 s instead of 113 s). The maintainer said the next update fixes it; the reporter has not confirmed.",
+        "Source key": "issue-497-cutscene-audio-missing"
+      }
+    },
+    "issue-499-music-after-battle": {
+      "id": "PVTI_lAHOAAsUY84Biy1azhAx9Zo",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Audio",
+        "Status": "In Progress",
+        "Delivery": "In progress",
+        "Start date": "2026-10-14",
+        "Evidence": "Open; cause unconfirmed. Battle music kept playing through the item fanfare into the next cutscene. On main, not released: #503 (dropped stop requests leave a track playing; candidate only, unconfirmed) and #504. PR #505 does not reproduce it. The maintainer said the update fixes a likely cause. The reporter was asked on 2026-10-14 whether fast-forward was on; no answer is recorded.",
+        "Source key": "issue-499-music-after-battle"
+      }
+    },
+    "issue-506-startup-crash-reshade-dxgi": {
+      "id": "PVTI_lAHOAAsUY84Biy1azhAx9fs",
+      "fields": {
+        "Kind": "Bug",
+        "Area": "Platforms",
+        "Status": "Awaiting validation",
+        "Delivery": "Implemented",
+        "Start date": "2026-10-14",
+        "Evidence": "Closed as completed 2026-10-14 18:06Z by PR #507 (merged to main as eaa5b06b; not in a release; the maintainer wrote it is fixed in the next release). Cause: #467 (in v0.9.52) made d3d11.dll and mfplat static imports, so a ReShade dxgi.dll in the game folder loaded at start on Vulkan. Fix: delay-load them. The reporter has not confirmed; closure is not verification.",
+        "Source key": "issue-506-startup-crash-reshade-dxgi"
       }
     }
   },
