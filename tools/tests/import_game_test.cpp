@@ -11,8 +11,35 @@
 #include "install/import_game.h"
 #include "gpu/shader/resource_cpx_index_sha256.h"
 
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
+
 namespace
 {
+// A live importer's .import.lock: the file exists and, outside Windows, is flocked.
+struct HeldLock
+{
+    explicit HeldLock(const std::filesystem::path& path)
+    {
+#ifdef _WIN32
+        std::ofstream(path, std::ios::binary) << "active";
+#else
+        fd = open(path.c_str(), O_WRONLY | O_CREAT, 0600);
+        flock(fd, LOCK_EX);
+#endif
+    }
+    ~HeldLock()
+    {
+#ifndef _WIN32
+        close(fd);
+#endif
+    }
+    int fd = -1;
+};
+
 void Require(bool condition, const std::string& message)
 {
     if (!condition) throw std::runtime_error("[extracted-dlc] " + message);
@@ -553,9 +580,11 @@ void RunSharedArchiveTest()
     checkLinked(interrupted, true, "after interruption");
 
     // Compaction shares the import lock.
-    { std::ofstream lock(copies / ".import.lock"); }
     bool locked = false;
-    try { install::CompactGameData(copies); } catch (const install::Error&) { locked = true; }
+    {
+        HeldLock held(copies / ".import.lock");
+        try { install::CompactGameData(copies); } catch (const install::Error&) { locked = true; }
+    }
     Require(locked, "compaction ignored the import lock");
 
     // With clones allowed (APFS, btrfs, XFS clone; elsewhere links) the shared copies keep their content.
@@ -714,21 +743,25 @@ int main(int argc, char** argv)
     // 5b. A pre-existing lock must reject a second importer without touching the destination.
     std::filesystem::path lockedDest = tempDir / "lockedDest";
     std::filesystem::create_directories(lockedDest);
-    {
-        std::ofstream lock(lockedDest / ".import.lock", std::ios::binary);
-        lock << "active";
-    }
     bool lockRejected = false;
-    try
     {
-        install::InstallDiscs(sourceStandard, lockedDest);
-    }
-    catch (const install::Error& err)
-    {
-        lockRejected = std::string(err.what()).find("Another import owns") != std::string::npos;
+        HeldLock held(lockedDest / ".import.lock");
+        try
+        {
+            install::InstallDiscs(sourceStandard, lockedDest);
+        }
+        catch (const install::Error& err)
+        {
+            lockRejected = std::string(err.what()).find("Another import owns") != std::string::npos;
+        }
     }
     assert(lockRejected);
     assert(std::filesystem::exists(lockedDest / ".import.lock"));
+#ifndef _WIN32
+    // A lock file whose owner was killed holds no flock; the next importer takes it over.
+    assert(install::InstallDiscs(sourceStandard, lockedDest).size() == 4);
+    assert(!std::filesystem::exists(lockedDest / ".import.lock"));
+#endif
     std::cout << "[PASS] Import lock exclusivity" << std::endl;
 
     // 6. Test cancellation during scan/install

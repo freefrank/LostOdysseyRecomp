@@ -332,6 +332,8 @@ std::string ArchiveSha256(const std::filesystem::path& path, uint64_t size, cons
 }
 
 // Holds <root>/.import.lock: one import or compaction per game folder at a time.
+// A killed run does not block the next one: Windows deletes the file when the
+// handle closes, and elsewhere the flock ends with the process.
 class DestinationLock
 {
 public:
@@ -339,10 +341,10 @@ public:
     {
 #ifdef _WIN32
         handle_ = CreateFileW(path_.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                              CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+                              CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
         if (handle_ == INVALID_HANDLE_VALUE) throw Error(Busy);
 #else
-        fd_ = open(path_.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+        fd_ = open(path_.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
         if (fd_ < 0 || flock(fd_, LOCK_EX | LOCK_NB) != 0)
         {
             if (fd_ >= 0) close(fd_);
@@ -355,10 +357,10 @@ public:
 #ifdef _WIN32
         CloseHandle(handle_);
 #else
-        close(fd_);
-#endif
         std::error_code ec;
         std::filesystem::remove(path_, ec);
+        close(fd_);
+#endif
     }
     DestinationLock(const DestinationLock&) = delete;
     DestinationLock& operator=(const DestinationLock&) = delete;
