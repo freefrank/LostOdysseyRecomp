@@ -453,6 +453,120 @@ void RunReimportTest()
     }
     std::cout << "[PASS] selective reimport, preparation/publish/callback rollback, retained backups and overlap" << std::endl;
 }
+
+bool SameFile(const std::filesystem::path& a, const std::filesystem::path& b)
+{
+    std::error_code ec;
+    return std::filesystem::equivalent(a, b, ec);
+}
+
+std::string ReadText(const std::filesystem::path& path)
+{
+    const auto bytes = ReadBytes(path);
+    return {bytes.begin(), bytes.end()};
+}
+
+// Archives identical on several discs are stored once, by import or by compaction;
+// different archives, indexes and failed or interrupted links keep plain copies.
+void RunSharedArchiveTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-shared-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { install::SetTestShareFailure({}); std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    // Hard links make sharing observable; copy-on-write clones are checked at the end.
+    install::SetTestShareFailure("no-clone");
+    for (uint32_t n = 1; n <= 2; ++n)
+        WriteDiscFiles(root / "sources" / ("disc" + std::to_string(n)), n);
+    {
+        std::ofstream field(root / "sources" / "disc2" / "xenon_field.fpd", std::ios::binary | std::ios::trunc);
+        field << "xenon_field.fpd payload, disc 2";
+    }
+    uint64_t sharedSize = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(root / "sources" / "disc1"))
+        if (entry.path().extension() == ".fpd" && entry.path().filename() != "xenon_field.fpd")
+            sharedSize += entry.file_size();
+    const auto both = install::ScanContent(root / "sources");
+    auto checkLinked = [&](const std::filesystem::path& game, bool linked, const std::string& what) {
+        for (const auto& entry : std::filesystem::directory_iterator(game / "disc1"))
+        {
+            const auto name = entry.path().filename();
+            const auto other = game / "disc2" / name;
+            if (!std::filesystem::exists(other)) continue;
+            const bool expect = linked && entry.path().extension() == ".fpd" && name != "xenon_field.fpd";
+            Require(SameFile(entry.path(), other) == expect, what + ": " + name.string() + " sharing is wrong");
+            if (name != "xenon_field.fpd" && name != "default.xex" && name != "import-info.json")
+                Require(ReadText(other) == name.string() + " payload", what + ": " + name.string() + " content changed");
+        }
+        Require(ReadText(game / "disc2" / "xenon_field.fpd") == "xenon_field.fpd payload, disc 2", what + ": distinct archive changed");
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(game))
+            Require(entry.path().extension() != ".lo-share", what + ": temporary left behind");
+    };
+
+    // Import links identical archives across the discs of one import.
+    const auto linked = root / "linked";
+    const auto imported = install::InstallContent(both, linked);
+    Require(imported.sharedBytes == sharedSize, "import did not share the identical archives");
+    checkLinked(linked, true, "import");
+
+    // A disc imported later links to a retained disc's archives.
+    const auto later = root / "later";
+    install::InstallContent(install::ScanContent(root / "sources" / "disc1"), later);
+    Require(install::InstallContent(install::ScanContent(root / "sources" / "disc2"), later).sharedBytes == sharedSize,
+            "later disc did not share the retained disc's archives");
+    checkLinked(later, true, "later import");
+
+    // Where links fail, the import keeps plain copies and still succeeds.
+    install::SetTestShareFailure("link");
+    const auto copies = root / "copies";
+    Require(install::InstallContent(both, copies).sharedBytes == 0, "failed links were counted");
+    install::SetTestShareFailure("no-clone");
+    checkLinked(copies, false, "link failure");
+    std::filesystem::copy(copies, root / "copies-interrupted", std::filesystem::copy_options::recursive);
+
+    // Compaction verifies digests and replaces later copies; a second run has nothing to do.
+    auto compacted = install::CompactGameData(copies);
+    Require(compacted.replaced == 12 && compacted.freedBytes == sharedSize && compacted.sharedBytes == sharedSize &&
+            compacted.failed == 0, "compaction did not replace the identical copies");
+    checkLinked(copies, true, "compaction");
+    compacted = install::CompactGameData(copies / "disc1");
+    Require(compacted.replaced == 0 && compacted.freedBytes == 0 && compacted.sharedBytes == sharedSize,
+            "second compaction changed a compacted folder");
+
+    // An interruption between link and rename leaves every copy intact; the next run cleans up.
+    const auto interrupted = root / "copies-interrupted";
+    install::SetTestShareFailure("rename");
+    bool stopped = false;
+    try { install::CompactGameData(interrupted); } catch (const install::Error&) { stopped = true; }
+    install::SetTestShareFailure("no-clone");
+    Require(stopped && !std::filesystem::exists(interrupted / ".import.lock"), "interrupted compaction kept its lock");
+    bool temporary = false;
+    for (const auto& entry : std::filesystem::directory_iterator(interrupted / "disc2"))
+        temporary |= entry.path().extension() == ".lo-share";
+    Require(temporary, "interruption did not leave its temporary");
+    for (const auto& entry : std::filesystem::directory_iterator(interrupted / "disc2"))
+        if (entry.path().extension() == ".fpd")
+            Require(!SameFile(entry.path(), interrupted / "disc1" / entry.path().filename()), "interrupted rename replaced a copy");
+    Require(install::CompactGameData(interrupted).replaced == 12, "compaction after an interruption did not finish");
+    checkLinked(interrupted, true, "after interruption");
+
+    // Compaction shares the import lock.
+    { std::ofstream lock(copies / ".import.lock"); }
+    bool locked = false;
+    try { install::CompactGameData(copies); } catch (const install::Error&) { locked = true; }
+    Require(locked, "compaction ignored the import lock");
+
+    // With clones allowed (APFS, btrfs, XFS clone; elsewhere links) the shared copies keep their content.
+    install::SetTestShareFailure({});
+    const auto any = root / "any";
+    Require(install::InstallContent(both, any).sharedBytes == sharedSize, "import with clones allowed did not share");
+    for (const auto& entry : std::filesystem::directory_iterator(any / "disc2"))
+        if (entry.path().extension() == ".fpd" && entry.path().filename() != "xenon_field.fpd")
+            Require(ReadText(entry.path()) == ReadText(any / "disc1" / entry.path().filename()), "shared copy content changed");
+    std::cout << "[PASS] shared archives: import, later disc, link failure, compaction, interrupted rename, lock, clones" << std::endl;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -467,8 +581,14 @@ int main(int argc, char** argv)
         try { RunDlcIoTest(); return 0; }
         catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
     }
+    if (argc > 1 && std::string(argv[1]) == "--shared")
+    {
+        try { RunSharedArchiveTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
     std::cout << "Starting LoImportGameTest..." << std::endl;
     RunDlcIoTest();
+    RunSharedArchiveTest();
 
     const auto uniqueId = std::chrono::steady_clock::now().time_since_epoch().count();
     std::filesystem::path tempDir = std::filesystem::temp_directory_path() /

@@ -19,6 +19,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Mods that replace models or text no longer rebuild their game files after every game update, only after an update that changes how mods are applied.
 - A game folder moved or copied after importing the discs finds them again instead of asking to import them a second time.
 - Windows: when Mod Organizer 2 starts the game from a folder without imported discs, the importer says so, so you can point MO2 at your game folder instead of importing a second copy.
+- Importing the discs stores the archives that are the same on several discs once, about 5.8 GB less for all four discs. For a game folder imported before, start the game once with `--compact-game-data`.
 
 ### 简体中文
 
@@ -33,6 +34,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 替换模型或文本的 Mod 不再在每次游戏更新后重建游戏文件，只在更新改变了 Mod 的处理方式时才重建。
 - 导入光盘后移动或复制过的游戏文件夹能找到已导入的光盘，不再要求重新导入。
 - Windows：Mod Organizer 2 从没有导入光盘的文件夹启动游戏时，导入器会提示这一点；把 MO2 指向你的游戏文件夹即可，不必再导入一份。
+- 导入光盘时，多张光盘里相同的资源包只存一份，四张光盘约省 5.8 GB。之前导入的游戏目录，用 `--compact-game-data` 启动一次即可。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

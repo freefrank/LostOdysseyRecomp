@@ -37,8 +37,16 @@
 #else
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
+#if defined(__linux__) && !defined(FICLONE)
+// <linux/fs.h> clashes with <sys/mount.h> on newer glibc; this is its definition.
+#define FICLONE _IOW(0x94, 9, int)
+#endif
+#if defined(__APPLE__)
+#include <sys/clonefile.h>
 #endif
 
 namespace install
@@ -65,6 +73,7 @@ std::string g_testDiscFailureFile;
 std::string g_testDiscFailureStage;
 std::string g_testPublishFailureSlot;
 std::string g_testPublishFailureStage;
+std::string g_testShareFailureStage;
 #endif
 
 std::string ToLower(std::string_view str);
@@ -228,6 +237,142 @@ bool IsSymlinkOrReparse(const std::filesystem::path& path)
 #endif
     return false;
 }
+
+// Disc archives that are byte-identical on several discs are stored once.
+constexpr std::string_view SharedTemporarySuffix = ".lo-share";
+
+bool IsDiscArchive(std::string_view name)
+{
+    const auto lower = ToLower(name);
+    return lower.size() > 4 && lower.compare(lower.size() - 4, 4, ".fpd") == 0;
+}
+
+enum class SharedBy { None, Clone, Link };
+
+// Makes `temporary` share the data of `source`: a copy-on-write clone where the
+// file system has one (APFS, btrfs, XFS), otherwise a hard link. exFAT/FAT32,
+// Android shared storage and links across volumes fail; callers keep their copy.
+SharedBy ShareFile(const std::filesystem::path& source, const std::filesystem::path& temporary)
+{
+#ifdef LO_IMPORT_TESTING
+    if (g_testShareFailureStage == "link") return SharedBy::None;
+    const bool clones = g_testShareFailureStage != "no-clone";
+#else
+    constexpr bool clones = true;
+#endif
+#if defined(__APPLE__)
+    if (clones && clonefile(source.c_str(), temporary.c_str(), CLONE_NOFOLLOW) == 0) return SharedBy::Clone;
+#elif defined(__linux__) && defined(FICLONE)
+    if (const int in = clones ? open(source.c_str(), O_RDONLY | O_CLOEXEC) : -1; in >= 0)
+    {
+        const int out = open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+        const bool cloned = out >= 0 && ioctl(out, FICLONE, in) == 0;
+        if (out >= 0) close(out);
+        close(in);
+        if (cloned) return SharedBy::Clone;
+        if (out >= 0) unlink(temporary.c_str());
+    }
+#else
+    (void)clones;
+#endif
+    std::error_code ec;
+    std::filesystem::create_hard_link(source, temporary, ec);
+    return ec ? SharedBy::None : SharedBy::Link;
+}
+
+// Replaces `target` with a file that shares `source`'s data. The shared file is
+// made under a temporary name and renamed over the target, so an interruption
+// leaves the complete copy and at most a stray temporary the next run removes.
+SharedBy ReplaceWithShared(const std::filesystem::path& source, const std::filesystem::path& target)
+{
+    std::error_code ec;
+    auto temporary = target;
+    temporary += SharedTemporarySuffix;
+    std::filesystem::remove(temporary, ec);
+    const auto shared = ShareFile(source, temporary);
+    if (shared == SharedBy::None)
+    {
+        std::filesystem::remove(temporary, ec);
+        return SharedBy::None;
+    }
+#ifdef LO_IMPORT_TESTING
+    if (g_testShareFailureStage == "rename")
+        throw Error("Injected interruption before replacing " + target.string());
+#endif
+    std::filesystem::rename(temporary, target, ec);
+    if (ec)
+    {
+        std::error_code removeEc;
+        std::filesystem::remove(temporary, removeEc);
+        return SharedBy::None;
+    }
+    return shared;
+}
+
+// SHA-256 of a whole file; empty when it cannot be read completely.
+std::string ArchiveSha256(const std::filesystem::path& path, uint64_t size, const Cancelled& cancelled,
+                          const std::function<void(uint64_t)>& advanced = {})
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return {};
+    xenos::resources::Sha256Incremental hash;
+    std::vector<char> bytes(1 << 20);
+    uint64_t total = 0;
+    while (in)
+    {
+        if (cancelled && cancelled()) throw Error("Cancelled; game files were kept", true);
+        in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        const auto count = static_cast<size_t>(in.gcount());
+        hash.Update(std::span(reinterpret_cast<const uint8_t*>(bytes.data()), count));
+        total += count;
+        if (advanced) advanced(count);
+    }
+    if (in.bad() || total != size) return {};
+    return xenos::resources::Sha256Hex(hash.Finalize());
+}
+
+// Holds <root>/.import.lock: one import or compaction per game folder at a time.
+class DestinationLock
+{
+public:
+    explicit DestinationLock(const std::filesystem::path& root) : path_(root / ".import.lock")
+    {
+#ifdef _WIN32
+        handle_ = CreateFileW(path_.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                              CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (handle_ == INVALID_HANDLE_VALUE) throw Error(Busy);
+#else
+        fd_ = open(path_.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (fd_ < 0 || flock(fd_, LOCK_EX | LOCK_NB) != 0)
+        {
+            if (fd_ >= 0) close(fd_);
+            throw Error(Busy);
+        }
+#endif
+    }
+    ~DestinationLock()
+    {
+#ifdef _WIN32
+        CloseHandle(handle_);
+#else
+        close(fd_);
+#endif
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+    }
+    DestinationLock(const DestinationLock&) = delete;
+    DestinationLock& operator=(const DestinationLock&) = delete;
+
+private:
+    static constexpr const char* Busy = "Another import owns this destination. If an earlier import crashed, "
+                                        "close all importers before removing .import.lock.";
+    std::filesystem::path path_;
+#ifdef _WIN32
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+#else
+    int fd_ = -1;
+#endif
+};
 
 struct ExecutionInfo
 {
@@ -857,6 +1002,11 @@ void SetTestPublishFailure(std::string_view slot, std::string_view stage)
     g_testPublishFailureSlot = slot;
     g_testPublishFailureStage = stage;
 }
+
+void SetTestShareFailure(std::string_view stage)
+{
+    g_testShareFailureStage = stage;
+}
 #endif
 
 std::vector<std::filesystem::path> Discover(const std::filesystem::path& path)
@@ -1071,46 +1221,7 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
     if (IsSymlinkOrReparse(dest))
         throw Error("Destination folder must not contain links or junctions");
 
-    // .import.lock
-    std::filesystem::path lockPath = dest / ".import.lock";
-#ifdef _WIN32
-    HANDLE lockHandle = INVALID_HANDLE_VALUE;
-    lockHandle = CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                             CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (lockHandle == INVALID_HANDLE_VALUE)
-    {
-        throw Error("Another import owns this destination. If an earlier import crashed, "
-                    "close all importers before removing .import.lock.");
-    }
-#else
-    const int lockFd = open(lockPath.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
-    if (lockFd < 0 || flock(lockFd, LOCK_EX | LOCK_NB) != 0)
-    {
-        if (lockFd >= 0) close(lockFd);
-        throw Error("Another import owns this destination. If an earlier import crashed, "
-                    "close all importers before removing .import.lock.");
-    }
-#endif
-
-    auto unlock = [&]() {
-#ifdef _WIN32
-        if (lockHandle != INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(lockHandle);
-            lockHandle = INVALID_HANDLE_VALUE;
-        }
-#else
-        close(lockFd);
-#endif
-        std::error_code removeEc;
-        std::filesystem::remove(lockPath, removeEc);
-    };
-
-    struct LockGuard
-    {
-        std::function<void()> fn;
-        ~LockGuard() { if (fn) fn(); }
-    } guard{unlock};
+    DestinationLock lock(dest);
 
     if (selection.discs.empty() && selection.packages.empty())
         throw Error("Select at least one disc or DLC package");
@@ -1163,6 +1274,7 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
         }
 
         std::string targetEdition = selection.discs[0].edition;
+        std::vector<std::filesystem::path> retainedDiscs;
         for (uint32_t n = 1; n <= 4; ++n)
         {
             auto existing = dest / ("disc" + std::to_string(n));
@@ -1191,6 +1303,7 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
                 installed.disc = info.disc; installed.edition = edition;
                 if (installed.disc != n || installed.edition != targetEdition)
                     throw Error("Cannot mix Europe/Asia and USA/Europe discs in one installation");
+                retainedDiscs.push_back(existing);
             }
         }
 
@@ -1224,6 +1337,32 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
             throw Error("Not enough free space for the selected discs");
 
         uint64_t doneBytes = 0;
+        // Archives identical on several discs (most of them, ~5.8 GB of a set)
+        // are stored once: a later copy becomes a link to the first. Every discN
+        // folder stays complete, so disc checks and disc switching are unchanged.
+        std::map<std::tuple<std::string, uint64_t, std::string>, std::filesystem::path> sharedArchives;
+        std::map<std::filesystem::path, std::string> retainedDigests;
+        auto shareArchive = [&](const std::filesystem::path& file, const std::string& name, uint64_t size, std::string digest) {
+            const auto key = std::make_tuple(ToLower(name), size, std::move(digest));
+            auto found = sharedArchives.find(key);
+            for (size_t i = 0; found == sharedArchives.end() && i < retainedDiscs.size(); ++i)
+            {
+                const auto candidate = retainedDiscs[i] / name;
+                std::error_code fileEc;
+                if (IsSymlinkOrReparse(candidate) || !std::filesystem::is_regular_file(candidate, fileEc) ||
+                    std::filesystem::file_size(candidate, fileEc) != size)
+                    continue;
+                auto known = retainedDigests.find(candidate);
+                if (known == retainedDigests.end())
+                    known = retainedDigests.emplace(candidate, ArchiveSha256(candidate, size, checkCancelled)).first;
+                if (known->second == std::get<2>(key))
+                    found = sharedArchives.emplace(key, candidate).first;
+            }
+            if (found == sharedArchives.end())
+                sharedArchives.emplace(key, file);
+            else if (ReplaceWithShared(found->second, file) != SharedBy::None)
+                result.sharedBytes += size;
+        };
             for (const auto& ld : loadedDiscs)
             {
                 if (checkCancelled())
@@ -1239,6 +1378,8 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
 
                     std::ofstream out(dstFile, std::ios::binary | std::ios::trunc);
                     CheckDiscOutput(out, dstFile, "open");
+                    const bool archive = IsDiscArchive(entry.name);
+                    xenos::resources::Sha256Incremental archiveHash;
 
                     std::vector<char> buffer(64 * 1024);
                     uint64_t remaining = entry.size;
@@ -1270,6 +1411,8 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
 
                         out.write(buffer.data(), chunk);
                         CheckDiscOutput(out, dstFile, "write");
+                        if (archive)
+                            archiveHash.Update(std::span(reinterpret_cast<const uint8_t*>(buffer.data()), chunk));
 
                         remaining -= chunk;
                         offset += chunk;
@@ -1277,6 +1420,8 @@ static InstallResult ImportContentImpl(const ContentScan& selection,
                         reportProgress(doneBytes, totalDiscBytes, entry.name);
                     }
                     FinishDiscOutput(out, dstFile);
+                    if (archive)
+                        shareArchive(dstFile, entry.name, entry.size, xenos::resources::Sha256Hex(archiveHash.Finalize()));
                 }
 
                 // Write import-info.json
@@ -1645,6 +1790,85 @@ std::vector<int> InstallDiscs(const std::filesystem::path& source,
         throw Error(res.error);
 
     return res.discs;
+}
+
+CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Progress& progress,
+                              const Cancelled& cancelled)
+{
+    std::error_code ec;
+    auto root = std::filesystem::absolute(gameFolder, ec).lexically_normal();
+    // Accept the game folder or one of its discN folders (the folder holding default.xex).
+    const auto leaf = ToLower(root.filename().string());
+    if (!std::filesystem::is_directory(root / "disc1", ec) && leaf.size() == 5 && leaf.compare(0, 4, "disc") == 0)
+        root = root.parent_path();
+    if (IsSymlinkOrReparse(root) || !std::filesystem::is_directory(root, ec))
+        throw Error("Game folder not found: " + root.string());
+    DestinationLock lock(root);
+
+    // Copies of one archive name and size on several discs.
+    std::map<std::pair<std::string, uint64_t>, std::vector<std::filesystem::path>> groups;
+    for (uint32_t n = 1; n <= 4; ++n)
+    {
+        const auto disc = root / ("disc" + std::to_string(n));
+        if (IsSymlinkOrReparse(disc) || !std::filesystem::is_directory(disc, ec)) continue;
+        for (const auto& entry : std::filesystem::directory_iterator(disc))
+        {
+            const auto name = entry.path().filename().string();
+            // An interrupted run leaves only its temporary; the copy it was replacing is intact.
+            if (name.size() > SharedTemporarySuffix.size() &&
+                std::string_view(name).substr(name.size() - SharedTemporarySuffix.size()) == SharedTemporarySuffix)
+            {
+                std::filesystem::remove(entry.path(), ec);
+                continue;
+            }
+            if (!IsDiscArchive(name) || IsSymlinkOrReparse(entry.path()) || !entry.is_regular_file(ec)) continue;
+            const auto size = entry.file_size(ec);
+            if (!ec) groups[{ToLower(name), size}].push_back(entry.path());
+        }
+    }
+    uint64_t total = 0, done = 0;
+    for (auto it = groups.begin(); it != groups.end();)
+    {
+        if (it->second.size() < 2) { it = groups.erase(it); continue; }
+        total += it->first.second * it->second.size();
+        ++it;
+    }
+    auto advanced = [&](uint64_t bytes) {
+        done += bytes;
+        if (progress) progress(done, total, "Comparing disc archives");
+    };
+
+    CompactResult result;
+    for (const auto& [key, copies] : groups)
+    {
+        const uint64_t size = key.second;
+        std::vector<std::pair<std::filesystem::path, std::string>> firsts; // first copy of each content
+        for (const auto& copy : copies)
+        {
+            const auto same = std::find_if(firsts.begin(), firsts.end(), [&](const auto& first) {
+                std::error_code sameEc;
+                return std::filesystem::equivalent(first.first, copy, sameEc);
+            });
+            if (same != firsts.end())
+            {
+                result.sharedBytes += size;
+                advanced(size);
+                continue;
+            }
+            const auto digest = ArchiveSha256(copy, size, cancelled, advanced);
+            if (digest.empty()) { ++result.failed; continue; }
+            const auto first = std::find_if(firsts.begin(), firsts.end(), [&](const auto& f) { return f.second == digest; });
+            if (first == firsts.end()) { firsts.emplace_back(copy, digest); continue; }
+            // A clone of an earlier run looks like any copy: replacing it again frees nothing.
+            const bool lastLink = std::filesystem::hard_link_count(copy, ec) == 1;
+            const auto shared = ReplaceWithShared(first->first, copy);
+            if (shared == SharedBy::None) { ++result.failed; continue; }
+            ++result.replaced;
+            result.sharedBytes += size;
+            if (lastLink) result.freedBytes += size;
+        }
+    }
+    return result;
 }
 
 std::filesystem::path DefaultGameDirectory(const std::filesystem::path& executableDirectory)

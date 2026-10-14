@@ -36,6 +36,7 @@
 #include "updater/apply_mode.h"
 #include "version.h"
 #include "install/host.h"
+#include "install/import_game.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
 #include "modding/text_overlay.h"
@@ -144,6 +145,37 @@ static settings::game_path::Resolution FindGameRoot(
     return settings::game_path::Resolve(executableDirectory, explicitGame);
 }
 
+// --compact-game-data: store disc archives that are identical on several discs
+// once (links), log the space freed and exit without starting the game.
+static int CompactGameDataCommand(const std::filesystem::path& gameRoot)
+{
+    LOG_NOTICE("compact game data: {}", FileSystem::PathUtf8(gameRoot));
+    std::error_code ec;
+    const auto before = std::filesystem::space(gameRoot, ec).available;
+    try
+    {
+        int reported = -1;
+        const auto result = install::CompactGameData(gameRoot, [&](uint64_t done, uint64_t total, std::string_view) {
+            const int percent = total ? int(done * 100 / total) : 100;
+            if (percent / 10 != reported / 10)
+            {
+                reported = percent;
+                LOG_NOTICE("compact game data: compared {}%", percent);
+            }
+        });
+        const auto after = std::filesystem::space(gameRoot, ec).available;
+        LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
+                   "{} archive bytes stored once in all, {} not shared",
+                   result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
+        return 0;
+    }
+    catch (const std::exception& error)
+    {
+        LOG_ERROR("compact game data failed: {}", error.what());
+        return 1;
+    }
+}
+
 void InstallPhysicalWatchpoint();
 
 static int RunGuest(uint32_t entry)
@@ -235,7 +267,7 @@ int main(int argc, char* argv[])
         return gpu::renderer::RunSceneCopyPromotionSelfTest(std::filesystem::u8path(argv[i + 1]));
     }
 #endif
-    bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false, requestedInstall=false;
+    bool explicitGame=false, requestedSetup=false, setupOnly=false, prepareShadersOnly=false, requestedInstall=false, compactGameData=false;
     std::optional<std::filesystem::path> explicitGamePath;
     std::vector<std::filesystem::path> installSources;
     for(int i=1;i<argc;++i) {
@@ -249,6 +281,7 @@ int main(int argc, char* argv[])
         setupOnly |= strcmp(argv[i],"--setup-only")==0;
         prepareShadersOnly |= strcmp(argv[i],"--prepare-shaders-only")==0;
         requestedInstall |= strcmp(argv[i],"--install")==0;
+        compactGameData |= strcmp(argv[i],"--compact-game-data")==0;
         // Disc images picked in Android's file picker; the importer scans them at once.
         if (strcmp(argv[i], "--install-source") == 0 && i + 1 < argc)
             installSources.push_back(std::filesystem::u8path(argv[i + 1]));
@@ -331,6 +364,8 @@ int main(int argc, char* argv[])
         }
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
+    if (compactGameData)
+        return CompactGameDataCommand(FindGameRoot(executableDirectory, explicitGamePath).root);
     InstallCrashHandler();
 #if defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG))
     LOG_INFO("FG: process physical-pixel awareness set={} error={}", fgDpiSet, fgDpiError);

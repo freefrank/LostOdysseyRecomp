@@ -72,6 +72,15 @@ struct InstallResult
     std::string warning;
     std::string error;
     bool cancelled = false;
+    uint64_t sharedBytes = 0; // disc archive copies stored as links to an identical copy on another disc
+};
+
+struct CompactResult
+{
+    uint64_t freedBytes = 0;  // copies this run replaced; copy-on-write clones of an earlier run count again
+    uint64_t sharedBytes = 0; // archive copies now stored once, including earlier runs and imports
+    uint32_t replaced = 0;    // copies this run replaced with a shared file
+    uint32_t failed = 0;      // identical copies the file system would not share, or unreadable ones
 };
 
 using Progress = std::function<void(uint64_t done, uint64_t total, std::string_view label)>;
@@ -120,6 +129,13 @@ InstallResult ReimportContent(const ContentScan& selection,
                               const Cancelled& cancelled = {},
                               const Commit& commit = {});
 
+// Stores disc archives that are identical on several discN folders once: after
+// comparing SHA-256 digests, each later copy is atomically replaced by a link
+// (or a copy-on-write clone) of the first. Every discN folder stays complete.
+// Safe to interrupt; holds .import.lock. `gameFolder` may also be a discN folder.
+CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Progress& progress = {},
+                              const Cancelled& cancelled = {});
+
 std::filesystem::path DefaultGameDirectory(const std::filesystem::path& executableDirectory);
 bool WriteGamePath(const std::filesystem::path& executableDirectory,
                    const std::filesystem::path& gameDirectory,
@@ -129,5 +145,8 @@ bool WriteGamePath(const std::filesystem::path& executableDirectory,
 void SetTestDlcWriteFailure(std::string_view filename, std::string_view stage);
 void SetTestDiscWriteFailure(std::string_view filename, std::string_view stage);
 void SetTestPublishFailure(std::string_view slot, std::string_view stage);
+// "link": sharing fails (copies are kept); "no-clone": hard links only;
+// "rename": stop after the temporary link.
+void SetTestShareFailure(std::string_view stage);
 #endif
 }

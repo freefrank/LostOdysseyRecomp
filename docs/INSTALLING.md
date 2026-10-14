@@ -63,7 +63,7 @@ Do not mix discs from the two editions. Other regional versions, title updates a
 
 Open the importer again from **Settings → System → Import discs & DLC**. Choose the discs or DLC to add or replace, check the result and confirm. Your other discs, saves and settings stay as they are. DLC can be selected directly or found in a scanned folder; it is not part of the download.
 
-The importer copies your files and never moves or changes them, so keep the originals until the game works. If an import is cancelled or fails, run it again.
+The importer copies your files and never moves or changes them, so keep the originals until the game works. If an import is cancelled or fails, run it again. Archives that are the same on several discs are stored once (not on exFAT or FAT32 drives), about 5.8 GB less with all four discs; for a game folder imported with an older version, run the game once with `--compact-game-data`.
 
 On the destination page, choose **New folder**, press **F2** or controller **Y** to create a folder. By default the game goes to `game/disc1`–`game/disc4` and DLC to `game/dlc/`; if you choose another folder, `game-path.txt` remembers it.
 
@@ -222,6 +222,7 @@ Saves cannot be moved back to a console.
 | `--setup` | Open the setup page, then start the game (Windows; elsewhere it only saves the current settings). |
 | `--setup-only` | Like `--setup`, then exit. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |
+| `--compact-game-data` | Store archives that are the same on several discs once, then exit. Safe to stop and run again; the log shows the space freed. |
 | `--quiet-kernel` | Leave kernel trace lines out of the log. |
 
 Write `--game <path>` as two arguments; `--game=<path>` and unknown arguments are ignored. The program prints nothing to a console; check the log.
