@@ -87,6 +87,23 @@ int main() {
     CHECK(!state.Enabled()); // SetOptions eOn alone cannot announce Ready
     state.Presented(true);
     CHECK(state.Enabled());
+    // Each frame requests the same feature again before its Present. The last
+    // checked Ready holds in between (the performance overlay reads it there).
+    CHECK(state.Request(changed));
+    CHECK(state.Enabled() && state.Phase() == RuntimePhase::Ready);
+    state.Presented(true);
+    CHECK(state.Enabled());
+    CHECK(state.Request(changed));
+    state.Presented(false); // a failed check on a steady frame still latches
+    CHECK(!state.Enabled() && state.Phase() == RuntimePhase::Unavailable);
+    CHECK(!state.Request(changed));
+    state.ResourceBoundary();
+    CHECK(state.Request(changed));
+    state.Presented(true);
+    auto resized = changed;
+    resized.outputWidth++;
+    CHECK(state.Request(resized)); // a different feature is checked again
+    CHECK(!state.Enabled() && state.Phase() == RuntimePhase::Pending);
     PresentCounterWindow counter;
     CHECK(!counter.Observe(true, true)); // initial cumulative SDK count
     CHECK(counter.Observe(true, true));

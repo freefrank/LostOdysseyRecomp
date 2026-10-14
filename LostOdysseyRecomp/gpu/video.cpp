@@ -4495,7 +4495,7 @@ namespace gpu::video
         }
 #endif
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
-        if (g_fgSession && g_fgSession->Available()) return {true, g_fgSession->ActualPresents()};
+        if (g_fgSession && g_fgSession->Available()) return {true, g_fgSession->ActualPresents(), g_fgSession->Multiplier()};
 #endif
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
         if (g_fsrVulkanFg && g_fsrVulkanFg->Available()) return {true, g_fsrVulkanFg->PresentedFrames()};

@@ -23,6 +23,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → Graphics: the DLSS, FSR, XeSS and MetalFX status line shows the quality and resolution of the last game frame instead of "No eligible scene this frame".
 - Settings → Graphics: a new frame generation multiplier applies as soon as you save, with HDR on too, instead of asking for a restart.
 - The DLSS 5 neural rendering page says when `nvngx_dlssnr.dll` is missing or the GPU cannot run it, instead of asking you to play a scene.
+- Performance overlay: the bar across the top shows the frame generation frame rate with DLSS frame generation on Vulkan too.
 
 ### 简体中文
 
@@ -41,6 +42,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 图像：DLSS、FSR、XeSS 和 MetalFX 的状态行显示最后一帧游戏画面的质量和分辨率，不再显示“这一帧没有合格场景”。
 - 设置 → 图像：修改帧生成倍数后保存即生效，开着 HDR 也一样，不再要求重启。
 - DLSS 5 神经渲染调整页在缺少 `nvngx_dlssnr.dll` 或显卡无法运行时会直接说明，不再提示进入游戏场景。
+- 性能信息：Vulkan 下开启 DLSS 帧生成时，顶部信息栏也会显示帧生成后的帧率。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

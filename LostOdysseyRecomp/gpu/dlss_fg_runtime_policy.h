@@ -51,12 +51,15 @@ public:
     bool Request(const FeatureKey& key) {
         if (phase_ == RuntimePhase::Unavailable && key == failedKey_ && boundary_ == failedBoundary_)
             return false;
+        // The same feature requested again for the next frame keeps its last
+        // checked Ready; readers between Prepare and Present (the performance
+        // overlay) would otherwise never see it.
+        if (phase_ != RuntimePhase::Ready || !(key == activeKey_)) phase_ = RuntimePhase::Pending;
         activeKey_ = key;
-        phase_ = RuntimePhase::Pending;
         return true;
     }
     void Presented(bool runtimeOkay) {
-        if (phase_ != RuntimePhase::Pending) return;
+        if (phase_ != RuntimePhase::Pending && phase_ != RuntimePhase::Ready) return;
         if (runtimeOkay) phase_ = RuntimePhase::Ready;
         else Fail();
     }
