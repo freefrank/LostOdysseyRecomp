@@ -1,5 +1,6 @@
 #include "model_import.h"
 #include "gltf_reader.h"
+#include "model_slot.h"
 #include "ue3_package.h"
 
 #include <algorithm>
@@ -58,6 +59,7 @@ struct Original
     std::array<float, 7> bounds{};                                   // origin, extent, radius
     size_t materialsBegin = 0, materialsEnd = 0;                     // count + references, then origin and rotation
     std::vector<std::string> materials;
+    std::set<uint16_t> usedSlots;                                    // material slots LOD 0's sections draw with
     size_t skeletonBegin = 0, skeletonEnd = 0;                       // bones and SkeletalDepth
     std::vector<std::string> bones;
     size_t requiredBegin = 0, requiredEnd = 0;                       // LOD 0's RequiredBones array
@@ -68,7 +70,12 @@ struct Original
 // One LOD as the exporter reads it (asset_export.cpp ReadSkeletalMesh), only skipped.
 void SkipLod(Reader &r, Original *first)
 {
-    ue3::SkipArray(r, 10);                    // Sections.
+    for (uint32_t s = 0, n = ue3::Count(r, 10); s < n; ++s) // Sections: material slot, chunk, first index, triangles.
+    {
+        const auto slot = r.U16();
+        r.U16(); r.U32(); r.U16();
+        if (first) first->usedSlots.insert(slot);
+    }
     ue3::SkipArray(r, 2);                     // Indices.
     ue3::SkipArray(r, 2);                     // f68.
     const auto active = ue3::Count(r, 2);     // ActiveBoneIndices.
@@ -159,29 +166,19 @@ Vec3 Cross(const Vec3 &a, const Vec3 &b) { return {a[1] * b[2] - a[2] * b[1], a[
 // glTF (right-handed, Y up, metres) to Unreal (left-handed, Z up, centimetres): the exporter's axes reversed.
 Vec3 ToUnreal(const Vec3 &v, float scale) { return {v[0] * scale, v[2] * scale, v[1] * scale}; }
 
-// Blender adds .001 to a duplicated material's name.
-std::string MaterialName(std::string name)
-{
-    const auto dot = name.rfind('.');
-    if (dot != std::string::npos && dot + 4 == name.size() &&
-        std::all_of(name.begin() + std::ptrdiff_t(dot) + 1, name.end(), [](char c) { return c >= '0' && c <= '9'; }))
-        name.resize(dot);
-    return Lower(name);
-}
+using model_slot::MaterialName;
 
-// The original material slot a primitive's material names.
-uint16_t SlotOf(const gltf::Document &doc, const std::vector<std::string> &materials, int material)
+// The original material slot a primitive's material names (model_slot.h).
+uint16_t SlotOf(const gltf::Document &doc, const Original &original, int material)
 {
+    const auto &materials = original.materials;
     if (material < 0 && materials.size() == 1) return 0;
     Require(material >= 0 && size_t(material) < doc.materials.size(), "a mesh part has no material; give it one of the original material names");
-    const auto name = MaterialName(doc.materials[size_t(material)]);
-    for (size_t i = 0; i < materials.size(); ++i)
-        if (MaterialName(materials[i]) == name) return uint16_t(i);
+    if (const auto slot = model_slot::ChooseSlot(materials, original.usedSlots, doc.materials[size_t(material)], material)) return *slot;
     std::string names;
     for (const auto &m : materials) names += (names.empty() ? "" : ", ") + m;
     throw std::runtime_error("material \"" + doc.materials[size_t(material)] + "\" is not one of the original's (" + names + ")");
 }
-
 // A primitive's triangles, its vertices starting at base; degenerate ones dropped.
 void AppendTriangles(const gltf::Document &doc, const gltf::Primitive &primitive, size_t count, uint32_t base, uint16_t slot, Model &model)
 {
@@ -324,7 +321,7 @@ Model ReadModel(const gltf::Document &doc, const Original &original)
             const int position = attribute("POSITION"), normal = attribute("NORMAL"), uv = attribute("TEXCOORD_0");
             Require(position >= 0, "a mesh part has no positions");
             Require(uv >= 0, "a mesh part has no UV map; the game needs one");
-            const uint16_t slot = SlotOf(doc, original.materials, primitive.material);
+            const uint16_t slot = SlotOf(doc, original, primitive.material);
             const auto positions = doc.Floats(position, 3);
             const auto uvs = doc.Floats(uv, 2);
             const auto normals = normal >= 0 ? doc.Floats(normal, 3) : std::vector<float>{};
