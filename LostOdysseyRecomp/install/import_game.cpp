@@ -345,7 +345,10 @@ public:
         if (handle_ == INVALID_HANDLE_VALUE) throw Error(Busy);
 #else
         fd_ = open(path_.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
-        if (fd_ < 0 || flock(fd_, LOCK_EX | LOCK_NB) != 0)
+        // A holder removes the file before unlocking; a lock taken on a removed file is no lock.
+        struct stat held{}, named{};
+        if (fd_ < 0 || flock(fd_, LOCK_EX | LOCK_NB) != 0 || fstat(fd_, &held) != 0 ||
+            stat(path_.c_str(), &named) != 0 || held.st_ino != named.st_ino || held.st_dev != named.st_dev)
         {
             if (fd_ >= 0) close(fd_);
             throw Error(Busy);
