@@ -35,6 +35,7 @@ lo_add_header_test(LoFsrQueuePlanTest ${CMAKE_SOURCE_DIR}/tools/tests/streamline
 lo_add_header_test(LoFrameGenerationSettingsTest ${CMAKE_SOURCE_DIR}/tools/tests/frame_generation_settings_test.cpp)
 target_compile_definitions(LoFrameGenerationSettingsTest PRIVATE LO_ENABLE_D3D12_FG=1 FRAMEGEN_WITH_DLSS=1 FRAMEGEN_WITH_FSR=1)
 lo_add_header_test(LoShaderPrebuildIoTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_prebuild_io_test.cpp)
+lo_add_header_test(LoShaderPreparationRequestTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_preparation_request_test.cpp)
 lo_add_header_test(LoPlumeLogTest ${CMAKE_SOURCE_DIR}/tools/tests/plume_log_test.cpp)
 target_include_directories(LoPlumeLogTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
 lo_add_header_test(LoParticleMaterialCompatTest ${CMAKE_SOURCE_DIR}/tools/tests/particle_material_compat_test.cpp)

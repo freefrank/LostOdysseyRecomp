@@ -1423,6 +1423,17 @@ void CheckHelpFit(uint8_t* base, const char* installRoot)
                             " audio " + std::to_string(output) + (pack ? " language pack" : ""));
                     }
         }
+        for (const auto& [key, traditional, where] : {
+                 std::tuple{L"Full shader preparation will run at the next start.",
+                            L"下次啟動時會完整準備著色器。", "shader preparation scheduled"},
+                 std::tuple{L"Could not schedule preparation. Check the settings folder.",
+                            L"無法安排著色器準備。請確認設定目錄可寫入。", "shader preparation failed"}})
+        {
+            const std::wstring line = settings::MenuFlowTranslate(language, key, traditional);
+            audit.MeasureBox(language, line, L"", where);
+            if (language == 0) english[where] = line;
+            else audit.CompareWithEnglish(english[where], line, language, where);
+        }
         settings::tab = 2;
         for (const auto& state : graphics)
             for (int row = 0; row < int(GraphicsRow::Count); ++row)
@@ -3085,6 +3096,59 @@ int main(int argc, char** argv)
 #endif
             settings::pending = 0; Tick(base);
             std::puts("PASS shader bundle action: cancel-first dialog, one redownload request, restart on Windows");
+        }
+        // System → Prepare shaders again writes a one-shot request in an isolated directory.
+        {
+            const auto previousDirectory = std::filesystem::current_path();
+            const auto sandbox = std::filesystem::temp_directory_path() /
+                ("lo-menu-shader-preparation-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(sandbox);
+            std::filesystem::current_path(sandbox);
+            const auto marker = std::filesystem::absolute(gpu::shader_preparation::RequestPath());
+            settings::tab = 3;
+            settings::row = settings::SystemShaderBundleRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemShaderPreparationRow &&
+                    settings::snapshot.rows[settings::SystemShaderPreparationRow].name == L"Prepare shaders again" &&
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" &&
+                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount) && settings::snapshot.scroll == 0 &&
+                    settings::graphics_menu::IsAction(3, settings::SystemShaderPreparationRow),
+                    "Prepare shaders again follows Shader bundle and precedes Save without scrolling");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::shaderPreparationPrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Prepare again", L"Cancel"},
+                    "shader preparation confirmation defaults to Cancel");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && !gpu::shader_preparation::PendingNextStart(marker) &&
+                    !settings::restart::Requested(), "default Cancel does not request shader preparation or restart");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && !gpu::shader_preparation::PendingNextStart(marker),
+                    "Back cancels shader preparation on the virtual pad");
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"重新準備著色器"}, std::pair{2u, L"シェーダーを再準備"},
+                     std::pair{3u, L"셰이더 다시 준비"}, std::pair{4u, L"重新准备着色器"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::SystemShaderPreparationRow].name == name,
+                        "translated shader preparation action");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && gpu::shader_preparation::PendingNextStart(marker) &&
+                    settings::snapshot.help == L"Full shader preparation will run at the next start." &&
+                    !settings::restart::Requested(),
+                    "confirmation persists one next-start request without restarting");
+            std::filesystem::current_path(previousDirectory);
+            std::filesystem::remove(marker);
+            std::filesystem::remove(sandbox);
+            settings::pending = 0; Tick(base);
+            std::puts("PASS shader preparation action: System placement, translations, cancel-first dialog, persistent request, no restart");
         }
         // System → Mods over a real mods folder and mod-list.ini through the mod API.
         {

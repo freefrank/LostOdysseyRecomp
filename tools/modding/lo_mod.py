@@ -841,26 +841,70 @@ def ink_box(image, threshold: int = 24) -> tuple[int, int, int, int] | None:
     return image.getchannel("A").point(lambda v: 255 if v > threshold else 0).getbbox()
 
 
-def font_reference(meta: dict, textures: Path) -> dict:
-    """Cell height, the 'H' ink box, outline width and colours of an exported font."""
-    from PIL import Image
-    glyphs = {g[0]: g[1:] for g in meta["glyphs"]}
-    if 0x48 not in glyphs or 0x49 not in glyphs:
-        raise ValueError("the font has no H or I to measure")
-    pages = {}
+# Letters to size a font by when it has no H (Japanese fonts with kana and kanji only):
+# measured against a font of the same export that has both.
+STAND_INS = "口あアの一日十0123456789"
 
-    def crop(cp: int):
-        x, y, w, h, page = glyphs[cp]
-        if page not in pages:
-            pages[page] = Image.open(textures / meta["pages"][page]["png"]).convert("RGBA")
-        return pages[page].crop((x, y, x + w, y + h))
-    letter_h = crop(0x48)
-    box = ink_box(letter_h)
-    if not box:
-        raise ValueError("the H glyph is empty")
+
+class FontCrops:
+    """Glyph pictures of an exported font."""
+
+    def __init__(self, meta: dict, textures: Path):
+        self.meta, self.textures, self.pages = meta, textures, {}
+        self.glyphs = {g[0]: g[1:] for g in meta["glyphs"]}
+
+    def crop(self, cp: int):
+        from PIL import Image
+        x, y, w, h, page = self.glyphs[cp]
+        if page not in self.pages:
+            self.pages[page] = Image.open(self.textures / self.meta["pages"][page]["png"]).convert("RGBA")
+        return self.pages[page].crop((x, y, x + w, y + h))
+
+    def box(self, cp: int):
+        return ink_box(self.crop(cp)) if cp in self.glyphs else None
+
+
+def h_from_stand_in(font: FontCrops, others: list[FontCrops]) -> tuple[int, int, int] | None:
+    """(stand-in, H top, H bottom) for a font without H, from a font that has H and the same stand-in.
+
+    The H is placed where it would stand relative to the stand-in in that font: its height and its
+    bottom as fractions of the stand-in's ink height."""
+    for ch in STAND_INS:
+        mine = font.box(ord(ch))
+        if not mine:
+            continue
+        for other in others:
+            h, ref = other.box(0x48), other.box(ord(ch))
+            if not h or not ref or ref[3] == ref[1]:
+                continue
+            unit, own = ref[3] - ref[1], mine[3] - mine[1]
+            bottom = mine[3] + (h[3] - ref[3]) * own / unit
+            return ord(ch), round(bottom - (h[3] - h[1]) * own / unit), round(bottom)
+    return None
+
+
+def font_reference(meta: dict, textures: Path, others: list[FontCrops] = ()) -> dict:
+    """Cell height, the 'H' ink box, outline width and colours of an exported font.
+
+    A font without H and I is measured by a stand-in letter it shares with one of `others`."""
+    font = FontCrops(meta, textures)
+    glyphs = font.glyphs
+    crop = font.crop
+    if 0x48 in glyphs and 0x49 in glyphs:
+        letter_h = crop(0x48)
+        box = ink_box(letter_h)
+        if not box:
+            raise ValueError("the H glyph is empty")
+        h_top, h_bottom, stroke_letter = box[1], box[3], 0x49
+    else:
+        found = h_from_stand_in(font, [o for o in others if o.meta is not meta])
+        if not found:
+            raise ValueError("the font has no H or I, and no letter shared with a font that has them")
+        stroke_letter, h_top, h_bottom = found
+        letter_h = crop(stroke_letter)
     heights = sorted(g[3] for g in glyphs.values())
     # Outline: dark opaque pixels before the first bright one across the middle of I.
-    letter_i = crop(0x49)
+    letter_i = crop(stroke_letter)
     row = [letter_i.getpixel((x, letter_i.height // 2)) for x in range(letter_i.width)]
     outline, started = 0, False
     for r, g, b, a in row:
@@ -873,7 +917,7 @@ def font_reference(meta: dict, textures: Path) -> dict:
     bright = [p for p in both if p[3] > 200 and max(p[:3]) >= 160]
     dark = [p for p in both if p[3] > 200 and max(p[:3]) < 96]
     median = lambda found, fallback: tuple(sorted(c[i] for c in found)[len(found) // 2] for i in range(3)) if found else fallback
-    return {"height": heights[len(heights) // 2], "h_top": box[1], "h_bottom": box[3], "outline": max(1, min(outline, 3)) if dark else 0,
+    return {"height": heights[len(heights) // 2], "h_top": h_top, "h_bottom": h_bottom, "outline": max(1, min(outline, 3)) if dark else 0,
             "fill": median(bright, (255, 255, 255)), "outline_colour": median(dark, (0, 0, 0)), "glyphs": glyphs}
 
 
@@ -896,13 +940,16 @@ def font_glyphs(export: Path, pack: Path, ttf_path: Path, only: set[str] | None 
         raise ValueError(f"{export} needs fonts/ and textures/: run --export-assets with --export-kinds textures,fonts")
     probe = GlyphPainter(ttf_path, 100)
     results = []
-    for meta_file in sorted(fonts_root.rglob("*.json")):
-        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    metas = [json.loads(f.read_text(encoding="utf-8")) for f in sorted(fonts_root.rglob("*.json"))]
+    metas = [m for m in metas if m["package"].endswith(f"_{base}.xxx")]
+    # Fonts with an H, same package first: what a font without H is measured against.
+    others = [FontCrops(m, textures) for m in metas if any(g[0] == 0x48 for g in m["glyphs"])]
+    for meta in metas:
         package, name = meta["package"], meta["font"]
-        if not package.endswith(f"_{base}.xxx") or (only and name not in only):
+        if only and name not in only:
             continue
         try:
-            ref = font_reference(meta, textures)
+            ref = font_reference(meta, textures, sorted(others, key=lambda o: o.meta["package"] != package))
         except ValueError as exc:
             results.append({"font": name, "package": package, "skipped": str(exc)})
             continue

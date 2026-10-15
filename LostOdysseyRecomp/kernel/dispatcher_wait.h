@@ -67,6 +67,14 @@ class Semaphore final : public Target {
     uint32_t count, maximum;
 public:
     Semaphore(uint32_t initial, uint32_t limit) : count(initial), maximum(limit) {}
+    void Reset(uint32_t initial, uint32_t limit) {
+        {
+            std::lock_guard lock(mutex);
+            count = initial;
+            maximum = limit;
+        }
+        Notify();
+    }
     bool Ready(uint32_t) const override { return count != 0; }
     void Consume(uint32_t) override { --count; }
     bool Release(uint32_t amount, uint32_t* previous) {

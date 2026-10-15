@@ -1,5 +1,6 @@
 #include "font_patch.h"
 #include "ue3_package.h"
+#include "xenos_texture.h"
 
 #include <lzokay.hpp>
 
@@ -25,6 +26,7 @@ constexpr uint32_t kMaxGlyphs = 16384;     // per font, as the menu reader allow
 constexpr uint32_t kBulkLzo = 0x10;        // UE3 bulk data stored LZO compressed
 constexpr uint32_t kBulkChunk = 131072;    // LZO chunk size of the game's bulk data
 constexpr int32_t kFormatDxt5 = 7;         // EPixelFormat PF_DXT5
+constexpr int32_t kFormatArgb = 2;         // PF_A8R8G8B8 (Japanese Yume24, Yume66)
 
 uint32_t Le32(std::span<const uint8_t> b, size_t p) { return uint32_t(b[p]) | uint32_t(b[p + 1]) << 8 | uint32_t(b[p + 2]) << 16 | uint32_t(b[p + 3]) << 24; }
 uint16_t Le16(std::span<const uint8_t> b, size_t p) { return uint16_t(b[p] | b[p + 1] << 8); }
@@ -172,14 +174,16 @@ struct Page
 {
     Properties props;
     uint32_t width = 0, height = 0;
-    std::vector<uint8_t> raw; // tiled DXT5 blocks, 8-in-16 swapped as stored
+    int32_t format = kFormatDxt5;
+    std::vector<uint8_t> raw; // tiled DXT5 blocks (8-in-16 swapped) or A, R, G, B pixels, as stored
 };
 
-// Bytes of a tiled DXT5 surface: block rows and columns padded to 32 (Xenos tiles).
-size_t TiledSize(uint32_t width, uint32_t height)
+// Bytes of a tiled surface: rows and columns of blocks (DXT5) or pixels (A8R8G8B8) padded to 32 (Xenos tiles).
+size_t TiledSize(uint32_t width, uint32_t height, int32_t format = kFormatDxt5)
 {
-    const size_t pitch = (width / 4 + 31) / 32 * 32, rows = (height / 4 + 31) / 32 * 32;
-    return pitch * rows * 16;
+    const uint32_t side = format == kFormatDxt5 ? 4 : 1, bytes = format == kFormatDxt5 ? 16 : 4;
+    const size_t pitch = (width / side + 31) / 32 * 32, rows = (height / side + 31) / 32 * 32;
+    return pitch * rows * bytes;
 }
 
 // The byte offset of block (x, y) in a tiled surface pitch blocks wide (tools/ui_assets/decode.cpp).
@@ -201,8 +205,10 @@ Page ReadPage(const Package &package, const ue3::Export &e)
     page.props = ReadProperties(package, r, true);
     const auto width = IntValue(package, page.props, "SizeX"), height = IntValue(package, page.props, "SizeY");
     const auto *format = page.props.Find("Format");
-    Require(format && format->type == "ByteProperty" && format->size == 1 && package.bytes[format->value] == kFormatDxt5,
-            e.name + " is not DXT5");
+    Require(format && format->type == "ByteProperty" && format->size == 1 &&
+            (package.bytes[format->value] == kFormatDxt5 || package.bytes[format->value] == kFormatArgb),
+            e.name + " is neither DXT5 nor A8R8G8B8");
+    page.format = package.bytes[format->value];
     Require(width >= 4 && height >= 4 && uint32_t(width) <= kMaxSide && uint32_t(height) <= kMaxSide &&
             width % 4 == 0 && height % 4 == 0, e.name + ": unsupported size");
     page.width = uint32_t(width); page.height = uint32_t(height);
@@ -212,7 +218,7 @@ Page ReadPage(const Package &package, const ue3::Export &e)
     Require(r.U32() == 1, e.name + ": more than one mip");
     const auto flags = r.U32(), rawSize = r.U32(), storedSize = r.U32();
     r.U32(); // payload offset in the file
-    Require(flags == kBulkLzo && rawSize == TiledSize(page.width, page.height), e.name + ": unexpected mip layout");
+    Require(flags == kBulkLzo && rawSize == TiledSize(page.width, page.height, page.format), e.name + ": unexpected mip layout");
     Reader stream{r.Take(storedSize)};
     Require(stream.U32() == ue3::kPackageMagic && stream.U32() == kBulkChunk, e.name + ": unexpected bulk header");
     const auto compressed = stream.U32(), decoded = stream.U32();
@@ -360,9 +366,22 @@ std::vector<uint8_t> WritePage(const Package &package, const ue3::Export &e, con
                                uint32_t top, uint32_t height, size_t base)
 {
     std::vector<uint8_t> raw = page.raw;
-    raw.resize(TiledSize(page.width, height), 0);
+    raw.resize(TiledSize(page.width, height, page.format), 0);
+    if (page.format == kFormatArgb)
+    {
+        // One pixel per element, stored A, R, G, B (modding/asset_export.cpp Untile reads it back).
+        const uint32_t pitch = (page.width + 31) / 32 * 32;
+        for (uint32_t y = 0; y < atlas.height; ++y)
+            for (uint32_t x = 0; x < page.width; ++x)
+            {
+                uint8_t px[4] = {};
+                if (x < atlas.width) std::memcpy(px, &atlas.rgba[(size_t(y) * atlas.width + x) * 4], 4);
+                const uint8_t stored[4] = {px[3], px[0], px[1], px[2]};
+                std::memcpy(&raw[xenos_texture::TiledOffset2D(x, top + y, pitch, 2)], stored, 4);
+            }
+    }
     const uint32_t pitch = (page.width / 4 + 31) / 32 * 32;
-    for (uint32_t by = top / 4; by < (top + atlas.height + 3) / 4; ++by)
+    for (uint32_t by = top / 4; page.format == kFormatDxt5 && by < (top + atlas.height + 3) / 4; ++by)
         for (uint32_t bx = 0; bx < page.width / 4; ++bx)
         {
             std::array<std::array<uint8_t, 4>, 16> px{};
