@@ -1641,8 +1641,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");
     if (tab == 3 && row == SystemModsRow)
-        next.help = Tr(L"Turn installed mods on or off and change their order. Changes apply after a restart.",
-                       L"開關已安裝的 Mod 並調整順序。重新啟動後生效。");
+        next.help = Tr(L"Turn installed mods on or off and change their order, without a restart.",
+                       L"開關已安裝的 Mod 並調整順序，無需重新啟動。");
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
