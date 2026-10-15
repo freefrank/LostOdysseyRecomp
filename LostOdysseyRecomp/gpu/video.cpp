@@ -171,6 +171,16 @@ static void LoadCustomVulkanDriver()
 #if defined(__ANDROID__) && defined(LO_HAS_ADRENOTOOLS)
     const char* driver = getenv("LO_VK_CUSTOM_DRIVER");
     if (!driver || !*driver) return;
+    // Adreno 650 / Turnip draw-ordering workaround (#558), at the cost of GPU
+    // overlap. Mesa reads this during driver loading; keep an explicit TU_DEBUG.
+    const char* syncDraw = getenv("LO_VK_ADRENO650_SYNC_DRAW");
+    if (syncDraw && strcmp(syncDraw, "1") == 0 && !getenv("TU_DEBUG")) {
+        if (setenv("TU_DEBUG", "syncdraw", 0) == 0) {
+            LOG_INFO("vulkan: Adreno 650 Turnip compatibility default TU_DEBUG=syncdraw applied (#558)");
+        } else {
+            LOG_WARNING("vulkan: could not apply Adreno 650 Turnip compatibility default TU_DEBUG=syncdraw (#558)");
+        }
+    }
     // Turnip keeps one of the five Adreno 6xx bindless sets for dynamic buffer
     // offsets and reports four; the renderer binds five sets and has no dynamic
     // offsets (#185). Mesa reads driconf options from the environment.
