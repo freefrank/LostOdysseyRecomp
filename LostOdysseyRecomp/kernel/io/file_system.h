@@ -39,6 +39,8 @@ struct FileSystem
     static std::filesystem::path ResolvePath(std::string_view guestPath);
 
     static std::filesystem::path GetGameRoot();
+    // The folder of the selected disc (game: and d: resolve into it).
+    static std::filesystem::path GetDiscRoot();
     static std::filesystem::path GetSaveRoot();
     static std::filesystem::path GetCacheRoot();
 

@@ -118,14 +118,22 @@ struct Tail
     }
 };
 
+// The mods the rebuilt files are made for. Fixed once listed; a live reload
+// replaces it whole, so a build on another thread keeps the set it started with.
+struct ModSet
+{
+    std::map<std::string, ResolvedAsset> texts;               // member path -> translation file or archive entry
+    std::map<std::string, std::vector<ResolvedAsset>> models; // package member path -> its model replacements
+    uint64_t key = 0;                                          // what the rebuilt bytes depend on (Build adds the folder)
+    bool Empty() const { return texts.empty() && models.empty(); }
+};
+
 std::mutex gMutex;
 std::mutex gFilesMutex; // gFiles: a foreground and a background build may both translate
-bool gListed = false;
 std::string gLanguagePack;
-std::map<std::string, ResolvedAsset> gTexts; // member path -> translation file or archive entry
-std::map<std::string, std::vector<ResolvedAsset>> gModels; // package member path -> its model replacements
+std::shared_ptr<const ModSet> gSet; // null until listed
 std::map<std::pair<fs::path, uint64_t>, std::optional<text::Replacements>> gFiles; // parsed, by file and offset
-std::map<fs::path, Folder> gFolders;
+std::map<fs::path, Folder> gFolders; // made for gSet
 
 const text::Replacements *Translation(const ResolvedAsset &file)
 {
@@ -214,11 +222,11 @@ std::string StemOf(const std::string &path)
 
 // The package with its model replacements, or empty to keep it. Replaced static
 // meshes add their vertex maps to maps.
-std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<uint8_t> &package, Counts &counts,
+std::vector<uint8_t> RebuildModels(const ModSet &set, const std::string &path, const std::vector<uint8_t> &package, Counts &counts,
                                    model_import::VertexMaps &maps, const std::atomic<bool> *stop)
 {
     std::vector<model_import::Replacement> replacements;
-    for (const auto &asset : gModels.at(path))
+    for (const auto &asset : set.models.at(path))
     {
         // Key: <package>#<export index>:<object>.
         const auto hash = asset.id.key.rfind('#'), colon = asset.id.key.find(':', hash);
@@ -260,10 +268,12 @@ std::vector<uint8_t> RebuildModels(const std::string &path, const std::vector<ui
 // (fpi_overflow.h) in the cache.
 // index: the file's first IndexSize() bytes, patched in place; tails: per
 // archive file name; overflows: the folder's overflow archives by name.
-void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &names, std::vector<uint8_t> &index,
+void PatchIndex(const ModSet &set, const fs::path &folder, const std::map<std::string, fs::path> &names, std::vector<uint8_t> &index,
                 std::map<std::string, Tail> &tails, std::map<std::string, Tail> &overflows, const fs::path &cache, Counts &counts,
                 const BuildOptions &options)
 {
+    const auto &texts = set.texts;
+    const auto &models = set.models;
     const auto parsed = fpi::Read(index);
     // In archive order, so the reads run forward through each file (slow disks).
     auto byOffset = [](const fpi::File *a, const fpi::File *b) { return std::tie(a->archive, a->offset) < std::tie(b->archive, b->offset); };
@@ -274,12 +284,12 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
     struct Group { std::vector<const fpi::File *> members, placers; bool shared = false; };
     std::map<std::string, Group> groups;
     for (const auto &file : parsed.files)
-        if ((gTexts.count(file.path) && text::Detect(file.path) != text::Format::None) || gModels.count(file.path))
+        if ((texts.count(file.path) && text::Detect(file.path) != text::Format::None) || models.count(file.path))
             groups[FolderOf(file.path)].members.push_back(&file);
     for (const auto &[meshes, placer] : model_import::kPlacedElsewhere)
     {
         const auto mesh = byPath.find(std::string(meshes)), user = byPath.find(std::string(placer));
-        if (!gModels.count(std::string(meshes)) || mesh == byPath.end() || user == byPath.end()) continue;
+        if (!models.count(std::string(meshes)) || mesh == byPath.end() || user == byPath.end()) continue;
         groups[FolderOf(mesh->first)].shared = true;
         groups[FolderOf(user->first)].placers.push_back(user->second);
     }
@@ -400,8 +410,8 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 ~Count() { if (!later) rebuild_progress::Advance(*progress); }
             } count{options.progress};
             const auto &file = *member;
-            const auto text = gTexts.find(file.path);
-            const bool model = gModels.count(file.path) != 0;
+            const auto text = texts.find(file.path);
+            const bool model = models.count(file.path) != 0;
             try
             {
                 const text::Replacements *translation = nullptr;
@@ -416,7 +426,7 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
                 if (model)
                 {
                     model_import::VertexMaps own;
-                    bytes = RebuildModels(file.path, loaded.bytes, counts, own, options.cancel);
+                    bytes = RebuildModels(set, file.path, loaded.bytes, counts, own, options.cancel);
                     if (group.shared) shared.insert(own.begin(), own.end());
                     maps.merge(own);
                 }
@@ -576,7 +586,6 @@ constexpr const char *kBuilder = LO_MODS_BUILDER_HASH;
 // Tools built without it (LoModelImport) key on the version instead.
 constexpr const char *kBuilder = lo_version::Source;
 #endif
-uint64_t gModsKey = 0;
 
 uint64_t Hash(uint64_t hash, std::string_view bytes)
 {
@@ -713,7 +722,7 @@ bool LoadCache(const fs::path &cache, uint64_t key, Folder &result)
     return true;
 }
 
-Folder Build(const fs::path &folder, const BuildOptions &options = {})
+Folder Build(const fs::path &folder, const ModSet &set, const BuildOptions &options = {})
 {
     Folder result;
     // File names are matched case-insensitively, as the game does.
@@ -723,7 +732,7 @@ Folder Build(const fs::path &folder, const BuildOptions &options = {})
         names.emplace(Lower(Utf8(item.path().filename())), item.path());
     // The indexes and the archives' sizes are part of the key.
     std::map<std::string, std::vector<uint8_t>> indexes;
-    uint64_t key = Hash(gModsKey, Utf8(fs::absolute(folder).lexically_normal()));
+    uint64_t key = Hash(set.key, Utf8(fs::absolute(folder).lexically_normal()));
     for (const auto &[name, path] : names)
     {
         const bool index = name.ends_with(".fpi");
@@ -792,7 +801,7 @@ Folder Build(const fs::path &folder, const BuildOptions &options = {})
             try
             {
                 const auto before = counts.files;
-                PatchIndex(folder, names, index, tails, overflows, building, counts, options);
+                PatchIndex(set, folder, names, index, tails, overflows, building, counts, options);
                 if (counts.files != before) patched.push_back(name);
             }
             catch (const std::exception &error)
@@ -880,34 +889,35 @@ Folder Build(const fs::path &folder, const BuildOptions &options = {})
     return result;
 }
 
-// Caller holds gMutex.
-void List()
+// The mods as the mod API lists them now. Lists every mod file (it may wait
+// for the listing), so a live reload calls it off the game thread.
+std::shared_ptr<const ModSet> MakeSet(const std::string &languagePack)
 {
-    if (gListed) return;
-    gListed = true;
-    for (auto &asset : ListTexts()) gTexts.emplace(asset.id.key, std::move(asset));
+    auto set = std::make_shared<ModSet>();
+    auto &texts = set->texts;
+    for (auto &asset : ListTexts()) texts.emplace(asset.id.key, std::move(asset));
     size_t packFiles = 0;
     for (const auto &pack : LanguagePacks())
-        if (pack.id == gLanguagePack)
+        if (pack.id == languagePack)
             for (auto &asset : ListTexts(pack))
             {
-                gTexts.insert_or_assign(asset.id.key, std::move(asset));
+                texts.insert_or_assign(asset.id.key, std::move(asset));
                 ++packFiles;
             }
-    if (!gTexts.empty())
-        LOG_NOTICE("[mods] text: {} translation files ({} from language pack {})", gTexts.size(), packFiles,
-                   gLanguagePack.empty() ? "none" : gLanguagePack);
+    if (!texts.empty())
+        LOG_NOTICE("[mods] text: {} translation files ({} from language pack {})", texts.size(), packFiles,
+                   languagePack.empty() ? "none" : languagePack);
     size_t models = 0;
     for (auto &asset : ListModels())
     {
         const auto package = asset.id.key.substr(0, asset.id.key.rfind('#'));
-        gModels[package].push_back(std::move(asset));
+        set->models[package].push_back(std::move(asset));
         ++models;
     }
-    if (models) LOG_NOTICE("[mods] model: {} replacements in {} packages", models, gModels.size());
+    if (models) LOG_NOTICE("[mods] model: {} replacements in {} packages", models, set->models.size());
 
     uint64_t key = Hash(Hash(0xcbf29ce484222325ull, kBuilder), kCacheFormat);
-    key = Hash(key, gLanguagePack);
+    key = Hash(key, languagePack);
     // Sizes and times from one listing per folder: a stat per file takes
     // seconds for a pack of tens of thousands of files on Windows.
     using Stat = std::pair<uint64_t, int64_t>;
@@ -927,10 +937,17 @@ void List()
         key = Hash(Hash(Hash(key, asset.id.key), Utf8(asset.path)), asset.offset);
         key = Hash(Hash(Hash(key, asset.size), size), uint64_t(time));
     };
-    for (const auto &[member, asset] : gTexts) add(asset);
-    for (const auto &[member, assets] : gModels)
+    for (const auto &[member, asset] : texts) add(asset);
+    for (const auto &[member, assets] : set->models)
         for (const auto &asset : assets) add(asset);
-    gModsKey = key;
+    set->key = key;
+    return set;
+}
+
+// Caller holds gMutex.
+void List()
+{
+    if (!gSet) gSet = MakeSet(gLanguagePack);
 }
 
 // ---- Background preparation of the other discs ------------------------------
@@ -944,6 +961,8 @@ struct Prebuild
     std::mutex mutex;
     std::condition_variable changed;
     bool allowed = false, started = false, stopping = false;
+    bool running = false;           // the thread is alive (a live reload restarts the list, not the thread)
+    std::shared_ptr<const ModSet> set; // what the discs are prepared for
     std::chrono::seconds delay{30}; // after the first disc: the DLC folders, the first map's shaders
     int foreground = 0;            // builds the game waits for: the background one waits
     std::vector<fs::path> pending; // disc folders still to prepare
@@ -973,16 +992,18 @@ void PrebuildThread()
     for (;;)
     {
         fs::path folder;
+        std::shared_ptr<const ModSet> set;
         {
             std::unique_lock lock(gPrebuild.mutex);
             gPrebuild.changed.wait(lock, [] { return gPrebuild.stopping || !gPrebuild.foreground; });
-            if (gPrebuild.stopping) break;
-            if (gPrebuild.pending.empty())
+            if (gPrebuild.stopping || gPrebuild.pending.empty())
             {
-                LOG_NOTICE("[mods] background preparation finished");
+                if (!gPrebuild.stopping) LOG_NOTICE("[mods] background preparation finished");
+                gPrebuild.running = false;
                 break;
             }
             folder = gPrebuild.pending.front();
+            set = gPrebuild.set;
             gPrebuild.pending.erase(gPrebuild.pending.begin());
             gPrebuild.current = folder;
             gPrebuild.cancel = false;
@@ -998,7 +1019,7 @@ void PrebuildThread()
             options.threads = PrebuildThreads();
             options.background = true;
             options.cancel = &gPrebuild.cancel;
-            Build(folder, options);
+            Build(folder, *set, options);
             LOG_NOTICE("[mods] background preparation of {} done in {:.0f} s", Utf8(folder),
                        std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
         }
@@ -1015,7 +1036,8 @@ void PrebuildThread()
             std::lock_guard lock(gPrebuild.mutex);
             gPrebuild.current.clear();
             gPrebuild.progress = 0;
-            if (again && !gPrebuild.stopping && !gPrebuild.claimed.count(folder))
+            if (again && !gPrebuild.stopping && !gPrebuild.claimed.count(folder) &&
+                std::find(gPrebuild.pending.begin(), gPrebuild.pending.end(), folder) == gPrebuild.pending.end())
                 gPrebuild.pending.insert(gPrebuild.pending.begin(), folder);
         }
         gPrebuild.changed.notify_all();
@@ -1046,7 +1068,14 @@ void StartPrebuild(const fs::path &folder)
         if (index) gPrebuild.pending.push_back(other);
     }
     if (gPrebuild.pending.empty()) return;
+    gPrebuild.set = gSet;
     LOG_NOTICE("[mods] {} other discs will be prepared in the background", gPrebuild.pending.size());
+    if (gPrebuild.running)
+    {
+        gPrebuild.changed.notify_all();
+        return;
+    }
+    gPrebuild.running = true;
     std::thread(PrebuildThread).detach();
 }
 
@@ -1081,6 +1110,54 @@ struct ForegroundBuild
         gPrebuild.changed.notify_all();
     }
 };
+
+// ---- Live reload ----------------------------------------------------------------
+// After the mod list changes in game, the current disc's files are prepared for
+// the new mods on a thread while the game runs. The runtime then has the game
+// reload that disc's index (modding/hot_reload.h); the files switch when the game
+// opens the index again, after it closed every archive, so no handle mixes the
+// old index with the new files.
+struct Reload
+{
+    ReloadState state = ReloadState::Idle; // gMutex, like the fields up to error
+    uint64_t serial = 0;                   // each request; a newer one drops older results
+    fs::path folder;
+    std::shared_ptr<const ModSet> set;
+    Folder result;
+    std::string error;
+    std::atomic<uint64_t> progress{0};
+    std::atomic<bool> cancel{false};
+    std::mutex building; // one preparation at a time: two of the same mods would share a cache folder
+};
+Reload gReload;
+
+// Disc folders whose files were made for the old mods: folder and its discN siblings.
+bool SameDiscs(const fs::path &path, const fs::path &folder)
+{
+    if (path == folder) return true;
+    const auto name = Lower(Utf8(path.filename()));
+    return path.parent_path() == folder.parent_path() && name.size() == 5 && name.starts_with("disc") && name[4] >= '1' && name[4] <= '4';
+}
+
+// The game opens the index of the reloaded disc. Caller holds gMutex.
+void CommitReload(const fs::path &folder)
+{
+    gSet = std::move(gReload.set);
+    std::erase_if(gFolders, [&](const auto &entry) { return SameDiscs(entry.first, folder); });
+    if (!gSet->Empty()) gFolders.emplace(folder, std::move(gReload.result));
+    gReload.result = {};
+    gReload.state = ReloadState::Committed;
+    {
+        // The other discs are prepared again, for these mods.
+        std::lock_guard lock(gPrebuild.mutex);
+        gPrebuild.cancel = true;
+        gPrebuild.pending.clear();
+        gPrebuild.claimed.clear();
+        gPrebuild.started = false;
+    }
+    LOG_NOTICE("[mods] live reload: {} now reads the files for the new mods ({} text, {} model packages)", Utf8(folder),
+               gSet->texts.size(), gSet->models.size());
+}
 } // namespace
 
 std::vector<Range> RangesFor(const fs::path &file)
@@ -1090,7 +1167,9 @@ std::vector<Range> RangesFor(const fs::path &file)
     if (!archive) return {};
     std::lock_guard lock(gMutex);
     List();
-    if (gTexts.empty() && gModels.empty())
+    const auto folder = file.parent_path().lexically_normal();
+    if (gReload.state == ReloadState::Armed && name == "lo.fpi" && folder == gReload.folder) CommitReload(folder);
+    if (gSet->Empty())
     {
         // The rebuilt files of earlier starts stay: turning the mods on again reads them.
         static bool reported = false;
@@ -1102,12 +1181,11 @@ std::vector<Range> RangesFor(const fs::path &file)
         }
         return {};
     }
-    const auto folder = file.parent_path().lexically_normal();
     auto it = gFolders.find(folder);
     if (it == gFolders.end())
     {
         ForegroundBuild foreground(folder);
-        it = gFolders.emplace(folder, Build(folder)).first;
+        it = gFolders.emplace(folder, Build(folder, *gSet)).first;
     }
     StartPrebuild(folder);
     const auto ranges = it->second.ranges.find(name);
@@ -1149,8 +1227,8 @@ bool Translates(const std::string &memberPath, const std::string &key)
 {
     std::lock_guard lock(gMutex);
     List();
-    const auto text = gTexts.find(memberPath);
-    if (text == gTexts.end()) return false;
+    const auto text = gSet->texts.find(memberPath);
+    if (text == gSet->texts.end()) return false;
     std::lock_guard files(gFilesMutex);
     const auto *translation = Translation(text->second);
     return translation && translation->count(key);
@@ -1190,5 +1268,109 @@ void SelectLanguagePack(const std::string &id)
 {
     std::lock_guard lock(gMutex);
     gLanguagePack = id;
+}
+
+void PrepareReload(const fs::path &discFolder)
+{
+    // As RangesFor names it: the parent of the index's path.
+    const auto folder = (discFolder / "LO.fpi").parent_path().lexically_normal();
+    uint64_t serial = 0;
+    std::string pack;
+    {
+        std::lock_guard lock(gMutex);
+        gReload.cancel = true; // an earlier preparation stops; its result would be dropped anyway
+        serial = ++gReload.serial;
+        gReload.state = ReloadState::Preparing;
+        gReload.folder = folder;
+        gReload.set.reset();
+        gReload.result = {};
+        gReload.error.clear();
+        pack = gLanguagePack;
+    }
+    LOG_NOTICE("[mods] live reload: preparing the files of {} for the changed mods", Utf8(folder));
+    std::thread([serial, folder, pack] {
+        auto current = [&] { return gReload.serial == serial; }; // caller holds gMutex
+        const auto began = std::chrono::steady_clock::now();
+        try
+        {
+            std::lock_guard building(gReload.building);
+            {
+                std::lock_guard lock(gMutex);
+                if (!current()) return;
+                gReload.cancel = false;
+                gReload.progress = 0;
+            }
+            auto set = MakeSet(pack); // waits for the mod listing
+            {
+                std::lock_guard lock(gMutex);
+                if (!current()) return;
+                if (gSet && gSet->key == set->key)
+                {
+                    gReload.state = ReloadState::Unchanged;
+                    LOG_NOTICE("[mods] live reload: the mods give the same files; nothing to reload");
+                    return;
+                }
+            }
+            Folder result;
+            if (!set->Empty())
+            {
+                ForegroundBuild pause(folder); // the background preparation of other discs waits
+                BuildOptions options;
+                options.progress = &gReload.progress;
+                options.cancel = &gReload.cancel;
+                result = Build(folder, *set, options);
+            }
+            std::lock_guard lock(gMutex);
+            if (!current()) return;
+            gReload.set = std::move(set);
+            gReload.result = std::move(result);
+            gReload.state = ReloadState::Ready;
+            LOG_NOTICE("[mods] live reload: files of {} ready in {:.1f} s", Utf8(folder),
+                       std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
+        }
+        catch (const Cancelled &)
+        {
+            LOG_NOTICE("[mods] live reload: preparation of {} stopped", Utf8(folder));
+        }
+        catch (const std::exception &error)
+        {
+            std::lock_guard lock(gMutex);
+            if (!current()) return;
+            gReload.state = ReloadState::Failed;
+            gReload.error = error.what();
+            LOG_WARNING("[mods] live reload: preparing {} failed: {}", Utf8(folder), error.what());
+        }
+    }).detach();
+}
+
+ReloadStatus GetReloadStatus()
+{
+    std::lock_guard lock(gMutex);
+    const auto progress = gReload.progress.load(std::memory_order_relaxed);
+    return {gReload.state, rebuild_progress::Done(progress), rebuild_progress::Total(progress), gReload.error};
+}
+
+bool ArmReload()
+{
+    std::lock_guard lock(gMutex);
+    if (gReload.state != ReloadState::Ready) return false;
+    gReload.state = ReloadState::Armed;
+    return true;
+}
+
+void DisarmReload()
+{
+    std::lock_guard lock(gMutex);
+    if (gReload.state == ReloadState::Armed) gReload.state = ReloadState::Ready;
+}
+
+void EndReload()
+{
+    std::lock_guard lock(gMutex);
+    gReload.cancel = true;
+    ++gReload.serial;
+    gReload.state = ReloadState::Idle;
+    gReload.set.reset();
+    gReload.result = {};
 }
 }

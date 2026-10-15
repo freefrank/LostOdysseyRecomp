@@ -308,6 +308,11 @@ bool FileSystem::SelectDisc(uint32_t discNumber)
 }
 
 std::filesystem::path FileSystem::GetGameRoot() { return g_gameRoot; }
+std::filesystem::path FileSystem::GetDiscRoot()
+{
+    std::lock_guard lock(g_discMutex);
+    return g_discRoot;
+}
 std::filesystem::path FileSystem::GetSaveRoot() { return g_saveRoot; }
 std::filesystem::path FileSystem::GetCacheRoot() { return g_cacheRoot; }
 std::filesystem::path GetGamePath() { return g_gameRoot; }

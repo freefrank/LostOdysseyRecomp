@@ -63,4 +63,24 @@ void StopPrebuild();
 // files replace other mods' translations of the same files. Set before the
 // game opens its archives.
 void SelectLanguagePack(const std::string &id);
+
+// Live reload after the mod list changes in game (modding/hot_reload.h runs it).
+// PrepareReload lists the mods again (call modding::Reload first) and, on a
+// thread, prepares discFolder's rebuilt files for them: Ready, or Unchanged when
+// the mods give the files in use. ArmReload makes the next open of that
+// folder's LO.fpi switch to them (Committed): the game is about to reload its
+// index, after closing every archive. The other discs' files are made again for
+// the new mods. EndReload drops whatever is left (Idle).
+enum class ReloadState { Idle, Preparing, Ready, Unchanged, Armed, Committed, Failed };
+struct ReloadStatus
+{
+    ReloadState state = ReloadState::Idle;
+    uint32_t done = 0, total = 0; // packages, while Preparing
+    std::string error;            // Failed
+};
+void PrepareReload(const std::filesystem::path &discFolder);
+ReloadStatus GetReloadStatus();
+bool ArmReload(); // false unless Ready
+void DisarmReload(); // back to Ready when the game did not reload its index
+void EndReload();
 }

@@ -7,6 +7,8 @@
 //     archive and writes it decoded. --prebuild 1 then prepares the other discs
 //     in the background as the runtime does (no delay); --switch <disc> after
 //     --switch-after <seconds> opens that disc's index meanwhile, as a disc switch.
+//     --reload <mods folder> then switches to those mods as a live reload does
+//     (prepare the disc's files, arm, open LO.fpi again) before reading the member.
 #include <gpu/shader/cpx_decode.h>
 #include <modding/fpi_index.h>
 #include <modding/mod_api.h>
@@ -90,7 +92,7 @@ int Run(std::map<std::string, std::string> &args)
     std::printf("models listed: %zu\n", modding::ListModels().size());
     const auto header = Read(disc / "LO.fpi", 0, 64);
     const auto index = Read(disc / "LO.fpi", 0, modding::fpi::IndexSize(header));
-    const auto parsed = modding::fpi::Read(index);
+    auto parsed = modding::fpi::Read(index);
     if (args.count("--prebuild"))
     {
         const auto began = std::chrono::steady_clock::now();
@@ -105,6 +107,30 @@ int Run(std::map<std::string, std::string> &args)
         }
         modding::text_overlay::WaitForPrebuild();
         std::printf("background preparation idle at %.1f s\n", seconds());
+    }
+    if (args.count("--reload"))
+    {
+        const auto began = std::chrono::steady_clock::now();
+        modding::Initialize(args.at("--reload"));
+        modding::text_overlay::PrepareReload(disc);
+        using State = modding::text_overlay::ReloadState;
+        auto status = modding::text_overlay::GetReloadStatus();
+        while (status.state == State::Preparing)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            status = modding::text_overlay::GetReloadStatus();
+        }
+        std::printf("reload state %d after %.1f s %s\n", int(status.state),
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count(), status.error.c_str());
+        if (status.state == State::Failed) return 3;
+        if (status.state == State::Ready)
+        {
+            modding::text_overlay::ArmReload();
+            const auto again = Read(disc / "LO.fpi", 0, 64);
+            parsed = modding::fpi::Read(Read(disc / "LO.fpi", 0, modding::fpi::IndexSize(again)));
+            std::printf("reload state %d after the index was opened again\n", int(modding::text_overlay::GetReloadStatus().state));
+            modding::text_overlay::EndReload();
+        }
     }
     // The record the game opens: an overflow archive's copy comes first.
     const auto *file = modding::fpi::Find(parsed, args.at("--member"));

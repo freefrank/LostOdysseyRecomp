@@ -293,6 +293,10 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
          L"모드 목록을 저장했습니다. 변경 사항을 적용하려면 게임을 다시 시작하세요.",
          L"Mod 列表已保存。请重启游戏以应用更改。"},
         {L"Mod list saved.", L"MOD リストを保存しました。", L"모드 목록을 저장했습니다.", L"Mod 列表已保存。"},
+        {L"Mod list saved. Models change when you next enter an area; texture changes need a restart.",
+         L"MOD リストを保存しました。モデルは次にエリアに入ったときに切り替わります。テクスチャの変更は再起動が必要です。",
+         L"모드 목록을 저장했습니다. 모델은 다음에 지역에 들어갈 때 바뀝니다. 텍스처 변경은 다시 시작해야 합니다.",
+         L"Mod 列表已保存。模型会在下次进入区域时更换；贴图变更需要重启。"},
         // The startup screen while the game files are rebuilt for the mods (gpu/video.cpp).
         {L"Preparing mods", L"MOD を準備しています", L"모드 준비 중", L"正在准备 Mod"},
         {L" game files", L" ゲームファイル", L"개 게임 파일", L" 个游戏文件"},

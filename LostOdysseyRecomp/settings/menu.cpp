@@ -10,6 +10,7 @@
 #include "translations.h"
 #include "achievements_page.h"
 #include "mods_page.h"
+#include <patches/mod_hot_reload.h>
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
@@ -3211,6 +3212,10 @@ PPC_FUNC(sub_822F19B0)
                 LOG_INFO("settings: mod list saved ({} mods)", order.size());
                 // Saving the order this run started with needs no restart.
                 if (order == modsRunning) status = Tr(L"Mod list saved.", L"Mod 清單已儲存。");
+                // Model and text mods switch while the game runs (patches/mod_hot_reload.h).
+                else if (mod_hot_reload::Request())
+                    status = Tr(L"Mod list saved. Models change when you next enter an area; texture changes need a restart.",
+                                L"Mod 清單已儲存。模型會在下次進入區域時更換；貼圖變更需要重新啟動。");
                 else
                 {
                     restartPrompt = savedRestartPrompt = restartForMods = true;
