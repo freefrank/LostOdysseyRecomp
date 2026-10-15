@@ -152,3 +152,57 @@ Open v1.0.0 items after this round (readback, Release "v1.0.0" and Status not Do
 Roadmap: `docs/ROADMAP.md` and `docs/ROADMAP.zh-CN.md` were updated in the same change. The Android item is `[x]` and the render-pass item is `[x]`. The motion replay and DLSS-NR/FG items are `[~]` in the v1.0.0 section, and the #172 clause was removed from the later backlog in both languages.
 
 Not verified here: the Android acceptance rests on the 2026-10-14 maintainer decision and the recorded measurements, not on a new run. No build, game or test was run in this round.
+
+## Round 5: merged-but-unreleased work and the three v1.0.0 items
+
+Applied in the worktree `C:\Users\freefrank\worktrees\LostOdysseyRecomp\pm-sync-20261015` (branch `pm/sync-20261015`, base `origin/main` d0216f7b, which is PR #530). Nothing was committed or pushed. Timestamps in this round are UTC.
+
+Run:
+
+- Plan before edits: `{"created": 0, "updated": 0, "unchanged": 318, "conflicts": 0, "operations": 0}`. The manifest matched the Project.
+- Plan after edits: `{"created": 0, "updated": 5, "unchanged": 313, "conflicts": 0, "operations": 16}`.
+- `--apply` with the report in the scratchpad: the same five records updated, exit 0.
+- Plan after the apply: `{"created": 0, "updated": 0, "unchanged": 318, "conflicts": 0, "operations": 0}`, exit 0.
+- Readback (`gh project item-list 3 --owner freefrank --format json`): 319 items (318 managed plus the keyless Issue #17 link). The five touched items matched Status, Delivery, Release, Area, Evidence (388 to 925 characters, all under the 1,024 limit) and the draft body.
+- The saved views were read through GraphQL: Roadmap (board, grouped by Release), Backlog (filter `-status:Done -status:Cancelled`) and History (`status:Done`). No view was changed.
+
+Live checks: `gh pr view` for #507, #509, #510, #511, #512, #514, #515, #516, #518, #519, #520, #521, #523, #525, #526, #527 and #530 shows all merged to `main` between 2026-10-14 18:06 and 2026-10-15 00:05 UTC. `git merge-base --is-ancestor d0216f7b v0.9.52` returns no, so #530 is not in v0.9.52, the latest release (published 2026-10-14T04:07:16Z). Issue #506 closed COMPLETED at 18:06:53Z by PR #507 (automatic close, no reporter confirmation). Issue #524 and Issue #497 are open.
+
+Changed records:
+
+| Record | Before | After |
+| --- | --- | --- |
+| `sr-motion-replay-moving-only` | In Progress / In progress / v1.0.0 | Done / Implemented / v1.0.0. Evidence has the PR #530 numbers (psvita, AMD, 30 W, FSR Quality 1440p), #519 as related, and the not-run list. Body has a "Status — 2026-10-15 (Done)" section; the 2026-10-14 in-progress section is marked superseded. The criteria boxes stay unticked where the evidence covers only part of them. |
+| `dlss-nr-settings-preview-blank` | In Progress / In progress / v1.0.0 / Graphics/Settings | Done / Implemented / v1.0.0 / Graphics/Settings. Evidence: #515 explains the missing `nvngx_dlssnr.dll`, #518 and #521 add the not-included and tested-version (310.8.0.0) notes, #523 adds the entry row. The "fix" criterion is ticked as explained-not-rendered; the D3D12/Vulkan check stays unticked. |
+| `fg-multiplier-restart-required` | In Progress / In progress / v1.0.0 / Graphics/Settings | Done / Implemented / v1.0.0 / Graphics/Settings. Evidence: live multiplier on D3D12 and Vulkan (#515). On/off and provider switch still need a restart, by maintainer decision. Both criteria are ticked from the maintainer brief. |
+| `texture-replacement-mod-loader` | Done / Released / v0.9.52; Evidence listed the 4 GiB limit as pending | Fields unchanged. Evidence and body: the 4 GiB limit removed in #520 (merged after v0.9.52, not released); #510 and #511 listed as merged after v0.9.52, not released. |
+| `playstation-controller-glyphs` | Done / Released / v0.7.0 | Fields unchanged. Evidence and body add #525 (merged 2026-10-14, not released). |
+
+Roadmap: `docs/ROADMAP.md` and `docs/ROADMAP.zh-CN.md` lines for the motion-replay item and the DLSS-NR/FG item changed from `[~]` to `[x]` in the same wording, each with its merge state and the not-run list. Neither roadmap mentions the 4 GiB limit, so there is no roadmap change for #520.
+
+Judgment calls:
+
+1. The three v1.0.0 records are Done, following the brief. The evidence for each keeps what was not run. The DLSS-NR fix explains the blank; the preview itself still needs `nvngx_dlssnr.dll`, which is not included. A parent decision could narrow this to "explained, preview pending the DLL".
+2. The Done decision date is recorded as 2026-10-14, the sync date. The brief gave no separate decision date. PR #530 merged 2026-10-15 00:05 UTC.
+3. #511 (portable MO2 instance, moved game folder) is mapped to `texture-replacement-mod-loader`, because MO2 support is part of the mod scope. #510 (`cache/mods` key) is mapped to the same item.
+4. #506 and #507 need no change. `issue-506-startup-crash-reshade-dxgi` is already Awaiting validation with #507 in its Evidence. As for #491, the automatic close does not count as reporter confirmation.
+5. #525 is mapped to `playstation-controller-glyphs` (glyph wording in help text).
+
+Items not mapped (no record fits, and no record was created):
+
+- #509 performance overlay.
+- #512 disc archive dedupe (`--compact-game-data`). The v0.2 `portable-game-importer` record has a different scope, so it was not used.
+- #514 DLSS status row (the status line shows the last game frame).
+- #516 worktree build script.
+- #526 XMA failure reasons and #527 D3D12 DRED logging. Both PRs cite Issue #524 (open, "XMA Decode Failures (result = -11) Causing Crash in Uhra"), and #527 also cites #462. Neither Issue has a manifest record. The maintainer should decide whether #524 needs one.
+- `d3d12-motion-replay-pso-invalidarg` (Todo, no Release) is the D3D12 motion-replay PSO failure. PR #530 changes the replay path, so this record may need a check; it was not checked here.
+
+Open v1.0.0 items after this round (readback; Release exactly `v1.0.0` and Status not Done or Cancelled): none. The five `v1.0.0` records in the Project are Done: `android-frame-time-v100`, `render-pass-merging-v100`, `sr-motion-replay-moving-only`, `dlss-nr-settings-preview-blank`, `fg-multiplier-restart-required`. The Release values in use are `v1.0.0` and `After v1.0.0` only; no variant such as `v1.0` exists.
+
+Open items without a Release field (readback, not v1.0.0 by field; listed so the release decision sees them):
+
+- Issues: #491 `issue-491-android-no-sound-after-app-switch` (Awaiting validation / Implemented), #492 (In progress), #497 `issue-497-cutscene-audio-missing` (Awaiting validation / Implemented), #499 `issue-499-music-after-battle` (In progress), #506 `issue-506-startup-crash-reshade-dxgi` (Awaiting validation / Implemented).
+- Drafts (25): AMD opening shadow and RX 9060 XT Kaim shadow reports, full playthrough regression, GPU query pointer corruption, screen-space GI, hardware ray tracing, Switch alignment, cross-edition text patch, WMV playback, physical controller regression, embedded section research, title update research, EDRAM aliasing audit, native renderer conditional coverage, XEX metadata boundary, runtime interface replacement, guest ABI removal research, Xenia component provenance audit, D3D12 motion-replay PSO failure, temporal P0 contracts probe, temporal P3 FG infrastructure, PM4 translator removal, Streamline PRESENT-AFTER-WRITE exception, save-state support, loading and save speed (2026-10-10).
+- Other release values: `linux-aarch64-platform` and `v100-ui-separation-production-handoff` are Paused / Deferred with `After v1.0.0`.
+
+Not verified here: the three new Done records rest on the maintainer's brief and the merged PRs. No build, game or test was run in this round, and no PR, Issue, comment or release was changed.
