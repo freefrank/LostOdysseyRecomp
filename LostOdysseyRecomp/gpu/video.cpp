@@ -656,21 +656,21 @@ namespace gpu::video
         uint32_t g_snapshotWidth=0,g_snapshotHeight=0;
         plume::RenderFormat g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         float g_snapshotOutputScale = 1.0f;
-        // Last 3D game scene for the HDR and brightness previews. The game
-        // resolves every frame to one frontbuffer, so the scene is gone once
-        // its own menu draws. Gameplay frames refresh two copies in turn every
-        // 250 ms (FP16 extended gamma when available, otherwise SDR); the first
-        // frame without the scene, or a host menu, freezes the older one: the
-        // newer can hold the frame where the menu blurs the scene.
+        // The settings menu copies the last resolved 3D scene once on opening;
+        // ordinary gameplay does not keep a full-size preview alive.
         struct HdrCalibrationCache {
-            std::unique_ptr<plume::RenderTexture> copies[2];
-            bool filled[2] = {};
-            uint32_t next = 0; // the copy refreshed next, the older one
+            std::unique_ptr<plume::RenderTexture> copy;
             uint32_t width = 0, height = 0;
-            std::chrono::steady_clock::time_point copied{};
-            plume::RenderTexture* scene = nullptr; // frozen copy
+            plume::RenderTexture* scene = nullptr;
+            bool attempted = false;
+            bool previewOpen = false;
             bool ready = false, extended = false;
         } g_hdrCalibrationCache;
+        uint32_t g_lastSceneAddress = 0, g_lastSceneWidth = 0, g_lastSceneHeight = 0;
+#if LO_PLATFORM_MACOS
+        std::unique_ptr<plume::RenderTexture> g_metalFxOutput;
+        uint32_t g_metalFxWidth = 0, g_metalFxHeight = 0;
+#endif
         uint32_t g_cpuWidth=0,g_cpuHeight=0;
         uint32_t g_lastPresentedImage=0;
         bool g_hasPresentedImage=false;
@@ -2232,7 +2232,12 @@ namespace gpu::video
         g_preparationBar = {};
         g_presentedSnapshot.reset(); g_snapshotWidth = g_snapshotHeight = 0; g_snapshotFormat=plume::RenderFormat::UNKNOWN;
         g_hdrCalibrationCache = {};
+        g_lastSceneAddress = g_lastSceneWidth = g_lastSceneHeight = 0;
         settings::SetHdrCalibrationSceneAvailable(false);
+#if LO_PLATFORM_MACOS
+        g_metalFxOutput.reset();
+        g_metalFxWidth = g_metalFxHeight = 0;
+#endif
         // Renderer shutdown above established a completed/lost-device teardown
         // boundary; a failed ordinary wait alone never releases these leases.
         g_fgPresent = FgPresentBridge{}; g_fgPresentSerial = 0;
@@ -3254,8 +3259,6 @@ namespace gpu::video
     // Scaling filter "MetalFX": Apple's spatial upscaler brings the scene to the
     // size presentation would scale it to (aspect kept), so the normal pass then
     // runs 1:1 with its AA, RGB range and UI. Falls back to the source on failure.
-    std::unique_ptr<plume::RenderTexture> g_metalFxOutput;
-    uint32_t g_metalFxWidth = 0, g_metalFxHeight = 0;
     plume::RenderTexture* UpscaleWithMetalFx(plume::RenderTexture* source, uint32_t& width, uint32_t& height)
     {
         const uint32_t outputWidth = g_swapChain->getWidth(), outputHeight = g_swapChain->getHeight();
@@ -4106,6 +4109,27 @@ namespace gpu::video
         if (!EnsureAndroidSurfaceSwapChain()) return false;
 #endif
         if (!g_swapChain) return false;
+        if (g_hdrCalibrationCache.attempted || g_hdrCalibrationCache.copy) {
+            auto& cache = g_hdrCalibrationCache;
+            const bool menuOpen = settings::IsOpen();
+            const bool previewOpen = menuOpen &&
+                (settings::GetHdrCalibration().open || settings::GetBrightnessCalibration().open);
+            if (!menuOpen || (cache.previewOpen && !previewOpen)) {
+                if (cache.copy && !WaitForPresentGpu()) return false;
+                cache = {};
+                settings::SetHdrCalibrationSceneAvailable(false);
+                if (menuOpen) cache.attempted = true;
+            }
+            if (previewOpen && !cache.previewOpen && !cache.copy) cache.attempted = false;
+            cache.previewOpen = previewOpen;
+        }
+#if LO_PLATFORM_MACOS
+        if (g_metalFxOutput && settings::GetConfig().scalingQuality != settings::ScalingMetalFx) {
+            if (!WaitForPresentGpu()) return false;
+            g_metalFxOutput.reset();
+            g_metalFxWidth = g_metalFxHeight = 0;
+        }
+#endif
         UpdateHdrOutput();
         if (!ReconcileHdrSwapchain()) return false;
         // Shared by real game frames and paused host overlays. Saving a new
@@ -4329,58 +4353,43 @@ namespace gpu::video
         g_frameOnGpu = false;
     }
 
-    // The scene resolve to copy into copies[next] for the calibration previews,
-    // (re)allocating both copies on a size change; null when there is none. The caller
-    // records RecordSceneCopy and, once submitted, calls SceneCopySubmitted.
+    // Prepare the last game resolve for one copy when the settings menu opens.
     static plume::RenderTexture* PrepareSceneCopy(uint32_t address, uint64_t ordinal, uint32_t width, uint32_t height)
     {
         auto& cache = g_hdrCalibrationCache;
-        const bool allocate = !cache.copies[0] || cache.width != width || cache.height != height;
-        // The copies keep the format they were made with: the HDR twin when the
-        // first frame has one, otherwise the SDR resolve presentation shows. A
-        // frame without the twin the copies need is skipped.
         uint32_t sourceWidth = 0, sourceHeight = 0, sourceFormat = 0;
-        plume::RenderTexture* source = allocate || cache.extended
-            ? renderer::AcquireResolvedWrite(address, ordinal, true, sourceWidth, sourceHeight, sourceFormat) : nullptr;
+        plume::RenderTexture* source = renderer::AcquireResolvedWrite(address, ordinal, true,
+            sourceWidth, sourceHeight, sourceFormat);
         const bool extended = source != nullptr;
-        if (!source && ((!allocate && cache.extended) || !(source = renderer::AcquireResolvedWrite(address, ordinal, false,
+        if (!source && (!(source = renderer::AcquireResolvedWrite(address, ordinal, false,
                 sourceWidth, sourceHeight, sourceFormat)) || plume::RenderFormat(sourceFormat) != kSwapChainFormat))
             return nullptr;
         if (sourceWidth < width || sourceHeight < height) return nullptr;
-        if (allocate) {
-            for (auto& copy : cache.copies)
-                copy = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
-                    extended ? plume::RenderFormat::R16G16B16A16_FLOAT : kSwapChainFormat));
-            cache.width = width;
-            cache.height = height;
-            cache.extended = extended;
-            cache.filled[0] = cache.filled[1] = false;
-        }
-        return cache.copies[0] && cache.copies[1] ? source : nullptr;
+        cache.copy = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
+            extended ? plume::RenderFormat::R16G16B16A16_FLOAT : kSwapChainFormat));
+        cache.width = width;
+        cache.height = height;
+        cache.extended = extended;
+        return cache.copy ? source : nullptr;
     }
 
     // An upscaled HDR frame has its highlights only after the presentation gain
-    // pass; its resolve is SDR, so the HDR page's peak preview had nothing to map.
-    // It copies the gain pass's FP16 result instead, once that is recorded.
+    // pass; its resolve is SDR. Copy the composed FP16 result instead.
     static bool PrepareGainSceneCopy(uint32_t width, uint32_t height)
     {
         auto& cache = g_hdrCalibrationCache;
-        if (!cache.copies[0] || cache.width != width || cache.height != height || !cache.extended) {
-            for (auto& copy : cache.copies)
-                copy = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
-                    plume::RenderFormat::R16G16B16A16_FLOAT));
-            cache.width = width;
-            cache.height = height;
-            cache.extended = true;
-            cache.filled[0] = cache.filled[1] = false;
-        }
-        return cache.copies[0] && cache.copies[1];
+        cache.copy = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
+            plume::RenderFormat::R16G16B16A16_FLOAT));
+        cache.width = width;
+        cache.height = height;
+        cache.extended = true;
+        return bool(cache.copy);
     }
 
     static void RecordSceneCopy(plume::RenderTexture* source)
     {
         const auto& cache = g_hdrCalibrationCache;
-        auto* target = cache.copies[cache.next].get();
+        auto* target = cache.copy.get();
         g_commandList->barriers(plume::RenderBarrierStage::COPY,
             plume::RenderTextureBarrier(source, plume::RenderTextureLayout::COPY_SOURCE));
         g_commandList->barriers(plume::RenderBarrierStage::COPY,
@@ -4390,12 +4399,13 @@ namespace gpu::video
             plume::RenderTextureCopyLocation::Subresource(source), 0, 0, 0, &sceneBox);
     }
 
-    static void SceneCopySubmitted(std::chrono::steady_clock::time_point now)
+    static void SceneCopySubmitted()
     {
         auto& cache = g_hdrCalibrationCache;
-        cache.filled[cache.next] = true;
-        cache.next ^= 1;
-        cache.copied = now;
+        cache.scene = cache.copy.get();
+        cache.ready = true;
+        settings::SetHdrCalibrationSceneAvailable(true);
+        LOG_INFO("calibration: frozen game scene {}x{} extended={}", cache.width, cache.height, cache.extended);
     }
 
     // The DLSS 5 neural rendering page: whether a DLSS frame is held for its
@@ -4414,21 +4424,6 @@ namespace gpu::video
         if (open && !nowOpen && g_dlssController) g_dlssController->ReleaseNeuralRenderingPreview();
         open = nowOpen;
 #endif
-    }
-
-    // Copies stop refreshing and the previews may sample the older one.
-    static void FreezeScene()
-    {
-        auto& cache = g_hdrCalibrationCache;
-        if (cache.ready) return;
-        const uint32_t pick = cache.filled[cache.next] ? cache.next : cache.next ^ 1;
-        if (!cache.filled[pick]) return;
-        cache.scene = cache.copies[pick].get();
-        cache.ready = true;
-        settings::SetHdrCalibrationSceneAvailable(true);
-        static uint32_t logs = 0;
-        if (logs++ < 8)
-            LOG_INFO("calibration: frozen game scene {}x{} extended={}", cache.width, cache.height, cache.extended);
     }
 
     // The title menu's Settings legend over the presented frame, on the GPU
@@ -4742,10 +4737,37 @@ namespace gpu::video
         // Upload the untiled pixels; rows must be 256-byte aligned for D3D12.
         const uint32_t rowPitch = (width * 4 + 255) & ~255u;
         const uint64_t requiredBytes = uint64_t(rowPitch) * height;
+        plume::RenderTexture* sceneCopySource = nullptr;
+        plume::RenderTexture* sceneGain = nullptr;
+        bool sceneCopyAttempted = false;
+        uint32_t sceneWidth = 0, sceneHeight = 0, gainWidth = 0, gainHeight = 0;
+        uint64_t sceneOrdinal = 0;
         try {
             if (!WaitForPresentGpu()) return false;
-            // A host menu opened straight over gameplay freezes the last copy.
-            if (isMenu) FreezeScene();
+            if (isMenu && settings::IsOpen() && !g_hdrCalibrationCache.attempted) {
+                sceneCopyAttempted = true;
+                if (g_lastSceneWidth && g_lastSceneHeight &&
+                    renderer::ResolvedScene(g_lastSceneAddress, sceneOrdinal)) {
+                    sceneWidth = g_lastSceneWidth;
+                    sceneHeight = g_lastSceneHeight;
+                    if (g_presentation && (sceneGain = renderer::AcquireHdrGainSurface(
+                            g_lastSceneAddress, gainWidth, gainHeight))) {
+                        uint32_t sourceWidth = 0, sourceHeight = 0, sourceFormat = 0;
+                        sceneCopySource = renderer::AcquireResolvedWrite(g_lastSceneAddress, sceneOrdinal, false,
+                            sourceWidth, sourceHeight, sourceFormat);
+                        sceneWidth = std::min(sceneWidth, sourceWidth);
+                        sceneHeight = std::min(sceneHeight, sourceHeight);
+                        if (!sceneCopySource || !sceneWidth || !sceneHeight ||
+                            !PrepareGainSceneCopy(sceneWidth, sceneHeight)) sceneCopySource = nullptr;
+                    }
+                    if (!sceneCopySource) {
+                        sceneGain = nullptr;
+                        sceneWidth = g_lastSceneWidth;
+                        sceneHeight = g_lastSceneHeight;
+                        sceneCopySource = PrepareSceneCopy(g_lastSceneAddress, sceneOrdinal, sceneWidth, sceneHeight);
+                    }
+                }
+            }
             TrackNeuralRenderingPreview();
             // Stage allocations before acquiring an image or opening a command
             // list. Failed resizing keeps the previous usable resources intact.
@@ -4789,6 +4811,24 @@ namespace gpu::video
             plume::RenderTextureCopyLocation::Subresource(uploadTarget),
             plume::RenderTextureCopyLocation::PlacedFootprint(g_uploadBuffer.get(), kSwapChainFormat, width, height, 1, rowPitch / 4),
             0, 0, 0, g_presentation?nullptr:&box);
+        bool sceneCopyRecorded = false;
+        if (sceneCopySource && sceneGain) {
+            if (auto* gained = g_presentation->ComposeHdrGain(g_commandList.get(), sceneCopySource, sceneGain,
+                    sceneWidth, sceneHeight, std::min(sceneWidth, gainWidth), std::min(sceneHeight, gainHeight),
+                    gainWidth, gainHeight)) {
+                RecordSceneCopy(gained);
+                sceneCopyRecorded = true;
+            }
+            else if (auto* source = PrepareSceneCopy(g_lastSceneAddress, sceneOrdinal,
+                    g_lastSceneWidth, g_lastSceneHeight)) {
+                RecordSceneCopy(source);
+                sceneCopyRecorded = true;
+            }
+        }
+        else if (sceneCopySource) {
+            RecordSceneCopy(sceneCopySource);
+            sceneCopyRecorded = true;
+        }
         // This upload came from guest tiled memory, not the processed GPU resolve.
         // GPU-only scene-AA provenance cannot authorize skipping its legacy AA.
         if(g_presentation) {
@@ -4865,6 +4905,8 @@ namespace gpu::video
             g_fence.get(), &submissionSerial, &submitResult);
         FgHostSubmitted(submitted, submissionSerial, submitResult);
         if (!submitted) { LOG_ERROR("video: present submit failed raw_result={}", submitResult); ReadPresentCapture(captureResult, false, false, 0); return false; }
+        if (sceneCopyAttempted) g_hdrCalibrationCache.attempted = true;
+        if (sceneCopyRecorded) SceneCopySubmitted();
         FgPresentStart();
         const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
         FgPresented(presented);
@@ -5039,28 +5081,14 @@ namespace gpu::video
                 DisplayCompletion completion(g_displayChanges, displayTicket);
                 if (!WaitForPresentGpu()) return;
                 TrackNeuralRenderingPreview();
-                // Calibration previews: scene frames refresh the copy (no earlier
-                // frame still samples it after the wait); the first frame without
-                // the scene freezes it.
-                plume::RenderTexture* sceneCopySource = nullptr;
-                bool sceneCopyFromGain = false;
                 uint64_t sceneOrdinal = 0;
                 const auto now = std::chrono::steady_clock::now();
                 if (renderer::ResolvedScene(physicalAddress & 0x1FFFFFFF, sceneOrdinal)) {
                     g_gameplayPresented.store(true, std::memory_order_relaxed);
-                    if (g_hdrCalibrationCache.ready) {
-                        // A new stretch of gameplay starts with fresh copies.
-                        g_hdrCalibrationCache.ready = false;
-                        g_hdrCalibrationCache.scene = nullptr;
-                        g_hdrCalibrationCache.filled[0] = g_hdrCalibrationCache.filled[1] = false;
-                        settings::SetHdrCalibrationSceneAvailable(false);
-                    }
-                    if (now - g_hdrCalibrationCache.copied >= std::chrono::milliseconds(250)) {
-                        if (hdrGainSource && g_presentation) sceneCopyFromGain = PrepareGainSceneCopy(sourceWidth, sourceHeight);
-                        else sceneCopySource = PrepareSceneCopy(physicalAddress & 0x1FFFFFFF, sceneOrdinal, sourceWidth, sourceHeight);
-                    }
+                    g_lastSceneAddress = physicalAddress & 0x1FFFFFFF;
+                    g_lastSceneWidth = sourceWidth;
+                    g_lastSceneHeight = sourceHeight;
                 }
-                else FreezeScene();
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
                 frame_generation::CompositeHandoff composite;
                 double fgProducerWaitMs = 0.0;
@@ -5127,7 +5155,6 @@ namespace gpu::video
                 // Settings → Graphics → Performance overlay; Off costs this test.
                 const bool performanceOverlay = presentationConfig.performanceOverlay || g_performanceOverlay.active;
                 if (performanceOverlay) BeginPresentTiming();
-                if (sceneCopySource) RecordSceneCopy(sceneCopySource);
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
                 if (g_d3dFg && g_d3dFg->Enabled()) {
                     g_d3dFg->PrepareAfterHostDrain(composite,
@@ -5165,10 +5192,6 @@ namespace gpu::video
                             sourceWidth, sourceHeight, hdrGainValidWidth, hdrGainValidHeight, hdrGainWidth, hdrGainHeight)) {
                         source = gained;
                         hdrScene = true;
-                        if (sceneCopyFromGain) {
-                            RecordSceneCopy(gained);
-                            sceneCopySource = gained;
-                        }
                         static uint32_t gainLogs = 0;
                         if (gainLogs++ < 8)
                             LOG_INFO("HDR: highlight gain applied address={:#x} scene={}x{} (valid {}x{}) output={}x{}",
@@ -5241,7 +5264,6 @@ namespace gpu::video
                 if (!submitted) { LOG_ERROR("video: GPU presentation submit failed raw_result={}", submitResult); ReadPresentCapture(captureResult, false, false, 0); return; }
                 if (performanceOverlay) g_presentTiming.pending = g_presentTiming.recording;
                 g_fgPresent.Submitted(g_deviceEpoch.load(), submissionSerial);
-                if (sceneCopySource) SceneCopySubmitted(now);
                 FgPresentStart();
                 const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
                 FgPresented(presented);

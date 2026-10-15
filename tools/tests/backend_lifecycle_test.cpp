@@ -133,6 +133,14 @@ bool ReadbackResolvedSurface(uint32_t,std::vector<uint32_t>&,uint32_t&,uint32_t&
 std::vector<uint32_t> GetResolvedAddresses() { return {}; }
 void DumpRenderTargets(const char*) {}
 }
+namespace gpu::dred {
+void ConfigureBeforeDeviceCreation(bool) {}
+bool Enabled() { return false; }
+void LogRemovedDevice(ID3D12Device*) {}
+}
+namespace modding::text_overlay {
+void StopPrebuild() {}
+}
 // Upscaler, DLSS probe, and sizing paths are reached through video init/reset
 // but never configured here; the stubs mirror present_capture_test.cpp.
 namespace settings {
@@ -214,6 +222,19 @@ void Start(backend::Backend b) {
     Check(externalPump,"HID external pump wasn't enabled");
     Inspect("init"); Record("init");
 }
+void CheckCalibrationCopyRelease() {
+    // A failed first menu submit can leave an allocated copy without an
+    // accepted snapshot. The next prepared frame must release it after close.
+    auto& cache=video::g_hdrCalibrationCache;
+    cache.copy=video::GetDevice()->createTexture(plume::RenderTextureDesc::Texture2D(8,8,1,
+        plume::RenderFormat::R16G16B16A16_FLOAT));
+    Check(bool(cache.copy),"calibration test texture allocation failed");
+    cache.attempted=false;
+    uint64_t ticket=0; uint32_t width=0,height=0;
+    Check(video::PreparePresentation(ticket,width,height),"calibration cleanup preparation failed");
+    Check(!cache.copy&&!cache.scene&&!cache.ready&&!cache.attempted,
+        "unsubmitted calibration copy survived menu close");
+}
 void Resize() {
     // Config is the production window-owner pathway; do not call SDL from the render thread.
     { std::lock_guard lock(mutex); config.width=800;config.height=450; }
@@ -281,7 +302,7 @@ int main(int argc,char** argv) {
         fixture::Record("baseline");
         for(auto backend:{gpu::backend::Backend::D3D12,gpu::backend::Backend::Vulkan}) {
             if(mode=="vulkan-cycles" && backend==gpu::backend::Backend::D3D12) continue;
-            fixture::Start(backend); fixture::Resize(); fixture::Stop();
+            fixture::Start(backend); fixture::CheckCalibrationCopyRelease(); fixture::Resize(); fixture::Stop();
             const auto calls=xenos::GetDxcStatistics().calls;
             fixture::Start(backend);
             fixture::Check(xenos::GetDxcStatistics().calls==calls,"same-process reinit recompiled presentation");

@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- HDR and brightness calibration now take a scene snapshot when Settings opens and release it when Settings closes; switching away from MetalFX also releases its unused output.
+
+### 简体中文
+
+- HDR 和亮度校准会在打开设置时截取场景快照，并在关闭设置时释放；切换离开 MetalFX 后也会释放不再使用的输出纹理。
+
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 
 ### English
