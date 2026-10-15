@@ -13,6 +13,7 @@
 #include <modding/fpi_index.h>
 #include <settings/menu_assets.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -135,8 +136,22 @@ int main(int argc, char **argv)
         WriteFile(out / stem, result.package.data(), result.package.size());
 
         // The settings menu's reader is independent of font_patch: every new glyph must be there.
+        // It reads DXT5 pages only (the menu's fonts); fonts on A8R8G8B8 pages are listed with their glyphs instead.
+        const auto infos = modding::font_patch::ReadFonts(result.package);
         for (const auto &addition : additions)
         {
+            const auto info = std::find_if(infos.begin(), infos.end(), [&](const auto &f) { return f.name == addition.font; });
+            if (info != infos.end() && std::any_of(info->pages.begin(), info->pages.end(), [](const auto &p) { return p.format != 7; }))
+            {
+                size_t found = 0;
+                for (const auto &g : addition.glyphs.glyphs)
+                    found += std::any_of(info->glyphs.begin(), info->glyphs.end(), [&](const auto &h) {
+                        return h.codepoint == g.codepoint && h.width == g.width && h.height == g.height; });
+                std::printf("glyph table: %s has %zu/%zu new glyphs (pages not DXT5: the menu reader does not read them)\n",
+                            addition.font.c_str(), found, addition.glyphs.glyphs.size());
+                failed |= found != addition.glyphs.glyphs.size();
+                continue;
+            }
             const auto font = settings::menu_assets::DecodeFont(result.package, addition.font);
             size_t found = 0;
             for (const auto &g : addition.glyphs.glyphs)

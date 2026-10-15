@@ -53,8 +53,8 @@ struct ThreadWaitState
 static Mutex g_waitStatesMutex;
 static std::vector<ThreadWaitState*> g_waitStates;
 
-// Clears the live-context pointer when the host thread exits so the watchdog
-// never dereferences a dead guest context.
+// Remove a thread's diagnostic record when it exits; the watchdog holds the
+// same lock while reading the records.
 struct ThreadWaitStateGuard
 {
     ThreadWaitState* state = nullptr;
@@ -63,8 +63,8 @@ struct ThreadWaitStateGuard
         if (state)
         {
             std::lock_guard lock(g_waitStatesMutex);
-            state->ctx = nullptr;
-            state->what = "exited";
+            std::erase(g_waitStates, state);
+            delete state;
         }
     }
 };
@@ -105,8 +105,6 @@ void DumpGuestThreadStates()
     LOG_WARNING("guest thread states ({} threads):", g_waitStates.size());
     for (auto* st : g_waitStates)
     {
-        if (st->what[0] == 'e') // exited
-            continue;
         bool running = st->what[0] == 'r';
         uint32_t liveLr = st->ctx ? uint32_t(st->ctx->lr) : 0;
         uint32_t liveR1 = st->ctx ? st->ctx->r1.u32 : 0;
@@ -189,6 +187,7 @@ struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
     Semaphore(uint32_t count, uint32_t maximum) : state(count, maximum) {}
     kernel::wait::Target* WaitTarget() override { return &state; }
     bool Release(uint32_t amount, uint32_t* previous) { return state.Release(amount, previous); }
+    void Reset(uint32_t count, uint32_t limit) { state.Reset(count, limit); }
 };
 struct Mutant final : KernelObject, HostObject<XDISPATCHER_HEADER>
 {
@@ -376,7 +375,7 @@ static void KeInitializeSemaphore(XKSEMAPHORE* semaphore, uint32_t count, uint32
     semaphore->Header.Type = 5;
     semaphore->Header.SignalState = count;
     semaphore->Limit = limit;
-    QueryKernelObject<Semaphore>(semaphore->Header);
+    QueryKernelObject<Semaphore>(semaphore->Header)->Reset(count, limit);
 }
 
 static uint32_t KeReleaseSemaphore(XKSEMAPHORE* semaphore, uint32_t increment, uint32_t adjustment, uint32_t wait)

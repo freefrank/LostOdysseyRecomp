@@ -8,10 +8,18 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Language packs can add missing letters to the Japanese fonts too, including the dream fonts on uncompressed pages.
+- Live mod reload keeps the active and open files safe while preparing another configuration, and edited translated text reloads from disk.
+- Memory used by a finished replacement cutscene is now released shortly after playback ends.
+- Android: Settings → System → Import discs & DLC now opens the Android importer so you can import discs and DLC (#559).
 - Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
 
 ### 简体中文
 
+- 语言包也可以给日文字体补充缺少的字母，包括使用未压缩页面的梦境字体。
+- 实时重载 Mod 时，准备另一套配置不会删除当前或仍在使用的文件，修改后的译文也会从磁盘重新加载。
+- 替换过场视频播放结束后会及时释放所占内存。
+- Android：设置 → 系统 →“导入光盘和 DLC”现在会打开 Android 导入器，可导入光盘和 DLC（#559）。
 - 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
 
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15

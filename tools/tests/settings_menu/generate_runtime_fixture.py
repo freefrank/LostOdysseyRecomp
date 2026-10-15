@@ -70,6 +70,8 @@ std::string KeyName(uint32_t scancode) { return "#" + std::to_string(scancode); 
 }
 // System -> Shader bundle records nothing here.
 namespace updater::shader_pack { bool RequestRedownload(){return true;} }
+// System -> Shader preparation records nothing here.
+namespace gpu::shader_preparation { bool RequestNextStart(){return true;} }
 namespace settings {
 Config savedConfig;
 Config GetConfig(){return savedConfig;}
