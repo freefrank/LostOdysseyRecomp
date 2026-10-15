@@ -21,7 +21,8 @@
 //   max(view+0x24 * view+0x80, view+0x28 * view+0x94) * radius / max(depth, 1)
 // (about the object's height in 720p pixels), then creates it unless the
 // light's fade is zero; when it creates nothing it changes nothing. Low skips
-// the interactions smaller than the LowCount-th largest of the previous frame.
+// the interactions smaller than the LowCount-th largest of the previous frame,
+// counting objects that are not on screen as size 0.
 extern "C" PPC_FUNC(__imp__sub_823BE570);
 extern "C" PPC_FUNC(__imp__sub_823BE9D0);
 
@@ -72,6 +73,29 @@ float ScreenSize(uint32_t renderer, uint32_t primitive)
     }
     return std::isfinite(size) ? size : 0.0f;
 }
+
+// Whether the primitive or an attached one is visible in a view: the bit of its
+// index (+0x20) in the view's visibility map (+0x25C), as sub_823BE9D0 tests
+// before it adds the half-size second shadow.
+bool Visible(uint32_t renderer, uint32_t primitive)
+{
+    const uint32_t views = LoadU32(renderer + 0x30);
+    const uint32_t count = std::min<uint32_t>(LoadU32(renderer + 0x34), 8);
+    auto inView = [&](uint32_t p) {
+        const int32_t index = int32_t(LoadU32(p + 0x20));
+        if (index < 0) return false;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const uint32_t bits = LoadU32(views + i * 0x6F0 + 0x25C);
+            if (bits && (LoadU32(bits + uint32_t(index >> 5) * 4) >> (index & 31) & 1)) return true;
+        }
+        return false;
+    };
+    if (inView(primitive)) return true;
+    for (uint32_t child = LoadU32(primitive + 0x8C), guard = 0; child && guard < 64; child = LoadU32(child + 0x90), ++guard)
+        if (inView(child)) return true;
+    return false;
+}
 }
 
 PPC_FUNC(sub_823BE570)
@@ -103,7 +127,8 @@ PPC_FUNC(sub_823BE9D0)
         __imp__sub_823BE9D0(ctx, base);
         return;
     }
-    const float size = ScreenSize(ctx.r3.u32, primitive);
+    // Off-screen casters rank last, so the budget goes to the shadows of visible objects.
+    const float size = Visible(ctx.r3.u32, primitive) ? ScreenSize(ctx.r3.u32, primitive) : 0.0f;
     sizes.push_back(size);
     bool& had = shown[primitive];
     had = size >= threshold * (had ? KeepFraction : 1.0f);
