@@ -552,8 +552,9 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
     if (modsFocus == rows.open)
         return {Tr(L"Opens the mods folder in File Explorer.", L"在檔案總管中開啟 mods 資料夾。"), folder};
     // A saved list being applied (patches/mod_hot_reload.h): one line for every row.
+    // The party's models are loaded once at startup and stay, so they need a restart.
     if (const auto reload = mod_hot_reload::GetStatus(); reload.Pending())
-        return {Tr(L"Models update when you enter a new area.", L"模型會在進入新區域時更新。"),
+        return {Tr(L"Models update in the next area; party members after a restart.", L"模型從下一個區域起更新，隊伍成員需重新啟動後更新。"),
                 reload.phase == mod_hot_reload::Phase::Preparing && reload.total
                     ? std::wstring(Tr(L"Preparing mods", L"正在準備 Mod")) + L"  " + std::to_wstring(reload.done) + L" / " +
                           std::to_wstring(reload.total)

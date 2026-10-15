@@ -3193,11 +3193,11 @@ int main(int argc, char** argv)
             Require(readList() == "beta=off\nalpha=on\ngamma=on\n", "Save writes the order and switches to mod-list.ini");
             // A changed list applies while the game runs: no restart, one line says when models follow.
             Require(modsReloadRequests == 1 && !settings::restartPrompt && !settings::restartForMods && settings::modsOpen &&
-                    settings::snapshot.help == L"Models update when you enter a new area." && settings::snapshot.notice.empty(),
+                    settings::snapshot.help == L"Models update in the next area; party members after a restart." && settings::snapshot.notice.empty(),
                     "a changed mod list reloads in game and says when models follow");
             modsReloadStatus = {mod_hot_reload::Phase::Preparing, 12, 393};
             settings::pending = 0; Tick(base);
-            Require(settings::snapshot.help == L"Models update when you enter a new area." &&
+            Require(settings::snapshot.help == L"Models update in the next area; party members after a restart." &&
                     settings::snapshot.notice == L"Preparing mods  12 / 393", "the count of packages prepared so far");
             modsReloadStatus = {mod_hot_reload::Phase::Done};
             settings::pending = 0; Tick(base);
