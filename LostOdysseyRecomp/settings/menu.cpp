@@ -1719,8 +1719,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
             break;
         case GraphicsRow::DynamicShadows:
-            next.help = Tr(L"Character and object shadows. Low keeps only large, nearby ones; Off removes them. Both can raise the frame rate. Applies after saving.",
-                           L"角色與物件的陰影。「低」只保留近處的大物件，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
+            next.help = Tr(L"Character and object shadows. Low keeps only the largest few; Off removes them. Both can raise the frame rate. Applies after saving.",
+                           L"角色與物件的陰影。「低」只保留畫面上最大的幾個，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
 #if LO_PLATFORM_ANDROID

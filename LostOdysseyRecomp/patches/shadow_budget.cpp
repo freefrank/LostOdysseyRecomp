@@ -36,7 +36,9 @@ constexpr float KeepFraction = 0.8f;
 bool low = false;
 float threshold = 0.0f;                   // the LowCount-th largest size of the previous frame
 std::vector<float> sizes, lastSizes;      // interaction sizes this frame / the previous frame
-std::unordered_map<uint32_t, bool> shown; // primitive scene info -> had a shadow last frame
+// Primitive scene info -> had a shadow last frame. A primitive lit by two
+// lights has two interactions; both see the same size, so they decide alike.
+std::unordered_map<uint32_t, bool> shown;
 
 uint32_t LoadU32(uint32_t address)
 {
