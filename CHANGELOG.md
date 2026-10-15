@@ -15,7 +15,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
 - The HDR and brightness calibration previews show the game scene from just before the menu opened, and the game no longer keeps copies of the screen in graphics memory while you play; turning MetalFX off also frees its memory.
 - Android: added a compatibility workaround for GPU hangs with Adreno 650 and Turnip (#558).
-- At startup, choose Free space to reclaim disk space used by duplicate disc files.
+- Game folders imported before v0.9.57 store some disc files twice. At startup the game now offers to free that space, about 5.8 GB for all four discs, where the drive supports it.
 
 ### 简体中文
 
@@ -26,7 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
 - HDR 和亮度校准的预览显示打开菜单前那一刻的游戏画面，游玩时不再在显存里保留画面副本；关闭 MetalFX 后也会释放它占用的显存。
 - Android：为 Adreno 650 使用 Turnip 驱动时的 GPU 卡死增加兼容性处理（#558）。
-- 启动时可选择“释放空间”，回收光盘重复文件占用的磁盘空间。
+- v0.9.57 之前导入的游戏目录里有些光盘文件存了两份。现在启动时会提示释放这部分空间（四张光盘约 5.8 GB），前提是所在磁盘支持。
 
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 
