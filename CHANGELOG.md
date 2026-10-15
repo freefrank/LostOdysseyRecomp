@@ -38,6 +38,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows, Vulkan: when the graphics card stops working, the closing message on AMD cards says to turn off FSR Upscaling / Radeon Super Resolution in AMD Software or to switch to DirectX 12; on any card, if it happens right after startup, the message offers to start with DirectX 12 next time (#337, #533).
 - Pressing START on the title screen opens the menu right away, without the "Updating gamer profile" message and its one-second wait.
 - Turning TAA or an upscaler off now frees the graphics memory it used once you close Settings, about 350 MB at 4K, instead of keeping it until you restart the game.
+- The achievement notification no longer draws a piece of itself over the "Y: Settings" hint on the title screen, nor over the loading bar or the performance overlay.
 
 ### 简体中文
 
@@ -71,6 +72,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows Vulkan：显卡停止工作时，AMD 显卡上的关闭提示会建议在 AMD Software 里关闭 FSR Upscaling / Radeon Super Resolution，或改用 DirectX 12；不论哪种显卡，如果刚启动就出现，提示都会询问下次是否改用 DirectX 12 启动（#337、#533）。
 - 在标题画面按 START 后直接打开菜单，不再显示“正在更新玩家档案”提示，也不再等约一秒。
 - 关闭 TAA 或超分后，退出设置时会释放它占用的显存（4K 下约 350 MB），不再一直占到重启游戏。
+- 成就通知不再在标题画面的“Y：设置”提示上，也不再在加载进度条和性能叠加层上，画出自己的一块。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

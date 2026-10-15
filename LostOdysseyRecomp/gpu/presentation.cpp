@@ -44,7 +44,11 @@ struct Presentation::Impl
     std::unique_ptr<RenderPipelineLayout> overlayLayout;
     std::unique_ptr<RenderShader> overlayVs, overlayPs;
     std::unique_ptr<RenderPipeline> overlayPipeline;
-    std::unique_ptr<RenderDescriptorSet> overlayDescriptors;
+    // One set per overlay draw of a frame: setTexture takes effect for the whole
+    // command list, so draws sharing a set would all sample the last texture.
+    static constexpr size_t kOverlaySets = 8;
+    std::array<std::unique_ptr<RenderDescriptorSet>, kOverlaySets> overlayDescriptors;
+    size_t overlayNext = 0;
     // A failed compile or pipeline creation is not retried until Init.
     bool overlayFailed = false;
     std::unique_ptr<RenderSampler> sampler;
@@ -687,8 +691,13 @@ float4 pixelOverlay(float4 position : SV_Position) : SV_Target {
     builder.begin(false, false); builder.addPushConstant(0, 0, 20, RenderShaderStageFlag::PIXEL);
     builder.addDescriptorSet(set); builder.end();
     auto pipelineLayout = builder.create(device);
-    auto descriptors = set.create(device);
-    if (!pipelineLayout || !descriptors) {
+    std::array<std::unique_ptr<RenderDescriptorSet>, kOverlaySets> descriptors;
+    bool descriptorsOk = true;
+    for (auto &slot : descriptors) {
+        slot = set.create(device);
+        descriptorsOk = descriptorsOk && slot;
+    }
+    if (!pipelineLayout || !descriptorsOk) {
         LOG_WARNING("presentation overlay: layout creation failed");
         return false;
     }
@@ -727,9 +736,11 @@ void Presentation::DrawOverlay(RenderCommandList *commands, RenderTexture *overl
         return;
     width = std::min(width, targetWidth - x);
     height = std::min(height, targetHeight - y);
-    // Each present records after the previous one completed, so one
-    // descriptor set serves every frame's overlay.
-    p.overlayDescriptors->setTexture(0, overlay, RenderTextureLayout::SHADER_READ);
+    // Each present records after the previous one completed, so the sets are
+    // free again; within a frame every overlay takes the next one.
+    auto *descriptors = p.overlayDescriptors[p.overlayNext].get();
+    p.overlayNext = (p.overlayNext + 1) % Impl::kOverlaySets;
+    descriptors->setTexture(0, overlay, RenderTextureLayout::SHADER_READ);
     commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(overlay, RenderTextureLayout::SHADER_READ));
     commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE));
     commands->setFramebuffer(p.FramebufferFor(target, targetWidth, targetHeight));
@@ -743,7 +754,7 @@ void Presentation::DrawOverlay(RenderCommandList *commands, RenderTexture *overl
         float(x), float(y), (p.output.linear ? 1u : 0u) | (p.output.linear && p.output.pq ? 8u : 0u),
         p.output.scale, std::min(opacity, 1.0f)};
     commands->setGraphicsPushConstants(0, &constants);
-    commands->setGraphicsDescriptorSet(p.overlayDescriptors.get(), 0);
+    commands->setGraphicsDescriptorSet(descriptors, 0);
     commands->drawInstanced(3, 1, 0, 0);
 }
 bool Presentation::ProcessSceneColor(RenderCommandList *commands, RenderTexture *source, RenderTexture *target,
