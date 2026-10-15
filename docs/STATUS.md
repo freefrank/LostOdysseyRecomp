@@ -2,7 +2,52 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v0.9.65 published — 2026-10-15
+
+[v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) was published at 2026-10-15T21:15:30Z by the workflow's own publish step. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` and `isPrerelease` false, and `gh release list` marks it Latest; checked 2026-10-15 at about 21:17Z). It was cut from annotated tag `v0.9.65` at commit `298b3e8f`, the merge of PR [#572](https://github.com/freefrank/LostOdysseyRecomp/pull/572) (merged 2026-10-15T20:52:37Z). The version number is the maintainer's choice: v0.9.57 plus 0.0.8.
+
+The release run is Gitea run 1424, `release.yml` on `refs/tags/v0.9.65`. Create draft, Prepare FSR Vulkan build inputs, Windows Release, Linux Release, Android Release and Publish complete release succeeded.
+
+Assets, as listed by GitHub's release metadata at about 21:17Z on 2026-10-15 (bytes and `sha256` digests from GitHub; the packages were not downloaded in this documentation task):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v0.9.65.zip` | 153,139,165 | `439f916503e18f7a8d0dfd3660dc32980de60816c7d64aed015d6e38bcce1a05` |
+| `LostOdysseyRecomp-linux-x64-v0.9.65.AppImage` | 78,952,952 | `56f11d36e2c62f54ad7c218f91b604862e69a67333ca3f5f393b6056fd349fe2` |
+| `LostOdysseyRecomp-linux-x64-v0.9.65.flatpak` | 55,475,040 | `943bba18fa348552e8f03fbc394bdc98b275a81040b9c43038edfb8bbae2bcf5` |
+| `LostOdysseyRecomp-android-arm64-v0.9.65.apk` | 47,102,138 | `c184a3734bd6d05c3ed4d9bba574f6604b02039b89056d3b528e3e703c3cc68e` |
+| `LostOdysseyRecomp-macos-arm64-v0.9.65.dmg` | 65,391,616 | `31b7ae38ccc65aa55b92a22fd5cf7b0878f62cf60453fe965490433e56f3b256` |
+
+The PortForge manifest `.forge.json` moved from 0.9.57 to 0.9.65. Its Windows ZIP and Linux AppImage URLs return HTTP 200.
+
+What the release contains, grouped (one line each; details in the Changelog):
+
+- Language packs: Japanese-font glyphs can be added for language packs ([#556](https://github.com/freefrank/LostOdysseyRecomp/pull/556), external contribution).
+- Stability: semaphore re-initialisation and wait-diagnostics cleanup ([#560](https://github.com/freefrank/LostOdysseyRecomp/pull/560)); replacement-video session cleanup ([#561](https://github.com/freefrank/LostOdysseyRecomp/pull/561)).
+- Mods: the mod cache is pinned, and edited translated text reloads from disk ([#562](https://github.com/freefrank/LostOdysseyRecomp/pull/562)).
+- Calibration: the HDR and brightness calibration previews show the scene from just before the menu opened ([#563](https://github.com/freefrank/LostOdysseyRecomp/pull/563)).
+- Android: Import discs & DLC opens the importer ([#564](https://github.com/freefrank/LostOdysseyRecomp/pull/564), fixes [#559](https://github.com/freefrank/LostOdysseyRecomp/issues/559)).
+- Shaders: Prepare shaders can run again ([#565](https://github.com/freefrank/LostOdysseyRecomp/pull/565)).
+- Disc data: at startup the game can offer to free duplicate disc data ([#570](https://github.com/freefrank/LostOdysseyRecomp/pull/570)). It never prompts on Android `/sdcard`, which cannot share files.
+- Adreno 650 with Turnip: a `TU_DEBUG=syncdraw` workaround ([#571](https://github.com/freefrank/LostOdysseyRecomp/pull/571), fixes [#558](https://github.com/freefrank/LostOdysseyRecomp/issues/558)). It was reproduced and verified on a Galaxy S20 with R8 and T30. The root cause in the driver is not identified, and the performance cost has not been measured.
+
+Shader packs: not republished. The contracts are unchanged (d3d12 `05fd9431…`, vulkan and metal `03ef0787…`). `tools/release/publish_shader_packs.py --check` passed on the maintainer's M1 Max on `df1ce051` and on the tag.
+
+macOS: the disk image was built from the tag on the maintainer's M1 Max with `mac-release-sdl3.sh v0.9.65 v0.9.65 tag package` and uploaded to the draft release before publication. `hdiutil verify` reports it VALID, `codesign --verify` passes and `CFBundleShortVersionString` is 0.9.65 ([macOS releases](MACOS_RELEASE.md#v0965-image)).
+
+Reports and Issues (live GitHub state read at about 21:17Z on 2026-10-15):
+
+- [#558](https://github.com/freefrank/LostOdysseyRecomp/issues/558) is closed (2026-10-15T20:42:40Z). A release comment was posted on it. The Retroid Pocket 5 confirmation is still pending. The closure is not reporter acceptance.
+- [#559](https://github.com/freefrank/LostOdysseyRecomp/issues/559) is closed (2026-10-15T17:30:17Z). The report came from Discord, so the maintainer replies there. The closure is not reporter acceptance.
+- [#564](https://github.com/freefrank/LostOdysseyRecomp/issues/564) has not yet been checked on a device; the test tablet was locked.
+
+Not in this release: draft [#548](https://github.com/freefrank/LostOdysseyRecomp/pull/548) (dynamic shadows Low), which is still a draft and open.
+
+Acceptance: none. No game run with the v0.9.65 packages is recorded in this file, and the maintainer has not accepted v0.9.65. The in-game check of [#563](https://github.com/freefrank/LostOdysseyRecomp/issues/563) by the maintainer does not cover the release packages. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v0.9.57 published — 2026-10-15
+
+Update, 2026-10-15: v0.9.57 stopped being the latest release when [v0.9.65](#v0965-published--2026-10-15) was published at 2026-10-15T21:15:30Z. The record below is unchanged.
 
 [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) was published at 2026-10-15T08:24:56Z by the workflow's own publish step. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` false and `gh release list` marks it Latest). It was cut from tag `v0.9.57` at commit `b0903a05` (PR [#555](https://github.com/freefrank/LostOdysseyRecomp/pull/555), the README table of contents, merged 2026-10-15). The first tag at `3278de66` (`chore: release v0.9.57`, PR [#554](https://github.com/freefrank/LostOdysseyRecomp/pull/554)) was withdrawn before any package was built: Gitea run 1389 was cancelled and its draft release deleted. Before the re-tag, external PR [#544](https://github.com/freefrank/LostOdysseyRecomp/pull/544) (language packs add the letters the game's fonts lack, by faisalkindi) merged as `498094d3`. The previous release is v0.9.52, published 2026-10-14T04:07:16Z at `9769f12e`. The player-facing list is the [Changelog, v0.9.57](../CHANGELOG.md#v0957--2026-10-15) section, covering the merged PRs #495 to #553 since v0.9.52 as well as the later changes listed there.
 
