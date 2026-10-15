@@ -136,6 +136,12 @@ InstallResult ReimportContent(const ContentScan& selection,
 CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Progress& progress = {},
                               const Cancelled& cancelled = {});
 
+// Cheap, read-only estimate from archive names, sizes and file identities in the
+// four discN folders; never reads archive contents. Same-sized different content
+// and existing copy-on-write clones may overestimate the space compaction frees.
+// Already hard-linked copies and missing discs do not contribute to the estimate.
+uint64_t EstimateCompactGameDataBytes(const std::filesystem::path& gameFolder);
+
 std::filesystem::path DefaultGameDirectory(const std::filesystem::path& executableDirectory);
 bool WriteGamePath(const std::filesystem::path& executableDirectory,
                    const std::filesystem::path& gameDirectory,

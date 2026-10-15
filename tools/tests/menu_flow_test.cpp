@@ -3756,6 +3756,34 @@ int main(int argc, char** argv)
                 output << contents;
                 Require(bool(output), "write isolated settings.ini");
             };
+            writeIni("");
+            Require(settings::Read().askCompactGameData, "missing compaction preference offers to free disk space");
+            writeIni("ask_compact_game_data=0\n");
+            Require(!settings::Read().askCompactGameData, "Don't ask again reads from INI");
+            for (const auto* contents : {"ask_compact_game_data=2\n", "ask_compact_game_data=-1\n",
+                                         "ask_compact_game_data=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().askCompactGameData, "invalid compaction preference keeps enabled default");
+            }
+            settings::Config compact{};
+            compact.askCompactGameData = false;
+            Require(settings::SaveConfig(compact) && !settings::GetConfig().askCompactGameData &&
+                    !settings::Read().askCompactGameData, "Don't ask again persists through save and reload");
+            compact = settings::Read();
+            compact.debugLog = true;
+            Require(settings::SaveConfig(compact) && !settings::Read().askCompactGameData,
+                    "saving another setting preserves Don't ask again");
+            {
+                std::ifstream compactIni("settings.ini");
+                const std::string text((std::istreambuf_iterator<char>(compactIni)), std::istreambuf_iterator<char>());
+                Require(text.find("\nask_compact_game_data=0\n") != std::string::npos,
+                        "INI writes the compaction preference key");
+            }
+            compact.askCompactGameData = true;
+            Require(settings::SaveConfig(compact) && settings::Read().askCompactGameData,
+                    "enabled compaction preference roundtrips");
+            std::puts("PASS compaction preference default, validation, Don't ask again save/reload and unrelated save");
             writeIni("upscaler=2\nfsr_sharpness=75\n");
             Require(settings::Read().fsrSharpnessPercent == 75, "FSR sharpness reads from INI");
             writeIni("fsr_sharpness=101\n");

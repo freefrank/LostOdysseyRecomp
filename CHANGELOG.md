@@ -14,6 +14,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android: Settings → System → Import discs & DLC now opens the Android importer so you can import discs and DLC (#559).
 - Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
 - The HDR and brightness calibration previews show the game scene from just before the menu opened, and the game no longer keeps copies of the screen in graphics memory while you play; turning MetalFX off also frees its memory.
+- At startup, choose Free space to reclaim disk space used by duplicate disc files.
 
 ### 简体中文
 
@@ -23,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android：设置 → 系统 →“导入光盘和 DLC”现在会打开 Android 导入器，可导入光盘和 DLC（#559）。
 - 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
 - HDR 和亮度校准的预览显示打开菜单前那一刻的游戏画面，游玩时不再在显存里保留画面副本；关闭 MetalFX 后也会释放它占用的显存。
+- 启动时可选择“释放空间”，回收光盘重复文件占用的磁盘空间。
 
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 

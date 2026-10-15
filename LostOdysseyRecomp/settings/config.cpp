@@ -319,6 +319,8 @@ Config Read()
             // Unknown values keep the safe package default (enabled).
             if (number <= 1) value.automaticUpdates = number == 1;
         }
+        else if (key == "ask_compact_game_data" && number <= 1)
+            value.askCompactGameData = number == 1;
         else if (key == "debug_log" && number <= 1)
             value.debugLog = number == 1;
     }
@@ -463,6 +465,7 @@ static bool WriteConfig(const Config &value)
            << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\nask_compact_game_data=" << (value.askCompactGameData ? 1 : 0)
            << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
            << "\naudio_matrix_rear=" << value.audioMatrixRear

@@ -1797,6 +1797,63 @@ std::vector<int> InstallDiscs(const std::filesystem::path& source,
     return res.discs;
 }
 
+uint64_t EstimateCompactGameDataBytes(const std::filesystem::path& gameFolder)
+{
+    std::error_code ec;
+    auto root = std::filesystem::absolute(gameFolder, ec).lexically_normal();
+    if (ec) return 0;
+    const auto leaf = ToLower(root.filename().string());
+    if (!std::filesystem::is_directory(root / "disc1", ec) && leaf.size() == 5 && leaf.compare(0, 4, "disc") == 0)
+        root = root.parent_path();
+    if (IsSymlinkOrReparse(root) || !std::filesystem::is_directory(root, ec)) return 0;
+
+    std::map<std::pair<std::string, uint64_t>, std::vector<std::filesystem::path>> groups;
+    for (uint32_t n = 1; n <= 4; ++n)
+    {
+        const auto disc = root / ("disc" + std::to_string(n));
+        if (IsSymlinkOrReparse(disc) || !std::filesystem::is_directory(disc, ec)) continue;
+        std::filesystem::directory_iterator it(disc, ec), end;
+        for (; !ec && it != end; it.increment(ec))
+        {
+            const auto& entry = *it;
+            const auto name = entry.path().filename().string();
+            if (!IsDiscArchive(name) || IsSymlinkOrReparse(entry.path()) || !entry.is_regular_file(ec)) continue;
+            const auto size = entry.file_size(ec);
+            if (!ec) groups[{ToLower(name), size}].push_back(entry.path());
+        }
+    }
+
+    uint64_t bytes = 0;
+    for (const auto& [key, copies] : groups)
+    {
+        if (copies.size() < 2) continue;
+        struct PhysicalCopy { std::filesystem::path path; uintmax_t links; uint32_t copies; };
+        std::vector<PhysicalCopy> distinct;
+        bool complete = true;
+        for (const auto& copy : copies)
+        {
+            auto same = distinct.end();
+            for (auto it = distinct.begin(); it != distinct.end(); ++it)
+            {
+                if (std::filesystem::equivalent(it->path, copy, ec)) { same = it; break; }
+                if (ec) { complete = false; break; }
+            }
+            if (!complete) break;
+            if (same != distinct.end()) { ++same->copies; continue; }
+            const auto links = std::filesystem::hard_link_count(copy, ec);
+            if (ec) { complete = false; break; }
+            distinct.push_back({copy, links, 1});
+        }
+        if (!complete) continue;
+        // Compaction retains the first physical copy. Another file frees its
+        // storage only after all its links are replaced; links outside this
+        // archive group keep that storage alive and must not be counted.
+        for (size_t i = 1; i < distinct.size(); ++i)
+            if (distinct[i].links == distinct[i].copies) bytes += key.second;
+    }
+    return bytes;
+}
+
 CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Progress& progress,
                               const Cancelled& cancelled)
 {

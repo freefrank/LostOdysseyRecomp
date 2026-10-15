@@ -16,6 +16,21 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        // Startup offer for installations that still contain duplicate disc archives.
+        {L"Free disk space", L"ディスク容量を節約", L"디스크 공간 확보", L"释放磁盘空间"},
+        {L"Free about %s GB?", L"約 %s GB を節約しますか？", L"약 %s GB를 확보할까요?", L"释放约 %s GB？"},
+        {L"Your discs store some files twice.", L"ディスク間に重複したファイルがあります。", L"디스크에 중복 저장된 파일이 있습니다.", L"光盘中存有部分重复文件。"},
+        {L"This takes a few minutes and runs once.", L"数分かかります。実行は一度だけです。", L"몇 분이 걸리며 한 번만 실행합니다.", L"需要几分钟，只需运行一次。"},
+        {L"Free space (A)", L"容量を節約 (A)", L"공간 확보 (A)", L"释放空间 (A)"},
+        {L"Not now (B)", L"後で (B)", L"나중에 (B)", L"暂时不要 (B)"},
+        {L"Don't ask again", L"今後は表示しない", L"다시 묻지 않기", L"不再询问"},
+        {L"Comparing disc archives", L"ディスクのファイルを比較中", L"디스크 파일 비교 중", L"正在比较光盘文件"},
+        {L"Cancel (B)", L"キャンセル (B)", L"취소 (B)", L"取消 (B)"},
+        {L"Compaction cancelled.", L"容量の節約をキャンセルしました。", L"공간 확보를 취소했습니다.", L"已取消空间整理。"},
+        {L"Game files were kept. You can try again later.", L"ゲームファイルは保持されました。後で再試行できます。", L"게임 파일을 보존했습니다. 나중에 다시 시도할 수 있습니다.", L"游戏文件已保留，可稍后重试。"},
+        {L"Freed %s GB.", L"%s GB を節約しました。", L"%s GB를 확보했습니다.", L"已释放 %s GB。"},
+        {L"Some files could not be shared.", L"一部のファイルを共有できませんでした。", L"일부 파일을 공유하지 못했습니다.", L"部分文件无法共享。"},
+        {L"Continue (A)", L"続ける (A)", L"계속 (A)", L"继续 (A)"},
         {L"HDR output", L"HDR 出力", L"HDR 출력", L"HDR 输出"},
         {L"HDR paper white", L"HDR 基準白", L"HDR 기준 흰색", L"HDR 参考白"},
         {L"HDR peak reference", L"HDR ピーク基準", L"HDR 최대 밝기 기준", L"HDR 高光参考值"},

@@ -37,6 +37,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
 #include "modding/text_overlay.h"
@@ -630,6 +631,9 @@ int main(int argc, char* argv[])
 
     LOG_INFO("game root: {}", FileSystem::PathUtf8(gameRoot));
 
+    // The startup offer and compaction finish before any disc archive opens.
+    if (!prepareShadersOnly)
+        install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
     XamInit();
 
