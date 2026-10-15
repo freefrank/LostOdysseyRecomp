@@ -224,7 +224,7 @@ Text has to use characters the game's font for that language has, or ones the pa
 
 ## Fonts (LOFONT1)
 
-A language pack can add glyphs to the game's fonts for letters they lack. The fonts are UE3 `Font` objects in `loc/<language>/menu/rpfonts*_<language>.xxx`: a glyph table (texture rectangle and page per glyph, stored twice, as the `Characters` property and again in the native data), DXT5 page textures (`Texture2D`, one mip, LZO-compressed, Xenos-tiled), one `Kerning` for the whole font and a `CharRemap` from 16-bit code points to glyphs. The game advances by glyph width plus kerning; glyphs have no bearings.
+A language pack can add glyphs to the game's fonts for letters they lack. The fonts are UE3 `Font` objects in `loc/<language>/menu/rpfonts*_<language>.xxx`: a glyph table (texture rectangle and page per glyph, stored twice, as the `Characters` property and again in the native data), page textures (`Texture2D`, one mip, LZO-compressed, Xenos-tiled; DXT5, or A8R8G8B8 for the Japanese `Yume24` and `Yume66`, both supported), one `Kerning` for the whole font and a `CharRemap` from 16-bit code points to glyphs. The game advances by glyph width plus kerning; glyphs have no bearings.
 
 - Identity: `AssetKind::Font` (2). The key is `<package member path>#<font object>`, for example `bin/xenon/loc/int/menu/rpfontscommon_int.xxx#Maru23`.
 - Files: `<pack>/fonts/<package member path>/<font object>.lofont`, listed by `ListFonts(pack)`. Only the selected language pack's fonts apply; mod folders and the top-level overlay have no font files.

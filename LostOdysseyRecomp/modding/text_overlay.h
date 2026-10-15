@@ -30,6 +30,7 @@ struct Range
     uint64_t offset = 0, size = 0;
     std::shared_ptr<const std::vector<uint8_t>> bytes; // in memory, or
     std::shared_ptr<CachedFile> file;                  // a cache file
+    std::shared_ptr<void> cachePin;                    // keeps the cache set while a handle holds this range
     // Copies count bytes from at (counted from offset); false if the cache file cannot be read.
     bool Read(uint64_t at, uint8_t *out, size_t count) const;
 };
@@ -43,7 +44,7 @@ std::vector<Range> RangesFor(const std::filesystem::path &file);
 // can address in one) go into overflow archives the patched index adds
 // (fpi_overflow.h). For an overflow archive of a folder whose files were
 // rebuilt: its file in the mod cache, opened in its place; otherwise empty.
-std::filesystem::path OverflowArchive(const std::filesystem::path &file);
+std::filesystem::path OverflowArchive(const std::filesystem::path &file, std::shared_ptr<void> *cachePin = nullptr);
 
 // Whether a language pack has a translation for this key of this member
 // (for host text that replaces game text, such as the Quit to Desktop row).

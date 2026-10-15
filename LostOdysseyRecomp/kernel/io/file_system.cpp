@@ -228,6 +228,7 @@ struct FileHandle : KernelObject
     // Language packs: bytes served from memory over and after the file
     // (modding/text_overlay.h); size then includes them, fileSize does not.
     std::vector<modding::text_overlay::Range> ranges;
+    std::shared_ptr<void> cachePin; // overflow archive's cache set, until this handle closes
     uint64_t fileSize = 0;
     bool writable = false;
     // Writable save file: synced to disk before it closes.
@@ -542,8 +543,9 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
     const bool wantWrite = (DesiredAccess & 0x40000000) != 0 || (DesiredAccess & 0x2) != 0 || (DesiredAccess & 0x4) != 0;
     // A mod overflow archive the patched index names lives in the mod cache.
     bool overflow = false;
+    std::shared_ptr<void> cachePin;
     if (!wantWrite && !hostPath.empty())
-        if (auto cached = modding::text_overlay::OverflowArchive(hostPath); !cached.empty())
+        if (auto cached = modding::text_overlay::OverflowArchive(hostPath, &cachePin); !cached.empty())
         {
             hostPath = std::move(cached);
             overflow = true;
@@ -597,6 +599,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
 
     auto handle = CreateKernelObject<FileHandle>();
     handle->path = hostPath;
+    handle->cachePin = std::move(cachePin);
 
     if (isDir || ((CreateOptions & FILE_DIRECTORY_FILE) && !exists))
     {
