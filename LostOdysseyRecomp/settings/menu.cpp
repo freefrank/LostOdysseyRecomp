@@ -1435,7 +1435,8 @@ void Publish(uint8_t *base, uint32_t config)
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
-        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
+                   {Tr(L"On", L"開"), Tr(L"Low", L"低"), Tr(L"Off", L"關")}, graphics_menu::DynamicShadowsChoice(edit)));
 #if LO_PLATFORM_MACOS
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
@@ -1718,8 +1719,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
             break;
         case GraphicsRow::DynamicShadows:
-            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
-                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
+            next.help = Tr(L"Character and object shadows. Low keeps only large, nearby ones; Off removes them. Both can raise the frame rate. Applies after saving.",
+                           L"角色與物件的陰影。「低」只保留近處的大物件，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
 #if LO_PLATFORM_ANDROID
@@ -3611,7 +3612,8 @@ PPC_FUNC(sub_822F19B0)
                     cycle(graphics_menu::ShadowResolutionChoice(edit), uint32_t(std::size(graphics_menu::ShadowResolutions)))];
                 break;
             case GraphicsRow::DynamicShadows:
-                edit.dynamicShadows = !edit.dynamicShadows;
+                edit.dynamicShadows = graphics_menu::DynamicShadowsValues[
+                    cycle(graphics_menu::DynamicShadowsChoice(edit), uint32_t(std::size(graphics_menu::DynamicShadowsValues)))];
                 break;
             case GraphicsRow::AntiAliasing:
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));

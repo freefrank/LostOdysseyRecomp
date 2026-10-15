@@ -448,6 +448,20 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.shadowResolution == 4, "shadow resolution selects 4x");
     settings::pending = 8; Tick(base);
     Require(settings::edit.shadowResolution == 1, "shadow resolution wraps to 1x");
+    {
+        const auto& shadows = settings::snapshot.rows[int(GraphicsRow::DynamicShadows)];
+        Require(shadows.choices == std::vector<std::wstring>{L"On", L"Low", L"Off"} && shadows.selectedChoice == 0,
+                "dynamic shadows default to On");
+        settings::row = int(GraphicsRow::DynamicShadows);
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 2 &&
+                settings::snapshot.rows[int(GraphicsRow::DynamicShadows)].value == L"Low" &&
+                settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Custom", "dynamic shadows select Low");
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 0, "dynamic shadows select Off");
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 1, "dynamic shadows wrap to On");
+    }
     settings::row = int(GraphicsRow::AmbientOcclusion);
     settings::pending = 8; Tick(base);
     Require(settings::edit.ambientOcclusion == 1 &&

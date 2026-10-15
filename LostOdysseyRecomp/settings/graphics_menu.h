@@ -93,7 +93,7 @@ inline void ApplyPreset(Config& config, Preset preset)
     const bool low = preset == Preset::LowEnd;
     config.internalResolution = 720;
     config.frameRate = 30;
-    config.dynamicShadows = !low;
+    config.dynamicShadows = low ? 0 : 1;
     config.motionBlur = !low;
     config.depthOfFieldPercent = low ? 0 : 100;
     config.bloom = !low;
@@ -108,6 +108,14 @@ inline Preset PresetOf(const Config& config)
         if (applied == config) return preset;
     }
     return Preset::Custom;
+}
+// Dynamic shadows row: On, Low, Off (settings values 1, 2, 0).
+inline constexpr uint32_t DynamicShadowsValues[] = {1, 2, 0};
+inline uint32_t DynamicShadowsChoice(const Config& config)
+{
+    for (uint32_t i = 0; i < std::size(DynamicShadowsValues); ++i)
+        if (DynamicShadowsValues[i] == config.dynamicShadows) return i;
+    return 0;
 }
 inline constexpr uint32_t ShadowResolutions[] = {1, 2, 4};
 inline uint32_t ShadowResolutionChoice(const Config& config)
