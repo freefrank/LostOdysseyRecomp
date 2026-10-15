@@ -70,16 +70,22 @@ void AskForSameDisc(PPCContext &ctx, uint8_t *base)
 }
 } // namespace
 
-bool Request()
+// The current disc's files for the mods the mod API lists now.
+static void Prepare()
 {
-    if (!modding::Enabled()) return false;
     const auto disc = FileSystem::GetDiscRoot();
-    modding::Reload();
     modding::text_overlay::PrepareReload(disc);
     std::lock_guard lock(mutex);
     folder = (disc / "LO.fpi").parent_path().lexically_normal();
     phase = Phase::Preparing;
     attempts = 0;
+}
+
+bool Request()
+{
+    if (!modding::Enabled()) return false;
+    modding::Reload();
+    Prepare();
     return true;
 }
 
@@ -133,7 +139,7 @@ void Tick(PPCContext &ctx, uint8_t *base, bool playerInField)
         if ((FileSystem::GetDiscRoot() / "LO.fpi").parent_path().lexically_normal() != prepared)
         {
             LOG_NOTICE("[mods] live reload: the disc changed; preparing the new one");
-            Request();
+            Prepare();
             return;
         }
         if (!Safe(base, playerInField)) return;
