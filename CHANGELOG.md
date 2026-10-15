@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Live mod reload keeps the active and open files safe while preparing another configuration, and edited translated text reloads from disk.
+
+### 简体中文
+
+- 实时重载 Mod 时，准备另一套配置不会删除当前或仍在使用的文件，修改后的译文也会从磁盘重新加载。
+
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 
 ### English

@@ -88,6 +88,7 @@ struct Folder
 {
     std::map<std::string, std::vector<Range>> ranges; // by lower-case file name
     std::map<std::string, fs::path> overflow;         // overflow archives (fpi_overflow.h) by lower-case name
+    std::shared_ptr<void> cachePin;                   // keeps this set while active or prepared for reload
 };
 
 // Rebuilt files after an archive's real end: appended to a cache file, or kept
@@ -132,16 +133,41 @@ struct ModSet
 
 std::mutex gMutex;
 std::mutex gFilesMutex; // gFiles: a foreground and a background build may both translate
+std::mutex gCachePinsMutex;
+std::map<fs::path, std::weak_ptr<void>> gCachePins;
 std::string gLanguagePack;
 std::shared_ptr<const ModSet> gSet; // null until listed
-std::map<std::pair<fs::path, uint64_t>, std::optional<text::Replacements>> gFiles; // parsed, by file and offset
+struct ParsedTranslation
+{
+    std::tuple<uint64_t, uint64_t, fs::file_time_type> version;
+    std::shared_ptr<const text::Replacements> replacements;
+};
+std::map<std::pair<fs::path, uint64_t>, ParsedTranslation> gFiles; // one version per path and archive offset
 std::map<fs::path, Folder> gFolders; // made for gSet
 
-const text::Replacements *Translation(const ResolvedAsset &file)
+std::shared_ptr<void> PinCache(const fs::path &path)
 {
+    std::lock_guard lock(gCachePinsMutex);
+    auto &pin = gCachePins[path];
+    if (auto held = pin.lock()) return held;
+    auto held = std::make_shared<int>(0);
+    pin = held;
+    return held;
+}
+
+std::shared_ptr<const text::Replacements> Translation(const ResolvedAsset &file)
+{
+    std::error_code ec;
+    const auto size = fs::file_size(file.path, ec);
+    const auto diskSize = ec ? uint64_t(0) : size;
+    ec.clear();
+    const auto modified = fs::last_write_time(file.path, ec);
+    const auto version = std::tuple{file.size, diskSize, ec ? fs::file_time_type{} : modified};
     auto [it, added] = gFiles.try_emplace({file.path, file.offset});
-    if (added)
+    if (added || it->second.version != version)
     {
+        it->second.version = version;
+        it->second.replacements.reset();
         try
         {
             std::ifstream input;
@@ -158,14 +184,14 @@ const text::Replacements *Translation(const ResolvedAsset &file)
                 if (!value.is_string()) throw std::runtime_error("value of \"" + key + "\" is not a string");
                 replacements.emplace(key, value.get<std::string>());
             }
-            it->second = std::move(replacements);
+            it->second.replacements = std::make_shared<text::Replacements>(std::move(replacements));
         }
         catch (const std::exception &error)
         {
             LOG_WARNING("[mods] text {} skipped: {}", DescribeAsset(file), error.what());
         }
     }
-    return it->second ? &*it->second : nullptr;
+    return it->second.replacements;
 }
 
 struct Counts
@@ -452,7 +478,7 @@ void PatchIndex(const ModSet &set, const fs::path &folder, const std::map<std::s
             const bool model = models.count(file.path) != 0 || font;
             try
             {
-                const text::Replacements *translation = nullptr;
+                std::shared_ptr<const text::Replacements> translation;
                 if (!model)
                 {
                     std::lock_guard lock(gFilesMutex);
@@ -619,8 +645,8 @@ void PatchIndex(const ModSet &set, const fs::path &folder, const std::map<std::s
 // entry, size, time), and the folder's indexes and archive sizes; any change
 // makes a new set. A game update that leaves the rebuilding code alone keeps the
 // cache. Each folder keeps its last kKeptSets sets by use (the manifest's time),
-// so turning a mod off and on again reads its files instead of rebuilding them;
-// a start without mods keeps them too.
+// plus sets still in use, so turning a mod off and on again reads its files
+// instead of rebuilding them; a start without mods keeps them too.
 constexpr const char *kCacheFormat = "3"; // bump when the rebuilt bytes change for the same inputs
 constexpr size_t kKeptSets = 2;           // the set in use and the one before it
 #ifdef LO_MODS_BUILDER_HASH
@@ -686,11 +712,13 @@ uint64_t Bytes(const fs::path &path)
 
 double MiB(uint64_t bytes) { return double(bytes) / (1024.0 * 1024.0); }
 
-// After a set of folderCache is read or written: it and the most recently used
-// other set stay; older sets, builds that did not finish and the files of the
-// earlier one-set layout go. Only the thread building this folder calls it.
+// After a set of folderCache is read or written: it, the most recently used
+// other set and any set held by an active folder or open handle stay. Older
+// sets, unfinished builds and files of the earlier one-set layout go.
 void Prune(const fs::path &folderCache, const fs::path &current)
 {
+    std::lock_guard pins(gCachePinsMutex); // a new handle cannot acquire a pin during removal
+    std::erase_if(gCachePins, [](const auto &entry) { return entry.second.expired(); });
     struct Set { fs::path path; fs::file_time_type used; };
     std::vector<Set> sets;
     std::vector<fs::path> stale;
@@ -708,13 +736,28 @@ void Prune(const fs::path &folderCache, const fs::path &current)
     // The earlier layout built a folder's files in <folder hash>.new.
     if (const auto old = fs::path(folderCache).concat(".new"); fs::exists(old, ec)) stale.push_back(old);
     std::sort(sets.begin(), sets.end(), [](const Set &a, const Set &b) { return a.used > b.used; });
-    for (size_t i = kKeptSets - 1; i < sets.size(); ++i) stale.push_back(sets[i].path);
-    sets.resize(std::min(sets.size(), kKeptSets - 1));
+    std::vector<Set> keptSets;
+    size_t recent = 0;
+    for (const auto &set : sets)
+    {
+        const auto pin = gCachePins.find(set.path);
+        if (pin != gCachePins.end() && !pin->second.expired()) keptSets.push_back(set);
+        else if (recent++ < kKeptSets - 1) keptSets.push_back(set);
+        else stale.push_back(set.path);
+    }
 
     uint64_t kept = Bytes(current), freed = 0;
-    for (const auto &set : sets) kept += Bytes(set.path);
+    size_t keptCount = keptSets.size() + 1;
+    for (const auto &set : keptSets) kept += Bytes(set.path);
     for (const auto &path : stale)
     {
+        const auto pin = gCachePins.find(path);
+        if (pin != gCachePins.end() && !pin->second.expired())
+        {
+            kept += Bytes(path);
+            ++keptCount;
+            continue;
+        }
         const auto bytes = Bytes(path);
         std::error_code removeError;
         fs::remove_all(path, removeError);
@@ -722,8 +765,8 @@ void Prune(const fs::path &folderCache, const fs::path &current)
         freed += bytes - std::min(bytes, left);
         if (removeError) LOG_WARNING("[mods] cannot remove {} from the mod cache: {}", Utf8(path), removeError.message());
     }
-    LOG_NOTICE("[mods] mod cache {}: kept {} set{} ({:.1f} MiB), freed {:.1f} MiB", Utf8(folderCache), sets.size() + 1,
-               sets.empty() ? "" : "s", MiB(kept), MiB(freed));
+    LOG_NOTICE("[mods] mod cache {}: kept {} set{} ({:.1f} MiB), freed {:.1f} MiB", Utf8(folderCache), keptCount,
+               keptCount == 1 ? "" : "s", MiB(kept), MiB(freed));
 }
 
 bool LoadCache(const fs::path &cache, uint64_t key, Folder &result)
@@ -762,6 +805,9 @@ bool LoadCache(const fs::path &cache, uint64_t key, Folder &result)
         }
         else return false;
     }
+    loaded.cachePin = PinCache(cache);
+    for (auto &[name, ranges] : loaded.ranges)
+        for (auto &range : ranges) range.cachePin = loaded.cachePin;
     result = std::move(loaded);
     return true;
 }
@@ -827,7 +873,16 @@ Folder Build(const fs::path &folder, const ModSet &set, const BuildOptions &opti
     fs::path building = cache.empty() ? fs::path() : fs::path(cache).concat(".new");
     if (!building.empty())
     {
-        fs::remove_all(building, ec);
+        {
+            std::lock_guard pins(gCachePinsMutex);
+            for (size_t suffix = 1;; ++suffix)
+            {
+                const auto pin = gCachePins.find(building);
+                if (pin == gCachePins.end() || pin->second.expired()) break;
+                building = fs::path(cache).concat(".new." + std::to_string(suffix));
+            }
+            fs::remove_all(building, ec);
+        }
         fs::create_directories(building, ec);
         if (ec)
         {
@@ -892,8 +947,14 @@ Folder Build(const fs::path &folder, const ModSet &set, const BuildOptions &opti
             manifest.close();
             if (!manifest) throw std::runtime_error("cannot write the manifest");
             fs::rename(building / "manifest.txt.part", building / "manifest.txt");
-            fs::remove_all(cache);
-            fs::rename(building, cache);
+            {
+                std::lock_guard pins(gCachePinsMutex);
+                const auto pin = gCachePins.find(cache);
+                if (pin != gCachePins.end() && !pin->second.expired())
+                    throw std::runtime_error("cache set is in use");
+                fs::remove_all(cache);
+                fs::rename(building, cache);
+            }
             cached = LoadCache(cache, key, result);
         }
         catch (const std::exception &error)
@@ -929,6 +990,12 @@ Folder Build(const fs::path &folder, const ModSet &set, const BuildOptions &opti
         }
         for (const auto &[name, overflow] : overflows)
             if (overflow.size) result.overflow[name] = overflow.path;
+        if (!building.empty() && fs::is_directory(building, ec))
+        {
+            result.cachePin = PinCache(building);
+            for (auto &[name, ranges] : result.ranges)
+                for (auto &range : ranges) range.cachePin = result.cachePin;
+        }
     }
     return result;
 }
@@ -1248,7 +1315,7 @@ std::vector<Range> RangesFor(const fs::path &file)
     return ranges == it->second.ranges.end() ? std::vector<Range>{} : ranges->second;
 }
 
-fs::path OverflowArchive(const fs::path &file)
+fs::path OverflowArchive(const fs::path &file, std::shared_ptr<void> *cachePin)
 {
     const auto name = Lower(Utf8(file.filename()));
     if (!name.ends_with(".fpd")) return {};
@@ -1256,6 +1323,7 @@ fs::path OverflowArchive(const fs::path &file)
     const auto folder = gFolders.find(file.parent_path().lexically_normal());
     if (folder == gFolders.end()) return {};
     const auto it = folder->second.overflow.find(name);
+    if (it != folder->second.overflow.end() && cachePin) *cachePin = folder->second.cachePin;
     return it == folder->second.overflow.end() ? fs::path() : it->second;
 }
 
@@ -1286,7 +1354,7 @@ bool Translates(const std::string &memberPath, const std::string &key)
     const auto text = gSet->texts.find(memberPath);
     if (text == gSet->texts.end()) return false;
     std::lock_guard files(gFilesMutex);
-    const auto *translation = Translation(text->second);
+    const auto translation = Translation(text->second);
     return translation && translation->count(key);
 }
 
