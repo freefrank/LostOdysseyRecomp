@@ -186,6 +186,7 @@ std::map<uint32_t, std::shared_ptr<Session>> gSessions; // by session id
 std::map<uint32_t, uint32_t> gByMovie;                  // guest movie object -> session id
 std::vector<Retired> gRetired;
 uint32_t gNextId = 0;
+std::condition_variable gRetiredWake;
 
 std::shared_ptr<Session> Find(uint32_t id) {
     std::lock_guard lock(gMutex);
@@ -193,23 +194,55 @@ std::shared_ptr<Session> Find(uint32_t id) {
     return it == gSessions.end() ? nullptr : it->second;
 }
 
-// Caller holds gMutex. Returns the sessions to destroy outside the lock.
-std::vector<std::shared_ptr<Session>> RetireLocked(uint32_t guestMovie, double nowMs) {
-    std::vector<std::shared_ptr<Session>> expired;
+// Started only when a replacement stops. Sleep until its grace period ends;
+// normal frames do no cleanup work. The worker stops and joins before the
+// session maps are destroyed at shutdown.
+class RetiredCleanup {
+    bool stop_ = false; // guarded by gMutex
+    std::thread thread_{[this] {
+        std::unique_lock lock(gMutex);
+        for (;;) {
+            gRetiredWake.wait(lock, [this] { return stop_ || !gRetired.empty(); });
+            if (stop_) break;
+            const auto delay = std::chrono::duration<double, std::milli>(
+                std::max(0.0, gRetired.front().at + kRetireMs - NowMs()));
+            if (gRetiredWake.wait_for(lock, delay, [this] { return stop_; })) break;
+            std::vector<std::shared_ptr<Session>> expired;
+            const double nowMs = NowMs();
+            std::erase_if(gRetired, [&](const Retired& retired) {
+                if (nowMs - retired.at < kRetireMs) return false;
+                if (const auto session = gSessions.find(retired.id); session != gSessions.end()) {
+                    expired.push_back(std::move(session->second));
+                    gSessions.erase(session);
+                }
+                return true;
+            });
+            lock.unlock();
+            expired.clear(); // Joining decode threads must not hold gMutex.
+            lock.lock();
+        }
+    }};
+public:
+    ~RetiredCleanup() {
+        { std::lock_guard lock(gMutex); stop_ = true; }
+        gRetiredWake.notify_all();
+        thread_.join();
+    }
+};
+
+void WakeRetiredCleanupLocked() {
+    static RetiredCleanup cleanup;
+    gRetiredWake.notify_all();
+}
+
+// Caller holds gMutex. Pending draws retain the stopped session for kRetireMs.
+void RetireLocked(uint32_t guestMovie, double nowMs) {
     if (const auto it = gByMovie.find(guestMovie); it != gByMovie.end()) {
         if (const auto session = gSessions.find(it->second); session != gSessions.end()) session->second->RequestStop();
         gRetired.push_back({it->second, nowMs});
         gByMovie.erase(it);
+        WakeRetiredCleanupLocked();
     }
-    std::erase_if(gRetired, [&](const Retired& retired) {
-        if (nowMs - retired.at < kRetireMs) return false;
-        if (const auto session = gSessions.find(retired.id); session != gSessions.end()) {
-            expired.push_back(std::move(session->second));
-            gSessions.erase(session);
-        }
-        return true;
-    });
-    return expired;
 }
 }
 
@@ -219,12 +252,10 @@ double NowMs() {
 }
 
 void StartReplacement(uint32_t guestMovie, std::string_view name) {
-    std::vector<std::shared_ptr<Session>> expired;
     {
         std::lock_guard lock(gMutex);
-        expired = RetireLocked(guestMovie, NowMs());
+        RetireLocked(guestMovie, NowMs());
     }
-    expired.clear();
     if (name.empty() || !modding::Enabled()) return;
     auto asset = modding::Resolve({{modding::AssetKind::Movie, std::string(name)}, {}});
     if (!asset) return;
@@ -236,12 +267,8 @@ void StartReplacement(uint32_t guestMovie, std::string_view name) {
 }
 
 void StopReplacement(uint32_t guestMovie) {
-    std::vector<std::shared_ptr<Session>> expired;
-    {
-        std::lock_guard lock(gMutex);
-        if (gByMovie.empty() && gRetired.empty()) return;
-        expired = RetireLocked(guestMovie, NowMs());
-    }
+    std::lock_guard lock(gMutex);
+    RetireLocked(guestMovie, NowMs());
 }
 
 uint32_t ReplacementSession(uint32_t guestMovie) {
