@@ -164,7 +164,12 @@ void PrepareAtStartup(const std::filesystem::path& gameFolder)
     const auto white = host_ui::MakeColor(255, 230, 235, 240);
     const auto muted = host_ui::MakeColor(255, 160, 173, 187);
     Offer offer;
-    std::jthread worker;
+    std::thread worker;
+    struct JoinWorker
+    {
+        std::thread& thread;
+        ~JoinWorker() { if (thread.joinable()) thread.join(); }
+    } joinWorker{worker};
     bool started = false;
 #if defined(__ANDROID__)
     uint16_t touchButtons = hid::android_touch::Snapshot().buttons;
@@ -204,7 +209,7 @@ void PrepareAtStartup(const std::filesystem::path& gameFolder)
             }
             if (offer.selected != Choice::Free) return;
             started = true;
-            worker = std::jthread([&] { work.Run(gameFolder); });
+            worker = std::thread([&] { work.Run(gameFolder); });
         }
 
         rasterizer.FillRect(0, 0, 1280, 720, host_ui::MakeColor(255, 15, 20, 29));
