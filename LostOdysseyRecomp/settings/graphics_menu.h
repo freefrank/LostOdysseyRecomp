@@ -84,6 +84,30 @@ inline uint32_t RenderResolutionChoice(const Config& config)
         if (RenderResolutions[i] == config.internalResolution) return i;
     return 0;
 }
+// Graphics preset: a shortcut for the rows it sets, shown as the preset those
+// rows match (Custom otherwise). Nothing of its own is saved. Low-end turns off
+// the game's costliest effects for weak hardware; Original is their retail state.
+enum class Preset : uint32_t { Original, LowEnd, Custom };
+inline constexpr uint32_t PresetChoiceCount = 2; // Custom is shown, never chosen
+inline void ApplyPreset(Config& config, Preset preset)
+{
+    const bool low = preset == Preset::LowEnd;
+    config.dynamicShadows = !low;
+    config.motionBlur = !low;
+    config.depthOfFieldPercent = low ? 0 : 100;
+    config.bloom = !low;
+    config.scalingQuality = low ? 0 : 1; // Standard (bilinear) or High (bicubic)
+}
+inline Preset PresetOf(const Config& config)
+{
+    for (const Preset preset : {Preset::Original, Preset::LowEnd})
+    {
+        Config applied = config;
+        ApplyPreset(applied, preset);
+        if (applied == config) return preset;
+    }
+    return Preset::Custom;
+}
 inline constexpr uint32_t ShadowResolutions[] = {1, 2, 4};
 inline uint32_t ShadowResolutionChoice(const Config& config)
 {
@@ -101,6 +125,9 @@ inline bool IsAction(int tab, int row)
 }
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::DlssModel));
 static_assert(int(GraphicsRow::DlssModel) + 1 == int(GraphicsRow::FsrSharpness));
+// The preset opens the rendering group, after the display rows.
+static_assert(int(GraphicsRow::OutputResolution) + 1 == int(GraphicsRow::Preset));
+static_assert(int(GraphicsRow::Preset) + 1 == int(GraphicsRow::RenderResolution));
 static_assert(int(GraphicsRow::RenderResolution) + 1 == int(GraphicsRow::ShadowResolution));
 static_assert(int(GraphicsRow::ShadowResolution) + 1 == int(GraphicsRow::DynamicShadows));
 // Upscaling, neural rendering and frame generation stay one group.

@@ -457,6 +457,36 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.ambientOcclusion == 2, "ambient occlusion selects GTAO");
     settings::pending = 8; Tick(base);
     Require(settings::edit.ambientOcclusion == 0, "ambient occlusion wraps to Off");
+    // Graphics preset: derived from the rows it sets, Custom when they match neither.
+    {
+        const settings::Config before = settings::edit;
+        const auto& preset = settings::snapshot.rows[int(GraphicsRow::Preset)];
+        Require(preset.choices == std::vector<std::wstring>{L"Original", L"Low-end", L"Custom"} &&
+                preset.selectedChoice == 0, "the factory effects show the Original preset");
+        settings::row = int(GraphicsRow::Preset);
+        settings::pending = 8; Tick(base);
+        Require(!settings::edit.dynamicShadows && !settings::edit.motionBlur && settings::edit.depthOfFieldPercent == 0 &&
+                !settings::edit.bloom && settings::edit.scalingQuality == 0 &&
+                settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Low-end", "Right selects the Low-end preset");
+        settings::Config others = settings::edit;
+        others.dynamicShadows = before.dynamicShadows; others.motionBlur = before.motionBlur;
+        others.depthOfFieldPercent = before.depthOfFieldPercent; others.bloom = before.bloom;
+        others.scalingQuality = before.scalingQuality;
+        Require(others == before, "the preset changes only its own rows");
+        settings::row = int(GraphicsRow::Bloom);
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.bloom && settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Custom" &&
+                settings::snapshot.rows[int(GraphicsRow::Preset)].selectedChoice == 2, "one changed row shows Custom");
+        settings::row = int(GraphicsRow::Preset);
+        settings::pending = 4; Tick(base);
+        Require(settings::graphics_menu::PresetOf(settings::edit) == settings::graphics_menu::Preset::LowEnd,
+                "Left from Custom selects Low-end");
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows && settings::edit.motionBlur && settings::edit.depthOfFieldPercent == 100 &&
+                settings::edit.bloom && settings::edit.scalingQuality == 1 &&
+                settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Original", "Right back to Original");
+        settings::edit = before;
+    }
     settings::row = int(GraphicsRow::AntiAliasing);
     settings::pending = 0; Tick(base);
     Require(settings::snapshot.help == L"Saves the DLSS preference. The status line shows the latest DLSS result.",

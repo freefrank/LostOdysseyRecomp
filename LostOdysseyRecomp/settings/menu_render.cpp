@@ -1179,7 +1179,9 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             line(labelLeft, y + rowHeight - 3, choiceLeft + choiceWidth, y + rowHeight - 3, MakeColor(255, 173, 176, 177));
             continue;
         }
-        if (current.tab == 2 && (index == size_t(GraphicsRow::AntiAliasing) ||
+        // The preset opens the rendering group; on Android no row comes before it.
+        if (current.tab == 2 && ((index == size_t(GraphicsRow::Preset) && visible > 1) ||
+                                 index == size_t(GraphicsRow::AntiAliasing) ||
                                  index == size_t(GraphicsRow::AmbientOcclusion) ||
                                  index == size_t(GraphicsRow::FrameRate) ||
                                  index == size_t(GraphicsRow::Hdr) ||

@@ -103,7 +103,7 @@ void PointerDrag(float x, float y, bool held);
 // - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
 //   scroll; only Graphics scrolls. The pages opened from a row (Mods,
 //   Controls, Achievements) may scroll.
-// - Graphics order: display -> resolution and shadows -> anti-aliasing,
+// - Graphics order: display -> graphics preset -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
 //   frame generation -> effects -> frame rate (VSync, performance overlay) ->
 //   HDR and brightness -> Save. A divider opens each group after the first
@@ -162,35 +162,36 @@ enum class GraphicsRow : int
     Display = 3,
     AspectRatio = 4,
     OutputResolution = 5,
-    RenderResolution = 6,
-    ShadowResolution = 7,
-    DynamicShadows = 8,
-    AntiAliasing = 9,
-    DlssQuality = 10,
-    DlssModel = 11, // shown with DLSS
-    FsrSharpness = 12,
-    DlssNeuralRendering = 13,
-    NeuralRenderingTuning = 14, // opens the NR page; shown with the NR row
-    FrameGeneration = 15,
-    FrameGenerationMultiplier = 16,
-    AmbientOcclusion = 17,
-    AnisotropicFiltering = 18,
-    DepthOfField = 19,
-    Bloom = 20,
-    MotionBlur = 21,
-    Culling = 22,
-    ScalingQuality = 23,
-    RgbRange = 24,
-    FrameRate = 25,
-    VariableRefreshRate = 26,
-    PerformanceOverlay = 27,
-    Hdr = 28,
-    HdrPaperWhite = 29, // shown with HDR on
-    HdrPeak = 30, // shown with HDR on
-    HdrCalibration = 31, // opens the HDR peak page; shown with HDR on
-    Brightness = 32, // opens the brightness page
-    Save = 33,
-    Count = 34,
+    Preset = 6, // derived from the rows below; not saved
+    RenderResolution = 7,
+    ShadowResolution = 8,
+    DynamicShadows = 9,
+    AntiAliasing = 10,
+    DlssQuality = 11,
+    DlssModel = 12, // shown with DLSS
+    FsrSharpness = 13,
+    DlssNeuralRendering = 14,
+    NeuralRenderingTuning = 15, // opens the NR page; shown with the NR row
+    FrameGeneration = 16,
+    FrameGenerationMultiplier = 17,
+    AmbientOcclusion = 18,
+    AnisotropicFiltering = 19,
+    DepthOfField = 20,
+    Bloom = 21,
+    MotionBlur = 22,
+    Culling = 23,
+    ScalingQuality = 24,
+    RgbRange = 25,
+    FrameRate = 26,
+    VariableRefreshRate = 27,
+    PerformanceOverlay = 28,
+    Hdr = 29,
+    HdrPaperWhite = 30, // shown with HDR on
+    HdrPeak = 31, // shown with HDR on
+    HdrCalibration = 32, // opens the HDR peak page; shown with HDR on
+    Brightness = 33, // opens the brightness page
+    Save = 34,
+    Count = 35,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail

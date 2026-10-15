@@ -1423,6 +1423,9 @@ void Publish(uint8_t *base, uint32_t config)
             if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1]) outputChoice = i;
         }
         placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
+        placeGraphics(GraphicsRow::Preset, makeChoices(L"Graphics preset", L"畫質預設",
+                   {Tr(L"Original", L"原版"), Tr(L"Low-end", L"低配置"), Tr(L"Custom", L"自訂")},
+                   uint32_t(graphics_menu::PresetOf(edit))));
         std::vector<std::wstring> renderChoices;
         for (const int height : graphics_menu::RenderResolutions)
             renderChoices.push_back(height == 0 ? Tr(L"Follow output", L"跟隨輸出") :
@@ -1695,6 +1698,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::OutputResolution:
             next.help = Tr(L"Sets the output size. Fullscreen uses the desktop size.",
                            L"設定輸出尺寸；全螢幕使用桌面尺寸。");
+            break;
+        case GraphicsRow::Preset:
+            next.help = Tr(L"Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
+                           L"低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
             break;
         case GraphicsRow::RenderResolution:
             if (edit.internalResolution == graphics_menu::LowResolution)
@@ -3591,6 +3598,15 @@ PPC_FUNC(sub_822F19B0)
                 index = cycle(index, uint32_t(list.size()));
                 edit.width = list[index][0];
                 edit.height = list[index][1];
+                break;
+            }
+            case GraphicsRow::Preset:
+            {
+                // Original and Low-end; from Custom, Right picks Original and Left Low-end.
+                const auto current = graphics_menu::PresetOf(edit);
+                const uint32_t index = current == graphics_menu::Preset::Custom ? (delta > 0 ? graphics_menu::PresetChoiceCount - 1 : 0)
+                                                                                : uint32_t(current);
+                graphics_menu::ApplyPreset(edit, graphics_menu::Preset(cycle(index, graphics_menu::PresetChoiceCount)));
                 break;
             }
             case GraphicsRow::RenderResolution:
