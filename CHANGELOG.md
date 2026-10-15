@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Android: Settings → System → Import discs & DLC now opens the Android importer so you can import discs and DLC (#559).
+
+### 简体中文
+
+- Android：设置 → 系统 →“导入光盘和 DLC”现在会打开 Android 导入器，可导入光盘和 DLC（#559）。
+
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 
 ### English

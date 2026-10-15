@@ -22,6 +22,8 @@ import org.libsdl.app.SDLActivity;
 
 /** Game runtime. User-supplied discs live in app-owned storage. */
 public final class RuntimeActivity extends SDLActivity {
+    /** Matches the SDL_SendAndroidMessage command in settings/menu.cpp. */
+    private static final int COMMAND_OPEN_GAME_FOLDER = 0x8000;
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";
     /** Files and folders picked in the system file picker, which the importer scans at once. */
@@ -82,7 +84,16 @@ public final class RuntimeActivity extends SDLActivity {
         startActivity(intent);
     }
 
-    /** Opens the game folder page over the game (CTRL dialog). */
+    @Override
+    protected boolean onUnhandledMessage(int command, Object param) {
+        if (command == COMMAND_OPEN_GAME_FOLDER) {
+            openGameFolderPage();
+            return true;
+        }
+        return super.onUnhandledMessage(command, param);
+    }
+
+    /** Opens the game folder page over the game (CTRL dialog or native settings). */
     void openGameFolderPage() {
         Intent intent = new Intent(this, GameFolderActivity.class);
         intent.putExtra(GameFolderActivity.EXTRA_FROM_GAME, true);

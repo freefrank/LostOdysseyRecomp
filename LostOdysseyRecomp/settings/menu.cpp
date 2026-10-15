@@ -22,6 +22,9 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if LO_PLATFORM_ANDROID
+#include <SDL3/SDL_system.h>
+#endif
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
@@ -3789,8 +3792,19 @@ PPC_FUNC(sub_822F19B0)
     }
     if ((input & 0x1000) && tab == 3 && row == SystemImportRow)
     {
+#if LO_PLATFORM_ANDROID
+        // RuntimeActivity handles this on the UI thread and keeps the game
+        // alive until the player confirms an import in GameFolderActivity.
+        // 0x8000 is RuntimeActivity.COMMAND_OPEN_GAME_FOLDER.
+        if (!SDL_SendAndroidMessage(0x8000, 0))
+        {
+            importLaunchPending = true;
+            restart::ReportLaunchFailure();
+        }
+#else
         importPrompt = true;
         importChoice = 1;
+#endif
         status.clear();
     }
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
