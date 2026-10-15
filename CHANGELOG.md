@@ -38,6 +38,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Pressing START on the title screen opens the menu right away, without the "Updating gamer profile" message and its one-second wait.
 - Turning TAA or an upscaler off now frees the graphics memory it used once you close Settings, about 350 MB at 4K, instead of keeping it until you restart the game.
 - The achievement notification no longer draws a piece of itself over the "Y: Settings" hint on the title screen, nor over the loading bar or the performance overlay.
+- The MO2 export tool's Scan game data now lists models and animation sets; before, it found none.
 
 ### 简体中文
 
@@ -71,6 +72,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 在标题画面按 START 后直接打开菜单，不再显示“正在更新玩家档案”提示，也不再等约一秒。
 - 关闭 TAA 或超分后，退出设置时会释放它占用的显存（4K 下约 350 MB），不再一直占到重启游戏。
 - 成就通知不再在标题画面的“Y：设置”提示上，也不再在加载进度条和性能叠加层上，画出自己的一块。
+- MO2 导出工具的“Scan game data”现在会列出模型和动画；之前一个也找不到。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

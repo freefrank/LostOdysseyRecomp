@@ -69,6 +69,9 @@ OLD_GAME_NEW = (
 )
 KIND_ARGUMENT = {"texture": "textures", "movie": "movies", "text": "text", "model": "models",
                  "animation": "animations"}
+# A scan lists every kind; the boxes only filter the table. The exporter's
+# default kinds leave out models and animations.
+SCAN_KINDS = ",".join(KIND_ARGUMENT.values())
 GLB_KINDS = ("model", "animation")  # Rows exported as one glTF binary each.
 MODEL_CLASSES = {"SkeletalMesh": "Skeletal", "StaticMesh": "Static", "StaticMeshRPG": "Static (map)"}
 NO_DATA = (
@@ -818,7 +821,8 @@ class ExportDialog(QDialog):
         except OSError:
             return ""
         game = os.path.normcase(os.path.abspath(self._game_dir))
-        stamp = f"{game}|{info.st_size}|{info.st_mtime_ns}"
+        # The kinds too: a catalog scanned with other kinds lacks rows.
+        stamp = f"{game}|{info.st_size}|{info.st_mtime_ns}|{SCAN_KINDS}"
         name = hashlib.sha1(stamp.encode("utf-8")).hexdigest()[:12]
         return os.path.join(self._cache_dir, f"catalog-{name}.csv") if self._cache_dir else ""
 
@@ -839,7 +843,7 @@ class ExportDialog(QDialog):
         if exe is None:
             return
         self._scan_dir = self._session_dir("scan")
-        self._launch("scan", exe, ["--export-assets", self._scan_dir, "--export-list"])
+        self._launch("scan", exe, ["--export-assets", self._scan_dir, "--export-list", "--export-kinds", SCAN_KINDS])
 
     def _finish_scan(self, ok: bool, message: str) -> None:
         rows: list[list[str]] = []
@@ -855,7 +859,10 @@ class ExportDialog(QDialog):
         if not ok:
             old = any("--export-list" in line for line in self._errors)
             no_data = any("no game data" in line for line in self._errors)
-            self._status.setText(OLD_GAME if old else NO_DATA if no_data else "Scan failed.")
+            # Lists, but has no model or animation kinds.
+            old_kinds = any(unknown_option(line) for line in self._errors)
+            self._status.setText(OLD_GAME if old else NO_DATA if no_data else
+                                 OLD_GAME_NEW if old_kinds else "Scan failed.")
             self._log.setPlainText("\n".join(self._errors[-20:]) or "No error message was printed.")
             self._log.show()
             return
@@ -1187,7 +1194,7 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "Exports the original textures, movies, text, models and animations from your own game data."
 
     def version(self) -> mobase.VersionInfo:
-        return mobase.VersionInfo(1, 3, 0, 0)
+        return mobase.VersionInfo(1, 3, 1, 0)
 
     def requirements(self) -> list[mobase.IPluginRequirement]:
         return [mobase.PluginRequirementFactory.gameDependency(GAME_NAME)]
