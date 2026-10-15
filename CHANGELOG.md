@@ -8,10 +8,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Language packs can add missing letters to the Japanese fonts too, including the dream fonts on uncompressed pages.
 - Live mod reload keeps the active and open files safe while preparing another configuration, and edited translated text reloads from disk.
 
 ### 简体中文
 
+- 语言包也可以给日文字体补充缺少的字母，包括使用未压缩页面的梦境字体。
 - 实时重载 Mod 时，准备另一套配置不会删除当前或仍在使用的文件，修改后的译文也会从磁盘重新加载。
 
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
@@ -53,7 +55,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The MO2 export tool's Scan game data now lists models and animation sets; before, it found none.
 - The MO2 export tool names models with the game's own names in the chosen text language, such as "Kaim" or "Uhra - Main Street", sorts them into groups such as Party, Monsters and Maps, shows a picture of the selected model, and opens Explorer at an exported model, ready for Blender. New wiki page: Open models in Blender.
 - Windows, Direct3D 12: FSR frame generation gives a higher frame rate, most of all in battles, and the performance overlay shows its real frame rate instead of an estimate marked with ~.
-- Language packs can add the letters the game's fonts lack, such as Polish, Russian or Arabic ones: `lo_mod.py font-glyphs` draws them from a TrueType or OpenType font in the style of each game font, and `--export-assets --export-kinds fonts` exports what it needs; this works on the Japanese fonts too, including the dream fonts on uncompressed pages. See [Creating mods](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack).
+- Language packs can add the letters the game's fonts lack, such as Polish, Russian or Arabic ones: `lo_mod.py font-glyphs` draws them from a TrueType or OpenType font in the style of each game font, and `--export-assets --export-kinds fonts` exports what it needs. See [Creating mods](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack).
 
 ### 简体中文
 
@@ -92,7 +94,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - MO2 导出工具的“Scan game data”现在会列出模型和动画；之前一个也找不到。
 - MO2 导出工具用游戏里的名字标注模型，例如“凯姆”“乌拉・中央大街”（随“Text language”切换语言），按队伍、怪物、地图等分组，显示选中模型的预览图，并能导出模型后在资源管理器中选中它，方便拖进 Blender。新增 Wiki 页面《在 Blender 中打开模型》。
 - Windows Direct3D 12：FSR 帧生成的帧率更高，战斗中最明显；性能信息显示它的实际帧率，不再是带 ~ 的估算值。
-- 语言包可以补充游戏字体缺少的字母，例如波兰语、俄语或阿拉伯语字母：`lo_mod.py font-glyphs` 用 TrueType 或 OpenType 字体按每个游戏字体的样式绘制这些字母，`--export-assets --export-kinds fonts` 导出它需要的信息；日文字体（包括使用未压缩页面的梦境字体）同样适用。见[制作 Mod](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack)。
+- 语言包可以补充游戏字体缺少的字母，例如波兰语、俄语或阿拉伯语字母：`lo_mod.py font-glyphs` 用 TrueType 或 OpenType 字体按每个游戏字体的样式绘制这些字母，`--export-assets --export-kinds fonts` 导出它需要的信息。见[制作 Mod](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack)。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 
