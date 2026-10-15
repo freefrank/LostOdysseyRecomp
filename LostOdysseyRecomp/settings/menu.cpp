@@ -1699,8 +1699,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"設定輸出尺寸；全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::Preset:
-            next.help = Tr(L"Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
-                           L"低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
+            next.help = Tr(L"Both use 720p at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
+                           L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
             break;
         case GraphicsRow::RenderResolution:
 #if LO_PLATFORM_MACOS

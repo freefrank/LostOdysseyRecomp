@@ -83,13 +83,16 @@ inline uint32_t RenderResolutionChoice(const Config& config)
     return 0;
 }
 // Graphics preset: a shortcut for the rows it sets, shown as the preset those
-// rows match (Custom otherwise). Nothing of its own is saved. Low-end turns off
-// the game's costliest effects for weak hardware; Original is their retail state.
+// rows match (Custom otherwise). Nothing of its own is saved. Both render the
+// original 720p at 30 FPS; Low-end also turns off the game's costliest effects
+// for weak hardware, Original keeps their retail state.
 enum class Preset : uint32_t { Original, LowEnd, Custom };
 inline constexpr uint32_t PresetChoiceCount = 2; // Custom is shown, never chosen
 inline void ApplyPreset(Config& config, Preset preset)
 {
     const bool low = preset == Preset::LowEnd;
+    config.internalResolution = 720;
+    config.frameRate = 30;
     config.dynamicShadows = !low;
     config.motionBlur = !low;
     config.depthOfFieldPercent = low ? 0 : 100;

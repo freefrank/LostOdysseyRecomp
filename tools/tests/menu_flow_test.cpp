@@ -467,12 +467,26 @@ void CheckBr03DlssMenu(uint8_t* base)
         settings::pending = 8; Tick(base);
         Require(!settings::edit.dynamicShadows && !settings::edit.motionBlur && settings::edit.depthOfFieldPercent == 0 &&
                 !settings::edit.bloom && settings::edit.scalingQuality == 0 &&
+                settings::edit.internalResolution == 720 && settings::edit.frameRate == 30 &&
                 settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Low-end", "Right selects the Low-end preset");
         settings::Config others = settings::edit;
         others.dynamicShadows = before.dynamicShadows; others.motionBlur = before.motionBlur;
         others.depthOfFieldPercent = before.depthOfFieldPercent; others.bloom = before.bloom;
         others.scalingQuality = before.scalingQuality;
+        others.internalResolution = before.internalResolution; others.frameRate = before.frameRate;
         Require(others == before, "the preset changes only its own rows");
+        // Render resolution and frame rate are preset rows too.
+        for (const auto [presetRow, label] : {std::pair{GraphicsRow::RenderResolution, "render resolution"},
+                                              std::pair{GraphicsRow::FrameRate, "frame rate"}})
+        {
+            settings::row = int(presetRow);
+            settings::pending = 8; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Custom",
+                    (std::string("a changed ") + label + " shows Custom").c_str());
+            settings::pending = 4; Tick(base);
+            Require(settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Low-end",
+                    (std::string("the ") + label + " back at the preset value shows Low-end").c_str());
+        }
         settings::row = int(GraphicsRow::Bloom);
         settings::pending = 8; Tick(base);
         Require(settings::edit.bloom && settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Custom" &&
@@ -484,6 +498,7 @@ void CheckBr03DlssMenu(uint8_t* base)
         settings::pending = 8; Tick(base);
         Require(settings::edit.dynamicShadows && settings::edit.motionBlur && settings::edit.depthOfFieldPercent == 100 &&
                 settings::edit.bloom && settings::edit.scalingQuality == 1 &&
+                settings::edit.internalResolution == 720 && settings::edit.frameRate == 30 &&
                 settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Original", "Right back to Original");
         settings::edit = before;
     }
