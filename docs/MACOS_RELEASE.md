@@ -1,40 +1,61 @@
 # macOS releases
 
 macOS support is an experimental Apple Silicon integration. v0.7.35 was the
-first release with a macOS package, followed by v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32 and v0.9.52:
-`LostOdysseyRecomp-macos-arm64-v0.9.52.dmg`, a disk image that is ad-hoc signed
+first release with a macOS package, followed by v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32, v0.9.52 and v0.9.57:
+`LostOdysseyRecomp-macos-arm64-v0.9.57.dmg`, a disk image that is ad-hoc signed
 and not notarized. All of them stay that way: on 2026-10-03 the maintainer decided that
 Developer ID signing and notarization will not be done. GitHub CI builds the source
 and tests that do not require private game data; it does not link a complete
 runtime with game data, so the disk image is built on a Mac and uploaded to the
 release by hand.
 
-## Disk image (v0.9.52)
+## Disk image (v0.9.57)
 
 Build the runtime first using [the macOS build instructions](BUILDING.md#building-on-macos).
 Then run this on the Mac that built the executable:
 
 ```sh
-python3 tools/package_macos.py --build <build dir> --output <dir> --version v0.9.52 --dmg
+python3 tools/package_macos.py --build <build dir> --output <dir> --version v0.9.57 --dmg
 ```
 
 - `--dmg` writes a compressed HFS+ disk image, with the volume name "Lost
   Odyssey Recomp", that holds `LostOdysseyRecomp.app` and a link to
   `/Applications`. Without it the script writes a ZIP.
-- `--version v0.9.52` sets the asset tag, so the file is named
-  `LostOdysseyRecomp-macos-arm64-v0.9.52.dmg`. Keep the `v`: the script uses
+- `--version v0.9.57` sets the asset tag, so the file is named
+  `LostOdysseyRecomp-macos-arm64-v0.9.57.dmg`. Keep the `v`: the script uses
   the text as given, and the in-game updater looks for exactly this name. Do not
   use `--release` here; it needs a Developer ID identity, and the script exits
   without one.
 - Without `--identity` the app is signed ad hoc and the image is not signed.
   Neither is notarized.
 - The app declares macOS 15.0 as its minimum (`MINIMUM_MACOS` in the script,
-  matching `CMAKE_OSX_DEPLOYMENT_TARGET`), so the v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32 and v0.9.52 apps declare
+  matching `CMAKE_OSX_DEPLOYMENT_TARGET`), so the v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32, v0.9.52 and v0.9.57 apps declare
   15.0. The v0.7.35 image was made before this change and still declares 14.0; see
   [Minimum macOS version](#minimum-macos-version).
 - Upload the image to the release by hand. The release workflow's publish step
   accepts the four packages built by CI (Windows ZIP, AppImage, Flatpak and the
   Android APK) and, at most, this one disk image beside them.
+
+### v0.9.57 image
+
+The v0.9.57 release was published at 2026-10-15T08:24:56Z from tag `v0.9.57` at
+`b0903a05` ([release record](STATUS.md#v0957-published--2026-10-15)). The first tag at
+`3278de66` was withdrawn before any package was built. The image was built on the
+maintainer's M1 Max from the tag with the Mac-side script
+`mac-release-sdl3.sh v0.9.57 v0.9.57 tag package` and uploaded to the draft release
+with `gh` before publication. GitHub lists
+`LostOdysseyRecomp-macos-arm64-v0.9.57.dmg` at 64,733,767 bytes with SHA-256
+`5a1fb6e93cf12e0eddeb2739731a85cf17632a7e90f10f24e2ab1982a0cbefb3`. Checks on
+the built file:
+
+- `hdiutil verify` reports the image VALID.
+- `codesign --verify` passes. The signature is ad hoc.
+- The `Info.plist` `CFBundleShortVersionString` is `0.9.57`.
+- Shader packs: not republished. The contracts are unchanged since 2026-10-12
+  (d3d12 `05fd9431…`, vulkan `03ef0787…`), and `tools/release/publish_shader_packs.py --check`
+  passed on the Mac on `main` at `911c3e98` and on `b0903a05`.
+
+Limits: no game run was made with this image.
 
 ### v0.9.52 image
 
@@ -580,8 +601,8 @@ the Mac model, macOS version, source commit, game edition and tested scenes
 alongside any local result. Keep the existing Windows/Linux release records
 separate from this experimental path.
 
-For v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32 and v0.9.52 no game run with their disk images is recorded
-here, and no acceptance of any of the seventeen releases is recorded. The v0.7.35
+For v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32, v0.9.52 and v0.9.57 no game run with their disk images is recorded
+here, and no acceptance of any of the eighteen releases is recorded. The v0.7.35
 runs below are the existing record; a later source build also ran the opening
 battle with GTAO and 4× shadows on the same Mac ([changelog](../CHANGELOG.md)).
 

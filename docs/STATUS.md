@@ -2,7 +2,50 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v0.9.57 published — 2026-10-15
+
+[v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) was published at 2026-10-15T08:24:56Z by the workflow's own publish step. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` false and `gh release list` marks it Latest). It was cut from tag `v0.9.57` at commit `b0903a05` (PR [#555](https://github.com/freefrank/LostOdysseyRecomp/pull/555), the README table of contents, merged 2026-10-15). The first tag at `3278de66` (`chore: release v0.9.57`, PR [#554](https://github.com/freefrank/LostOdysseyRecomp/pull/554)) was withdrawn before any package was built: Gitea run 1389 was cancelled and its draft release deleted. Before the re-tag, external PR [#544](https://github.com/freefrank/LostOdysseyRecomp/pull/544) (language packs add the letters the game's fonts lack, by faisalkindi) merged as `498094d3`. The previous release is v0.9.52, published 2026-10-14T04:07:16Z at `9769f12e`. The player-facing list is the [Changelog, v0.9.57](../CHANGELOG.md#v0957--2026-10-15) section, covering the merged PRs #495 to #553 since v0.9.52 as well as the later changes listed there.
+
+The release run is Gitea run 1390 (web #995), `release.yml` on `refs/tags/v0.9.57`. Create draft, Prepare FSR Vulkan build inputs, Windows Release, Linux Release, Android Release and Publish complete release all succeeded.
+
+Assets, as listed by GitHub's release metadata on 2026-10-15 (bytes). The five download URLs returned HTTP 200 after redirects when checked:
+
+| Asset | Bytes |
+|---|---:|
+| `LostOdysseyRecomp-windows-x64-v0.9.57.zip` | 152,591,468 |
+| `LostOdysseyRecomp-linux-x64-v0.9.57.AppImage` | 78,436,856 |
+| `LostOdysseyRecomp-linux-x64-v0.9.57.flatpak` | 55,443,208 |
+| `LostOdysseyRecomp-android-arm64-v0.9.57.apk` | 47,065,370 |
+| `LostOdysseyRecomp-macos-arm64-v0.9.57.dmg` | 64,733,767 |
+
+The PortForge manifest `.forge.json` moved from 0.9.52 to 0.9.57. Its Windows ZIP and Linux AppImage URLs return HTTP 200.
+
+What the release contains, grouped (one line each; details in the Changelog):
+
+- Android: sound returns after switching apps or turning the screen off (#491); no graphics rebuild when the screen briefly turns upright (#492); the game stays in landscape.
+- Audio: music, cutscene audio and battle music no longer stall when sound requests pile up (#497, #499); sound requests are handled about ten times faster; fast-forward speeds up sound (PRs #503, #504, #505).
+- Graphics and performance: the Graphics preset (Original or Low-end, both at 720p30); Depth of field at 0% and Bloom off skip their passes; TAA and the upscalers cost less (about 8% higher frame rate in Uhra); turning TAA or an upscaler off frees its graphics memory when Settings closes (about 350 MB at 4K); a frame generation multiplier applies on save; the upscaler status line shows the last frame.
+- Overlay and settings: a Performance overlay; readable help text; new rows open the DLSS 5 neural rendering and HDR calibration pages; the neural rendering page says when `nvngx_dlssnr.dll` is missing.
+- Windows: a ReShade `dxgi.dll` in the game folder no longer crashes Vulkan startup (#506); the Direct3D 12 debug log records GPU state at a device stop (#524); the Vulkan device-loss message gives AMD and DirectX 12 advice (#337, #533); FSR frame generation on Direct3D 12 gives a higher frame rate.
+- Import and game data: imports store archives shared between discs once (about 5.8 GB less for four discs; `--compact-game-data` for earlier imports); a moved game folder is found again.
+- Mods and MO2: language packs can add letters the game's fonts lack (`lo_mod.py font-glyphs`, from [PR #544](https://github.com/freefrank/LostOdysseyRecomp/pull/544), merged as `498094d3`); model mods rebuild only after a changed mod-apply version, prepare other discs in the background and reuse files when toggled; a saved mod list applies without a restart; no 4 GB limit per disc; the MO2 export tool lists models and animations, names and groups them, and opens Explorer at an exported model.
+- Title screen: START opens the menu without the "Updating gamer profile" message and its wait; the achievement toast no longer covers the title hint.
+
+Shader packs: not republished. The contracts are unchanged since 2026-10-12 (d3d12 `05fd9431…`, vulkan `03ef0787…`). `tools/release/publish_shader_packs.py --check` passed on the maintainer's M1 Max on `main` at `911c3e98`.
+
+macOS: the disk image was built from the tag on the maintainer's M1 Max with `mac-release-sdl3.sh v0.9.57 v0.9.57 tag package` and uploaded to the draft with `gh` before publication. Its SHA-256 is `5a1fb6e93cf12e0eddeb2739731a85cf17632a7e90f10f24e2ab1982a0cbefb3`. `hdiutil verify` reports it VALID, `codesign --verify` passes and `CFBundleShortVersionString` is 0.9.57 ([macOS releases](MACOS_RELEASE.md#v0957-image)).
+
+Shader packs: not republished. The contracts are unchanged since 2026-10-12 (d3d12 `05fd9431…`, vulkan `03ef0787…`). `tools/release/publish_shader_packs.py --check` passed on the maintainer's M1 Max on `main` at `911c3e98` and on `b0903a05`.
+
+Reports: release comments were posted on [#492](https://github.com/freefrank/LostOdysseyRecomp/issues/492), [#497](https://github.com/freefrank/LostOdysseyRecomp/issues/497), [#499](https://github.com/freefrank/LostOdysseyRecomp/issues/499) and [#524](https://github.com/freefrank/LostOdysseyRecomp/issues/524). These stay open until the reporters confirm. [#491](https://github.com/freefrank/LostOdysseyRecomp/issues/491) and [#506](https://github.com/freefrank/LostOdysseyRecomp/issues/506) were closed before this release.
+
+Not in this release: draft [#548](https://github.com/freefrank/LostOdysseyRecomp/pull/548) (dynamic shadows Low). Switch PR [#502](https://github.com/freefrank/LostOdysseyRecomp/pull/502) merged on 2026-10-15 at 07:35:16 UTC into the `LostOdysseyNX` branch, not `main`.
+
+Acceptance: none. No game run with v0.9.57 packages is recorded in this file, and the maintainer has not accepted v0.9.57. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v0.9.52 published — 2026-10-14
+
+Update, 2026-10-15: v0.9.52 stopped being the latest release when [v0.9.57](#v0957-published--2026-10-15) was published at 2026-10-15T08:24:56Z. The record below is unchanged.
 
 [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) was published at 2026-10-14T04:07:16Z by the workflow's own publish step. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` and `isPrerelease` false and `gh release list` marks it Latest). It was cut from annotated tag `v0.9.52` (tag object `5dfe9743`, peeled to commit `9769f12e5293d8c52120469ed426311c34e7cade`, PR [#487](https://github.com/freefrank/LostOdysseyRecomp/pull/487), `chore: release v0.9.52`, which set the source version to 0.9.52, the CHANGELOG heading and the INSTALLING asset names). The tag was pushed to GitHub and to the zkx mirror at about 03:44:47 UTC. The previous release is v0.9.32, published 2026-10-12T17:41:58Z at `f87d2524`. At the read after publication `origin/main` was at the tag commit. The release body equals the matching [Changelog](../CHANGELOG.md#v0952--2026-10-14) section (only a trailing blank line differs, compared with `tools/release/extract_release_notes.py`). The five assets are listed under [Published v0.9.52 assets](#published-v0952-assets).
 
