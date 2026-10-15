@@ -6403,6 +6403,9 @@ void main()
                     xenos::portable_pack::Reader* pack = reader ? reader.get() : nullptr;
                     if (job->shader) {
                         LoadShaderJob(*job, pack);
+                    } else if (video::GpuWorkStopped()) {
+                        // A lost device fails every creation and logs each one
+                        // (#533); finish the job as failed without the call.
                     } else if (!job->needVs && !job->needPs) {
                         const auto started = std::chrono::steady_clock::now();
                         try { job->pipeline = device->createGraphicsPipeline(job->desc); }
@@ -9074,6 +9077,7 @@ void main()
 
             std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace, bool fastLink = false)
             {
+                if (video::GpuWorkStopped()) return nullptr; // every creation fails on a lost device
                 if (nativeVulkan && key.prim == 1 && vs && vs->shader && vk_object_trace::Permit())
                     std::fprintf(stderr, "VK_OBJECT_TRACE route=renderer event=point_pipeline vs_hash=0x%llx module=0x%llx uses_point_size_metadata=%u color_mask=%u depth_format=%u\n",
                         vk_object_trace::Id(key.vs), vk_object_trace::Id(static_cast<const VulkanShader*>(vs->shader.get())->vk),

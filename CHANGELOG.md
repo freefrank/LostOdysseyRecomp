@@ -32,6 +32,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows, Direct3D 12: with Settings → System → Debug log on, the log records what the graphics card was doing when it stops responding. It takes effect at the next launch and costs a few percent of GPU time (#524).
 - TAA and the upscalers (DLSS, FSR, XeSS) take less CPU and GPU time; in Uhra the frame rate is about 8% higher.
 - Model mods: while you play, the game prepares the other discs' mod files in the background, so a later disc switch takes seconds instead of a minute or two.
+- Windows, Vulkan: when the graphics card stops working, the closing message on AMD cards says to turn off FSR Upscaling / Radeon Super Resolution in AMD Software or to switch to DirectX 12; on any card, if it happens right after startup, the message offers to start with DirectX 12 next time (#337, #533).
 
 ### 简体中文
 
@@ -59,6 +60,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows Direct3D 12：打开“设置 → 系统 → 调试日志”后，显卡停止响应时日志会记下它当时在做什么。下次启动时生效，会多占几个百分点的 GPU 时间（#524）。
 - TAA 和超分（DLSS、FSR、XeSS）占用的 CPU 和 GPU 时间更少；在乌拉，帧率约提高 8%。
 - 模型 Mod：游戏运行时会在后台准备其他光盘的 Mod 文件，之后切换光盘只要几秒，不再等一两分钟。
+- Windows Vulkan：显卡停止工作时，AMD 显卡上的关闭提示会建议在 AMD Software 里关闭 FSR Upscaling / Radeon Super Resolution，或改用 DirectX 12；不论哪种显卡，如果刚启动就出现，提示都会询问下次是否改用 DirectX 12 启动（#337、#533）。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

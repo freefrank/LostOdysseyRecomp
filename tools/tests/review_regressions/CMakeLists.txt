@@ -53,6 +53,8 @@ lo_review_test(LoShadowResolutionTest shadow_resolution_test.cpp)
 lo_review_test(LoPendingClearTest pending_clear_test.cpp)
 # Startup shader-pack download: index, selection, asset URLs, decline record.
 lo_review_test(LoShaderPackIndexTest shader_pack_index_test.cpp "${LO_RUNTIME}/updater/shader_pack_index.cpp")
+# GPU-stopped dialog: AMD driver-upscaling hint and the DirectX 12 offer at boot.
+lo_review_test(LoDeviceLossHintTest device_loss_hint_test.cpp)
 # Offline capture, suspect-log and triage tools (standard-library Python).
 add_test(NAME LoJitterCaptureTools COMMAND "${Python3_EXECUTABLE}" -B "${LO_TESTS}/jitter_capture_tools_test.py")
 set_tests_properties(LoJitterCaptureTools PROPERTIES TIMEOUT 60)

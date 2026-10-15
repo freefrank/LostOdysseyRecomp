@@ -71,6 +71,7 @@ bool CaptureKey(uint32_t,bool) { return false; }
 HdrCalibration GetHdrCalibration() { return {}; }
 BrightnessCalibration GetBrightnessCalibration() { return {}; }
 bool SaveDisplayChoice(const std::string&,uint32_t) { return false; }
+bool SaveGraphicsBackend(GraphicsBackend) { return false; }
 namespace title_entry {
 bool HintShown() { return false; }
 float HintOpacity() { return 0.0f; }

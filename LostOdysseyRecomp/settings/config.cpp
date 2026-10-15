@@ -529,6 +529,17 @@ bool SaveDisplayChoice(const std::string &name, uint32_t index)
     Current().displayIndex = persisted.displayIndex;
     return true;
 }
+bool SaveGraphicsBackend(GraphicsBackend backend)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.graphicsBackend = backend;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    Current().graphicsBackend = persisted.graphicsBackend;
+    return true;
+}
 bool SaveDebugLanguage(uint32_t language)
 {
     std::lock_guard lock(mutex);

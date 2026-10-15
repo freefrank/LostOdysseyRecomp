@@ -17,6 +17,7 @@
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "renderer.h"
 #include "presentation.h"
+#include "device_loss_hint.h"
 #if defined(LO_GPU_PLUME)
 #include "frame_generation_present_bridge.h"
 #include "frame_generation_composite.h"
@@ -610,6 +611,12 @@ namespace gpu::video
         std::optional<bool> g_hdrReportedActive;
         FgPresentBridge g_fgPresent;
         uint64_t g_fgPresentSerial = 0;
+        // For the GPU-stopped dialog (device_loss_hint.h): when the renderer
+        // went live, whether a 3D game frame was presented since, and whether
+        // settings.ini (not LO_GRAPHICS_API) chose the Vulkan that runs.
+        std::chrono::steady_clock::time_point g_liveSince{};
+        std::atomic<bool> g_gameplayPresented{ false };
+        bool g_vulkanFromSettings = false;
 #endif
         std::unique_ptr<plume::RenderTexture> g_cpuFrame;
         // The title menu's Settings legend (settings/title_entry.cpp).
@@ -1168,17 +1175,44 @@ namespace gpu::video
         // teardown that a removed device can hang. Say so and end the process.
         void ExitAfterGpuStop(int32_t nativeResult)
         {
-            std::thread([nativeResult] {
+            // Read the device here, on the stopping thread; the dialog thread
+            // must not touch it.
+            device_loss_hint::Context context;
+#ifdef _WIN32
+            context.windows = true;
+#endif
+            context.vulkan = g_vulkan.load();
+            context.deviceLost = nativeResult == submission::VulkanState::DeviceLost || g_submissionState.Lost();
+            context.vendorId = g_device ? uint32_t(g_device->getDescription().vendor) : 0;
+            context.settingsChoseVulkan = g_vulkanFromSettings;
+            if (g_liveSince != std::chrono::steady_clock::time_point{})
+                context.secondsLive = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_liveSince).count();
+            context.gameplaySeen = g_gameplayPresented.load(std::memory_order_relaxed);
+            const auto advice = device_loss_hint::Decide(context);
+            std::thread([nativeResult, context, advice] {
                 LOG_ERROR("video: closing the game after the GPU stopped raw_result={}", nativeResult);
+                if (context.vulkan)
+                    LOG_NOTICE("video: GPU stop vendor={:#x} lost={} live_s={:.1f} gameplay={} amd_hint={} offer_d3d12={}",
+                        context.vendorId, context.deviceLost, context.secondsLive, context.gameplaySeen,
+                        advice.amdHint, advice.offerD3D12);
                 std::fflush(nullptr);
-                constexpr const char* text =
-                    "The graphics device stopped working, so Lost Odyssey has to close. "
-                    "Progress since your last save is lost. The logs folder has the details.";
+                const std::string text = device_loss_hint::Text(advice);
                 if (!getenv("LO_BACKGROUND") && !getenv("LO_HEADLESS")) {
 #ifdef _WIN32
-                    MessageBoxA(nullptr, text, "Lost Odyssey", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+                    const int answer = MessageBoxA(nullptr, text.c_str(), "Lost Odyssey",
+                        (advice.offerD3D12 ? MB_YESNO : MB_OK) | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+                    if (advice.offerD3D12 && answer == IDYES) {
+                        const bool saved = settings::SaveGraphicsBackend(settings::GraphicsBackend::D3D12);
+                        LOG_NOTICE("video: player chose DirectX 12 for the next start; graphics_backend=0 saved={}", saved);
+                        std::fflush(nullptr);
+                        if (!saved)
+                            MessageBoxA(nullptr, device_loss_hint::SaveFailedText, "Lost Odyssey",
+                                MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+                    } else if (advice.offerD3D12) {
+                        LOG_NOTICE("video: player kept Vulkan; graphics_backend unchanged");
+                    }
 #elif defined(__ANDROID__)
-                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Lost Odyssey", text, nullptr);
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Lost Odyssey", text.c_str(), nullptr);
 #endif
                 }
                 os::shaderlog::CloseForExit();
@@ -2821,6 +2855,10 @@ namespace gpu::video
         LOG_INFO("video: backend selection {}; configured={} (unchanged)", selection.Describe(), backend::Name(configured));
         if (selection.selected) {
             g_selectedBackend = static_cast<int>(*selection.selected);
+            const char* apiOverride = getenv("LO_GRAPHICS_API");
+            g_vulkanFromSettings = *selection.selected == backend::Backend::Vulkan &&
+                configured == backend::Backend::Vulkan && (!apiOverride || backend::Equal(apiOverride, "auto"));
+            g_liveSince = std::chrono::steady_clock::now();
             g_available = true; g_initializing = false;
 #if (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_VULKAN_FSR_FG)) && defined(_WIN32)
             if (*selection.selected == backend::Backend::Vulkan) {
@@ -5013,6 +5051,7 @@ namespace gpu::video
                 uint64_t sceneOrdinal = 0;
                 const auto now = std::chrono::steady_clock::now();
                 if (renderer::ResolvedScene(physicalAddress & 0x1FFFFFFF, sceneOrdinal)) {
+                    g_gameplayPresented.store(true, std::memory_order_relaxed);
                     if (g_hdrCalibrationCache.ready) {
                         // A new stretch of gameplay starts with fresh copies.
                         g_hdrCalibrationCache.ready = false;

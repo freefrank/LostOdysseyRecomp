@@ -51,6 +51,7 @@ void SetHdrCalibrationSceneAvailable(bool) {}
 HdrCalibration GetHdrCalibration() { return {}; }
 BrightnessCalibration GetBrightnessCalibration() { return {}; }
 bool SaveDisplayChoice(const std::string&, uint32_t) { return false; }
+bool SaveGraphicsBackend(GraphicsBackend) { return false; }
 }
 namespace hid {
 void Init() {}

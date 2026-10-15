@@ -196,6 +196,9 @@ bool SaveAudioOutput(uint32_t output);
 // The player moved the window to another display (Win+Shift+arrow, dragging):
 // saves only the display choice, merged with the persisted settings.
 bool SaveDisplayChoice(const std::string &name, uint32_t index);
+// The player accepted another backend for the next start (GPU-stopped dialog):
+// saves only graphics_backend, merged with the persisted settings.
+bool SaveGraphicsBackend(GraphicsBackend backend);
 uint32_t GameLanguage();
 // The selected language pack's id, if it is installed and its base is
 // GameLanguage(); empty otherwise. Fixed at the first call, after LanguagePacks.
