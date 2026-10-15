@@ -1854,6 +1854,56 @@ uint64_t EstimateCompactGameDataBytes(const std::filesystem::path& gameFolder)
     return bytes;
 }
 
+bool CanShareGameData(const std::filesystem::path& gameFolder)
+{
+    try
+    {
+        std::error_code ec;
+        auto root = std::filesystem::absolute(gameFolder, ec).lexically_normal();
+        if (ec) return false;
+        const auto leaf = ToLower(root.filename().string());
+        if (!std::filesystem::is_directory(root / "disc1", ec) && leaf.size() == 5 && leaf.compare(0, 4, "disc") == 0)
+            root = root.parent_path();
+        if (IsSymlinkOrReparse(root) || !std::filesystem::is_directory(root, ec)) return false;
+        for (uint32_t n = 1; n <= 4; ++n)
+        {
+            const auto disc = root / ("disc" + std::to_string(n));
+            if (IsSymlinkOrReparse(disc) || !std::filesystem::is_directory(disc, ec)) continue;
+            // An exclusively created directory keeps every probe path private;
+            // no existing file can be truncated or replaced by this check.
+            const auto probe = disc / (".lo-share-probe-" + ProcessIdString() + "-" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            if (!std::filesystem::create_directory(probe, ec)) return false;
+            struct Cleanup
+            {
+                std::filesystem::path directory;
+                ~Cleanup()
+                {
+                    std::error_code ignored;
+                    std::filesystem::remove(directory / "target.lo-share", ignored);
+                    std::filesystem::remove(directory / "target", ignored);
+                    std::filesystem::remove(directory / "source", ignored);
+                    std::filesystem::remove(directory, ignored);
+                }
+            } cleanup{probe};
+            const auto source = probe / "source", target = probe / "target";
+            for (const auto& path : {source, target})
+            {
+                std::ofstream file(path, std::ios::binary);
+                file << "probe\n";
+                file.close();
+                if (file.fail()) return false;
+            }
+            return ReplaceWithShared(source, target) != SharedBy::None;
+        }
+    }
+    catch (const std::exception&)
+    {
+        // Unsupported or unwritable storage should silently skip the offer.
+    }
+    return false;
+}
+
 CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Progress& progress,
                               const Cancelled& cancelled)
 {

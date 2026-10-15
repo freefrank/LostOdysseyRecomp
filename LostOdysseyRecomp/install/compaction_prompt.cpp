@@ -139,6 +139,14 @@ void PrepareAtStartup(const std::filesystem::path& gameFolder)
     if (mode == Mode::Skip) return;
     const uint64_t estimate = EstimateCompactGameDataBytes(gameFolder);
     if (!estimate) return;
+    // Probe once for this start, only after finding candidates. Android shared
+    // storage may expose ordinary file copies but support neither kind of link.
+    const bool canShare = CanShareGameData(gameFolder);
+    if (!canShare)
+    {
+        LOG_NOTICE("compact game data: skipped; game folder does not support sharing files");
+        return;
+    }
     LOG_NOTICE("compact game data: estimated {} duplicate bytes", estimate);
     Work work;
     if (mode == Mode::Run)

@@ -142,6 +142,11 @@ CompactResult CompactGameData(const std::filesystem::path& gameFolder, const Pro
 // Already hard-linked copies and missing discs do not contribute to the estimate.
 uint64_t EstimateCompactGameDataBytes(const std::filesystem::path& gameFolder);
 
+// Tests the compactor's link/clone and atomic replacement using tiny temporary
+// files on the installation's file system. Leaves archives untouched and removes
+// the probe files before returning, including when sharing is unsupported.
+bool CanShareGameData(const std::filesystem::path& gameFolder);
+
 std::filesystem::path DefaultGameDirectory(const std::filesystem::path& executableDirectory);
 bool WriteGamePath(const std::filesystem::path& executableDirectory,
                    const std::filesystem::path& gameDirectory,

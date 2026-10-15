@@ -545,6 +545,55 @@ void RunCompactionEstimateTest()
     std::cout << "[PASS] compaction estimate: copies, mixed/all hard links, external links, sizes, missing discs" << std::endl;
 }
 
+void RunGameDataSharingProbeTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-sharing-probe-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { install::SetTestShareFailure({}); std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    for (const auto disc : {"disc1", "disc4"})
+    {
+        std::filesystem::create_directories(root / disc);
+        std::ofstream(root / disc / "same.fpd", std::ios::binary) << "same";
+    }
+    const auto estimate = install::EstimateCompactGameDataBytes(root);
+    Require(estimate == 4, "probe fixture did not contain a duplicate archive");
+    const auto checkUnchanged = [&] {
+        size_t entries = 0;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+        {
+            ++entries;
+            Require(entry.path().filename() == "disc1" || entry.path().filename() == "disc4" ||
+                    entry.path().filename() == "same.fpd", "sharing probe left a temporary file or directory");
+        }
+        Require(entries == 4 && ReadText(root / "disc1/same.fpd") == "same" &&
+                ReadText(root / "disc4/same.fpd") == "same", "sharing probe changed an archive");
+        Require(install::EstimateCompactGameDataBytes(root) == estimate &&
+                !SameFile(root / "disc1/same.fpd", root / "disc4/same.fpd"),
+                "sharing probe compacted archives or changed their estimate");
+    };
+    install::SetTestShareFailure("no-clone");
+    Require(install::CanShareGameData(root), "hard-link-capable storage failed the sharing probe");
+    checkUnchanged();
+    Require(install::CanShareGameData(root / "disc4"), "sharing probe did not accept a disc folder");
+    checkUnchanged();
+    install::SetTestShareFailure("link");
+    Require(!install::CanShareGameData(root), "unsupported sharing passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure("rename");
+    Require(!install::CanShareGameData(root), "interrupted replacement passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure({});
+    Require(!install::CanShareGameData(root / "missing"), "missing installation passed the sharing probe");
+    std::filesystem::remove_all(root / "disc1");
+    std::filesystem::remove_all(root / "disc4");
+    Require(!install::CanShareGameData(root) && std::filesystem::is_empty(root),
+            "sharing probe created missing disc directories");
+    std::cout << "[PASS] sharing probe: hard links, unsupported sharing, interrupted replacement, cleanup, missing discs" << std::endl;
+}
+
 // Archives identical on several discs are stored once, by import or by compaction;
 // different archives, indexes and failed or interrupted links keep plain copies.
 void RunSharedArchiveTest()
@@ -664,12 +713,13 @@ int main(int argc, char** argv)
     }
     if (argc > 1 && std::string(argv[1]) == "--shared")
     {
-        try { RunCompactionEstimateTest(); RunSharedArchiveTest(); return 0; }
+        try { RunCompactionEstimateTest(); RunGameDataSharingProbeTest(); RunSharedArchiveTest(); return 0; }
         catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
     }
     std::cout << "Starting LoImportGameTest..." << std::endl;
     RunDlcIoTest();
     RunCompactionEstimateTest();
+    RunGameDataSharingProbeTest();
     RunSharedArchiveTest();
 
     const auto uniqueId = std::chrono::steady_clock::now().time_since_epoch().count();
