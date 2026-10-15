@@ -42,9 +42,14 @@ class SameFamilyRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def attachment_urls(text):
+    """Every distinct .log/.txt/.zip attachment URL in the text, in order of appearance."""
+    return list(dict.fromkeys(ATTACHMENT.findall(str(text or ''))))
+
+
 def attachments(text):
     """Distinct .log/.txt attachment URLs in the text, newest runtime log first."""
-    urls = list(dict.fromkeys(ATTACHMENT.findall(str(text or ''))))
+    urls = attachment_urls(text)
     def stamp(url):
         m = re.search(r'runtime-(\d+)', url)
         return int(m.group(1)) if m else 0

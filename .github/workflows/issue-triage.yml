@@ -33,8 +33,11 @@ jobs:
     if: >-
       github.event_name != 'issue_comment' ||
       (!github.event.issue.pull_request && github.event.comment.user.type != 'Bot' &&
-      contains(github.event.comment.body, '@codex') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+      ((contains(github.event.comment.body, '@codex') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event.issue.state == 'open' &&
+      github.event.comment.user.login == github.event.issue.user.login &&
+      contains(github.event.comment.body, 'user-attachments/files/'))))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
