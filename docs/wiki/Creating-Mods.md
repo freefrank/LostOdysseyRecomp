@@ -101,6 +101,7 @@ The output folder must not exist or must be empty, and it must be outside the ga
 - `--export-language-pack <id>`: only text, written as a language pack to translate (see [make a language pack](#make-a-language-pack-a-new-language)).
 - `--export-model-textures`: with `models`, writes each material's colour texture as a PNG file to a `textures` folder beside the models and links it from the `.glb` files.
 - `--export-select <file>`: exports only the names listed in a UTF-8 text file, one per line (see [models and animations](#models-and-animations-for-reference)).
+- `--export-preview`: with `models` or `animations`, writes a 512×512 PNG picture of each model, or of the character an animation set moves, in place of its `.glb` file; `index.csv` lists the pictures. The MO2 tool shows these.
 
 No window opens; the program prints progress and exits (exit code 1 on a fatal error). With [Mod Organizer 2](Mod-Organizer-2.md#export-the-original-assets), the **Export Lost Odyssey assets** tool does the same from a window; that page has step-by-step instructions.
 
@@ -121,7 +122,7 @@ my-export/export-summary.txt
 
 ### Models and animations (for reference)
 
-Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**. Models, map pieces included, can be edited and put back with a mod (see [Replace a model](#replace-a-model)); animations are for reference only.
+Models and animations are exported as glTF binaries (`.glb`). Blender opens them with **File → Import → glTF 2.0**; [Open models in Blender](Open-Models-in-Blender.md) has the steps. Models, map pieces included, can be edited and put back with a mod (see [Replace a model](#replace-a-model)); animations are for reference only.
 
 1. Export the models, the animations or both. Add `--export-model-textures` to link each material's colour texture:
 
@@ -137,7 +138,7 @@ Models and animations are exported as glTF binaries (`.glb`). Blender opens them
    LostOdysseyRecomp.exe --export-assets my-list --export-kinds models,animations --export-list
    ```
 
-   `my-list/list.csv` has a row for each model and animation set, with its `name`. Copy the `name` values you want into a UTF-8 text file, one per line, for example `selected.txt`. Then export into a new folder:
+   `my-list/list.csv` has a row for each model and animation set, with its `name`. Its `name` rows give the game's own names: a map code (`u36_0`) or character code (`pc_000`, `en_043a0`) in `name`, the language in `language` and the name in `label`. Copy the `name` values you want into a UTF-8 text file, one per line, for example `selected.txt`. Then export into a new folder:
 
    ```sh
    LostOdysseyRecomp.exe --export-assets my-selection --export-kinds models,animations --export-select selected.txt

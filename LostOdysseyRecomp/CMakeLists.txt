@@ -166,6 +166,8 @@ target_include_directories(LostOdysseyRecomp PRIVATE "${CMAKE_CURRENT_BINARY_DIR
 # a release that leaves that code alone keeps the cache, any change rebuilds it.
 set(LO_MODS_BUILDER_SOURCES ${LO_RUNTIME_SOURCES})
 list(FILTER LO_MODS_BUILDER_SOURCES INCLUDE REGEX "/modding/")
+# The asset exporter (--export-assets, the MO2 tool) rebuilds nothing.
+list(FILTER LO_MODS_BUILDER_SOURCES EXCLUDE REGEX "/modding/(asset_export|gltf_writer|model_preview)\\.")
 list(APPEND LO_MODS_BUILDER_SOURCES "${LO_RUNTIME_ROOT}/gpu/shader/cpx_decode.h" "${LO_RUNTIME_ROOT}/os/json.h")
 set(LO_MODS_BUILDER_LIST "${CMAKE_CURRENT_BINARY_DIR}/lo_mods_builder_sources.txt")
 list(JOIN LO_MODS_BUILDER_SOURCES "\n" LO_MODS_BUILDER_LINES)

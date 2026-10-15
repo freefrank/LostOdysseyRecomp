@@ -180,6 +180,7 @@ if(LO_BUILD_MOD_TESTS)
             LostOdysseyRecomp/modding/asset_export.cpp
             LostOdysseyRecomp/modding/gltf_writer.cpp
             LostOdysseyRecomp/modding/mod_api.cpp
+            LostOdysseyRecomp/modding/model_preview.cpp
             LostOdysseyRecomp/modding/text_format.cpp
             LostOdysseyRecomp/modding/text_menu.cpp
             thirdparty/lzokay/lzokay.cpp

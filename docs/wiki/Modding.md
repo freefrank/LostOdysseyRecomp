@@ -51,6 +51,7 @@ Mods are supported on the Windows build only. The Linux, macOS and Android build
 
 - [Creating mods](Creating-Mods.md): texture packs, translations and language packs, settings-menu artwork, and how to install them.
 - [Mod Organizer 2](Mod-Organizer-2.md): MO2 setup, the export tool, and which mod wins.
+- [Open models in Blender](Open-Models-in-Blender.md): look at exported models and play their animations.
 - [Modding API](Modding-API.md): identities, resolution, the file formats and extension points.
 - [Asset inventory](Asset-Inventory.md): the read-only four-disc resource catalog and its counting limits.
 - [Runtime texture replacement](Runtime-Texture-Replacement.md): what texture replacement covers and what is still open.

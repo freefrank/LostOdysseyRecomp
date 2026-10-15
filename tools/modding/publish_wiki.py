@@ -6,8 +6,8 @@ import argparse
 import re
 from pathlib import Path
 
-PAGES = ("Modding", "Creating-Mods", "Modding-API", "Mod-Organizer-2",
-         "Runtime-Texture-Replacement", "Modding-Validation", "Asset-Inventory")
+PAGES = ("Modding", "Creating-Mods", "Modding-API", "Mod-Organizer-2", "Open-Models-in-Blender",
+         "Open-Models-in-Blender.zh-CN", "Runtime-Texture-Replacement", "Modding-Validation", "Asset-Inventory")
 BEGIN, END = "<!-- LO-MODS:BEGIN -->", "<!-- LO-MODS:END -->"
 
 
@@ -34,14 +34,15 @@ def stage(source: Path, wiki: Path, repository: str, revision: str) -> list[str]
         def link(match: re.Match) -> str:
             page, anchor = match.group(1), match.group(2) or ""
             return f"]({url}/wiki/{page}{anchor})" if page in PAGES else match.group(0)
-        content = re.sub(r"\]\(([A-Za-z0-9_-]+)\.md(#[^)]+)?\)", link, content)
+        content = re.sub(r"\]\(([A-Za-z0-9_.-]+)\.md(#[^)]+)?\)", link, content)
         # The Wiki holds pages only: images load from the source revision.
         content = re.sub(r"\]\(images/([A-Za-z0-9_./-]+)\)",
                          lambda m: f"](https://raw.githubusercontent.com/{repository}/{revision}/docs/wiki/images/{m.group(1)})",
                          content)
         banner = f"> Source: [{revision[:12]}]({url}/blob/{revision}/docs/wiki/{name}.md). Check the source page for feature scope.\n\n"
         plan[name + ".md"] = banner + content
-    links = "\n".join(f"- [{name.replace('-', ' ')}]({url}/wiki/{name})" for name in PAGES)
+    # Translations (Page.zh-CN) are linked from their English page only.
+    links = "\n".join(f"- [{name.replace('-', ' ')}]({url}/wiki/{name})" for name in PAGES if "." not in name)
     block = f"{BEGIN}\n## Modding\n\n{links}\n{END}"
     for filename in ("Home.md", "_Sidebar.md"):
         target = wiki / filename
