@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include <atomic>
 #include <os/logger.h>
+#include "gpu/post_blur.h"
 #include "settings/config.h"
 
 // Player switches for two of the game's own effects, the recompiled
@@ -51,4 +52,50 @@ PPC_FUNC(sub_823D5E50)
     if (!Logged(shadowState, settings::GetConfig().dynamicShadows, "dynamic shadows"))
         return;
     __imp__sub_823D5E50(ctx, base);
+}
+
+// The depth of field and bloom post-process step (sub_823E2DE8) downsamples
+// the scene to a quarter-size surface (sub_823E3900), blurs it twice into the
+// depth of field texture (sub_823E4E70) and twice into the bloom texture
+// (sub_823E6F48), then draws the tone map, which reads them in fetch slots 2
+// and 3. At Depth of field 0% and with Bloom off those reads contribute
+// nothing (gpu/post_blur.h), so the blurs that feed them are skipped, and the
+// downsample when neither needs it. Each function only renders and resolves
+// its own surfaces and returns nothing the caller reads. Only the calls from
+// 823E2DE8 (return addresses 823E2E7C, 823E2F34, 823E2F5C) are skipped: the
+// downsample has other callers.
+extern "C" PPC_FUNC(__imp__sub_823E3900);
+extern "C" PPC_FUNC(__imp__sub_823E4E70);
+extern "C" PPC_FUNC(__imp__sub_823E6F48);
+
+namespace
+{
+std::atomic<int> depthOfFieldBlurState{-1};
+std::atomic<int> bloomBlurState{-1};
+}
+
+PPC_FUNC(sub_823E3900)
+{
+    if (ctx.lr == 0x823E2E7C)
+    {
+        const auto config = settings::GetConfig();
+        if (gpu::post_blur::SkipDepthOfField(config) && gpu::post_blur::SkipBloom(config))
+            return;
+    }
+    __imp__sub_823E3900(ctx, base);
+}
+
+PPC_FUNC(sub_823E4E70)
+{
+    if (ctx.lr == 0x823E2F34 &&
+        !Logged(depthOfFieldBlurState, !gpu::post_blur::SkipDepthOfField(settings::GetConfig()), "depth of field blur"))
+        return;
+    __imp__sub_823E4E70(ctx, base);
+}
+
+PPC_FUNC(sub_823E6F48)
+{
+    if (ctx.lr == 0x823E2F5C && !Logged(bloomBlurState, !gpu::post_blur::SkipBloom(settings::GetConfig()), "bloom blur"))
+        return;
+    __imp__sub_823E6F48(ctx, base);
 }

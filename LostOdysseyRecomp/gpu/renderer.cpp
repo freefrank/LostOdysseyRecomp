@@ -4,6 +4,7 @@
 #include "scene_copy_promotion_policy.h"
 #include "scene_copy_promotion_shaders.h"
 #include "bloom_prefilter.h"
+#include "post_blur.h"
 #include <stdafx.h>
 #include <os/atomic_ref.h>
 #include <condition_variable>
@@ -10423,11 +10424,20 @@ void main()
                         std::optional<binding::Texture> selectedBinding;
                         if (slot == 0 && !debugCaptureDir.empty() && ps && (ps->info.textureSlotMask & 1) && bank == sceneCopyBank)
                             selectedBinding.emplace();
-                        HostTexture* tex = (fetch[0] & 3) == 2 ? GetTexture(fetch, dimension,
+                        // The tone map's depth of field (slot 2) and bloom (slot 3)
+                        // textures are not rendered when they contribute nothing
+                        // (post_blur.h): bind the black dummy instead of what the
+                        // address last held, so the zeroed terms stay zero.
+                        bool unusedPostBlur = false;
+                        if (s == ps && key.ps == color_qualification::kTonemapPS && (slot == 2 || slot == 3)) {
+                            const auto post = settings::GetConfig();
+                            unusedPostBlur = slot == 2 ? post_blur::SkipDepthOfField(post) : post_blur::SkipBloom(post);
+                        }
+                        HostTexture* tex = !unusedPostBlur && (fetch[0] & 3) == 2 ? GetTexture(fetch, dimension,
                             selectedBinding ? &*selectedBinding : nullptr) : nullptr;
                         if (!tex)
                         {
-                            if (PlanSuppressed())
+                            if (PlanSuppressed() && !unusedPostBlur)
                             {
                                 failedPlan = true;
                                 return;
