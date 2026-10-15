@@ -71,12 +71,10 @@ inline void SelectAa(Config& config, uint32_t choice)
     }
 }
 // Render resolution choices, in menu order (Config::internalResolution values).
-// 540 sits below the original 720p for weak GPUs (LowResolution).
-inline constexpr int LowResolution = 540;
 #if LO_PLATFORM_MACOS
-inline constexpr int RenderResolutions[] = {0, LowResolution, 720, 1080, 1440, 2160, InternalResolutionNative};
+inline constexpr int RenderResolutions[] = {0, 720, 1080, 1440, 2160, InternalResolutionNative};
 #else
-inline constexpr int RenderResolutions[] = {0, LowResolution, 720, 1080, 1440, 2160};
+inline constexpr int RenderResolutions[] = {0, 720, 1080, 1440, 2160};
 #endif
 inline uint32_t RenderResolutionChoice(const Config& config)
 {

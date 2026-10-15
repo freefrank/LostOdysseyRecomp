@@ -24,11 +24,6 @@ int main() {
     Require(ResolveInternalSize(1080, 1920, 1200) == Size{1920, 1200}, "1080 fills a 1920x1200 output natively");
     Require(ResolveInternalSize(0, 3840, 2400) == Size{3840, 2400}, "Auto keeps a 2160-row 16:9 area at 3840x2400");
     Require(ResolveInternalSize(0, 5120, 3200) == Size{3840, 2400}, "Auto caps the 16:9 area at 2160 rows on tall outputs");
-    // 540, the low-end choice below the original 720p.
-    Require(ResolveInternalSize(540, 1280, 720) == Size{960, 540}, "540 on 16:9 is 960x540");
-    Require(ResolveInternalSize(540, 1920, 1080) == Size{960, 540}, "540 is independent of a larger 16:9 output");
-    Require(ResolveInternalSize(540, 1280, 800) == Size{960, 600}, "540 on 16:10 keeps the 16:9 width");
-    Require(ResolveInternalSize(540, 0, 0) == Size{960, 540}, "540 has a native fallback");
     Require(ResolveInternalSize(720, 1080, 1920) == Size{1280, 2276}, "portrait keeps the 16:9 width");
     Require(ResolveInternalSize(2160, 1080, 1920) == Size{2430, MaxTallHeight}, "portrait raster is bounded");
     Require(TargetSizeForRole(TargetRole::Unknown, 1280, 720, Size{1280, 960}) == Size{1280, 720},
@@ -38,8 +33,8 @@ int main() {
         "unknown targets keep the plan height at 16:9 and wider");
     // Every exact 16:9 output keeps the sizes from before tall layouts.
     for (uint32_t units = 1; units <= 2000; ++units)
-        for (const uint32_t mode : {0u, 540u, 720u, 1080u, 1440u, 2160u, 900u}) {
-            const bool fixed = mode == 540 || mode == 720 || mode == 1080 || mode == 1440 || mode == 2160;
+        for (const uint32_t mode : {0u, 720u, 1080u, 1440u, 2160u, 900u}) {
+            const bool fixed = mode == 720 || mode == 1080 || mode == 1440 || mode == 2160;
             const uint32_t legacyUnits = (std::min)(units, 240u);
             const Size legacy = fixed ? Size{mode * 16 / 9, mode} : Size{legacyUnits * 16, legacyUnits * 9};
             Require(ResolveInternalSize(mode, units * 16, units * 9) == legacy, "16:9 output keeps the previous size");

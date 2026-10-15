@@ -85,6 +85,10 @@ int wmain(int argc, wchar_t** argv)
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
         "invalid fast-forward values default to off, Hold, 2x");
 
+    Write("internal_resolution=540\n");
+    Check(settings::Read().internalResolution == 720, "the removed 540 render resolution loads as 720");
+    Write("internal_resolution=900\n");
+    Check(settings::Read().internalResolution == 0, "an unknown render resolution follows the output");
     Check(settings::Read().vibrationPercent == 100, "missing vibration key keeps retail strength");
     Write("vibration=40\n");
     Check(settings::Read().vibrationPercent == 40, "vibration strength read from INI");

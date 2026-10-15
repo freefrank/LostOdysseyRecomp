@@ -11,7 +11,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android: the sound comes back after you switch to another app or turn the screen off and return to the game (#491).
 - Android: when the screen briefly turns upright as you return to the game, the game no longer rebuilds its graphics, which could leave black blocks over characters and scenery (#492).
 - Android: the game stays in landscape; holding the device upright no longer turns it to portrait.
-- Settings → Graphics → Render resolution has a 540p choice for weak GPUs. It runs faster than the original 720p, but the picture and text are softer.
 - Depth of field at 0% and Bloom off now skip the game's blur passes for those effects instead of only hiding them, so they take less GPU time: in Uhra about 13% less per frame. The picture stays the same.
 - New Settings → Graphics → Graphics preset: Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter, for weak hardware. Original brings the game's effects back.
 - Music and cutscene audio no longer go missing, and battle music no longer plays on after a battle, when the game's sound requests pile up (#497, #499).
@@ -45,7 +44,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android：切到其他应用或关屏后再回到游戏，声音会恢复（#491）。
 - Android：回到游戏时如果屏幕短暂变成竖屏，游戏不再重建画面；之前这可能在角色和场景上留下黑块（#492）。
 - Android：游戏固定横屏，竖着拿设备时不再转成竖屏。
-- 设置 → 图像 → 渲染分辨率新增 540p，适合较弱的 GPU：比原版 720p 更快，但画面和文字更模糊。
 - 景深设为 0% 或关闭泛光后，游戏会跳过这两种效果的模糊渲染，而不只是把结果隐藏，GPU 耗时更少：在乌拉每帧约少 13%。画面不变。
 - 新增“设置 → 图像 → 画质预设”：低配会关闭动态阴影、动态模糊、景深和泛光，并使用标准缩放过滤，适合较弱的硬件；原版恢复游戏原有的效果。
 - 游戏的声音请求积压时，音乐和过场声音不再缺失，战斗结束后战斗音乐也不再继续播放（#497、#499）。

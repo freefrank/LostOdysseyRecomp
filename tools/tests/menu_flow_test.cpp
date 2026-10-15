@@ -1413,15 +1413,6 @@ void CheckHelpFit(uint8_t* base, const char* installRoot)
                 }
             }
         gpu::dlss::g_neuralRenderingState = NrState::Off;
-        // The 540p render resolution has its own help line.
-        settings::edit = savedConfig;
-        settings::edit.internalResolution = settings::graphics_menu::LowResolution;
-        settings::row = int(GraphicsRow::RenderResolution);
-        publish(language, "Graphics render resolution 540p");
-        if (language == 0)
-            Require(settings::snapshot.rows[int(GraphicsRow::RenderResolution)].value == L"540p (low-end)" &&
-                    settings::snapshot.rows[int(GraphicsRow::RenderResolution)].selectedChoice == 1,
-                    "540p is the second Render resolution choice, labelled low-end");
     }
     settings::edit = savedConfig;
 

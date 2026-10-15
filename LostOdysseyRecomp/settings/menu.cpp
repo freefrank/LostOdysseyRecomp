@@ -1430,7 +1430,6 @@ void Publish(uint8_t *base, uint32_t config)
         for (const int height : graphics_menu::RenderResolutions)
             renderChoices.push_back(height == 0 ? Tr(L"Follow output", L"跟隨輸出") :
                 height == InternalResolutionNative ? Tr(L"Native (Retina)", L"原生（Retina）") :
-                height == graphics_menu::LowResolution ? Tr(L"540p (low-end)", L"540p（低配置）") :
                 std::to_wstring(height) + L"p");
         placeGraphics(GraphicsRow::RenderResolution, makeChoices(L"Render resolution", L"渲染解析度",
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
@@ -1704,12 +1703,6 @@ void Publish(uint8_t *base, uint32_t config)
                            L"低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
             break;
         case GraphicsRow::RenderResolution:
-            if (edit.internalResolution == graphics_menu::LowResolution)
-            {
-                next.help = Tr(L"Below the original 720p for weak GPUs: faster, but the picture and text get softer.",
-                               L"低於原版 720p，適合較弱的 GPU：更快，但畫面與文字會變模糊。");
-                break;
-            }
 #if LO_PLATFORM_MACOS
             next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
                            L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
