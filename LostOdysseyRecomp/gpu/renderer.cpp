@@ -480,6 +480,11 @@ namespace gpu::renderer
             uint64_t nextFullScanFrame = 0;
             uint32_t writeGeneration = 0;        // guest_writes generation at the last look
             uint64_t replacementPending = 0; // fingerprint of a mod replacement still being read
+            // A texture mods can replace (eligible by shape and format, whether or not
+            // a mod has it now), made in this textureModsEpoch: re-created at its next
+            // lookup after the mod list changes in game.
+            bool modReplaceable = false;
+            uint32_t modsEpoch = 0;
 
             // The source remains BC3. Only a verified controller atlas owns an
             // optional, single-mip RGBA PlayStation child; retirement of the
@@ -1755,6 +1760,7 @@ namespace gpu::renderer
                 uint32_t format = 0, width = 0, height = 0;
                 bool blockCompressed = true;
                 std::chrono::steady_clock::time_point queued;
+                uint32_t epoch = 0; // textureModsEpoch when queued; an older read is dropped
                 std::optional<modding::TextureData> data;
                 std::string error;
                 bool bcSkipped = false;
@@ -1799,6 +1805,11 @@ namespace gpu::renderer
             static constexpr uint64_t kReplacementReadyFrames = 300;
             struct ReadyReplacement { modding::TextureData data; uint32_t format, width, height; uint64_t frame; };
             std::unordered_set<uint64_t> replacementsQueued, replacementsMissing;
+            // modding::Generation() as last seen: a change (the Mods page saved a new
+            // list, modding::Reload) starts a new epoch, and replaceable textures made
+            // in an older one are made again with the new mods.
+            uint64_t textureModsGeneration = ~0ull;
+            uint32_t textureModsEpoch = 0;
             std::unordered_map<uint64_t, ReadyReplacement> replacementsReady;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
@@ -8078,7 +8089,8 @@ void main()
                     {
                         std::lock_guard lock(reader.mutex);
                         // Without device BC (textureBcFallback) DDS payloads stay unread.
-                        reader.queue.push_back({fingerprint, format, width, height, !textureBcFallback, std::chrono::steady_clock::now()});
+                        reader.queue.push_back({fingerprint, format, width, height, !textureBcFallback, std::chrono::steady_clock::now(),
+                            textureModsEpoch});
                     }
                     if (!reader.thread.joinable()) reader.thread = std::thread([&reader] { reader.Run(); });
                     reader.wake.notify_one();
@@ -8109,10 +8121,28 @@ void main()
                     std::lock_guard lock(replacementReader.mutex);
                     done.swap(replacementReader.done);
                 }
+                if (const uint64_t generation = modding::Generation(); generation != textureModsGeneration)
+                {
+                    // The mods changed in game: what was found missing, failed or read
+                    // belongs to the old list.
+                    if (textureModsGeneration != ~0ull)
+                    {
+                        ++textureModsEpoch;
+                        replacementsQueued.clear();
+                        replacementsMissing.clear();
+                        replacementsReady.clear();
+                        textureReplacementFailures.clear();
+                        textureReplacementsLogged.clear();
+                        textureBcReplacementWarned = false;
+                        LOG_INFO("[mods] texture replacements: the mod list changed; replaceable textures are made again");
+                    }
+                    textureModsGeneration = generation;
+                }
                 const auto now = std::chrono::steady_clock::now();
                 auto& cost = replacementCost;
                 for (auto& read : done)
                 {
+                    if (read.epoch != textureModsEpoch) continue;
                     replacementsQueued.erase(read.fingerprint);
                     if (!read.data)
                     {
@@ -8442,8 +8472,10 @@ void main()
                 {
                     recentTexture = {key, it, texturesVersion};
                     HostTexture* cached = it->second.get();
-                    // An original whose mod replacement was read since: re-create it.
-                    const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
+                    // An original whose mod replacement was read since, or any replaceable
+                    // texture made before the mod list changed: re-create it.
+                    const bool replacementArrived = (cached->replacementPending && ReplacementArrived(*cached)) ||
+                        (cached->modReplaceable && cached->modsEpoch != textureModsEpoch);
                     // Guest bytes get another look only when they can have changed
                     // since the last one: in every frame for an untiled texture (its
                     // layout is the CPU's; the movie decoder rewrites its linear planes
@@ -8581,10 +8613,10 @@ void main()
                 // Mod replacements (docs/wiki/Modding-API.md, Runtime textures) match
                 // tiled 2D base levels by fingerprint. Resolves returned earlier;
                 // packed-tail and partial-block base levels never qualify.
-                const bool replaceable = dimension == 1 && tiled && base != 0 && sourceMip == 0 &&
+                const bool modReplaceable = dimension == 1 && tiled && base != 0 && sourceMip == 0 &&
                     (format == 2 || format == 6 || format == 18 || format == 19 || format == 20) &&
-                    std::min(width, height) > 16 && width % fi.blockWidth == 0 && height % fi.blockHeight == 0 &&
-                    modding::HasTextureReplacements();
+                    std::min(width, height) > 16 && width % fi.blockWidth == 0 && height % fi.blockHeight == 0;
+                const bool replaceable = modReplaceable && modding::HasTextureReplacements();
                 const bool logFingerprint = textureFingerprintLog && dimension == 1 && !fi.convertToRgba8;
                 const size_t baseRowBytes = size_t(blocksX) * fi.bytesPerBlock;
                 const uint64_t fingerprint = replaceable || logFingerprint
@@ -8612,6 +8644,8 @@ void main()
                 tex->guestAddress = sourceAddress;
                 tex->guestBytes = uint32_t(guestBytes);
                 tex->checkedFrame = frame;
+                tex->modReplaceable = modReplaceable;
+                tex->modsEpoch = textureModsEpoch;
                 // writeGeneration stays 0: a file read that landed before or during
                 // this upload makes the next bind look at the bytes once more.
                 if (controller_atlas::Candidate(dimension, format, originalWidth, originalHeight,

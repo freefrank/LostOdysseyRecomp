@@ -18,7 +18,7 @@ After step 5 you can delete the four `.7z` files.
 | Problem | Fix |
 | --- | --- |
 | 7-Zip reports a missing volume or an unexpected end of archive. | One part is missing or incomplete. Download all four parts into the same folder, then check them with step 2. |
-| The textures look unchanged. | The folder must be `mods\hd-textures-4x\` directly next to `LostOdysseyRecomp.exe`, not `mods\mods\...`. Check that the pack is on in Settings → System → Mods, then restart the game. |
+| The textures look unchanged. | The folder must be `mods\hd-textures-4x\` directly next to `LostOdysseyRecomp.exe`, not `mods\mods\...`. Check that the pack is on in Settings → System → Mods. A pack copied in while the game runs appears after a restart. |
 | Short stutters when entering an area for the first time. | The game reads the new textures from disk as they are needed. Keep the game folder on an SSD. |
 
 To remove the pack, delete `mods\hd-textures-4x\`, or turn it off in Settings → System → Mods.
@@ -61,6 +61,6 @@ Mods are supported on the Windows build only. The Linux, macOS and Android build
 
 The portable layout uses `mods/` next to the executable. Other layouts use the application's data directory plus `mods/`. Set `LO_MODS_DIR` to an absolute path to choose an explicit root. In the game, Settings → System → Mods → **Open mods folder** (Windows) opens it. ZIPs produced by the packer contain a top-level `mods/` folder (`mods/<id>/...` for a mod folder); deploy the contents of that folder into the selected root, without adding another `mods/` level.
 
-With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after changing installed mods or `mod-list.ini`. Settings → System → Mods turns mods on or off and changes their order; it saves `mod-list.ini`, which applies at the next start. Host integrations may call `modding::Reload()`, but there is no file watcher or player-facing reload button in this implementation. `LO_MODS=0` disables every replacement, including trusted providers.
+With Mod Organizer 2, install packages through MO2 instead; see [Mod Organizer 2](Mod-Organizer-2.md). Restart after installing or removing mods, or after editing `mod-list.ini` by hand. Settings → System → Mods turns mods on or off and changes their order; saving applies the list while the game runs: textures at once, replaced models from the next area you enter. There is no file watcher. `LO_MODS=0` disables every replacement, including trusted providers.
 
 Use only artwork you may distribute. Do not bundle the original game archives, executable, extraction catalog or unrelated extracted artwork with a mod.

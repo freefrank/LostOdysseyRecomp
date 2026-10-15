@@ -551,9 +551,16 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
                 folder};
     if (modsFocus == rows.open)
         return {Tr(L"Opens the mods folder in File Explorer.", L"在檔案總管中開啟 mods 資料夾。"), folder};
+    // A saved list being applied (patches/mod_hot_reload.h): one line for every row.
+    if (const auto reload = mod_hot_reload::GetStatus(); reload.Pending())
+        return {Tr(L"Models update when you enter a new area.", L"模型會在進入新區域時更新。"),
+                reload.phase == mod_hot_reload::Phase::Preparing && reload.total
+                    ? std::wstring(Tr(L"Preparing mods", L"正在準備 Mod")) + L"  " + std::to_wstring(reload.done) + L" / " +
+                          std::to_wstring(reload.total)
+                    : std::wstring{}};
     if (modsFocus == rows.save)
-        return {Tr(L"Saves the order and the switches. They apply after the game restarts.",
-                   L"儲存順序與開關。重新啟動遊戲後生效。"),
+        return {Tr(L"Saves the order and switches. Textures change at once, models in the next area.",
+                   L"儲存順序與開關。貼圖立即生效，模型在下一個區域生效。"),
                 Tr(L"When two mods change the same file, the one higher in the list wins.",
                    L"兩個 Mod 修改同一個檔案時，清單中較上方的優先。")};
     const int index = rows.EntryAt(modsFocus, modsEntries.size());
@@ -3212,10 +3219,10 @@ PPC_FUNC(sub_822F19B0)
                 LOG_INFO("settings: mod list saved ({} mods)", order.size());
                 // Saving the order this run started with needs no restart.
                 if (order == modsRunning) status = Tr(L"Mod list saved.", L"Mod 清單已儲存。");
-                // Model and text mods switch while the game runs (patches/mod_hot_reload.h).
+                // The mods switch while the game runs (patches/mod_hot_reload.h): textures
+                // at once, models from the next area; the help line says so meanwhile.
                 else if (mod_hot_reload::Request())
-                    status = Tr(L"Mod list saved. Models change when you next enter an area; texture changes need a restart.",
-                                L"Mod 清單已儲存。模型會在下次進入區域時更換；貼圖變更需要重新啟動。");
+                    modsRunning = order;
                 else
                 {
                     restartPrompt = savedRestartPrompt = restartForMods = true;

@@ -134,7 +134,7 @@ bool Enabled(){return true;}
 ResolutionMode Mode(){return ResolutionMode::Combined;}
 bool SaveModList(const std::vector<std::pair<std::string,bool>>&,std::string*){Check(false,"empty Mods page must not save");return false;}
 }
-namespace mod_hot_reload { bool Request(){return false;} }
+namespace mod_hot_reload { bool Request(){return false;} Status GetStatus(){return {};} }
 '''
 TEST = r'''
 extern "C" PPC_FUNC(__imp__sub_822F19B0) {}

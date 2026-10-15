@@ -17,9 +17,11 @@ struct Status
 {
     Phase phase = Phase::Idle;
     uint32_t done = 0, total = 0; // packages, while Preparing
-    std::string error;
+    // The new models are not in use yet.
+    bool Pending() const { return phase == Phase::Preparing || phase == Phase::Waiting || phase == Phase::Reloading; }
 };
-// Re-reads the mods and starts preparing. False when mods are off (LO_MODS=0).
+// Re-reads the mods (modding::Reload: texture replacements follow at once) and
+// starts preparing the models. False when mods are off (LO_MODS=0).
 bool Request();
 Status GetStatus();
 // Engine tick on the game thread. playerInField: the player controls a pawn on

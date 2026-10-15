@@ -157,6 +157,22 @@ bool settings::mods_page::MenuFlowOpenFolder(const std::filesystem::path& folder
     modsFolderOpened = folder;
     return true;
 }
+// The Mods page's live reload (patches/mod_hot_reload.h): a request re-reads the
+// mod list as the runtime does; the page shows whatever status the test sets.
+namespace {
+unsigned modsReloadRequests = 0;
+bool modsReloadAvailable = true;
+mod_hot_reload::Status modsReloadStatus;
+}
+bool mod_hot_reload::Request()
+{
+    ++modsReloadRequests;
+    if (!modsReloadAvailable) return false;
+    modding::Reload();
+    modsReloadStatus = {Phase::Preparing};
+    return true;
+}
+mod_hot_reload::Status mod_hot_reload::GetStatus() { return modsReloadStatus; }
 namespace {
 // Controls page: the sources held on the controllers, the layouts handed to hid.
 uint32_t heldSources = 0;
@@ -1572,6 +1588,12 @@ void CheckHelpFit(uint8_t* base, const char* installRoot)
             audit.MeasureBox(language, help, note == settings::PathText(modding::Root()) ? L"" : note,
                              "Mods row " + std::to_string(focus));
         }
+        modsReloadStatus = {mod_hot_reload::Phase::Preparing, 1234, 5678};
+        {
+            const auto [help, note] = settings::ModsHelp(rows);
+            audit.MeasureBox(language, help, note, "Mods page while the new mods are prepared");
+        }
+        modsReloadStatus = {};
         for (int focus = 0; focus < settings::AchievementsFirstRow + int(settings::achievementItems.size()); ++focus)
         {
             settings::achievementsFocus = focus;
@@ -3169,11 +3191,42 @@ int main(int argc, char** argv)
             Require(settings::modsFocus == save && !std::filesystem::exists(list), "Start moves to Save without saving");
             settings::pending = 0x10; Tick(base);
             Require(readList() == "beta=off\nalpha=on\ngamma=on\n", "Save writes the order and switches to mod-list.ini");
+            // A changed list applies while the game runs: no restart, one line says when models follow.
+            Require(modsReloadRequests == 1 && !settings::restartPrompt && !settings::restartForMods && settings::modsOpen &&
+                    settings::snapshot.help == L"Models update when you enter a new area." && settings::snapshot.notice.empty(),
+                    "a changed mod list reloads in game and says when models follow");
+            modsReloadStatus = {mod_hot_reload::Phase::Preparing, 12, 393};
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.help == L"Models update when you enter a new area." &&
+                    settings::snapshot.notice == L"Preparing mods  12 / 393", "the count of packages prepared so far");
+            modsReloadStatus = {mod_hot_reload::Phase::Done};
+            settings::pending = 0; Tick(base);
+            Require(settings::snapshot.help == L"Saves the order and switches. Textures change at once, models in the next area.",
+                    "the row help returns once the new models are in use");
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::modsOpen && settings::tab == 3 && settings::row == settings::SystemModsRow,
+                    "B without changes returns to the System tab");
+            // Reopened, the page lists the mods as the reload read them: the saved order.
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::snapshot.rows[0].name == L"Beta" && settings::snapshot.rows[0].selectedChoice == 1,
+                    "the reopened page shows the saved order");
+            // Saving the list in use changes nothing.
+            settings::pending = 0x10; Tick(base);
+            settings::pending = 0x10; Tick(base);
+            Require(readList() == "beta=off\nalpha=on\ngamma=on\n" && modsReloadRequests == 1 && !settings::restartPrompt &&
+                    settings::snapshot.help == L"Mod list saved.", "saving the running order needs no reload");
+            // Without a live reload (mods off for this run) a change asks for a restart.
+            modsReloadAvailable = false;
+            settings::modsFocus = 0;
+            settings::pending = 0x200; Tick(base);
+            settings::pending = 0x10; Tick(base);
+            settings::pending = 0x10; Tick(base);
+            Require(readList() == "alpha=on\nbeta=off\ngamma=on\n" && modsReloadRequests == 2, "Save writes the moved order");
 #ifdef _WIN32
             Require(settings::restartPrompt && settings::savedRestartPrompt && settings::restartForMods &&
                     settings::snapshot.dialogMessage == L"Mod list saved. Restart now?" &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Restart now", L"Later"},
-                    "a changed mod list offers the restart");
+                    "a change without a live reload offers the restart");
             settings::pending = 2; Tick(base);
             settings::pending = 0x1000; Tick(base);
             Require(!settings::restartPrompt && !settings::restartForMods && !settings::restart::Requested() &&
@@ -3181,23 +3234,11 @@ int main(int argc, char** argv)
                     "Later stays on the page");
 #else
             Require(settings::restartPrompt && settings::snapshot.dialogMessage == L"Mod list saved. Restart the game to apply the changes.",
-                    "a changed mod list asks for a manual restart");
+                    "a change without a live reload asks for a manual restart");
             settings::pending = 0x1000; Tick(base);
 #endif
-            settings::pending = 0x2000; Tick(base);
-            Require(!settings::modsOpen && settings::tab == 3 && settings::row == settings::SystemModsRow,
-                    "B without changes returns to the System tab");
-            // Reopened before the restart, the page shows the saved order.
-            settings::pending = 0x1000; Tick(base);
-            Require(settings::snapshot.rows[0].name == L"Beta" && settings::snapshot.rows[0].selectedChoice == 1,
-                    "the saved order shows until the restart applies it");
-            // Back to the order this run started with: saved without a restart.
-            settings::pending = 0x1000; Tick(base);
-            settings::pending = 0x200; Tick(base);
-            settings::pending = 0x10; Tick(base);
-            settings::pending = 0x10; Tick(base);
-            Require(readList() == "alpha=on\nbeta=on\ngamma=on\n" && !settings::restartPrompt &&
-                    settings::snapshot.help == L"Mod list saved.", "saving the running order needs no restart");
+            modsReloadAvailable = true;
+            modsReloadStatus = {};
             // Escape leaves too.
             Require(settings::CalibrationKey(27), "Escape belongs to the Mods page");
             settings::pending = 0; Tick(base);
@@ -3229,7 +3270,7 @@ int main(int argc, char** argv)
             Require(!settings::modsOpen, "the empty page has no Save and B leaves");
             modding::Shutdown();
             std::filesystem::remove_all(root);
-            std::puts("PASS Mods page: listing, switches, LB/RB and pointer moves, read-only rows, discard prompt, Open folder, Save + restart, saved order, empty page");
+            std::puts("PASS Mods page: listing, switches, LB/RB and pointer moves, read-only rows, discard prompt, Open folder, Save + live reload, restart without it, saved order, empty page");
         }
         // Opened from the title menu (title_entry.cpp) no game is loaded: the
         // retail Gameplay and Audio options, Restore, Quit and the retail
