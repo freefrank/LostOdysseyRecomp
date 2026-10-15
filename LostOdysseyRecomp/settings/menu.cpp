@@ -15,6 +15,7 @@
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_generation_settings.h>
+#include <gpu/shader_preparation_request.h>
 #include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
@@ -119,6 +120,8 @@ int importChoice = 1;
 bool importLaunchPending = false;
 bool shaderBundlePrompt = false;
 int shaderBundleChoice = 1;
+bool shaderPreparationPrompt = false;
+int shaderPreparationChoice = 1;
 // Mods page (System → Mods). The mods are listed when it opens; the order and
 // switches stay unsaved until Save. modsSaved is the order saved in this run,
 // applied at the next start; reopening the page shows it.
@@ -1599,6 +1602,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
+        addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -1649,6 +1653,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemShaderBundleRow)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
+    if (tab == 3 && row == SystemShaderPreparationRow)
+        next.help = Tr(L"Prepares shaders before play at the next start. Reuses the bundle and cache.",
+                       L"下次啟動時在遊玩前準備著色器，並重用著色器包與快取。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
         next.help = Tr(L"Cutscene dialogue volume. Voices in battle follow Sound effects. Applies from the next scene.",
                        L"過場動畫中的對白音量。戰鬥中的語音跟隨音效音量。從下一個場景起套用。");
@@ -1999,6 +2006,14 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
         next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = shaderBundleChoice;
+    }
+    if (shaderPreparationPrompt)
+    {
+        next.dialogTitle = Tr(L"Prepare shaders again", L"重新準備著色器");
+        next.dialogMessage = Tr(L"Run shader preparation before playing at the next start?",
+                                L"下次啟動時在遊玩前執行著色器準備嗎？");
+        next.dialogChoices = {Tr(L"Prepare again", L"重新準備"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = shaderPreparationChoice;
     }
     if (modsDiscardPrompt || controlsDiscardPrompt)
     {
@@ -2526,6 +2541,7 @@ PPC_FUNC(sub_822F19B0)
         importPrompt = false;
         importLaunchPending = false;
         shaderBundlePrompt = false;
+        shaderPreparationPrompt = false;
         modsOpen = false;
         modsDiscardPrompt = false;
         restartForMods = false;
@@ -2807,6 +2823,25 @@ PPC_FUNC(sub_822F19B0)
 #endif
                 }
             }
+        }
+        Publish(base, config);
+        return;
+    }
+    if (shaderPreparationPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            shaderPreparationChoice = std::min(selected, 1);
+        if (input & 3) shaderPreparationChoice = 1 - shaderPreparationChoice;
+        if (input & 0x2000) shaderPreparationChoice = 1;
+        if (input & 0x3000)
+        {
+            shaderPreparationPrompt = false;
+            if (shaderPreparationChoice == 0)
+                status = gpu::shader_preparation::RequestNextStart()
+                    ? Tr(L"Full shader preparation will run at the next start.",
+                         L"下次啟動時會完整準備著色器。")
+                    : Tr(L"Could not schedule preparation. Check the settings folder.",
+                         L"無法安排著色器準備。請確認設定目錄可寫入。");
         }
         Publish(base, config);
         return;
@@ -3797,6 +3832,12 @@ PPC_FUNC(sub_822F19B0)
     {
         shaderBundlePrompt = true;
         shaderBundleChoice = 1;
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemShaderPreparationRow)
+    {
+        shaderPreparationPrompt = true;
+        shaderPreparationChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 &&

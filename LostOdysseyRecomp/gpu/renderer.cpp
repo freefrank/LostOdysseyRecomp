@@ -79,6 +79,7 @@
 #include "shader/portable_shader_pack.h"
 #include "shader/portable_shader_contract.h"
 #include "shader/portable_shader_pack_location.h"
+#include "shader_preparation_request.h"
 #include "shader/resource_scan.h"
 #include "shader/source_store.h"
 #include "shader/resource_xex.h"
@@ -873,6 +874,7 @@ namespace gpu::renderer
             std::unordered_set<PipelineKey, PipelineKeyHash> preparedPipelineKeys, usedPreparedPipelineKeys;
             std::future<gpu::pipeline_cache::WriteResult> pipelineWrite;
             bool pipelineCacheEnabled = false, pipelineRecipesDirty = false;
+            bool reprepareRequested = false;
             uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::mutex pipelineRecipeMutex;
             // Scene being drawn (debug_menu::CurrentSceneTag), checked once a frame.
@@ -5789,7 +5791,20 @@ void main()
                 scenePrefetchEnabled = !getenv("LO_NO_PIPELINE_PREFETCH");
                 // Learning remains enabled when eager creation is skipped.
                 if (getenv("LO_NO_PIPELINE_PREPARE") || getenv("LO_NO_SHADER_PREPARE") ||
-                    settings::GetConfig().skipShaderPrebuild || video::ShaderPreparationSkipped()) return;
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested) ||
+                    video::ShaderPreparationSkipped()) return;
+                if (reprepareRequested) {
+                    reprepareRequested = gpu::shader_preparation::ConsumeNextStart();
+                    if (reprepareRequested) {
+                        // The installed shader pack or startup bundle already holds the
+                        // compiled binaries. Warm every known recipe with those inputs.
+                        synchronousPreparation = true;
+                        LOG_INFO("renderer: full known pipeline preparation requested from Settings");
+                    } else {
+                        LOG_WARNING("renderer: shader preparation request could not be consumed; using normal startup policy");
+                        if (settings::GetConfig().skipShaderPrebuild) return;
+                    }
+                }
                 if (!synchronousPreparation) {
                     QueueStartupPipelines(driverCache);
                     return;
@@ -5802,7 +5817,7 @@ void main()
                     std::vector<PipelineKey> wanted;
                     std::vector<std::pair<bool, uint64_t>> load;
                     for (const auto& [key, entry] : knownRecipes) {
-                        if (!PrebuildAtStartup(entry)) { ++deferred; continue; }
+                        if (!reprepareRequested && !PrebuildAtStartup(entry)) { ++deferred; continue; }
                         Shader* vs = nullptr;
                         Shader* ps = nullptr;
                         if (FindRecipeShaders(key, vs, ps, &load) == RecipeShaderState::Unavailable) { ++missingShaders; continue; }
@@ -6746,6 +6761,7 @@ void main()
 
             void PrepareKnownShaders()
             {
+                reprepareRequested = gpu::shader_preparation::PendingNextStart();
                 video::ResetShaderPreparationSkip();
                 // A process killed while writing a startup bundle leaves its temporary file.
                 if (!shaderCacheDir.empty())
@@ -6767,7 +6783,8 @@ void main()
                     ResetTimers();
                     return;
                 }
-                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") || settings::GetConfig().skipShaderPrebuild) {
+                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") ||
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested)) {
                     LOG_INFO("renderer: shader preparation skipped by configuration or environment");
                     return;
                 }

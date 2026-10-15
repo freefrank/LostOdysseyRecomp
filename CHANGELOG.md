@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
+
+### 简体中文
+
+- 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
+
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 
 ### English
