@@ -30,6 +30,20 @@
 
 </div>
 
+## Contents
+
+- [Start playing](#start-playing)
+- [Features](#features)
+- [Controls](#controls)
+- [Debug menu](#debug-menu)
+- [Files and folders](#files-and-folders)
+- [Command-line options](#command-line-options)
+- [Reporting a problem](#reporting-a-problem)
+- [Screenshots](#screenshots)
+- [Development](#development)
+- [Sponsors](#sponsors)
+- [Credits and game data](#credits-and-game-data)
+
 ## Start playing
 
 Download the package for your platform from the [latest release](https://github.com/freefrank/LostOdysseyRecomp/releases/latest).
