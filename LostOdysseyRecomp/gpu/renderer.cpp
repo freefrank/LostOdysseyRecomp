@@ -14684,8 +14684,12 @@ void main()
 
     void Draw(const DrawInfo& info)
     {
-        if (g_renderer)
+        if (g_renderer) {
+            // Includes resolve packets (RB_MODECONTROL == 6), so a native menu
+            // cannot overwrite the frontbuffer before the opening snapshot.
+            video::CaptureCalibrationSceneBeforeDraw();
             g_renderer->Draw(info);
+        }
     }
 
     bool OcclusionQueryEvent(uint32_t physicalAddress)
