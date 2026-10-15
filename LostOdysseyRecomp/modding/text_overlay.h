@@ -15,7 +15,8 @@
 // pointed there with their new sizes. The game's loader takes offsets and
 // sizes from the index, so rebuilt files may be longer. The rebuilt indexes and
 // files are kept in cache/mods (LO_MODS_CACHE_DIR; none keeps them in memory)
-// with a key of what they were made from, so later starts read them from there.
+// with a key of what they were made from, so later starts read them from there;
+// each folder keeps the sets of its last two mod setups.
 // See docs/notes/language-pack-research.zh-CN.md.
 namespace modding::text_overlay
 {

@@ -556,15 +556,19 @@ void PatchIndex(const fs::path &folder, const std::map<std::string, fs::path> &n
 }
 
 // ---- The cache ----------------------------------------------------------------
-// cache/mods/<folder hash>/ holds a folder's patched indexes (<name>.index), its
-// tails (<archive>.tail), its overflow archives (<name>) and manifest.txt,
-// written last: the key, then one line per index ("index <name>"), tail ("tail
-// <archive> <base> <size>") and overflow archive ("overflow <name> <size>"). The key
-// covers the code that rebuilds the files and the cache format, the selected
-// language pack, the mods' files (path, entry, size, time), and the folder's
-// indexes and archive sizes; any change rebuilds. A game update that leaves the
-// rebuilding code alone keeps the cache.
+// cache/mods/<folder hash>/<key>/ holds one set of a folder's rebuilt files: the
+// patched indexes (<name>.index), the tails (<archive>.tail), the overflow
+// archives (<name>) and manifest.txt, written last: the key, then one line per
+// index ("index <name>"), tail ("tail <archive> <base> <size>") and overflow
+// archive ("overflow <name> <size>"). The key covers the code that rebuilds the
+// files and the cache format, the selected language pack, the mods' files (path,
+// entry, size, time), and the folder's indexes and archive sizes; any change
+// makes a new set. A game update that leaves the rebuilding code alone keeps the
+// cache. Each folder keeps its last kKeptSets sets by use (the manifest's time),
+// so turning a mod off and on again reads its files instead of rebuilding them;
+// a start without mods keeps them too.
 constexpr const char *kCacheFormat = "3"; // bump when the rebuilt bytes change for the same inputs
+constexpr size_t kKeptSets = 2;           // the set in use and the one before it
 #ifdef LO_MODS_BUILDER_HASH
 // A hash of modding/ and the readers it uses, made by the build.
 constexpr const char *kBuilder = LO_MODS_BUILDER_HASH;
@@ -597,11 +601,76 @@ fs::path CacheRoot()
     return os::user_paths::UsePortableLayout() ? fs::path("cache/mods") : os::user_paths::DataDir() / "cache/mods";
 }
 
-// The cache folder for a game folder; empty without a cache.
+// The cache folder for a game folder, which holds its sets; empty without a cache.
 fs::path CacheFolder(const fs::path &folder)
 {
     const auto root = CacheRoot();
     return root.empty() ? root : root / Hex(Hash(0xcbf29ce484222325ull, Utf8(fs::absolute(folder).lexically_normal())));
+}
+
+bool IsHex16(const std::string &name)
+{
+    return name.size() == 16 && name.find_first_not_of("0123456789abcdef") == std::string::npos;
+}
+
+// Bytes of the files under path (or of path itself).
+uint64_t Bytes(const fs::path &path)
+{
+    std::error_code ec;
+    if (!fs::is_directory(path, ec))
+    {
+        const auto size = fs::file_size(path, ec);
+        return ec ? 0 : size;
+    }
+    uint64_t total = 0;
+    for (fs::recursive_directory_iterator it(path, ec), end; !ec && it != end; it.increment(ec))
+    {
+        std::error_code entryError;
+        if (it->is_regular_file(entryError)) total += it->file_size(entryError);
+    }
+    return total;
+}
+
+double MiB(uint64_t bytes) { return double(bytes) / (1024.0 * 1024.0); }
+
+// After a set of folderCache is read or written: it and the most recently used
+// other set stay; older sets, builds that did not finish and the files of the
+// earlier one-set layout go. Only the thread building this folder calls it.
+void Prune(const fs::path &folderCache, const fs::path &current)
+{
+    struct Set { fs::path path; fs::file_time_type used; };
+    std::vector<Set> sets;
+    std::vector<fs::path> stale;
+    std::error_code ec;
+    for (fs::directory_iterator it(folderCache, ec), end; !ec && it != end; it.increment(ec))
+    {
+        const auto &path = it->path();
+        if (path.filename() == current.filename()) continue;
+        std::error_code entryError;
+        const auto manifest = path / "manifest.txt";
+        if (it->is_directory(entryError) && IsHex16(Utf8(path.filename())) && fs::is_regular_file(manifest, entryError))
+            sets.push_back({path, fs::last_write_time(manifest, entryError)});
+        else stale.push_back(path);
+    }
+    // The earlier layout built a folder's files in <folder hash>.new.
+    if (const auto old = fs::path(folderCache).concat(".new"); fs::exists(old, ec)) stale.push_back(old);
+    std::sort(sets.begin(), sets.end(), [](const Set &a, const Set &b) { return a.used > b.used; });
+    for (size_t i = kKeptSets - 1; i < sets.size(); ++i) stale.push_back(sets[i].path);
+    sets.resize(std::min(sets.size(), kKeptSets - 1));
+
+    uint64_t kept = Bytes(current), freed = 0;
+    for (const auto &set : sets) kept += Bytes(set.path);
+    for (const auto &path : stale)
+    {
+        const auto bytes = Bytes(path);
+        std::error_code removeError;
+        fs::remove_all(path, removeError);
+        const auto left = removeError ? Bytes(path) : 0;
+        freed += bytes - std::min(bytes, left);
+        if (removeError) LOG_WARNING("[mods] cannot remove {} from the mod cache: {}", Utf8(path), removeError.message());
+    }
+    LOG_NOTICE("[mods] mod cache {}: kept {} set{} ({:.1f} MiB), freed {:.1f} MiB", Utf8(folderCache), sets.size() + 1,
+               sets.empty() ? "" : "s", MiB(kept), MiB(freed));
 }
 
 bool LoadCache(const fs::path &cache, uint64_t key, Folder &result)
@@ -673,21 +742,24 @@ Folder Build(const fs::path &folder, const BuildOptions &options = {})
             LOG_WARNING("[mods] cannot read index {}: {}", Utf8(path), error.what());
         }
     }
-    const auto cache = CacheFolder(folder);
+    const auto sets = CacheFolder(folder);
+    const auto cache = sets.empty() ? sets : sets / Hex(key);
     if (!cache.empty() && LoadCache(cache, key, result))
     {
         LOG_NOTICE("[mods] rebuilt files for {} read from {}", Utf8(folder), Utf8(cache));
+        // In use now: the manifest's time orders the sets.
+        fs::last_write_time(cache / "manifest.txt", fs::file_time_type::clock::now(), ec);
+        Prune(sets, cache);
         return result;
     }
     if (!cache.empty())
     {
-        std::ifstream manifest(cache / "manifest.txt");
-        std::string word, value;
-        const bool keyed = manifest >> word >> value && word == "key";
+        std::error_code missing;
         LOG_NOTICE("[mods] rebuilding the files for {} (mod code {}): {}", Utf8(folder), kBuilder,
-                   !keyed ? "nothing cached yet"
-                   : value != Hex(key) ? "the mods, the game files or the mod code changed"
-                                       : "the cached files are incomplete");
+                   fs::exists(cache / "manifest.txt", missing) ? "the cached files are incomplete"
+                   : fs::is_directory(sets, missing) && !fs::is_empty(sets, missing)
+                       ? "the mods, the game files or the mod code changed"
+                       : "nothing cached yet");
     }
 
     if (options.Cancelled()) throw Cancelled{};
@@ -775,6 +847,8 @@ Folder Build(const fs::path &folder, const BuildOptions &options = {})
         {
             LOG_WARNING("[mods] cannot keep the rebuilt files in {}: {}", Utf8(cache), error.what());
         }
+        // Not when the files are still served from the build folder.
+        if (cached) Prune(sets, cache);
     }
     if (!cached)
     {
@@ -1018,22 +1092,13 @@ std::vector<Range> RangesFor(const fs::path &file)
     List();
     if (gTexts.empty() && gModels.empty())
     {
-        // Without mods the rebuilt files of earlier starts are not needed (a
-        // pack's can take gigabytes). Only the cache's own folders go.
-        static bool cleared = false;
-        if (const auto root = CacheRoot(); !cleared && !root.empty())
+        // The rebuilt files of earlier starts stay: turning the mods on again reads them.
+        static bool reported = false;
+        if (const auto root = CacheRoot(); !reported && !root.empty())
         {
-            cleared = true;
-            std::error_code ec;
-            size_t removed = 0;
-            for (const auto &entry : fs::directory_iterator(root, ec))
-            {
-                auto name = Utf8(entry.path().filename());
-                if (name.ends_with(".new")) name.resize(name.size() - 4);
-                if (name.size() == 16 && name.find_first_not_of("0123456789abcdef") == std::string::npos && entry.is_directory(ec))
-                    removed += fs::remove_all(entry.path(), ec) > 0;
-            }
-            if (removed) LOG_NOTICE("[mods] no mods: removed {} folders of rebuilt files in {}", removed, Utf8(root));
+            reported = true;
+            if (const auto bytes = Bytes(root))
+                LOG_NOTICE("[mods] no mods: keeping {:.1f} MiB of rebuilt files in {} for the last mod sets", MiB(bytes), Utf8(root));
         }
         return {};
     }
