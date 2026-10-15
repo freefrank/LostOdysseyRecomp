@@ -6,7 +6,7 @@ These pages describe the mod system as of v0.9.52: mod format v1 and v2 (mod fol
 
 About 15,400 of the game's textures, upscaled 4x. Windows only, like all mods; it needs v0.9.22 or later. The download is 16.4 GB in four parts and unpacks to 33 GB.
 
-1. Open the [download page](https://fuckingfast.net/qgrm5ikgre7z) and download all five files into one folder: `LostOdysseyRecomp-HD-Textures-4x-v1.0.7z.001` to `.004`, and `SHA256SUMS.txt`.
+1. Join the [Discord server](https://discord.gg/z2yPct6z2w), open the **#mods** forum and find the **4x HD Texture Pack v1.0** post. Its download link has five files; download all of them into one folder: `LostOdysseyRecomp-HD-Textures-4x-v1.0.7z.001` to `.004`, and `SHA256SUMS.txt`.
 2. Optional: check the downloads. Open PowerShell in that folder and run `Get-FileHash *.7z.* -Algorithm SHA256`. Each hash must match the line for that file in `SHA256SUMS.txt`.
 3. Install [7-Zip](https://www.7-zip.org/) if you don't have it.
 4. Right-click `LostOdysseyRecomp-HD-Textures-4x-v1.0.7z.001` and choose **7-Zip → Extract files...**. As the destination, pick your game folder: the folder that contains `LostOdysseyRecomp.exe`. 7-Zip reads the other three parts by itself.

@@ -83,7 +83,7 @@
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。过场对白有单独的音量。 |
 | 输入 | 手柄、键盘和震动；Android 上有触摸按键。 |
-| Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包，以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)，其中有 [4x 高清纹理包](docs/wiki/Modding.md#4x-hd-texture-pack)的下载和安装方法。 |
+| Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包，以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。现成的 Mod（例如 4x 高清纹理包）在 [Discord](https://discord.gg/z2yPct6z2w) 的 **#mods** 论坛里分享。 |
 | 成就 | 游戏的 36 个 Xbox 360 成就，解锁时显示 Xbox 360 风格的通知并播放提示音。**设置 → 系统 → 成就**列出全部成就和解锁日期，也可以把通知设为开启、静音或关闭。在 `settings.ini` 旁边放一个 `achievement.wav` 可以替换提示音。 |
 | 调试菜单 | 渲染捕获、随时存档、遇敌开关、传送、快进和修改。见[调试菜单](#调试菜单)。 |
 
