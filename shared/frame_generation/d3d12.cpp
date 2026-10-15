@@ -93,8 +93,8 @@ bool D3D12Session::Submitted(bool success,uint64_t serial,std::string& reason) {
 bool D3D12Session::Presented(bool accepted,std::string& reason) {
     if (lease_.Pending()) {
         if (!lease_.Presented(accepted)) { reason="FG rejected present; lease retained"; return false; }
-        // For DLSS block-presenting-queue this orders all input reads. FSR also
-        // checks its SDK-owned presentation queues in WaitNative below.
+        // For DLSS block-presenting-queue this orders all input reads. FSR reads
+        // them only in its Prepare dispatch, inside the host batch.
         if (!SignalFence(reason)) return false;
     }
     const bool ok=PresentedNative(accepted,reason);
@@ -104,7 +104,10 @@ bool D3D12Session::Presented(bool accepted,std::string& reason) {
 bool D3D12Session::Drain(std::string& reason) {
     if (!lease_.Pending()) return true;
     if (lease_.GetPhase()!=InputLease::Phase::Presented) { reason="FG input has no accepted present"; return false; }
-    if (!WaitNative(reason) || !WaitFence(reason)) return false;
+    // Per frame only the input fence. Waiting for the SDK's presents here held
+    // the render thread until FSR's paced real frame was out (half a frame).
+    // Quiesce and cancellation still wait for them.
+    if (!WaitFence(reason)) return false;
     if (!lease_.Complete(lease_.Serial(),true)) { reason="FG invalid retirement"; return false; }
     return true;
 }

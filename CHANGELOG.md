@@ -42,6 +42,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The achievement notification no longer draws a piece of itself over the "Y: Settings" hint on the title screen, nor over the loading bar or the performance overlay.
 - The MO2 export tool's Scan game data now lists models and animation sets; before, it found none.
 - The MO2 export tool names models with the game's own names in the chosen text language, such as "Kaim" or "Uhra - Main Street", sorts them into groups such as Party, Monsters and Maps, shows a picture of the selected model, and opens Explorer at an exported model, ready for Blender. New wiki page: Open models in Blender.
+- Windows, Direct3D 12: FSR frame generation gives a higher frame rate, most of all in battles, and the performance overlay shows its real frame rate instead of an estimate marked with ~.
 
 ### 简体中文
 
@@ -79,6 +80,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 成就通知不再在标题画面的“Y：设置”提示上，也不再在加载进度条和性能叠加层上，画出自己的一块。
 - MO2 导出工具的“Scan game data”现在会列出模型和动画；之前一个也找不到。
 - MO2 导出工具用游戏里的名字标注模型，例如“凯姆”“乌拉・中央大街”（随“Text language”切换语言），按队伍、怪物、地图等分组，显示选中模型的预览图，并能导出模型后在资源管理器中选中它，方便拖进 Blender。新增 Wiki 页面《在 Blender 中打开模型》。
+- Windows Direct3D 12：FSR 帧生成的帧率更高，战斗中最明显；性能信息显示它的实际帧率，不再是带 ~ 的估算值。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

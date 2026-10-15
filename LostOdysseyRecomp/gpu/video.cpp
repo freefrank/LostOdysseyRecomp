@@ -4541,19 +4541,16 @@ namespace gpu::video
     }
 
     // Presented frames, generated ones included, while a frame generation
-    // provider generates; each provider counts its own presents. D3D12 FSR
-    // counts none (0), so the overlay shows rendered FPS times the multiplier.
-    struct FgPresents { bool active = false; uint64_t presented = 0; uint32_t multiplier = 2; };
+    // provider generates; each provider counts its own presents (D3D12 FSR:
+    // the native swapchain's present count).
+    struct FgPresents { bool active = false; uint64_t presented = 0; };
     static FgPresents FrameGenerationPresents()
     {
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
-        if (g_d3dFg && g_d3dFg->Available()) {
-            std::lock_guard lock(g_fgSettingsMutex);
-            return {true, g_d3dFg->ActualPresents(), g_fgAppliedConfig.generatedFrames + 1};
-        }
+        if (g_d3dFg && g_d3dFg->Available()) return {true, g_d3dFg->ActualPresents()};
 #endif
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
-        if (g_fgSession && g_fgSession->Available()) return {true, g_fgSession->ActualPresents(), g_fgSession->Multiplier()};
+        if (g_fgSession && g_fgSession->Available()) return {true, g_fgSession->ActualPresents()};
 #endif
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
         if (g_fsrVulkanFg && g_fsrVulkanFg->Available()) return {true, g_fsrVulkanFg->PresentedFrames()};
@@ -4602,7 +4599,6 @@ namespace gpu::video
                 const auto fg = FrameGenerationPresents();
                 sources.frameGeneration = fg.active;
                 sources.presentedFrames = fg.presented;
-                sources.fgMultiplier = fg.multiplier;
                 sources.gpuBusy = gpu_busy::Total();
             }
             overlay::Refresh(sources);
