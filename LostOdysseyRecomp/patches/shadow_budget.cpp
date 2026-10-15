@@ -9,10 +9,12 @@
 #include <os/logger.h>
 #include "settings/config.h"
 
-// Dynamic shadows Low: per-object shadows for the few objects largest on
-// screen only. Each shadow costs a depth pass, its projection passes and their
-// draws on the GPU and the render threads; in Uhra's streets about 30 of them
-// take half of the frame's GPU time at 10 W.
+// Dynamic shadows Low: per-object shadows only for objects on screen, and for
+// at most the LowCount largest of them. Each shadow costs a depth pass, its
+// projection passes and their draws on the GPU and the render threads. In
+// Uhra's main street the game makes about 60 a frame, 52 of them for people
+// and objects that are not on screen; at 10 W they take a third of the GPU
+// time.
 //
 // sub_823BE570 (InitDynamicShadows) runs once per frame and calls sub_823BE9D0
 // for each light-primitive interaction (r3 the scene renderer, r4 the
@@ -21,25 +23,34 @@
 //   max(view+0x24 * view+0x80, view+0x28 * view+0x94) * radius / max(depth, 1)
 // (about the object's height in 720p pixels), then creates it unless the
 // light's fade is zero; when it creates nothing it changes nothing. Low skips
-// the interactions smaller than the LowCount-th largest of the previous frame,
-// counting objects that are not on screen as size 0.
+// the interaction before that.
 extern "C" PPC_FUNC(__imp__sub_823BE570);
 extern "C" PPC_FUNC(__imp__sub_823BE9D0);
 
 namespace
 {
 constexpr size_t LowCount = 8;
-// A primitive that had a shadow keeps it down to this fraction of the
-// threshold, so objects of about the same size do not trade it every frame.
+// A shadow already shown stays down to this fraction of the threshold, so
+// objects of about the same size do not trade it every frame.
 constexpr float KeepFraction = 0.8f;
+// A caster that left the screen keeps its shadow this many frames, so
+// visibility that changes from frame to frame does not make it flicker.
+constexpr uint32_t OffScreenFrames = 15;
+
+struct Caster
+{
+    uint32_t lastOnScreen = 0; // frame
+    bool shadow = false;       // had a shadow in the frame before
+};
 
 // Render thread only.
 bool low = false;
-float threshold = 0.0f;                   // the LowCount-th largest size of the previous frame
-std::vector<float> sizes, lastSizes;      // interaction sizes this frame / the previous frame
-// Primitive scene info -> had a shadow last frame. A primitive lit by two
-// lights has two interactions; both see the same size, so they decide alike.
-std::unordered_map<uint32_t, bool> shown;
+uint32_t frame = 1;
+float threshold = 0.0f;              // the LowCount-th largest size of the previous frame
+std::vector<float> sizes, lastSizes; // sizes of the on-screen casters this frame / the previous frame
+// Keyed by primitive scene info. A primitive lit by two lights has two
+// interactions; both see the same size, so they decide alike.
+std::unordered_map<uint32_t, Caster> casters;
 
 uint32_t LoadU32(uint32_t address)
 {
@@ -77,7 +88,7 @@ float ScreenSize(uint32_t renderer, uint32_t primitive)
 // Whether the primitive or an attached one is visible in a view: the bit of its
 // index (+0x20) in the view's visibility map (+0x25C), as sub_823BE9D0 tests
 // before it adds the half-size second shadow.
-bool Visible(uint32_t renderer, uint32_t primitive)
+bool OnScreen(uint32_t renderer, uint32_t primitive)
 {
     const uint32_t views = LoadU32(renderer + 0x30);
     const uint32_t count = std::min<uint32_t>(LoadU32(renderer + 0x34), 8);
@@ -104,6 +115,7 @@ PPC_FUNC(sub_823BE570)
     if (lowNow != low)
         LOG_INFO("graphics effects: dynamic shadows {}", lowNow ? "low" : "full");
     low = lowNow;
+    ++frame;
     std::swap(sizes, lastSizes);
     sizes.clear();
     threshold = 0.0f;
@@ -112,8 +124,8 @@ PPC_FUNC(sub_823BE570)
         std::nth_element(lastSizes.begin(), lastSizes.begin() + (LowCount - 1), lastSizes.end(), std::greater<float>());
         threshold = lastSizes[LowCount - 1];
     }
-    if (!low || shown.size() > 4096)
-        shown.clear();
+    if (!low || casters.size() > 4096)
+        casters.clear();
     __imp__sub_823BE570(ctx, base);
 }
 
@@ -127,11 +139,17 @@ PPC_FUNC(sub_823BE9D0)
         __imp__sub_823BE9D0(ctx, base);
         return;
     }
-    // Off-screen casters rank last, so the budget goes to the shadows of visible objects.
-    const float size = Visible(ctx.r3.u32, primitive) ? ScreenSize(ctx.r3.u32, primitive) : 0.0f;
+    Caster& caster = casters[primitive];
+    if (OnScreen(ctx.r3.u32, primitive))
+        caster.lastOnScreen = frame;
+    if (frame - caster.lastOnScreen > OffScreenFrames)
+    {
+        caster.shadow = false;
+        return;
+    }
+    const float size = ScreenSize(ctx.r3.u32, primitive);
     sizes.push_back(size);
-    bool& had = shown[primitive];
-    had = size >= threshold * (had ? KeepFraction : 1.0f);
-    if (had)
+    caster.shadow = size >= threshold * (caster.shadow ? KeepFraction : 1.0f);
+    if (caster.shadow)
         __imp__sub_823BE9D0(ctx, base);
 }
