@@ -75,6 +75,7 @@
 | [原生90/120 FPS：实现与本地验收](native-90-120fps.md) | 参考 |
 | [FreeSync / G-SYNC Compatible：应用侧VRR接入](vrr-freesync-gsync-compatible.md) | 参考 |
 | [画质增强选项的开销：v0.9.22，RTX 5080，2026-10-10](graphics-options-cost-2026-10-10.zh-CN.md) | 参考 |
+| [画质选项的开销（1080p 输出）：main f7799aec，RTX 5080 与 psvita，2026-10-15](graphics-options-cost-1080p-2026-10-15.zh-CN.md) | 参考 |
 | [合并 render pass：v1.0.0 设计调研](render-pass-merging-design-2026-10-10.zh-CN.md) | 草案 |
 | [合并 render pass 阶段 0：平板实测](render-pass-merging-phase0-2026-10-10.zh-CN.md) | 调查 |
 
