@@ -9759,11 +9759,14 @@ void main()
                 // frame (vs 61722cf30bd5fa6f, gl_PointSize sprites at the screen
                 // centre, presumably light/flare visibility tests whose counts
                 // LO_ZPD_MODE fake modes make up anyway); each binds its own
-                // pipeline and target. LO_SKIP_NOOP_DRAWS=0 draws them.
+                // pipeline and target. On by default only on the Switch: on a desktop
+                // AMD GPU (psvita) skipping ~50 a battle frame saved 0.46 ms of draw
+                // CPU but no frame time. LO_SKIP_NOOP_DRAWS=1 / 0 forces it on / off.
                 {
                     static const bool skipNoop = [] {
                         const char* value = getenv("LO_SKIP_NOOP_DRAWS");
-                        return !(value && value[0] == '0');
+                        if (!value || !value[0]) return bool(LO_PLATFORM_SWITCH);
+                        return value[0] != '0';
                     }();
                     const bool writesDepth = depth && (depthControl & 6) == 6;
                     const bool writesStencil = depth && (depthControl & 1) != 0;
