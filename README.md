@@ -206,6 +206,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | `d3d12` or `vulkan` on Windows. |
 | `LO_FPS` | Frame-rate cap; `0` means uncapped. |
+| `LO_FAST_LOADING=0` | Disable the higher frame-rate limit during loading. On Android and devices with a detected battery, loading is capped at 4× the selected limit, up to 240 FPS (240 FPS if uncapped). |
 | `LO_NO_UPDATE=1` | Skip the update check. |
 | `LO_MODS=0` | Disable mods. |
 | `LO_AUDIO_MUTE=1` | Mute audio. |

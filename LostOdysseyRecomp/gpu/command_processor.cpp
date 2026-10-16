@@ -7,6 +7,7 @@
 #include "video.h"
 #include "renderer.h"
 #include "frame_pacer.h"
+#include "loading_pacing.h"
 #include "deadline_wait.h"
 #include "register_snapshot.h"
 #include "render_timing.h"
@@ -1082,7 +1083,8 @@ namespace gpu
             renderer::PreparePresent(frontbuffer);
             renderer::Flush();
             const auto timingPace = std::chrono::steady_clock::now();
-            const auto fpsCap = video::GetFramePacingTarget(GetFrameRateTarget());
+            const auto fpsCap = loading::Active() ? loading::Target(GetFrameRateTarget())
+                : video::GetFramePacingTarget(GetFrameRateTarget());
             const bool timingEnabled = frame_timing::Enabled();
             frame_timing::PacingSample pacing;
             {
@@ -1091,7 +1093,8 @@ namespace gpu
                 static DeadlineWait pacingWait;
                 // Preserve the original schedule anchor; sleep without millisecond rounding.
                 const auto nativeDeadline = pacer.Schedule(timingPace, fpsCap);
-                const auto output = video::GetDynamicFgOutputPacing(GetFrameRateTarget());
+                const auto output = loading::Active() ? video::DynamicFgOutputPacing{}
+                    : video::GetDynamicFgOutputPacing(GetFrameRateTarget());
                 const auto outputDeadline = outputPacer.Schedule(timingPace, output.outputFps, output.actualPresents);
                 const auto deadline = std::max(nativeDeadline, outputDeadline);
                 const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;

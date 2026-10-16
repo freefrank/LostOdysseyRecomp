@@ -206,6 +206,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | Windows 上为 `d3d12` 或 `vulkan`。 |
 | `LO_FPS` | 帧率上限；`0` 表示不限制。 |
+| `LO_FAST_LOADING=0` | 关闭加载时临时提高帧率上限。Android 和检测到电池的设备在加载时最多使用所选上限的 4 倍，最高 240 FPS；所选帧率不限制时也使用 240 FPS。 |
 | `LO_NO_UPDATE=1` | 跳过更新检查。 |
 | `LO_MODS=0` | 关闭 Mod。 |
 | `LO_AUDIO_MUTE=1` | 静音。 |
