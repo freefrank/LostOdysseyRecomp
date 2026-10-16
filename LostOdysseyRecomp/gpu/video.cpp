@@ -37,6 +37,7 @@
 #endif
 #include "command_processor.h"
 #include "frame_rate.h"
+#include "loading_pacing.h"
 #include "vrr_policy.h"
 #include "frame_pacer.h"
 #include "deadline_wait.h"
@@ -2943,6 +2944,7 @@ namespace gpu::video
     }
 
     bool FrameGenerationInputCaptureEnabled() {
+        if (loading::Active()) return false;
 #if defined(LO_GPU_PLUME) && defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
         if (g_d3dFg && g_d3dFg->Enabled()) return true;
 #endif
@@ -3267,6 +3269,16 @@ namespace gpu::video
 #endif
         if (!vrr::OutputLimit(refresh)) refresh = 0; // Unknown, not an invented 60 Hz.
         g_displayRefreshHz.store(refresh, std::memory_order_relaxed);
+        // SDL power queries stay on the window thread, alongside display polls.
+#if !defined(__ANDROID__) && !defined(__SWITCH__)
+        static std::chrono::steady_clock::time_point nextPowerPoll{};
+        if (now >= nextPowerPoll) {
+            nextPowerPoll = now + std::chrono::minutes(1);
+            const auto power = SDL_GetPowerInfo(nullptr, nullptr);
+            if (power != SDL_POWERSTATE_ERROR && power != SDL_POWERSTATE_UNKNOWN)
+                loading::portable.store(power != SDL_POWERSTATE_NO_BATTERY, std::memory_order_relaxed);
+        }
+#endif
     }
 
 #if LO_PLATFORM_MACOS
@@ -4167,22 +4179,23 @@ namespace gpu::video
             nativePolicy.nativeVsyncInitialized = true;
             nativePolicy.nativeVsyncReportPending = true;
         }
-        bool forceImmediate = false;
+        bool forceImmediate = loading::Active();
 #if defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
         // Retain the existing Vulkan DLSS-G requirement at every native cap.
-        forceImmediate = bool(g_fgSession);
+        forceImmediate = forceImmediate || bool(g_fgSession);
 #endif
 #if defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
         // The FidelityFX Vulkan presenter paces its own presents (see startup).
         forceImmediate = forceImmediate || (g_fsrVulkanFg && g_fsrVulkanFg->UsesProxySwapchain());
 #endif
 #if LO_PLATFORM_MACOS
-        // Metal keeps display sync: the compositor needs it and it never tears.
+        // Normal Metal presentation keeps display sync. Loading uses the same
+        // non-blocking presentation policy as the other backends.
         // Adaptive sync and targets above the 60 Hz guest clock present each
         // drawable for at least one game frame instead, so ProMotion displays
         // refresh at the game's cadence. 1 ms of slack keeps a frame from
         // slipping to the next refresh.
-        const bool nativeVsync = true;
+        const bool nativeVsync = !loading::Active();
         (void)forceImmediate;
         {
             const uint32_t paced = GetFramePacingTarget(nativeTarget);
@@ -4191,7 +4204,7 @@ namespace gpu::video
 #if defined(LO_ENABLE_METALFX_FG)
             if (g_metalFg && g_metalFg->Requested()) presentationMultiplier = 2;
 #endif
-            const double duration = (adaptive || presentationMultiplier > 1) && paced
+            const double duration = !loading::Active() && (adaptive || presentationMultiplier > 1) && paced
                 ? std::max(0.0, 1.0 / (double(paced) * presentationMultiplier) - 0.001) : 0.0;
             if (duration != nativePolicy.metalMinimumPresentDuration) {
                 plume::SetMetalMinimumPresentDuration(g_swapChain.get(), duration);
@@ -4764,6 +4777,24 @@ namespace gpu::video
 #endif
     }
 
+    static bool AcquirePresentTexture(uint32_t* index)
+    {
+        if (!loading::Active() || !g_vulkan)
+            return g_swapChain->acquireTexture(g_acquireSemaphore.get(), index);
+        // Some WSI implementations require FIFO even with vsync disabled.
+        // Never wait for their next refresh: no free image means drop this
+        // host present. A failed acquire does not signal the binary semaphore.
+#ifdef _WIN64
+        const plume::WindowPixelContext pixels;
+#endif
+        auto* swap = static_cast<plume::VulkanSwapChain*>(g_swapChain.get());
+        auto* semaphore = static_cast<plume::VulkanCommandSemaphore*>(g_acquireSemaphore.get());
+        const auto result = vkAcquireNextImageKHR(swap->commandQueue->device->vk, swap->vk,
+            0, semaphore->vk, VK_NULL_HANDLE, index);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) swap->surfaceOutOfDate = true;
+        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+    }
+
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
                                        const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult)
@@ -4836,7 +4867,7 @@ namespace gpu::video
         }
 
         uint32_t imageIndex = 0;
-        if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
+        if (!AcquirePresentTexture(&imageIndex))
         {
             return false;
         }
@@ -5028,6 +5059,11 @@ namespace gpu::video
             return;
 
 #ifdef LO_GPU_PLUME
+        static loading::PresentGate loadingPresents;
+        const auto nowNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+        if (!loadingPresents.Accept(loading::Active(), nowNs, g_displayRefreshHz.load(std::memory_order_relaxed)))
+            return;
         uint64_t displayTicket = 0;
         uint32_t menuWidth = 1280, menuHeight = 720;
         // Preserve headless CPU diagnostics; a live swap chain uses the same
@@ -5191,7 +5227,7 @@ namespace gpu::video
                 }
 #endif
                 uint32_t imageIndex = 0;
-                if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &imageIndex))
+                if (!AcquirePresentTexture(&imageIndex))
                 {
                     return;
                 }

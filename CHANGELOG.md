@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
 - The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
 - Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
+- Areas and battles load faster with a higher frame-rate limit during loading.
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
 - 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
 - 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
+- 加载地图和战斗时临时提高帧率上限，缩短等待时间。
 
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 

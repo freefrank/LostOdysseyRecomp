@@ -1,4 +1,5 @@
 #include <gpu/frame_pacer.h>
+#include <gpu/loading_pacing.h>
 #include <cstdio>
 #include <cstdlib>
 
@@ -84,8 +85,47 @@ int main()
         Require(!rate::HostVsyncEnabled(fps, true, true, true), "FG immediate requirement survives every native cap");
     }
     using gpu::MapPresentInterval;
+    {
+        using gpu::loading::Target;
+        gpu::loading::PresentGate gate;
+        for (const auto fps : {0u, 30u, 60u, 90u, 120u}) {
+            Require(Target(fps, false, false) == fps && Target(fps, false, true) == fps,
+                "leaving loading restores the exact configured cap, including uncapped");
+            Require(Target(fps, true, false) == 0, "desktop loading is uncapped");
+            Require(Target(fps, true, true) == (fps == 30 ? 120u : 240u), "portable loading budget");
+            Require(MapPresentInterval(0x200, 0x827B4A4C, fps, false, true) == 0,
+                "loading releases guest swap interval without altering vblank frequency");
+        }
+        constexpr uint64_t second = 1000000000ull;
+        Require(gate.Accept(true, second, 60), "first loading frame is visible");
+        for (uint64_t ms = 1; ms <= 16; ++ms)
+            Require(!gate.Accept(true, second + ms * 1000000, 60), "excess guest swaps skip host acquire/present");
+        Require(gate.Accept(true, second + 16666667, 60), "next refresh is visible");
+        Require(gate.Accept(true, second * 5, 60), "stalled presentation resumes immediately");
+        Require(!gate.Accept(true, second * 5 + 1, 60), "no catch-up presentation burst");
+        Require(gate.Accept(false, second * 5 + 2, 30), "load completion immediately restores normal presentation");
+        Require(gate.Accept(true, second * 5 + 3, 120), "new load resets presentation deadline");
+        gpu::loading::PresentGate unknown;
+        Require(unknown.Accept(true, second, 0) && !unknown.Accept(true, second + 1000000, 0),
+            "unknown refresh has a bounded 60 Hz fallback");
+    }
     for (const auto flags : {0u, 0x7Fu, 0x80000000u, 0xFFFF007Fu})
     {
+        for (const auto fps : {30u, 60u, 120u, 0u})
+        {
+            for (const auto interval : {0x100u, 0x200u})
+            {
+                Require(MapPresentInterval(flags | interval, 0x827B4A4C, fps, false, true) == flags,
+                    "loading releases Continue and field intervals, preserving flags");
+                Require(MapPresentInterval(flags | interval, 0x1234, fps, false, true) == (flags | interval),
+                    "loading leaves other callers untouched");
+            }
+            Require(MapPresentInterval(flags | 0x100, 0x827B4A4C, fps, true) == (flags | 0x100),
+                "normal unsynced policy preserves interval-1 after loading");
+            for (const auto interval : {0u, 0x300u, 0x400u, 0xFF00u})
+                Require(MapPresentInterval(flags | interval, 0x827B4A4C, fps, false, true) == (flags | interval),
+                    "loading preserves unobserved intervals");
+        }
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30) == (flags | 0x200), "30 baseline");
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30, true) == flags, "VSync Off or VRR: 30 is immediate");
         for (const auto fps : {60u, 90u, 120u, 0u, 144u})
