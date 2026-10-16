@@ -9,6 +9,7 @@ Download the package for your platform, import the game from your own discs, and
 - [Windows quick start](#windows-quick-start)
 - [Importing game data](#automatic-content-import)
 - [Adding or replacing discs and DLC](#adding-or-replacing-discs-and-dlc)
+  - [Check the space saved](#check-the-space-saved)
 - [Linux packages](#running-on-linux)
   - [AppImage](#appimage)
   - [Flatpak](#flatpak)
@@ -66,6 +67,43 @@ Open the importer again from **Settings → System → Import discs & DLC**. Cho
 The importer copies your files and never moves or changes them, so keep the originals until the game works. If an import is cancelled or fails, run it again. Archives that are the same on several discs are stored once (not on exFAT or FAT32 drives), about 5.8 GB less with all four discs; for a game folder imported with an older version, run the game once with `--compact-game-data`.
 
 On the destination page, choose **New folder**, press **F2** or controller **Y** to create a folder. By default the game goes to `game/disc1`–`game/disc4` and DLC to `game/dlc/`; if you choose another folder, `game-path.txt` remembers it.
+
+### Check the space saved
+
+Explorer and tools such as WizTree count each hard link, so they may still show about 20 GB for all four discs after sharing, even though they use about 14.5 GB on disk. Check the drive's free space or use the steps below.
+
+**Windows**
+
+1. Press **Win+R**, type `cmd` and press **Enter**. A normal Command Prompt is enough; you do not need administrator access.
+2. Run this command, replacing `<game folder>` with the folder containing `disc1`–`disc4`. Keep the quotes:
+
+   ```cmd
+   fsutil hardlink list "<game folder>\disc1\xenon_chr.fpd"
+   ```
+
+3. If the file is shared across all four discs, you will see four paths like these (`...` stands for your folder path):
+
+   ```text
+   \...\disc1\xenon_chr.fpd
+   \...\disc2\xenon_chr.fpd
+   \...\disc3\xenon_chr.fpd
+   \...\disc4\xenon_chr.fpd
+   ```
+
+   These are four paths to one file on disk. A single line means this file is not shared.
+
+**Linux, Steam Deck and macOS**
+
+1. Open Terminal (on Steam Deck, use Konsole in Desktop Mode).
+2. Run the following, replacing `<game folder>` with the folder containing `disc1`–`disc4` and keeping the quotes:
+
+   ```bash
+   du -sh "<game folder>"
+   ```
+
+3. Read the size at the start of the output, for example `14G /path/to/game`. Shared files are counted once, so this shows the space used on disk. `G` here uses a different unit from decimal GB, so the numbers need not match exactly.
+
+Android shared storage does not support this sharing, so there is no shared-space saving to check there.
 
 <a id="running-on-linux"></a>
 

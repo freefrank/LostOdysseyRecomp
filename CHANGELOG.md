@@ -8,10 +8,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
 - Cheats now offers Normal, Half or None for random encounters and a separate Battle EXP ×2 switch.
 
 ### 简体中文
 
+- 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
 - 调试菜单的 Cheats 页新增正常、减半或关闭随机遇敌，以及独立的战斗经验 ×2 开关。
 
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15

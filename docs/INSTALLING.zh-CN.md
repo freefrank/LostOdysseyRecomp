@@ -9,6 +9,7 @@
 - [Windows 快速开始](#windows-快速开始)
 - [导入游戏数据](#automatic-content-import)
 - [追加或替换光盘和 DLC](#追加或替换光盘和-dlc)
+  - [检查节省的空间](#检查节省的空间)
 - [Linux 安装包](#running-on-linux)
   - [AppImage](#appimage)
   - [Flatpak](#flatpak)
@@ -66,6 +67,43 @@ ZIP 中还有一个 `mo2` 文件夹，里面是 Mod Organizer 2 的插件，用�
 导入器只复制文件，不会移动或修改原文件；确认游戏可用前请保留原始文件。导入取消或失败时重新导入即可。多张光盘里相同的资源包只存一份（exFAT、FAT32 磁盘除外），四张光盘约省 5.8 GB；旧版本导入的游戏目录，用 `--compact-game-data` 启动一次即可。
 
 在目标目录页，选择 **New folder**、按 **F2** 或手柄 **Y** 可新建文件夹。游戏默认导入到 `game/disc1`–`game/disc4`，DLC 在 `game/dlc/`；选择其他文件夹时由 `game-path.txt` 记住位置。
+
+### 检查节省的空间
+
+资源管理器和 WizTree 等工具会重复计算每个硬链接，所以共享后显示的四张光盘大小仍可能约为 20 GB，实际占用则约为 14.5 GB。可以查看磁盘可用空间，或按下面的步骤检查。
+
+**Windows**
+
+1. 按 **Win+R**，输入 `cmd`，按 **Enter**。打开普通命令提示符即可，不需要管理员权限。
+2. 执行以下命令，把 `<game folder>` 替换为包含 `disc1`–`disc4` 的文件夹路径，保留引号：
+
+   ```cmd
+   fsutil hardlink list "<game folder>\disc1\xenon_chr.fpd"
+   ```
+
+3. 如果四张光盘已共享这个文件，会看到类似下面的四条路径（`...` 代表你的文件夹路径）：
+
+   ```text
+   \...\disc1\xenon_chr.fpd
+   \...\disc2\xenon_chr.fpd
+   \...\disc3\xenon_chr.fpd
+   \...\disc4\xenon_chr.fpd
+   ```
+
+   这表示磁盘上的同一个文件有四条路径。只有一行则表示这个文件尚未共享。
+
+**Linux、Steam Deck 和 macOS**
+
+1. 打开终端（Steam Deck 请在桌面模式打开 Konsole）。
+2. 执行以下命令，把 `<game folder>` 替换为包含 `disc1`–`disc4` 的文件夹路径，保留引号：
+
+   ```bash
+   du -sh "<game folder>"
+   ```
+
+3. 查看输出开头的大小，例如 `14G /path/to/game`。共享文件只计算一次，因此这里显示的是实际磁盘占用。这里的 `G` 与十进制 GB 单位不同，数字不必完全相同。
+
+Android 共享存储不支持这种文件共享，因此无需检查这项空间节省。
 
 <a id="running-on-linux"></a>
 
