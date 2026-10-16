@@ -260,6 +260,7 @@ public final class RuntimeActivity extends SDLActivity {
         // callback: the guest may still be writing even while another page is visible.
         SaveLocationState.Run saves = SaveLocationStore.prepare(this);
         nativeSetenv("LO_SAVE_DIR", saves.root.getAbsolutePath());
+        nativeSetenv("LO_SAVE_SHARED", saves.usesSharedStorage(SaveTransfer.saveRoot(getFilesDir())) ? "1" : "0");
         if (saves.fallback || saves.conflict || saves.error != null) runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) return;
             Context strings = SaveLocationStrings.context(this);

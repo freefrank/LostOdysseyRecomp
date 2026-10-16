@@ -252,6 +252,16 @@ public class SaveLocationMigrationTest {
         assertEquals("played", read(shared, "user00"));
     }
 
+    @Test public void sharedWriteModeFollowsTheActualRunRoot() throws IOException {
+        File privateRoot = root("private"), shared = root("game");
+        SaveLocationState state = new SaveLocationState();
+        assertFalse(state.prepare(privateRoot).usesSharedStorage(privateRoot));
+        state.pendingRoot = shared.getAbsolutePath();
+        assertTrue(state.prepare(privateRoot).usesSharedStorage(privateRoot));
+        state.pendingRoot = "";
+        assertFalse(state.prepare(privateRoot).usesSharedStorage(privateRoot));
+    }
+
     @Test public void failedEnableRemainsPrivateAndFailedDisableRemainsShared() throws IOException {
         File privateRoot = root("private"), shared = root("game");
         save(privateRoot, "user00", "private newer", TIME + 10000);
@@ -268,6 +278,7 @@ public class SaveLocationMigrationTest {
         SaveLocationState.Run run = disabling.prepare(privateRoot);
         assertTrue(run.conflict);
         assertEquals(shared, run.root);
+        assertTrue(run.usesSharedStorage(privateRoot));
         assertEquals(shared.getAbsolutePath(), disabling.sharedRoot);
         assertEquals("", disabling.pendingRoot);
         assertEquals("private newer", read(privateRoot, "user00"));
@@ -282,6 +293,7 @@ public class SaveLocationMigrationTest {
         SaveLocationState.Run run = state.prepare(privateRoot);
         assertEquals(privateRoot, run.root);
         assertTrue(run.conflict);
+        assertFalse(run.usesSharedStorage(privateRoot));
         assertNull(state.sharedRoot);
         assertNotNull(state.pendingRoot);
         assertEquals("pc newer", read(shared, "user00"));
@@ -296,6 +308,7 @@ public class SaveLocationMigrationTest {
         state.sharedRoot = shared.getAbsolutePath();
         SaveLocationState.Run fallback = state.prepare(privateRoot);
         assertTrue(fallback.fallback);
+        assertFalse(fallback.usesSharedStorage(privateRoot));
         assertTrue(state.fallbackDirty);
         assertEquals(privateRoot, fallback.root);
         assertEquals(shared.getAbsolutePath(), state.sharedRoot);
@@ -305,6 +318,7 @@ public class SaveLocationMigrationTest {
         save(privateRoot, "user00", "fallback progress", TIME + 10000);
         SaveLocationState.Run returned = state.prepare(privateRoot);
         assertEquals(shared, returned.root);
+        assertTrue(returned.usesSharedStorage(privateRoot));
         assertFalse(state.fallbackDirty);
         assertEquals("fallback progress", read(shared, "user00"));
         assertEquals("fallback progress", read(privateRoot, "user00"));
@@ -320,6 +334,7 @@ public class SaveLocationMigrationTest {
         SaveLocationState.Run run = state.prepare(privateRoot);
         assertTrue(run.conflict);
         assertEquals(privateRoot, run.root);
+        assertFalse(run.usesSharedStorage(privateRoot));
         assertTrue(state.fallbackDirty);
         state.approvedFingerprint = SaveLocationMigration.inspect(privateRoot, shared).fingerprint;
         state.keepDestination = true;

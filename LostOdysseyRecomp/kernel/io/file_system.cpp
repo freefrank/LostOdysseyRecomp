@@ -4,6 +4,7 @@
 #include "io_diagnostics.h"
 #include "file_system_test.h"
 #include <cerrno>
+#include <cstdlib>
 #include <limits>
 #include <mutex>
 #include <cpu/guest_thread.h>
@@ -112,6 +113,7 @@ namespace
     std::filesystem::path g_saveRoot;
     std::filesystem::path g_cacheRoot;
 #if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+    bool g_sharedSaves = false;
     std::mutex g_saveWriterMutex;
     std::set<std::filesystem::path> g_saveWriters;
 #endif
@@ -273,6 +275,10 @@ void FileSystem::Init(const std::filesystem::path& gameRoot)
     g_discIdentity = DiscSet::ReadIdentity(gameRoot);
     const auto dataRoot = os::user_paths::UsePortableLayout() ? std::filesystem::current_path() : os::user_paths::DataDir();
     g_saveRoot = os::user_paths::SaveDir();
+#if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+    const char* sharedSaves = std::getenv("LO_SAVE_SHARED");
+    g_sharedSaves = sharedSaves && std::strcmp(sharedSaves, "1") == 0;
+#endif
     g_cacheRoot = dataRoot / "cache";
     std::error_code ec;
     std::filesystem::create_directories(g_saveRoot, ec);
@@ -717,7 +723,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
             const auto relative = hostPath.lexically_normal().lexically_relative(g_saveRoot.lexically_normal());
             handle->durable = !relative.empty() && *relative.begin() != "..";
 #if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
-            if (handle->durable && _stricmp(hostPath.filename().string().c_str(), "save.bin") == 0)
+            if (g_sharedSaves && handle->durable && _stricmp(hostPath.filename().string().c_str(), "save.bin") == 0)
             {
                 const auto key = std::filesystem::absolute(hostPath, ec).lexically_normal();
                 if (ec)

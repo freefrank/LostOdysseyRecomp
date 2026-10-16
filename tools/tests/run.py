@@ -95,6 +95,7 @@ def main():
                 run([sys.executable, "-B", ROOT / "tools/tests/io_lifetime_test.py", binaries[name],
                      "--out", scratch / "io-lifetime"], cwd=scratch)
                 run([binaries[name], "atomic-save", scratch / "atomic-save"], cwd=scratch)
+                run([binaries[name], "private-save", scratch / "private-save"], cwd=scratch)
                 for variant in ("ascii", "unicode"):
                     for mode in ("write", "read", "overwrite", "read-overwritten"):
                         run([binaries[name], mode, scratch / variant,

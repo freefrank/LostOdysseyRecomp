@@ -23,6 +23,10 @@ final class SaveLocationState {
             this.conflict = conflict;
             this.error = error;
         }
+
+        boolean usesSharedStorage(File privateRoot) {
+            return !fallback && !root.equals(privateRoot);
+        }
     }
 
     File destination(File privateRoot) {
