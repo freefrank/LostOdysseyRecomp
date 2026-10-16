@@ -1,6 +1,8 @@
 package io.github.freefrank.lostodyssey;
 
 import android.content.Intent;
+import android.app.AlertDialog;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
@@ -254,6 +256,20 @@ public final class RuntimeActivity extends SDLActivity {
             if (sources != null) for (String source : sources) arguments.addAll(Arrays.asList("--install-source", source));
             return arguments.toArray(new String[0]);
         }
+        // SDL calls this before nativeRunMain. Never migrate in an Activity lifecycle
+        // callback: the guest may still be writing even while another page is visible.
+        SaveLocationState.Run saves = SaveLocationStore.prepare(this);
+        nativeSetenv("LO_SAVE_DIR", saves.root.getAbsolutePath());
+        if (saves.fallback || saves.conflict || saves.error != null) runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            Context strings = SaveLocationStrings.context(this);
+            int reason = saves.conflict ? R.string.save_location_conflict
+                : saves.fallback ? R.string.save_location_fallback : R.string.save_location_failed;
+            new AlertDialog.Builder(this).setTitle(strings.getString(R.string.save_location_warning_title))
+                .setMessage(strings.getString(reason) + "\n\n"
+                    + strings.getString(R.string.save_location_current, saves.root.getAbsolutePath()))
+                .setPositiveButton(strings.getString(R.string.save_location_ok), null).show();
+        });
         return new String[] { "--game", game.getAbsolutePath(), "--quiet-kernel" };
     }
 }

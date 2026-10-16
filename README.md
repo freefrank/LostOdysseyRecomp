@@ -73,7 +73,7 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 - **Mali devices:** the **GPU driver** page also opens first. Download the recommended PanVK driver there; it needs a Mali-G57, G68, G77, G78 or Mali-G610 and newer GPU.
 - **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout.
 - **Updates:** a new APK installs over the old one and keeps your saves.
-- **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter.
+- **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter. Its **Keep saves in the game folder** option uses `<game folder>/save/` for syncing with a PC; it is off by default and applies at the next app start.
 - **Logs:** **CTRL → Saves and logs → Export logs** saves them to a ZIP for a bug report ([details](docs/INSTALLING.md#android-logs)).
 
 [Step-by-step guide](docs/INSTALLING.md#android).
@@ -177,7 +177,7 @@ The Windows ZIP is **portable**: everything stays in the folder you extracted it
 | Linux AppImage | `~/.config/lost-odyssey-recomp/` | `~/.local/share/lost-odyssey-recomp/` | `~/.local/state/lost-odyssey-recomp/` |
 | Linux Flatpak | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/config/lost-odyssey-recomp/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/data/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/.local/state/lost-odyssey-recomp/` |
 | macOS app | `~/Library/Application Support/LostOdysseyRecomp/` | same | `~/Library/Logs/LostOdysseyRecomp/` |
-| Android | inside the app | inside the app; game data in `Android/data/io.github.freefrank.lostodyssey/files/game/` | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
+| Android | inside the app | saves inside the app by default, optionally `<game folder>/save/`; game data in `Android/data/io.github.freefrank.lostodyssey/files/game/` or the chosen folder | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
 
 | What | Where | Notes |
 | :--- | :--- | :--- |

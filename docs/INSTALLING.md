@@ -177,10 +177,14 @@ You need a 64-bit Android 8.0 or newer device with Vulkan and about 20 GB of fre
 
 Touch controls appear over the game. **CTRL** opens their size, opacity and layout settings, the saves page, the game folder page and the GPU driver page. A USB or Bluetooth controller hides the touch controls automatically. Settings are changed on the in-game Settings page.
 
-With **Automatic updates** on, the app checks for a new version at startup and offers the APK download. Install the new APK over the old one; saves and settings stay. If you installed an APK you built yourself, uninstall it first. Uninstalling the app deletes your saves and the game data in `Android/data`.
+With **Automatic updates** on, the app checks for a new version at startup and offers the APK download. Install the new APK over the old one; saves and settings stay. If you installed an APK you built yourself, uninstall it first. Uninstalling the app deletes its private saves and everything in its `Android/data` folder.
 
 <a id="android-saves"></a>
-**Saves** stay inside the app, where file managers cannot reach them. **CTRL → Saves and logs** exports every slot to one ZIP file you choose, for example in Download, and imports a ZIP of save folders: one exported here or from a PC, a ZIP of Xenia's `userNN` folders, or the download from the [RGH save converter](#console-saves). Export your saves before uninstalling the app.
+**Saves** stay inside the app by default, where file managers cannot reach them. **CTRL → Saves and logs** exports every slot to one ZIP file you choose, for example in Download, and imports a ZIP of save folders: one exported here or from a PC, a ZIP of Xenia's `userNN` folders, or the download from the [RGH save converter](#console-saves). Export your saves before uninstalling the app.
+
+For folder sync, choose a shared-storage or SD-card folder with **CTRL → Game folder**, then enable **Keep saves in the game folder** on **CTRL → Saves and logs**. It is off by default. Saves use `<game folder>/save/userNN/`, including `save.bin`, `.lo-content` and the other files in each slot, exactly as on Windows. Sync the whole `save/` folder with the PC's existing `save/` beside `LostOdysseyRecomp.exe`, or set Windows' `LO_SAVE_DIR` to the full path of your synced `save/` folder before launching. Close the game on both devices before syncing.
+
+Turning the option on or off takes effect at the next app start, after fully closing the game. The app copies saves to the selected location and verifies every copied file before switching; turning it off copies them back into the app. It asks before replacing a different destination save that is as new or newer, and keeps the source copy as a backup. If the game folder is missing or unwritable at startup, it uses private storage for that run and tells you.
 
 <a id="android-logs"></a>
 **Logs** for a bug report: turn on **Settings → System → Debug log**, play until the problem happens, then choose **CTRL → Saves and logs → Export logs…** and save the ZIP, for example in Download. It holds the logs of the last three runs, `native-stderr.log` and, if the app itself failed, `java-crash-*.txt`. If the game crashed or stayed black, open the app once more and export from the CTRL menu. The same files are in `Android/data/io.github.freefrank.lostodyssey/files/logs/` for a PC over USB. With adb, `adb logcat -s LostOdyssey` shows the same lines live.
@@ -214,7 +218,7 @@ To download them again, for example after skipping, choose **Settings → System
 | Linux AppImage | Saves, profiles, cache and games: `~/.local/share/lost-odyssey-recomp/`. Settings: `~/.config/lost-odyssey-recomp/`. Logs: `~/.local/state/lost-odyssey-recomp/logs/`. |
 | Linux Flatpak | Under `~/.var/app/io.github.freefrank.LostOdysseyRecomp/`: saves, profiles, cache and games in `data/` (`/var/data` inside the sandbox); settings in `config/lost-odyssey-recomp/`; logs in `.local/state/lost-odyssey-recomp/logs/`. |
 | macOS | Saves, profiles, cache, games and settings: `~/Library/Application Support/LostOdysseyRecomp/`. Logs: `~/Library/Logs/LostOdysseyRecomp/logs/`. |
-| Android | Game: `Android/data/io.github.freefrank.lostodyssey/files/game/` (or the folder chosen on the **Game folder** page). Logs: `Android/data/io.github.freefrank.lostodyssey/files/logs/`. Saves and settings stay inside the app; **CTRL → Saves and logs** exports and imports saves. |
+| Android | Game: `Android/data/io.github.freefrank.lostodyssey/files/game/` (or the folder chosen on the **Game folder** page). Logs: `Android/data/io.github.freefrank.lostodyssey/files/logs/`. Settings and default saves stay inside the app; **Keep saves in the game folder** uses `<game folder>/save/` ([details](#android-saves)). |
 
 Render captures go to `captures/` and mods to `mods/`: beside the program for the Windows ZIP, otherwise captures in the settings folder and mods in the data folder. Downloaded shaders go to `shaders/` in the same place as mods. To manage mods with Mod Organizer 2, see [Mod Organizer 2](wiki/Mod-Organizer-2.md).
 
@@ -224,7 +228,7 @@ On Linux, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` move the AppIm
 
 ## Importing saves from Xenia or an Xbox 360
 
-Each save slot is a folder in `save/`, for example `save/user00/save.bin`; see [file locations](#file-locations) for where `save/` is. Close the game and back up `save/` first. The copied saves then appear in the game's load list. On Android, import a ZIP of the save folders with **CTRL → Saves and logs** instead ([details](#android-saves)).
+Each save slot is a folder in `save/`, for example `save/user00/save.bin`; see [file locations](#file-locations) for where `save/` is. Close the game and back up `save/` first. The copied saves then appear in the game's load list. On Android, **CTRL → Saves and logs** can import a ZIP of the save folders; with **Keep saves in the game folder** enabled, you can also copy them into the game folder's `save/` ([details](#android-saves)).
 
 <a id="xenia-saves"></a>
 
@@ -281,6 +285,7 @@ Environment variables override the saved settings for one run:
 | `LO_FG_PROVIDER`, `LO_FG_MODE`, `LO_FG_MULTIPLIER`, `LO_FG_TARGET_FPS` | Frame generation: `off`/`dlss`/`fsr`/`xess`; `off`/`fixed`/`dynamic`; 2–6; target FPS ([details](notes/vulkan-fg-fsr4-metalfx.md)). |
 | `LO_OPTISCALER_PATH` | Windows: full path to your own `OptiScaler.dll` ([setup](notes/vulkan-fg-fsr4-metalfx.md#optional-optiscaler-loading-on-windows)). |
 | `LO_NO_UPDATE` | Any value other than `0` skips the update check. |
+| `LO_SAVE_DIR` | Full path to a `save/` folder, containing `userNN` slot folders; useful for syncing Windows and Android saves. |
 | `LO_PROFILE_DIR`, `LO_SHADER_CACHE_DIR`, `LO_MODS_DIR` | Use another profile, shader cache or mods folder. An empty `LO_SHADER_CACHE_DIR` turns the shader cache off. |
 | `LO_MODS` | `0` or `false` disables mods. |
 | `LO_LOG_FILE` | Write the log to this path, or `0` for no log file. |

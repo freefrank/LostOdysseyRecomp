@@ -1,0 +1,28 @@
+<resources>
+    <string name="saves_title">セーブとログ</string>
+    <string name="save_location_toggle">ゲームフォルダーにセーブを保存</string>
+    <string name="save_location_help">初期設定はオフ。&lt;ゲームフォルダー&gt;/save/userNN/（save.bin、.lo-content など）を使います。Windows と同じ形式なので、PC の save フォルダーと同期できます。CTRL → ゲームフォルダーで読み書きできる場所を選んでください。切り替え前にコピーをバイト単位で検証し、元のファイルはバックアップとして残します。</string>
+    <string name="save_location_restart_help">変更は次回のアプリ起動時、ゲームが保存を始める前に適用されます。アプリを完全に閉じてから開き直してください。フォルダーが見つからない、または書き込めない場合は、今回だけ非公開バックアップを使い警告します。アクセスが戻ると進行状況を統合し、競合時は選択を求めます。両方の端末でゲームを閉じてから同期してください。</string>
+    <string name="save_location_current">今回の保存先：%1$s</string>
+    <string name="save_location_pending">次回起動時の保存先：%1$s</string>
+    <string name="save_location_private">アプリの非公開ストレージ</string>
+    <string name="save_location_fixed">ゲームフォルダーの保存先：%1$s</string>
+    <string name="save_location_warning_title">セーブの保存先</string>
+    <string name="save_location_fallback">ゲームフォルダーにアクセスできないか、非公開セーブの統合が必要です。今回は下記の非公開バックアップを使います。ゲームフォルダー設定はオンのままです。セーブは削除していません。</string>
+    <string name="save_location_failed">保存先を切り替えられませんでした。今回は下記の保存先を使います。CTRL → セーブとログで再試行してください。元のセーブは削除していません。</string>
+    <string name="save_location_conflict">コピー先に新しいセーブ、または同じ保存時刻で内容の異なるセーブがあります。保存先は変更していません。CTRL → セーブとログで使うバージョンを選んでください。</string>
+    <string name="save_location_resolve">セーブの競合を確認…</string>
+    <string name="save_location_conflict_title">次回起動時に使うセーブ</string>
+    <string name="save_location_conflict_message">スロット：%1$s\n\nコピー元：%2$s\nコピー先：%3$s\n\n「コピー先を保持」は競合スロットを残します。「コピー元を使用」は上書きします。元のファイルはバックアップとして残ります。この確認は現在のファイルにのみ有効です。次回起動までにどちらかが変わった場合、再度選択が必要です。</string>
+    <string name="save_location_use_source">コピー元を使用</string>
+    <string name="save_location_use_destination">コピー先を保持</string>
+    <string name="save_location_cancel">キャンセル</string>
+    <string name="save_location_ok">OK</string>
+    <string name="save_location_queued">次回のアプリ起動時に適用します。</string>
+    <string name="save_location_no_game">先に CTRL → ゲームフォルダーで読み書きできるフォルダーを選んでください。</string>
+    <string name="save_location_import_running">セーブをインポートする前にゲームを閉じてください。</string>
+    <string name="save_import_close_title">ゲームを閉じてインポートしますか？</string>
+    <string name="save_import_close_message">インポート前にゲームを閉じる必要があります。最後のセーブ以降の進行状況は失われます。その後セーブ画面を開き直し、ZIP を選択できます。</string>
+    <string name="save_import_close_action">閉じてインポート</string>
+    <string name="save_location_cancel_pending">切り替え予約を取り消す</string>
+</resources>

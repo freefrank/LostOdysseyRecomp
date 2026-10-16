@@ -121,4 +121,10 @@ namespace os::user_paths
         return detail::EnvironmentPath("LO_PROFILE_DIR",
             UsePortableLayout() ? std::filesystem::path("profile") : DataDir() / "profile");
     }
+
+    inline std::filesystem::path SaveDir()
+    {
+        return detail::EnvironmentPath("LO_SAVE_DIR",
+            (UsePortableLayout() ? std::filesystem::current_path() : DataDir()) / "save");
+    }
 }

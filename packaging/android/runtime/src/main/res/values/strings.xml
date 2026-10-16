@@ -1,0 +1,28 @@
+<resources>
+    <string name="saves_title">Saves and logs</string>
+    <string name="save_location_toggle">Keep saves in the game folder</string>
+    <string name="save_location_help">Off by default. Uses &lt;game folder&gt;/save/userNN/ (save.bin, .lo-content and other slot files), the same layout as Windows. Sync this save folder with the PC save folder. Requires a readable, writable game folder chosen in CTRL → Game folder. A verified copy is made before switching; the source is kept as a backup.</string>
+    <string name="save_location_restart_help">Changes apply at the next app start, before the game writes any saves. Fully close and reopen the app. If the game folder is missing or unwritable, this run uses the private backup and shows a warning. Progress made there is merged back after access returns; conflicting saves need your choice. Sync only while the game is closed on both devices.</string>
+    <string name="save_location_current">Saves for this run: %1$s</string>
+    <string name="save_location_pending">Pending for next start: %1$s</string>
+    <string name="save_location_private">Private app storage</string>
+    <string name="save_location_fixed">Game-folder saves: %1$s</string>
+    <string name="save_location_warning_title">Save location</string>
+    <string name="save_location_fallback">The game folder is unavailable, or private saves still need merging. This run uses the private backup shown below. The game-folder setting stays on; no saves were deleted.</string>
+    <string name="save_location_failed">The save location could not change. This run keeps using the location shown below. Open CTRL → Saves and logs to retry. No source saves were deleted.</string>
+    <string name="save_location_conflict">Some destination slots are newer, or have different contents with the same save time. The location has not changed. Open CTRL → Saves and logs to choose which version to use.</string>
+    <string name="save_location_resolve">Review save conflicts…</string>
+    <string name="save_location_conflict_title">Choose saves for the next start</string>
+    <string name="save_location_conflict_message">Slots: %1$s\n\nCopy from: %2$s\nTo: %3$s\n\nKeep destination keeps those conflicting slots; copy source replaces them. The source is kept as a backup. This approval applies only to these exact files. If either side changes before the next app start, choose again.</string>
+    <string name="save_location_use_source">Copy source</string>
+    <string name="save_location_use_destination">Keep destination</string>
+    <string name="save_location_cancel">Cancel</string>
+    <string name="save_location_ok">OK</string>
+    <string name="save_location_queued">Saved for the next app start.</string>
+    <string name="save_location_no_game">Choose a readable, writable game folder in CTRL → Game folder first.</string>
+    <string name="save_location_import_running">Close the game before importing saves.</string>
+    <string name="save_import_close_title">Close game to import?</string>
+    <string name="save_import_close_message">The game must close before importing saves. Progress since the last save will be lost. The Saves page will reopen so you can choose a ZIP.</string>
+    <string name="save_import_close_action">Close game and import</string>
+    <string name="save_location_cancel_pending">Cancel pending change</string>
+</resources>
