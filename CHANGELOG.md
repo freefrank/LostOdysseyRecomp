@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
+
+### 简体中文
+
+- 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
+
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 
 ### English
