@@ -133,6 +133,10 @@ def main():
         stage_shader_pack_license(appdir / "usr/share/licenses/lost-odyssey-recomp")
         shutil.copy2(ROOT / "thirdparty/licenses/XeGTAO.txt",
                      appdir / "usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt")
+        for source, license_name in (("LICENSE.txt", "Signalsmith-Stretch.txt"),
+                             ("signalsmith-linear/LICENSE.txt", "Signalsmith-Linear.txt")):
+            shutil.copy2(ROOT / "thirdparty/signalsmith-stretch" / source,
+                         appdir / "usr/share/licenses/lost-odyssey-recomp" / license_name)
         desktop = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.desktop"
         icon = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.png"
         metainfo = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.metainfo.xml"

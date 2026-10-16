@@ -67,7 +67,7 @@ Config GetConfig()
     return config;
 }
 bool SaveDebugLanguage(uint32_t) { return true; }
-bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
+bool SaveFastForward(bool, uint32_t, uint32_t, bool) { return true; }
 bool SaveMenuAnimationRate(uint32_t) { return true; }
 }
 
@@ -161,6 +161,9 @@ int main(int argc, char** argv)
     capture("cheats-zh-playstation.ppm");
     for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
+    capture("fast-forward-audio-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
     capture("encounter-rate-zh-playstation.ppm");
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
@@ -168,7 +171,7 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("menu-animations-zh-playstation.ppm");
-    for (int i = 0; i < 6; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
+    for (int i = 0; i < 7; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
@@ -177,6 +180,9 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("fast-forward-audio-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("encounter-rate-en.ppm");
     debug_menu::HandleInput(debug_menu::InputAction::Down);
@@ -199,8 +205,8 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::Cancel); // Dismiss picker
     debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
-    for(int i=0;i<7;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 7: memory edits confirmation
+    for(int i=0;i<8;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 8: memory edits confirmation
     g_playStation = false;
     const auto confirmReference = renderFrame();
     g_playStation = true;

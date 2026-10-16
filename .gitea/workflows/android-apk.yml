@@ -16,6 +16,8 @@ on:
       - .gitea/workflows/android-apk.yml
       - packaging/android/**
       - thirdparty/libadrenotools/**
+      - thirdparty/signalsmith*/**
+      - LostOdysseyRecomp/apu/**
       - tools/android/**
 permissions:
   contents: read

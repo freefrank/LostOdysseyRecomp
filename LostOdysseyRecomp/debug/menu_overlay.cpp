@@ -163,13 +163,15 @@ namespace debug_menu
                 // Keep the player's fast-forward rows across restarts (#104).
                 const auto after = fast_forward::GetStatus();
                 const unsigned afterMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
-                if (after.enabled != before.enabled || after.mode != before.mode || after.multiplier != before.multiplier)
+                if (after.enabled != before.enabled || after.mode != before.mode || after.multiplier != before.multiplier ||
+                    after.keepAudioPitch != before.keepAudioPitch)
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
                     if (!settings::SaveFastForward(after.enabled, after.mode == fast_forward::Mode::Toggle ? 1 : 0,
-                                                   after.multiplier))
+                                                   after.multiplier, after.keepAudioPitch))
                     {
+                        fast_forward::SetKeepAudioPitch(before.keepAudioPitch);
                         std::lock_guard lock(g_overlayStateMutex);
                         g_overlayState.cheatsPage.notice = zh ? L"保存变速设置失败" : L"Failed to save fast-forward setting";
                     }

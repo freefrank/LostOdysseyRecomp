@@ -100,6 +100,26 @@ int main() {
     using settings::EncounterRate;
     Check(settings::GetConfig().encounterRate==EncounterRate::Normal &&
         !settings::GetConfig().battleExpDouble,"safe defaults for existing profiles");
+    Check(settings::GetConfig().fastForwardKeepAudioPitch,"missing fast-forward audio key keeps pitch");
+    for(auto text : {"", "fast_forward_keep_pitch=2\n", "fast_forward_keep_pitch=-1\n",
+                    "fast_forward_keep_pitch=4294967295\n", "fast_forward_keep_pitch=bad\n"}) {
+        Write(text); Check(settings::Read().fastForwardKeepAudioPitch,"missing/invalid fast-forward audio keeps pitch");
+    }
+    for(bool keep : {false,true}) {
+        Write(keep ? "fast_forward_keep_pitch=1\n" : "fast_forward_keep_pitch=0\n");
+        Check(settings::Read().fastForwardKeepAudioPitch==keep,"fast-forward audio key parses both modes");
+        Check(settings::SaveFastForward(true,1,8,keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+            settings::GetConfig().fastForwardKeepAudioPitch==keep,"fast-forward audio roundtrip retains selected mode");
+        auto graphics=settings::GetConfig(); graphics.fastForwardKeepAudioPitch=!keep;
+        Check(settings::SaveConfig(graphics) && settings::Read().fastForwardKeepAudioPitch==keep,
+            "graphics save preserves debug audio mode");
+        settings::PreviewConfig(graphics);
+        Check(settings::GetConfig().fastForwardKeepAudioPitch==keep,"graphics preview preserves debug audio mode");
+        Check(fs::create_directory("settings.ini.tmp"),"block atomic settings temporary file");
+        Check(!settings::SaveFastForward(true,1,8,!keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+            settings::GetConfig().fastForwardKeepAudioPitch==keep,"failed audio-mode save preserves disk and runtime choice");
+        Check(fs::remove("settings.ini.tmp"),"remove atomic settings blocker");
+    }
     Write("no_random_encounters=1\n");
     Check(settings::Read().encounterRate==EncounterRate::None,"legacy 1 migrates to None");
     for(auto text : {"no_random_encounters=0\n","no_random_encounters=2\n",

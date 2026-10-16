@@ -12,6 +12,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Cheats now offers Normal, Half or None for random encounters and a separate Battle EXP ×2 switch.
 - Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
 - The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
+- Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
 
 ### 简体中文
 
@@ -19,6 +20,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 调试菜单的 Cheats 页新增正常、减半或关闭随机遇敌，以及独立的战斗经验 ×2 开关。
 - 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
 - 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
+- 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
 
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 

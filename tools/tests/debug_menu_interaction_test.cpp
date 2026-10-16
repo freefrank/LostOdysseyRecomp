@@ -29,6 +29,9 @@ struct MockServices
 {
     uint32_t selectedLanguage = 1;
     bool saveLanguageSuccess = true;
+    bool keepAudioPitch = true;
+    bool saveFastForwardSuccess = true;
+    int fastForwardSaveCalls = 0;
     uint32_t menuAnimationRate = 1;
     bool saveMenuAnimationSuccess = true;
     int menuAnimationSaveCalls = 0;
@@ -65,6 +68,7 @@ Config GetConfig()
 {
     Config c;
     c.debugLanguage = g_mock.selectedLanguage;
+    c.fastForwardKeepAudioPitch = g_mock.keepAudioPitch;
     c.menuAnimationRate = g_mock.menuAnimationRate;
     return c;
 }
@@ -74,7 +78,13 @@ bool SaveDebugLanguage(uint32_t language)
     g_mock.selectedLanguage = language;
     return true;
 }
-bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
+bool SaveFastForward(bool, uint32_t, uint32_t, bool keepAudioPitch)
+{
+    ++g_mock.fastForwardSaveCalls;
+    if (!g_mock.saveFastForwardSuccess) return false;
+    g_mock.keepAudioPitch = keepAudioPitch;
+    return true;
+}
 bool SaveMenuAnimationRate(uint32_t rate)
 {
     ++g_mock.menuAnimationSaveCalls;
@@ -343,10 +353,11 @@ int main()
     Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
     Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
 
-    // All three live quick-tool options must fit their production text columns.
+    // Live quick-tool options must fit their production text columns.
     for (bool zh : {false, true})
     {
-        for (const auto* label : {debug_menu::cheat_overlay::EncounterRateLabel[zh],
+        for (const auto* label : {debug_menu::cheat_overlay::FastForwardAudioLabel[zh],
+                                 debug_menu::cheat_overlay::EncounterRateLabel[zh],
                                  debug_menu::cheat_overlay::BattleExpLabel[zh],
                                  debug_menu::cheat_overlay::MenuAnimationLabel[zh]})
             Require(rasterizer.MeasureWString(label) <= 170,
@@ -354,6 +365,9 @@ int main()
         for (const auto& rate : debug_menu::cheat_overlay::EncounterRateValues)
             Require(rasterizer.MeasureWString(rate[zh]) <= 350,
                 "Encounter rate value exceeds the Cheats value column");
+        for (const auto& mode : debug_menu::cheat_overlay::FastForwardAudioValues)
+            Require(rasterizer.MeasureWString(mode[zh]) <= 350,
+                "Fast-forward audio value exceeds the Cheats value column");
         for (const auto* value : {L"ON", L"OFF"})
             Require(rasterizer.MeasureWString(value) <= 350,
                 "Battle EXP value exceeds the Cheats value column");
@@ -365,8 +379,8 @@ int main()
                 "Menu animations value exceeds the Cheats value column");
     }
     const debug_menu::cheat_overlay::Model quickTools;
-    Require(quickTools.Rows() == 11 &&
-            (int(quickTools.Rows()) - 1) * debug_menu::cheat_overlay::QuickToolRowHeight + 24 <= 296,
+    Require(quickTools.Rows() == 12 &&
+            (int(quickTools.Rows()) - 1) * debug_menu::cheat_overlay::QuickToolRowHeight + 23 <= 296,
         "Quick-tool rows overlap the help area");
 
     // Cheats -> Quick tools: the independent live options need no memory-edit
@@ -374,6 +388,21 @@ int main()
     Require(!debug_menu::cheats::session.Get().enabled, "Memory edits unexpectedly enabled");
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     for(int i=0;i<4;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    Require(debug_menu::fast_forward::KeepAudioPitch(), "Fast-forward audio should initially keep pitch");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(!debug_menu::fast_forward::KeepAudioPitch() && !g_mock.keepAudioPitch,
+        "Confirm should select and persist Speed up");
+    g_mock.saveFastForwardSuccess = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(!debug_menu::fast_forward::KeepAudioPitch() && !g_mock.keepAudioPitch,
+        "Failed audio-mode save must preserve the live and persisted choice");
+    g_mock.saveFastForwardSuccess = true;
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(debug_menu::fast_forward::KeepAudioPitch() && g_mock.keepAudioPitch && g_mock.fastForwardSaveCalls == 3,
+        "Left should select Keep pitch and persist once per change");
+    Require(!debug_menu::fast_forward::GetStatus().enabled,
+        "Changing audio mode must not enable fast-forward");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.encounterRate==settings::EncounterRate::Half, "Encounter rate did not select Half");
     debug_menu::HandleInput(debug_menu::InputAction::Right);
@@ -393,7 +422,7 @@ int main()
     debug_menu::RenderOverlay(rasterizer);
 
     // Cheats / Quick tools / Menu animations: forward/backward cycling persists each choice.
-    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 6: Menu animations
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 7: Menu animations
     Require(g_mock.menuAnimationRate == 1, "Menu animation speed should initially be Normal");
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.menuAnimationRate == 2, "Confirm should select and save Fast");
@@ -421,7 +450,7 @@ int main()
 
     // Both debug-menu languages must show the complete two-line help at the
     // production 700px content width, without an ellipsis or discarded text.
-    for(bool zh : {false,true}) for(unsigned row : {4u,5u,6u}) {
+    for(bool zh : {false,true}) for(unsigned row : {4u,5u,6u,7u}) {
         std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
         Require(!remaining.empty(), "Quick-tool help is missing a language");
         for(int line=0;!remaining.empty() && line<2;++line) {

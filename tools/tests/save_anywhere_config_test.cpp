@@ -89,8 +89,9 @@ int wmain(int argc, wchar_t** argv)
         "new key precedence is independent of ordering; invalid EXP defaults off");
     Write("no_random_encounters=1\nencounter_rate=garbage\n");
     Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "malformed new rate overrides legacy safely");
-    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
-        "missing fast-forward keys default to off, Hold, 2x");
+    Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2 &&
+          settings::Read().fastForwardKeepAudioPitch,
+        "missing fast-forward keys default to off, Hold, 2x, Keep pitch");
     Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
     Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 6,
         "fast-forward keys read from INI");
@@ -177,9 +178,9 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::SaveBattleExpDouble(true) && settings::GetConfig().battleExpDouble &&
           Contents().find("battle_exp_double=1\n") != std::string::npos,
         "battle EXP preference persists");
-    Check(settings::SaveFastForward(true, 1, 8) && settings::GetConfig().fastForward &&
-          settings::GetConfig().fastForwardRate == 8 &&
-          Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\n") != std::string::npos,
+    Check(settings::SaveFastForward(true, 1, 8, false) && settings::GetConfig().fastForward &&
+          settings::GetConfig().fastForwardRate == 8 && !settings::GetConfig().fastForwardKeepAudioPitch &&
+          Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\nfast_forward_keep_pitch=0\n") != std::string::npos,
         "fast-forward choices persist");
     auto menuPreview = settings::GetConfig();
     menuPreview.width = 2200;
@@ -231,7 +232,8 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
     Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
         "ordinary save retains encounter rate and battle EXP");
-    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8,
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8 &&
+          !settings::Read().fastForwardKeepAudioPitch,
         "ordinary save retains fast-forward choices");
     Check(settings::GetConfig().menuAnimationRate == 4 && settings::MenuAnimationRate() == 4 &&
           settings::Read().menuAnimationRate == 4, "ordinary save retains menu animation speed");

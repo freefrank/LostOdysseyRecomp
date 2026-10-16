@@ -18,7 +18,13 @@ inline constexpr const wchar_t* Categories[][2] = {
     {L"Inventory",L"物品与素材"}, {L"Equipment",L"装备"},
     {L"Party",L"队伍"}, {L"Developer",L"开发者"}};
 inline constexpr unsigned Quantities[] = {1,10,50,99};
-inline constexpr int QuickToolRowHeight = 25;
+inline constexpr int QuickToolRowHeight = 24;
+inline constexpr const wchar_t* FastForwardAudioLabel[] = {L"Fast-forward audio",L"变速音频"};
+inline constexpr const wchar_t* FastForwardAudioValues[][2] = {
+    {L"Keep pitch",L"保持音调"}, {L"Speed up",L"随速度升调"}};
+inline constexpr const wchar_t* FastForwardAudioHelp[] = {
+    L"Keep pitch preserves voices and music; Speed up raises pitch with speed.",
+    L"保持音调让人声和音乐维持原调；随速度升调会按加速倍率提高音调。"};
 inline constexpr const wchar_t* EncounterRateLabel[] = {L"Encounter rate",L"遇敌率"};
 inline constexpr const wchar_t* EncounterRateValues[][2] = {
     {L"Normal",L"正常"}, {L"Half",L"减半"}, {L"None",L"关闭"}};
@@ -47,7 +53,7 @@ struct Model {
     Request request;
     std::wstring notice;
     unsigned menuAnimationRate=1;
-    unsigned Rows() const { constexpr unsigned rows[]={11,8,6,5,7,2}; return rows[category]; }
+    unsigned Rows() const { constexpr unsigned rows[]={12,8,6,5,7,2}; return rows[category]; }
     void ChangeCategory(int direction) { category=Wrap(category,direction,unsigned(std::size(Categories))); row=0; }
     std::span<const cheats::data::Entry> EquipmentList() const {
         if (equipmentSlot==0) return cheats::data::Weapons;
@@ -153,20 +159,22 @@ struct Model {
                 for(unsigned i=0;i<std::size(fast_forward::Rates);++i) if(fast_forward::Rates[i]==speed.multiplier)index=i;
                 fast_forward::SetRate(fast_forward::Rates[Wrap(index,direction,unsigned(std::size(fast_forward::Rates)))]);
             } else if (row==4) {
-                debug_menu::SetEncounterRate(settings::EncounterRate(Wrap(unsigned(debug_menu::GetEncounterRate()),direction,3)));
+                fast_forward::SetKeepAudioPitch(!speed.keepAudioPitch);
             } else if (row==5) {
-                debug_menu::SetBattleExpDoubleEnabled(!debug_menu::BattleExpDoubleEnabled());
+                debug_menu::SetEncounterRate(settings::EncounterRate(Wrap(unsigned(debug_menu::GetEncounterRate()),direction,3)));
             } else if (row==6) {
+                debug_menu::SetBattleExpDoubleEnabled(!debug_menu::BattleExpDoubleEnabled());
+            } else if (row==7) {
                 unsigned index=0;
                 for(unsigned i=0;i<std::size(settings::MenuAnimationRates);++i)
                     if(settings::MenuAnimationRates[i]==menuAnimationRate)index=i;
                 menuAnimationRate=settings::MenuAnimationRates[Wrap(index,direction,unsigned(std::size(settings::MenuAnimationRates)))];
-            } else if (row==7 && activate) {
+            } else if (row==8 && activate) {
                 if (cheats::session.Get().enabled) cheats::session.Enable(false);
                 else { confirmation=Confirmation::Enable; confirm=true; yes=false; }
-            } else if (activate && row==8) Write(Action::AddGold,100000,0,false,zh);
-            else if (activate && row==9) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
-            else if (activate && row==10) Write(Action::HealParty,0,0,false,zh);
+            } else if (activate && row==9) Write(Action::AddGold,100000,0,false,zh);
+            else if (activate && row==10) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
+            else if (activate && row==11) Write(Action::HealParty,0,0,false,zh);
         } else if (category==1) {
             if(row==1) { if(activate)Open(Picker::Character,character);else character=Wrap(character,direction,9); }
             else if(row==2 && activate) Write(Action::Heal,0,0,false,zh);
@@ -220,13 +228,14 @@ inline const wchar_t* ResultText(cheats::Result result,bool zh) {
     }
 }
 inline const wchar_t* QuickToolHelp(unsigned row,bool zh) {
-    if(row==4) return zh
+    if(row==4) return FastForwardAudioHelp[zh];
+    if(row==5) return zh
         ? L"仅影响步行随机遇敌；减半模式交替跳过成功判定，剧情与首领战不受影响。"
         : L"Walking encounters only. Half skips alternate successful draws; story and boss fights are unchanged.";
-    if(row==5) return zh
+    if(row==6) return zh
         ? L"战斗经验加倍，SP 与金币不变。"
         : L"Doubles battle EXP. SP and gold stay unchanged.";
-    if(row==6) return MenuAnimationHelp[zh];
+    if(row==7) return MenuAnimationHelp[zh];
     return nullptr;
 }
 inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int width,bool playStation) {
@@ -248,7 +257,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
     auto row=[&](unsigned id,const wchar_t* label,std::wstring value,bool enabled=true) {
         const int py=y+int(id)*rowH;
         const bool selected=m.row==id;
-        const int height=m.category==0 ? 24:30, textY=py+(m.category==0 ? 4:7);
+        const int height=m.category==0 ? 23:30, textY=py+(m.category==0 ? 4:7);
         r.FillRect(rx,py,rw,height,selected ? color(255,46,57,72):color(255,29,34,43));
         if(selected)r.FillRect(rx,py,3,height,gold);
         const auto c=enabled ? text:muted;
@@ -267,13 +276,14 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         row(2,zh ? L"变速模式" : L"Speed mode",speed.mode==fast_forward::Mode::Hold
             ? (zh ? L"按住" : L"Hold") : (zh ? L"切换" : L"Toggle"));
         row(3,zh ? L"加速倍率" : L"Speed multiplier",std::to_wstring(speed.multiplier)+L"x");
-        row(4,EncounterRateLabel[zh],EncounterRateValues[unsigned(debug_menu::GetEncounterRate())][zh]);
-        row(5,BattleExpLabel[zh],debug_menu::BattleExpDoubleEnabled() ? L"ON":L"OFF");
-        row(6,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
-        row(7,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
-        row(8,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
-        row(9,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
-        row(10,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
+        row(4,FastForwardAudioLabel[zh],FastForwardAudioValues[speed.keepAudioPitch ? 0:1][zh]);
+        row(5,EncounterRateLabel[zh],EncounterRateValues[unsigned(debug_menu::GetEncounterRate())][zh]);
+        row(6,BattleExpLabel[zh],debug_menu::BattleExpDoubleEnabled() ? L"ON":L"OFF");
+        row(7,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
+        row(8,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
+        row(9,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
+        row(10,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
+        row(11,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
     } else if(m.category==1) {
         row(1,zh ? L"角色" : L"Character",charName);
         row(2,zh ? L"恢复 HP / MP" : L"Restore HP / MP",L"",writable);
@@ -310,11 +320,11 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
     }
     const wchar_t* hints[][2]={
         {speed.mode==fast_forward::Mode::Hold
-            ? L"Hold LT to boost; release for 1x. LT+RT does not boost. Audio is not time-stretched."
-            : L"Press LT to toggle boost. LT+RT does not boost. Audio is not time-stretched.",
+            ? L"Hold LT to boost; release for 1x. LT+RT does not boost."
+            : L"Press LT to toggle boost. LT+RT does not boost.",
          speed.mode==fast_forward::Mode::Hold
-            ? L"按住 LT 加速，松开恢复原速；LT+RT 不加速。音频不做时间拉伸。"
-            : L"按 LT 切换加速；LT+RT 不加速。音频不做时间拉伸。"},
+            ? L"按住 LT 加速，松开恢复原速；LT+RT 不加速。"
+            : L"按 LT 切换加速；LT+RT 不加速。"},
         {L"HP/MP are out-of-battle values. EXP is progress, not a level selector.",L"HP/MP 为非战斗数值；EXP 是经验进度，不是等级。"},
         {L"Choose item: A opens a paged list. Sort the inventory once to refresh.",L"按 A 打开可翻页列表；修改后在游戏内整理物品以刷新。"},
         {L"Only existing accessory slots. Check character compatibility before applying.",L"仅能修改已有饰品槽；应用前请确认角色适用的装备。"},

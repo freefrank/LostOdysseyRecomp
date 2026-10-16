@@ -65,7 +65,13 @@ option(LO_BUILD_TOOLS "Build XenonRecomp / XenosRecomp (use tools/build_tools.ba
 option(LO_BUILD_RECOMP_LIB "Build the recompiled game code library from LostOdysseyRecompLib/ppc" ON)
 option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
 option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
+option(LO_BUILD_AUDIO_TESTS "Build the game-free fast-forward audio fixture" ON)
 option(LO_BUILD_ANDROID_RUNTIME "Enable the Android game runtime shared library" OFF)
+
+if(LO_BUILD_AUDIO_TESTS AND NOT CMAKE_CROSSCOMPILING)
+    enable_testing()
+    add_subdirectory(tools/tests/fast_forward_audio)
+endif()
 
 if(ANDROID)
     if(NOT LO_TARGET_ISA STREQUAL "aarch64")

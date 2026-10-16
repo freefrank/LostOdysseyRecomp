@@ -38,12 +38,13 @@ struct Clock {
         return value;
     }
 };
-struct Status { bool enabled = false, active = false; unsigned multiplier = 2; Mode mode = Mode::Hold; };
+struct Status { bool enabled = false, active = false; unsigned multiplier = 2; Mode mode = Mode::Hold; bool keepAudioPitch = true; };
 struct Control {
     Clock clock;
     bool enabled = false, armed = false, held = false;
     unsigned multiplier = 2;
     Mode mode = Mode::Hold;
+    bool keepAudioPitch = true;
     void Stop(uint64_t now) {
         clock.Read(now); clock.rate = 1; clock.lease = now;
         held = armed = false;
@@ -77,7 +78,7 @@ struct Control {
     }
     Status Get(uint64_t now) {
         clock.Read(now);
-        return {enabled, clock.rate > 1 && !clock.paused, multiplier, mode};
+        return {enabled, clock.rate > 1 && !clock.paused, multiplier, mode, keepAudioPitch};
     }
     unsigned ActiveRate() const { return clock.rate > 1 && !clock.paused ? clock.rate : 1; }
 };
@@ -85,12 +86,14 @@ inline std::mutex mutex;
 inline Control control;
 // The clock's current rate for the audio driver, read without the lock.
 inline std::atomic<unsigned> audioRate{1};
+inline std::atomic<bool> audioKeepPitch{true};
 // Caller holds mutex.
 inline void PublishRate() {
     const unsigned rate = control.ActiveRate();
     if (audioRate.load(std::memory_order_relaxed) != rate) audioRate.store(rate, std::memory_order_relaxed);
 }
 inline unsigned AudioRate() { return audioRate.load(std::memory_order_relaxed); }
+inline bool KeepAudioPitch() { return audioKeepPitch.load(std::memory_order_relaxed); }
 inline uint64_t GameTimeNs() {
     std::lock_guard lock(mutex);
     const uint64_t value = control.clock.Read(NowNs());
@@ -101,6 +104,11 @@ inline Status GetStatus() { std::lock_guard lock(mutex); const Status status = c
 inline void Enable(bool enabled) { std::lock_guard lock(mutex); control.Enable(enabled, NowNs()); PublishRate(); }
 inline void SetMode(Mode mode) { std::lock_guard lock(mutex); control.SetMode(mode, NowNs()); PublishRate(); }
 inline void SetRate(unsigned rate) { std::lock_guard lock(mutex); control.SetRate(rate, NowNs()); PublishRate(); }
+inline void SetKeepAudioPitch(bool keep) {
+    std::lock_guard lock(mutex);
+    control.keepAudioPitch = keep;
+    audioKeepPitch.store(keep, std::memory_order_relaxed);
+}
 inline void SetPaused(bool paused) { std::lock_guard lock(mutex); control.Pause(paused, NowNs()); PublishRate(); }
 inline void Release() { std::lock_guard lock(mutex); control.Stop(NowNs()); PublishRate(); }
 inline void Sample(uint8_t lt, uint8_t rt, bool allowed) {

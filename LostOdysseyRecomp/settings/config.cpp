@@ -319,6 +319,8 @@ Config Read()
             value.fastForwardMode = number;
         else if (key == "fast_forward_rate")
             value.fastForwardRate = number;
+        else if (key == "fast_forward_keep_pitch" && number <= 1)
+            value.fastForwardKeepAudioPitch = number == 1;
         else if (key == "menu_animation_rate")
             value.menuAnimationRate = number;
         else if (key == "audio_output")
@@ -364,6 +366,7 @@ void CopyFastForward(Config &to, const Config &from)
     to.fastForward = from.fastForward;
     to.fastForwardMode = from.fastForwardMode;
     to.fastForwardRate = from.fastForwardRate;
+    to.fastForwardKeepAudioPitch = from.fastForwardKeepAudioPitch;
 }
 } // namespace
 void ConfigureGameLanguages(const std::filesystem::path &xexPath)
@@ -500,6 +503,7 @@ static bool WriteConfig(const Config &value)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)
            << "\nfast_forward_mode=" << value.fastForwardMode
            << "\nfast_forward_rate=" << value.fastForwardRate
+           << "\nfast_forward_keep_pitch=" << (value.fastForwardKeepAudioPitch ? 1 : 0)
            << "\nmenu_animation_rate=" << value.menuAnimationRate << '\n';
     output.flush();
     if (!output)
@@ -607,13 +611,14 @@ bool SaveBattleExpDouble(bool enabled)
     Current().battleExpDouble = enabled;
     return true;
 }
-bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate)
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch)
 {
     std::lock_guard lock(mutex);
     auto persisted = Read();
     persisted.fastForward = enabled;
     persisted.fastForwardMode = mode;
     persisted.fastForwardRate = rate;
+    persisted.fastForwardKeepAudioPitch = keepAudioPitch;
     persisted = Validate(persisted);
     if (!WriteConfig(persisted)) return false;
     CopyFastForward(Current(), persisted);
