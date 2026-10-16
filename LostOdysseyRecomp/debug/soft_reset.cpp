@@ -2,12 +2,14 @@
 #include <os/logger.h>
 #include <host_ui/host_ui.h>
 #include <settings/menu.h>
+#include <settings/config.h>
 #include "soft_reset.h"
 #include "soft_reset_policy.h"
 #include "fast_forward.h"
 #include "battle_menu.h"
 #include "teleport.h"
 #include "cheats.h"
+#include "translations.h"
 #include <mutex>
 
 extern "C" PPC_FUNC(__imp__sub_82820A10);
@@ -32,16 +34,19 @@ State refusal = State::Ready;
 
 const wchar_t* Message(State value)
 {
+    const wchar_t* key;
     switch (value)
     {
-    case State::Loading: return L"Please wait for loading to finish";
-    case State::Saving: return L"Please wait for saving to finish";
-    case State::StorageMenu: return L"Close the save/load screen first";
-    case State::Title: return L"Already at the title screen";
+    case State::Battle: key = L"Not available during battle"; break;
+    case State::Loading: key = L"Please wait for loading to finish"; break;
+    case State::Saving: key = L"Please wait for saving to finish"; break;
+    case State::StorageMenu: key = L"Close the save/load screen first"; break;
+    case State::Title: key = L"Already at the title screen"; break;
     case State::Pending:
-    case State::Returning: return L"Returning to title";
-    default: return L"Return to title unavailable";
+    case State::Returning: key = L"Returning to title"; break;
+    default: key = L"Return to title unavailable"; break;
     }
+    return translations::Text(key, settings::GetConfig().debugLanguage == 1);
 }
 
 bool Object(uint32_t address)
@@ -55,6 +60,14 @@ Snapshot Read(uint8_t* base)
     const uint32_t engine = PPC_LOAD_U32(Engine), world = PPC_LOAD_U32(World);
     s.engine = Object(engine) ? engine : 0;
     s.world = Object(world) ? world : 0;
+    if (s.world)
+    {
+        // Native sub_829E54F0: both scene modes remain battle through the
+        // victory/results UI and the return transition (not just core phase 1..10).
+        s.worldMode = PPC_LOAD_U32(s.world + 472);
+        s.activeWorldMode = PPC_LOAD_U32(s.world + 476);
+    }
+    s.battleQueued = int32_t(PPC_LOAD_U32(Loader + 3168 + 88)) > 0;
     s.title = PPC_LOAD_U32(Title);
     s.reset = PPC_LOAD_U32(Reset);
     // Match native sub_8229E4F0: stages 0/1 are inactive. Refuse the whole
@@ -90,8 +103,9 @@ bool Request()
         state = State::Unavailable;
     if (state != State::Ready)
     {
-        LOG_INFO("debug reset: unavailable state={} storage_stage={} storage_io={} loading={} pending_map={} title={:#x}",
-            unsigned(state), observed.storageStage, observed.storageIoBusy, observed.loading, observed.pendingMap, observed.title);
+        LOG_INFO("debug reset: unavailable state={} world_modes={}/{} battle_queued={} storage_stage={} storage_io={} loading={} pending_map={} title={:#x}",
+            unsigned(state), observed.worldMode, observed.activeWorldMode, observed.battleQueued,
+            observed.storageStage, observed.storageIoBusy, observed.loading, observed.pendingMap, observed.title);
         return false;
     }
     state = State::Pending;
@@ -137,8 +151,9 @@ void Tick(PPCContext& ctx, uint8_t* base)
             if (!apply)
             {
                 refusal = available == State::Ready ? State::Unavailable : available;
-                LOG_INFO("debug reset: refused on guest thread state={} storage_stage={} storage_io={} loading={} pending_map={} title={:#x}",
-                    unsigned(available), current.storageStage, current.storageIoBusy, current.loading, current.pendingMap, current.title);
+                LOG_INFO("debug reset: refused on guest thread state={} world_modes={}/{} battle_queued={} storage_stage={} storage_io={} loading={} pending_map={} title={:#x}",
+                    unsigned(available), current.worldMode, current.activeWorldMode, current.battleQueued,
+                    current.storageStage, current.storageIoBusy, current.loading, current.pendingMap, current.title);
             }
         }
         state = returning ? State::Returning : available;

@@ -134,11 +134,11 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 ### Overview: captures and game actions
 
-**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Return to title** and an action that wins the current battle.
+**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Return to title** (outside battles) and an action that wins the current battle.
 
 - **Capture render state:** confirm it, then close the menu. The archive is saved in `captures/` with screenshots, rendering data and logs; look through it before sharing.
 - **Save Anywhere** turns on the game's own **System → Save**.
-- **Return to title** asks for confirmation before returning to the title screen. Unsaved progress will be lost. Close the save/load screen and wait for saving or loading to finish before using it.
+- **Return to title** asks for confirmation before returning to the title screen. Unsaved progress will be lost. It is unavailable from the battle transition through the victory/results screens until control returns to the field or world map. Close the save/load screen and wait for saving or loading to finish before using it.
 
 ### Teleport: positions within the current map
 

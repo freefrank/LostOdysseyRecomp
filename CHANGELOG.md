@@ -8,7 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Debug Menu → Overview → Return to title lets you return to the title screen after confirming that unsaved progress will be lost (#592).
+- Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
 - Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
 - After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
 - Cheats → Encounter rate offers Normal, Half, None or the temporary Every step mode, alongside a separate Battle EXP ×2 switch.
@@ -19,7 +19,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
-- 调试菜单 → Overview → 返回标题：确认放弃未保存的进度后，可返回标题画面（#592）。
+- 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。
 - Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
 - 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
 - 调试菜单的 Cheats → 遇敌率可选正常、减半、关闭或临时的一步一遇敌模式，另有独立的战斗经验 ×2 开关。

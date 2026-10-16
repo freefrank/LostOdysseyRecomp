@@ -607,7 +607,7 @@ namespace debug_menu
             if (state.selectedRow == 4)
             {
                 const wchar_t* help[] = {
-                    zh ? L"确认后返回标题画面。" : L"Return to the title screen after confirmation.",
+                    translations::Text(L"Return to title after confirmation; unavailable in battle.", zh),
                     translations::Text(L"Unsaved progress will be lost", zh),
                 };
                 for (int line = 0; line < 2; ++line)

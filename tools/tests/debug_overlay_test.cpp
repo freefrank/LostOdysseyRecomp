@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -26,6 +27,23 @@ std::atomic<settings::EncounterRate> g_encounterRate{settings::EncounterRate::No
 std::atomic<bool> g_everyStep{false};
 std::atomic<uint32_t> g_debugLanguage{0};
 std::atomic<const wchar_t*> g_resetRefusal{nullptr};
+std::atomic<const wchar_t*> g_resetStatus{L"Return to title unavailable"};
+
+struct ResetNotice
+{
+    const wchar_t* key;
+    const wchar_t* chinese;
+    const char* filename;
+};
+constexpr ResetNotice ResetNotices[] = {
+    {L"Return to title unavailable", L"当前无法返回标题", "unavailable"},
+    {L"Not available during battle", L"战斗期间不可用", "battle"},
+    {L"Please wait for loading to finish", L"请等待读取完成", "loading"},
+    {L"Please wait for saving to finish", L"请等待保存完成", "saving"},
+    {L"Close the save/load screen first", L"先关闭存档/读档画面", "storage"},
+    {L"Already at the title screen", L"当前已在标题画面", "title"},
+    {L"Returning to title", L"正在返回标题", "returning"},
+};
 
 void Require(bool condition, const char* message)
 {
@@ -110,7 +128,7 @@ const wchar_t* Status() { return L""; }
 namespace soft_reset
 {
 bool Request() { return false; }
-const wchar_t* Status() { return L"Return to title unavailable"; }
+const wchar_t* Status() { return g_resetStatus.load(); }
 const wchar_t* TakeRefusal() { return g_resetRefusal.exchange(nullptr); }
 }
 }
@@ -161,6 +179,18 @@ int main(int argc, char** argv)
                     "guest-thread refusal did not render the complete localized notice");
             }
     };
+    const auto checkResetNotices = [&](bool chinese) {
+        for (const auto& notice : ResetNotices)
+        {
+            g_resetRefusal = notice.key;
+            debug_menu::PollResetNotice();
+            renderFrame();
+            const std::string filename = std::string("return-to-title-notice-") + notice.filename +
+                (chinese ? "-zh.ppm" : "-en.ppm");
+            capture(filename.c_str());
+            requireResetNotice(chinese ? notice.chinese : notice.key);
+        }
+    };
 
     const auto overviewReference = renderFrame();
     capture("overview-reference.ppm");
@@ -198,6 +228,7 @@ int main(int argc, char** argv)
     renderFrame();
     capture("return-to-title-storage-screen-refusal-en.ppm");
     requireResetNotice(L"Close the save/load screen first");
+    checkResetNotices(false);
 
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     const auto resetNoReference = renderFrame();
@@ -209,6 +240,15 @@ int main(int argc, char** argv)
         "Return to title Yes/No selection did not render");
     debug_menu::HandleInput(debug_menu::InputAction::Cancel);
     Require(debug_menu::IsOverlayVisible(), "cancel closed overlay instead of Return to title confirmation");
+    g_resetStatus = L"Not available during battle";
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    renderFrame();
+    capture("return-to-title-battle-refusal-immediate-en.ppm");
+    requireResetNotice(L"Not available during battle");
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused(),
+        "battle refusal did not keep the menu open and paused");
     for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
 
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Chinese debug UI
@@ -231,6 +271,13 @@ int main(int argc, char** argv)
     renderFrame();
     capture("return-to-title-storage-screen-refusal-zh-playstation.ppm");
     requireResetNotice(L"先关闭存档/读档画面");
+    checkResetNotices(true);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    renderFrame();
+    capture("return-to-title-battle-refusal-immediate-zh.ppm");
+    requireResetNotice(L"战斗期间不可用");
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     renderFrame();
     capture("return-to-title-zh-playstation.ppm");

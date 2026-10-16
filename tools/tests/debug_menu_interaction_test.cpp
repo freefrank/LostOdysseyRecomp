@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -412,12 +413,31 @@ int main()
     Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
     Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
 
+    for (const auto& notice : {
+        std::pair{L"Return to title unavailable", L"当前无法返回标题"},
+        std::pair{L"Not available during battle", L"战斗期间不可用"},
+        std::pair{L"Please wait for loading to finish", L"请等待读取完成"},
+        std::pair{L"Please wait for saving to finish", L"请等待保存完成"},
+        std::pair{L"Close the save/load screen first", L"先关闭存档/读档画面"},
+        std::pair{L"Already at the title screen", L"当前已在标题画面"},
+        std::pair{L"Returning to title", L"正在返回标题"}})
+    {
+        Require(std::wstring(debug_menu::translations::Text(notice.first, true)) == notice.second,
+            "Return to title notice lacks its Chinese translation");
+        for (bool zh : {false, true})
+            Require(rasterizer.MeasureWString(debug_menu::translations::Text(notice.first, zh)) <= 700,
+                "Return to title notice exceeds the Overview text width");
+    }
+
     // Live quick-tool options must fit their production text columns.
     for (bool zh : {false, true})
     {
         for (const auto* key : {L"Return to title", L"Unsaved progress will be lost"})
             Require(rasterizer.MeasureWString(debug_menu::translations::Text(key, zh)) <= 520,
                 "Return to title confirmation text exceeds the dialog width");
+        Require(rasterizer.MeasureWString(debug_menu::translations::Text(
+            L"Return to title after confirmation; unavailable in battle.", zh)) <= 700,
+            "Return to title help exceeds the Overview text width");
         for (const auto* label : {debug_menu::cheat_overlay::FastForwardAudioLabel[zh],
                                  debug_menu::cheat_overlay::EncounterRateLabel[zh],
                                  debug_menu::cheat_overlay::BattleExpLabel[zh],

@@ -134,11 +134,11 @@
 
 ### Overview：捕获与游戏操作
 
-**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Return to title（返回标题）**，以及直接赢下当前战斗的操作。
+**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Return to title（返回标题，仅限战斗外）**，以及直接赢下当前战斗的操作。
 
 - **Capture render state：** 确认后关闭菜单。归档保存在 `captures/`，内含截图、渲染数据和日志，分享前请检查内容。
 - **Save Anywhere** 会开放原作的 **System → Save（系统 → 存档）**。
-- **Return to title** 会在确认后返回标题画面，未保存的进度将丢失。请先关闭存档/读档画面，并等待保存或读取完成后再使用。
+- **Return to title** 会在确认后返回标题画面，未保存的进度将丢失。从开始切入战斗、胜利及结算画面，直到恢复场景或世界地图控制前均不可用。请先关闭存档/读档画面，并等待保存或读取完成后再使用。
 
 ### Teleport：当前地图内移动
 
