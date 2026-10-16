@@ -150,12 +150,14 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 | Category | What it does |
 | :--- | :--- |
-| **Quick tools** | Fast-forward, **Allow memory edits**, gold and HP/MP. |
+| **Quick tools** | Fast-forward, menu animation speed, **Allow memory edits**, gold and HP/MP. |
 | **Characters** | HP/MP, EXP (0–99, not the level) and skills. |
 | **Inventory** | Set items and materials to 1, 10, 50 or 99, or fill whole categories. Sort the in-game inventory to refresh it. |
 | **Equipment** | Weapon, ring and accessory changes. |
 | **Party** | Party members, rows and field character. |
 | **Developer** | The original **EDIT MENU**: enable it, close F1, press **LT+RT**. |
+
+**Menu animations** sets camp menu opening, closing and submenu transitions to **Normal (1×)**, **Fast (2×)** or **Faster (4×)**. The choice is saved; **Normal** is the default. Gameplay and audio keep their usual speed.
 
 **Fast-forward** runs at 2×–8× while you hold **LT** (**Hold**) or after you press it (**Toggle**).
 

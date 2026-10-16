@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
+
+### 简体中文
+
+- 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
+
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 
 ### English

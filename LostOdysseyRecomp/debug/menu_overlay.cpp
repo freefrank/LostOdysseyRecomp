@@ -70,12 +70,14 @@ namespace debug_menu
             opening = !g_overlayState.visible;
         }
 
-        const bool chinese = settings::GetConfig().debugLanguage == 1;
+        const auto config = settings::GetConfig();
+        const bool chinese = config.debugLanguage == 1;
         const auto snapshot = opening ? debug_menu::GetTeleportSnapshot() : TeleportSnapshot{};
         {
             std::lock_guard lock(g_overlayStateMutex);
             g_overlayState.visible = opening;
             g_overlayState.chinese = chinese;
+            g_overlayState.cheatsPage.menuAnimationRate = config.menuAnimationRate;
             g_overlayState.cheatsPage.Dismiss();
             if (opening && snapshot.available)
             {
@@ -151,6 +153,7 @@ namespace debug_menu
             if (nav)
             {
                 const auto before = fast_forward::GetStatus();
+                const unsigned beforeMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
                 if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
                 {
                     stateLock.unlock();
@@ -159,6 +162,7 @@ namespace debug_menu
                 }
                 // Keep the player's fast-forward rows across restarts (#104).
                 const auto after = fast_forward::GetStatus();
+                const unsigned afterMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
                 if (after.enabled != before.enabled || after.mode != before.mode || after.multiplier != before.multiplier)
                 {
                     const bool zh = g_overlayState.chinese;
@@ -168,6 +172,17 @@ namespace debug_menu
                     {
                         std::lock_guard lock(g_overlayStateMutex);
                         g_overlayState.cheatsPage.notice = zh ? L"保存变速设置失败" : L"Failed to save fast-forward setting";
+                    }
+                }
+                else if (afterMenuRate != beforeMenuRate)
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    if (!settings::SaveMenuAnimationRate(afterMenuRate))
+                    {
+                        std::lock_guard lock(g_overlayStateMutex);
+                        g_overlayState.cheatsPage.menuAnimationRate = beforeMenuRate;
+                        g_overlayState.cheatsPage.notice = zh ? L"保存菜单动画设置失败" : L"Failed to save menu animation setting";
                     }
                 }
                 return;

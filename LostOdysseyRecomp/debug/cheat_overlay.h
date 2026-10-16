@@ -2,6 +2,7 @@
 #include "cheats.h"
 #include "fast_forward.h"
 #include "../host_ui/rasterizer.h"
+#include "../settings/config.h"
 #include "controller_hint.h"
 #include <string>
 
@@ -15,6 +16,17 @@ inline constexpr const wchar_t* Categories[][2] = {
     {L"Inventory",L"物品与素材"}, {L"Equipment",L"装备"},
     {L"Party",L"队伍"}, {L"Developer",L"开发者"}};
 inline constexpr unsigned Quantities[] = {1,10,50,99};
+inline constexpr const wchar_t* MenuAnimationLabel[] = {L"Menu animations",L"菜单动画"};
+inline constexpr const wchar_t* MenuAnimationValues[][2] = {
+    {L"Normal (1x)",L"正常 (1x)"}, {L"Fast (2x)",L"快速 (2x)"}, {L"Faster (4x)",L"更快 (4x)"}};
+inline constexpr const wchar_t* MenuAnimationHelp[] = {
+    L"Camp menu transitions only; world and audio keep their speed.",
+    L"仅加速营地菜单切换；世界和音频保持原速。"};
+inline const wchar_t* MenuAnimationValue(unsigned rate, bool zh) {
+    for (unsigned i=0;i<std::size(settings::MenuAnimationRates);++i)
+        if (settings::MenuAnimationRates[i]==rate) return MenuAnimationValues[i][zh];
+    return MenuAnimationValues[0][zh];
+}
 inline unsigned Wrap(unsigned value, int direction, unsigned count) {
     return unsigned((int(value)+direction+int(count))%int(count));
 }
@@ -27,7 +39,8 @@ struct Model {
     enum class Confirmation { Write, Enable, Editor } confirmation=Confirmation::Write;
     Request request;
     std::wstring notice;
-    unsigned Rows() const { constexpr unsigned rows[]={8,8,6,5,7,2}; return rows[category]; }
+    unsigned menuAnimationRate=1;
+    unsigned Rows() const { constexpr unsigned rows[]={9,8,6,5,7,2}; return rows[category]; }
     void ChangeCategory(int direction) { category=Wrap(category,direction,unsigned(std::size(Categories))); row=0; }
     std::span<const cheats::data::Entry> EquipmentList() const {
         if (equipmentSlot==0) return cheats::data::Weapons;
@@ -132,12 +145,17 @@ struct Model {
                 unsigned index=0;
                 for(unsigned i=0;i<std::size(fast_forward::Rates);++i) if(fast_forward::Rates[i]==speed.multiplier)index=i;
                 fast_forward::SetRate(fast_forward::Rates[Wrap(index,direction,unsigned(std::size(fast_forward::Rates)))]);
-            } else if (row==4 && activate) {
+            } else if (row==4) {
+                unsigned index=0;
+                for(unsigned i=0;i<std::size(settings::MenuAnimationRates);++i)
+                    if(settings::MenuAnimationRates[i]==menuAnimationRate)index=i;
+                menuAnimationRate=settings::MenuAnimationRates[Wrap(index,direction,unsigned(std::size(settings::MenuAnimationRates)))];
+            } else if (row==5 && activate) {
                 if (cheats::session.Get().enabled) cheats::session.Enable(false);
                 else { confirmation=Confirmation::Enable; confirm=true; yes=false; }
-            } else if (activate && row==5) Write(Action::AddGold,100000,0,false,zh);
-            else if (activate && row==6) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
-            else if (activate && row==7) Write(Action::HealParty,0,0,false,zh);
+            } else if (activate && row==6) Write(Action::AddGold,100000,0,false,zh);
+            else if (activate && row==7) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
+            else if (activate && row==8) Write(Action::HealParty,0,0,false,zh);
         } else if (category==1) {
             if(row==1) { if(activate)Open(Picker::Character,character);else character=Wrap(character,direction,9); }
             else if(row==2 && activate) Write(Action::Heal,0,0,false,zh);
@@ -194,7 +212,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
     const auto s=cheats::session.Get(); const auto speed=fast_forward::GetStatus();
     const auto color=host_ui::MakeColor;
     const auto text=color(255,226,233,243),muted=color(255,145,158,178),gold=color(255,229,196,126);
-    const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=35;
+    const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=m.category==0 ? 31:35;
     auto drawText=[&](int px,int py,std::wstring t,int maxWidth,uint32_t c) {
         r.DrawWString(px,py,Fit(r,controller_hint::ShoulderLabels(std::move(t),playStation),maxWidth),c);
     };
@@ -227,10 +245,11 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         row(2,zh ? L"变速模式" : L"Speed mode",speed.mode==fast_forward::Mode::Hold
             ? (zh ? L"按住" : L"Hold") : (zh ? L"切换" : L"Toggle"));
         row(3,zh ? L"加速倍率" : L"Speed multiplier",std::to_wstring(speed.multiplier)+L"x");
-        row(4,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
-        row(5,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
-        row(6,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
-        row(7,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
+        row(4,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
+        row(5,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
+        row(6,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
+        row(7,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
+        row(8,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
     } else if(m.category==1) {
         row(1,zh ? L"角色" : L"Character",charName);
         row(2,zh ? L"恢复 HP / MP" : L"Restore HP / MP",L"",writable);
@@ -288,7 +307,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             value.erase(0,n);while(!value.empty() && value.front()==L' ')value.erase(0,1);
         }
     };
-    paragraph(x,y+296,(playStation && m.category==2)
+    paragraph(x,y+296,(m.category==0 && m.row==4) ? MenuAnimationHelp[zh] : (playStation && m.category==2)
         ? (zh ? L"选择物品：按确定键打开可翻页列表；修改后在游戏内整理物品以刷新。"
               : L"Choose item: Confirm opens a paged list. Sort the inventory once to refresh.")
         : hints[m.category][zh],width,muted);

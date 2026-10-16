@@ -67,6 +67,7 @@ Config GetConfig()
 }
 bool SaveDebugLanguage(uint32_t) { return true; }
 bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
+bool SaveMenuAnimationRate(uint32_t) { return true; }
 }
 
 namespace gpu::renderer
@@ -155,6 +156,10 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     renderFrame();
     capture("cheats-zh-playstation.ppm");
+    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("menu-animations-zh-playstation.ppm");
+    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
@@ -162,6 +167,11 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    renderFrame();
+    capture("menu-animations-en-faster.ppm");
     debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Character picker
@@ -178,7 +188,8 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 4: memory edits confirmation
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 5: memory edits confirmation
     g_playStation = false;
     const auto confirmReference = renderFrame();
     g_playStation = true;
