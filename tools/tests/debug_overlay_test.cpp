@@ -7,6 +7,7 @@
 #include <settings/config.h>
 
 #include <atomic>
+#include <barrier>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -201,33 +202,51 @@ int main(int argc, char** argv)
     Require(debug_menu::IsOverlayVisible(), "cancel closed overlay instead of the cheat confirmation");
     g_playStation = false;
 
-    std::thread updates([] {
-        for (uint64_t revision = 1; revision <= 1000; ++revision)
+    // Keep all three workers participating in every round, without making the
+    // rasterizer draw hundreds of frames after the mutation workers finish.
+    constexpr int stressRounds = 64;
+    constexpr int mutationsPerRound = 16;
+    std::barrier stressRound(3);
+    std::thread updates([&] {
+        for (int round = 0; round < stressRounds; ++round)
         {
+            stressRound.arrive_and_wait();
+            for (int iteration = 0; iteration < mutationsPerRound; ++iteration)
             {
-                std::lock_guard lock(g_fixtureMutex);
-                g_teleport.poiRevision = revision;
-                g_teleport.pois = {{revision, L"POI", {float(revision), 2.0f, 3.0f}}};
+                const uint64_t revision = uint64_t(round) * mutationsPerRound + iteration + 1;
+                {
+                    std::lock_guard lock(g_fixtureMutex);
+                    g_teleport.poiRevision = revision;
+                    g_teleport.pois = {{revision, L"POI", {float(revision), 2.0f, 3.0f}}};
+                }
+                debug_menu::UpdateOverlaySnapshot();
             }
-            debug_menu::UpdateOverlaySnapshot();
+            stressRound.arrive_and_wait();
         }
     });
-    std::thread input([] {
-        for (int iteration = 0; iteration < 1000; ++iteration)
+    std::thread input([&] {
+        for (int round = 0; round < stressRounds; ++round)
         {
-            debug_menu::HandleInput(debug_menu::InputAction::NextTab);
-            debug_menu::HandleInput(debug_menu::InputAction::Down);
-            debug_menu::HandleInput(debug_menu::InputAction::Right);
-            debug_menu::HandleInput(debug_menu::InputAction::Up);
-            debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
+            stressRound.arrive_and_wait();
+            for (int iteration = 0; iteration < mutationsPerRound; ++iteration)
+            {
+                debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+                debug_menu::HandleInput(debug_menu::InputAction::Down);
+                debug_menu::HandleInput(debug_menu::InputAction::Right);
+                debug_menu::HandleInput(debug_menu::InputAction::Up);
+                debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
+            }
+            stressRound.arrive_and_wait();
         }
     });
     std::thread render([&] {
-        for (int iteration = 0; iteration < 1000; ++iteration)
+        for (int round = 0; round < stressRounds; ++round)
         {
+            stressRound.arrive_and_wait();
             frame.Clear();
             host_ui::Rasterizer rasterizer(frame);
             debug_menu::RenderOverlay(rasterizer);
+            stressRound.arrive_and_wait();
         }
     });
     updates.join();
