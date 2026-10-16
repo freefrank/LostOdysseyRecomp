@@ -78,6 +78,9 @@ int main()
         {L"Compaction cancelled.", L"已取消空間整理。", 1, 1048},
         {L"Game files were kept. You can try again later.", L"遊戲檔案已保留，可稍後再試。", 1, 1048},
         {L"Freed %s GB.", L"已釋放 %s GB。", 1, 1048},
+        {L"Already done: these files are stored once (about %s GB saved)", L"已完成：這些檔案只儲存一份（約節省 %s GB）", 1, 1048},
+        {L"Explorer still shows full folder size; check free space on the drive.", L"檔案總管仍顯示完整資料夾大小，請查看磁碟可用空間。", 1, 1048},
+        {L"Folder size may stay the same; check free space on the drive.", L"資料夾大小可能不變，請查看磁碟可用空間。", 1, 1048},
         {L"Some files could not be shared.", L"部分檔案無法共用。", 1, 1048},
         {L"Continue (A)", L"繼續 (A)", 1, 328},
     };
@@ -95,6 +98,6 @@ int main()
                 return 1;
             }
         }
-    std::cout << "PASS 14 prompt strings in all five languages at production font scales\n";
+    std::cout << "PASS " << std::size(lines) << " prompt strings in all five languages at production font scales\n";
     std::cout << "PASS compaction startup policy, safe default, choices, navigation and completed input\n";
 }

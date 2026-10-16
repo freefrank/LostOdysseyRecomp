@@ -134,11 +134,11 @@
 
 ### Overview：捕获与游戏操作
 
-**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**No Random Encounters（不遇敌）**、**Encounter Every Step（一步一遇敌）**，以及直接赢下当前战斗的操作。
+**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Encounter Every Step（一步一遇敌）**，以及直接赢下当前战斗的操作。
 
 - **Capture render state：** 确认后关闭菜单。归档保存在 `captures/`，内含截图、渲染数据和日志，分享前请检查内容。
 - **Save Anywhere** 会开放原作的 **System → Save（系统 → 存档）**。
-- **No Random Encounters** 停止场景中的随机战斗，剧情战斗照常发生。**Encounter Every Step** 让每走一步都遇敌。
+- **Encounter Every Step** 让每走一步都遇敌，仅在有随机遇敌的区域生效。
 
 ### Teleport：当前地图内移动
 
@@ -150,7 +150,7 @@
 
 | 类别 | 功能 |
 | :--- | :--- |
-| **Quick tools** | 快进、菜单动画速度、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
+| **Quick tools** | 快进、**Encounter rate（遇敌率）**、**Battle EXP ×2（战斗经验 ×2）**、菜单动画速度、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
 | **Characters** | HP／MP、EXP（0–99，不是等级）和技能。 |
 | **Inventory** | 把物品和素材设为 1、10、50 或 99，或填满整类。在游戏背包里整理一次即可刷新显示。 |
 | **Equipment** | 修改武器、指环和饰品。 |
@@ -160,6 +160,10 @@
 **Menu animations（菜单动画）**可把营地菜单打开、关闭和子菜单切换动画设为**正常（1×）**、**快速（2×）**或**更快（4×）**。选择会保存，默认正常。游戏运行和音频保持原速。
 
 **快进**倍率 2×–8×，按住 **LT**（**Hold**）或按一下切换（**Toggle**）。
+
+**遇敌率**可选**正常**、**减半**或**关闭**。减半会跳过每隔一次的随机遇敌，剧情战斗和 Boss 不受影响。**战斗经验 ×2** 可单独开启，使战斗获胜所得的经验加倍。两项设置都会保存。
+
+经验按游戏原有的等级差规则计算后再翻倍，保留原有的单场上限。SP 和金币保持原样。
 
 **内存修改**默认关闭。先备份存档，开启 **Allow memory edits**，选择操作并确认 **Yes**，关闭 F1 后生效。
 

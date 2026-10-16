@@ -94,8 +94,10 @@ MapInfo GetMapInfo() { return {}; }
 bool SaveAnywhereEnabled() { return g_saveAnywhere.load(); }
 void SetSaveAnywhereEnabled(bool enabled) { g_saveAnywhere = enabled; }
 void RequestPartySwitch() {}
-bool NoEncountersEnabled() { return false; }
-void SetNoEncountersEnabled(bool) {}
+settings::EncounterRate GetEncounterRate() { return settings::EncounterRate::Normal; }
+void SetEncounterRate(settings::EncounterRate) {}
+bool BattleExpDoubleEnabled() { return false; }
+void SetBattleExpDoubleEnabled(bool) {}
 bool EncounterEveryStepEnabled() { return false; }
 void SetEncounterEveryStepEnabled(bool) {}
 bool RequestVictory() { return true; }
@@ -159,8 +161,14 @@ int main(int argc, char** argv)
     capture("cheats-zh-playstation.ppm");
     for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
+    capture("encounter-rate-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("battle-exp-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
     capture("menu-animations-zh-playstation.ppm");
-    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
+    for (int i = 0; i < 6; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
@@ -169,6 +177,12 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("encounter-rate-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("battle-exp-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Right);
     debug_menu::HandleInput(debug_menu::InputAction::Right);
     renderFrame();
@@ -185,12 +199,8 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::Cancel); // Dismiss picker
     debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 5: memory edits confirmation
+    for(int i=0;i<7;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 7: memory edits confirmation
     g_playStation = false;
     const auto confirmReference = renderFrame();
     g_playStation = true;

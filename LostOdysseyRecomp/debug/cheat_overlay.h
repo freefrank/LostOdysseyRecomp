@@ -1,6 +1,8 @@
 #pragma once
 #include "cheats.h"
 #include "fast_forward.h"
+#include "no_encounters.h"
+#include "battle_exp.h"
 #include "../host_ui/rasterizer.h"
 #include "../settings/config.h"
 #include "controller_hint.h"
@@ -16,6 +18,11 @@ inline constexpr const wchar_t* Categories[][2] = {
     {L"Inventory",L"物品与素材"}, {L"Equipment",L"装备"},
     {L"Party",L"队伍"}, {L"Developer",L"开发者"}};
 inline constexpr unsigned Quantities[] = {1,10,50,99};
+inline constexpr int QuickToolRowHeight = 25;
+inline constexpr const wchar_t* EncounterRateLabel[] = {L"Encounter rate",L"遇敌率"};
+inline constexpr const wchar_t* EncounterRateValues[][2] = {
+    {L"Normal",L"正常"}, {L"Half",L"减半"}, {L"None",L"关闭"}};
+inline constexpr const wchar_t* BattleExpLabel[] = {L"Battle EXP ×2",L"战斗 EXP ×2"};
 inline constexpr const wchar_t* MenuAnimationLabel[] = {L"Menu animations",L"菜单动画"};
 inline constexpr const wchar_t* MenuAnimationValues[][2] = {
     {L"Normal (1x)",L"正常 (1x)"}, {L"Fast (2x)",L"快速 (2x)"}, {L"Faster (4x)",L"更快 (4x)"}};
@@ -40,7 +47,7 @@ struct Model {
     Request request;
     std::wstring notice;
     unsigned menuAnimationRate=1;
-    unsigned Rows() const { constexpr unsigned rows[]={9,8,6,5,7,2}; return rows[category]; }
+    unsigned Rows() const { constexpr unsigned rows[]={11,8,6,5,7,2}; return rows[category]; }
     void ChangeCategory(int direction) { category=Wrap(category,direction,unsigned(std::size(Categories))); row=0; }
     std::span<const cheats::data::Entry> EquipmentList() const {
         if (equipmentSlot==0) return cheats::data::Weapons;
@@ -146,16 +153,20 @@ struct Model {
                 for(unsigned i=0;i<std::size(fast_forward::Rates);++i) if(fast_forward::Rates[i]==speed.multiplier)index=i;
                 fast_forward::SetRate(fast_forward::Rates[Wrap(index,direction,unsigned(std::size(fast_forward::Rates)))]);
             } else if (row==4) {
+                debug_menu::SetEncounterRate(settings::EncounterRate(Wrap(unsigned(debug_menu::GetEncounterRate()),direction,3)));
+            } else if (row==5) {
+                debug_menu::SetBattleExpDoubleEnabled(!debug_menu::BattleExpDoubleEnabled());
+            } else if (row==6) {
                 unsigned index=0;
                 for(unsigned i=0;i<std::size(settings::MenuAnimationRates);++i)
                     if(settings::MenuAnimationRates[i]==menuAnimationRate)index=i;
                 menuAnimationRate=settings::MenuAnimationRates[Wrap(index,direction,unsigned(std::size(settings::MenuAnimationRates)))];
-            } else if (row==5 && activate) {
+            } else if (row==7 && activate) {
                 if (cheats::session.Get().enabled) cheats::session.Enable(false);
                 else { confirmation=Confirmation::Enable; confirm=true; yes=false; }
-            } else if (activate && row==6) Write(Action::AddGold,100000,0,false,zh);
-            else if (activate && row==7) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
-            else if (activate && row==8) Write(Action::HealParty,0,0,false,zh);
+            } else if (activate && row==8) Write(Action::AddGold,100000,0,false,zh);
+            else if (activate && row==9) Write(Action::SetGold,cheats::GoldLimit,0,true,zh);
+            else if (activate && row==10) Write(Action::HealParty,0,0,false,zh);
         } else if (category==1) {
             if(row==1) { if(activate)Open(Picker::Character,character);else character=Wrap(character,direction,9); }
             else if(row==2 && activate) Write(Action::Heal,0,0,false,zh);
@@ -208,11 +219,21 @@ inline const wchar_t* ResultText(cheats::Result result,bool zh) {
     default:return zh ? L"等待读档完成并进入可控制场景" : L"Waiting for a loaded, playable field";
     }
 }
+inline const wchar_t* QuickToolHelp(unsigned row,bool zh) {
+    if(row==4) return zh
+        ? L"仅影响步行随机遇敌；减半模式交替跳过成功判定，剧情与首领战不受影响。"
+        : L"Walking encounters only. Half skips alternate successful draws; story and boss fights are unchanged.";
+    if(row==5) return zh
+        ? L"战斗经验加倍，SP 与金币不变。"
+        : L"Doubles battle EXP. SP and gold stay unchanged.";
+    if(row==6) return MenuAnimationHelp[zh];
+    return nullptr;
+}
 inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int width,bool playStation) {
     const auto s=cheats::session.Get(); const auto speed=fast_forward::GetStatus();
     const auto color=host_ui::MakeColor;
     const auto text=color(255,226,233,243),muted=color(255,145,158,178),gold=color(255,229,196,126);
-    const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=m.category==0 ? 31:35;
+    const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=m.category==0 ? QuickToolRowHeight:35;
     auto drawText=[&](int px,int py,std::wstring t,int maxWidth,uint32_t c) {
         r.DrawWString(px,py,Fit(r,controller_hint::ShoulderLabels(std::move(t),playStation),maxWidth),c);
     };
@@ -227,14 +248,15 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
     auto row=[&](unsigned id,const wchar_t* label,std::wstring value,bool enabled=true) {
         const int py=y+int(id)*rowH;
         const bool selected=m.row==id;
-        r.FillRect(rx,py,rw,30,selected ? color(255,46,57,72):color(255,29,34,43));
-        if(selected)r.FillRect(rx,py,3,30,gold);
+        const int height=m.category==0 ? 24:30, textY=py+(m.category==0 ? 4:7);
+        r.FillRect(rx,py,rw,height,selected ? color(255,46,57,72):color(255,29,34,43));
+        if(selected)r.FillRect(rx,py,3,height,gold);
         const auto c=enabled ? text:muted;
-        if(value.empty())drawText(rx+12,py+7,label,rw-24,c);
+        if(value.empty())drawText(rx+12,textY,label,rw-24,c);
         else {
             const int labelWidth=180;
-            drawText(rx+12,py+7,label,labelWidth-10,c);
-            drawText(rx+labelWidth,py+7,std::move(value),rw-labelWidth-12,selected ? gold:c);
+            drawText(rx+12,textY,label,labelWidth-10,c);
+            drawText(rx+labelWidth,textY,std::move(value),rw-labelWidth-12,selected ? gold:c);
         }
     };
     row(0,zh ? L"类别  < / >" : L"Category  < / >",Categories[m.category][zh]);
@@ -245,11 +267,13 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         row(2,zh ? L"变速模式" : L"Speed mode",speed.mode==fast_forward::Mode::Hold
             ? (zh ? L"按住" : L"Hold") : (zh ? L"切换" : L"Toggle"));
         row(3,zh ? L"加速倍率" : L"Speed multiplier",std::to_wstring(speed.multiplier)+L"x");
-        row(4,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
-        row(5,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
-        row(6,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
-        row(7,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
-        row(8,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
+        row(4,EncounterRateLabel[zh],EncounterRateValues[unsigned(debug_menu::GetEncounterRate())][zh]);
+        row(5,BattleExpLabel[zh],debug_menu::BattleExpDoubleEnabled() ? L"ON":L"OFF");
+        row(6,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
+        row(7,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
+        row(8,zh ? L"增加 100,000 金币" : L"Add 100,000 gold",L"",writable);
+        row(9,zh ? L"金币设为 9,999,999" : L"Set gold to 9,999,999",L"",writable);
+        row(10,zh ? L"恢复当前队伍 HP / MP" : L"Restore party HP / MP",L"",writable);
     } else if(m.category==1) {
         row(1,zh ? L"角色" : L"Character",charName);
         row(2,zh ? L"恢复 HP / MP" : L"Restore HP / MP",L"",writable);
@@ -307,7 +331,9 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             value.erase(0,n);while(!value.empty() && value.front()==L' ')value.erase(0,1);
         }
     };
-    paragraph(x,y+296,(m.category==0 && m.row==4) ? MenuAnimationHelp[zh] : (playStation && m.category==2)
+    const auto quickHelp=m.category==0 ? QuickToolHelp(m.row,zh):nullptr;
+    paragraph(x,y+296,quickHelp ? quickHelp
+        : (playStation && m.category==2)
         ? (zh ? L"选择物品：按确定键打开可翻页列表；修改后在游戏内整理物品以刷新。"
               : L"Choose item: Confirm opens a paged list. Sort the inventory once to refresh.")
         : hints[m.category][zh],width,muted);

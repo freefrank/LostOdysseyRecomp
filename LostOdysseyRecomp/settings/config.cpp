@@ -32,6 +32,7 @@ std::string PackId(std::string text)
 }
 Config Validate(Config value)
 {
+    value.encounterRate = ValidEncounterRate(value.encounterRate);
     value.gpuDevice = TextValue(std::move(value.gpuDevice));
     value.displayName = TextValue(std::move(value.displayName));
     value.gameLanguagePack = PackId(std::move(value.gameLanguagePack));
@@ -140,6 +141,7 @@ Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
+    bool hasEncounterRate = false, legacyNoEncounters = false;
     bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
@@ -152,6 +154,7 @@ Config Read()
         const auto name = key.substr(0, equal);
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
+        if (name == "encounter_rate") { hasEncounterRate = true; value.encounterRate = EncounterRate::Normal; }
         if (name == "internal_resolution") value.internalResolution = 0;
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         if (name == "aspect_ratio") hasAspectRatio = true;
@@ -305,7 +308,11 @@ Config Read()
         else if (key == "save_anywhere" && number <= 1)
             value.saveAnywhere = number == 1;
         else if (key == "no_random_encounters" && number <= 1)
-            value.noRandomEncounters = number == 1;
+            legacyNoEncounters = number == 1;
+        else if (key == "encounter_rate")
+            value.encounterRate = ValidEncounterRate(EncounterRate(number));
+        else if (key == "battle_exp_double" && number <= 1)
+            value.battleExpDouble = number == 1;
         else if (key == "fast_forward" && number <= 1)
             value.fastForward = number == 1;
         else if (key == "fast_forward_mode")
@@ -331,6 +338,7 @@ Config Read()
             value.debugLog = number == 1;
     }
     if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
+    if (!hasEncounterRate && legacyNoEncounters) value.encounterRate = EncounterRate::None;
     // Profiles written before automatic peak detection use their stored peak
     // as an explicit choice. A fresh profile follows the current display.
     if (hasHdrPeakNits && !hasHdrPeakAuto) value.hdrPeakAutomatic = false;
@@ -402,7 +410,8 @@ void PreviewConfig(const Config &value)
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
     merged.saveAnywhere = Current().saveAnywhere;
-    merged.noRandomEncounters = Current().noRandomEncounters;
+    merged.encounterRate = Current().encounterRate;
+    merged.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(merged, Current());
     merged.menuAnimationRate = Current().menuAnimationRate;
     merged.audioOutput = Current().audioOutput;
@@ -486,7 +495,8 @@ static bool WriteConfig(const Config &value)
            << "\nachievement_sound=" << (value.achievementSound ? 1 : 0)
            << "\nperformance_overlay=" << value.performanceOverlay
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
-           << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)
+           << "\nencounter_rate=" << uint32_t(value.encounterRate)
+           << "\nbattle_exp_double=" << (value.battleExpDouble ? 1 : 0)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)
            << "\nfast_forward_mode=" << value.fastForwardMode
            << "\nfast_forward_rate=" << value.fastForwardRate
@@ -515,7 +525,8 @@ bool SaveConfig(const Config &requested)
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
     value.saveAnywhere = Current().saveAnywhere;
-    value.noRandomEncounters = Current().noRandomEncounters;
+    value.encounterRate = Current().encounterRate;
+    value.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(value, Current());
     value.menuAnimationRate = Current().menuAnimationRate;
     value.audioOutput = Current().audioOutput;
@@ -578,13 +589,22 @@ bool SaveSaveAnywhere(bool enabled)
     Current().saveAnywhere = enabled;
     return true;
 }
-bool SaveNoRandomEncounters(bool enabled)
+bool SaveEncounterRate(EncounterRate rate)
 {
     std::lock_guard lock(mutex);
     auto persisted = Read();
-    persisted.noRandomEncounters = enabled;
+    persisted.encounterRate = ValidEncounterRate(rate);
     if (!WriteConfig(persisted)) return false;
-    Current().noRandomEncounters = enabled;
+    Current().encounterRate = persisted.encounterRate;
+    return true;
+}
+bool SaveBattleExpDouble(bool enabled)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.battleExpDouble = enabled;
+    if (!WriteConfig(persisted)) return false;
+    Current().battleExpDouble = enabled;
     return true;
 }
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate)
