@@ -93,7 +93,7 @@ int main()
                 "leaving loading restores the exact configured cap, including uncapped");
             Require(Target(fps, true, false) == 0, "desktop loading is uncapped");
             Require(Target(fps, true, true) == (fps == 30 ? 120u : 240u), "portable loading budget");
-            Require(MapPresentInterval(0x200, 0x827B4A4C, fps, true) == 0,
+            Require(MapPresentInterval(0x200, 0x827B4A4C, fps, false, true) == 0,
                 "loading releases guest swap interval without altering vblank frequency");
         }
         constexpr uint64_t second = 1000000000ull;
@@ -111,6 +111,21 @@ int main()
     }
     for (const auto flags : {0u, 0x7Fu, 0x80000000u, 0xFFFF007Fu})
     {
+        for (const auto fps : {30u, 60u, 120u, 0u})
+        {
+            for (const auto interval : {0x100u, 0x200u})
+            {
+                Require(MapPresentInterval(flags | interval, 0x827B4A4C, fps, false, true) == flags,
+                    "loading releases Continue and field intervals, preserving flags");
+                Require(MapPresentInterval(flags | interval, 0x1234, fps, false, true) == (flags | interval),
+                    "loading leaves other callers untouched");
+            }
+            Require(MapPresentInterval(flags | 0x100, 0x827B4A4C, fps, true) == (flags | 0x100),
+                "normal unsynced policy preserves interval-1 after loading");
+            for (const auto interval : {0u, 0x300u, 0x400u, 0xFF00u})
+                Require(MapPresentInterval(flags | interval, 0x827B4A4C, fps, false, true) == (flags | interval),
+                    "loading preserves unobserved intervals");
+        }
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30) == (flags | 0x200), "30 baseline");
         Require(MapPresentInterval(flags | 0x200, 0x827B4A4C, 30, true) == flags, "VSync Off or VRR: 30 is immediate");
         for (const auto fps : {60u, 90u, 120u, 0u, 144u})

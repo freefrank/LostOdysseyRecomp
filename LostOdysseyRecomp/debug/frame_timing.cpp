@@ -140,7 +140,7 @@ PPC_FUNC(sub_827B6AD8)
     // identified game's present interval changes; no clock or delta scaling.
     const auto config = settings::GetConfig();
     const auto mapped = mapInterval ? gpu::MapPresentInterval(requested, uint32_t(ctx.lr), gpu::GetFrameRateTarget(),
-        config.variableRefreshRate || !config.vsync || gpu::loading::Active()) : requested;
+        config.variableRefreshRate || !config.vsync, gpu::loading::Active()) : requested;
     if (mapped != requested) ctx.r7.u64 = (ctx.r7.u64 & 0xFFFFFFFF00000000ull) | mapped;
     if (uint32_t(ctx.lr) == 0x827B4A4C) frame_timing::GuestInterval(requested, ctx.r7.u32);
     __imp__sub_827B6AD8(ctx, base);
