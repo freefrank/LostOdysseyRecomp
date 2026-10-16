@@ -32,10 +32,10 @@ void Write(const char* text)
     Check(bool(output), "write isolated settings.ini");
 }
 
-void CheckFreshProcess(const wchar_t* executable, const char* expected)
+void CheckFreshProcess(const wchar_t* executable, const char* expected, uint32_t menuRate = 1)
 {
     std::wstring command = L"\"" + std::wstring(executable) + L"\" --restore " +
-        (expected[0] == '1' ? L"1" : L"0");
+        (expected[0] == '1' ? L"1" : L"0") + L" " + std::to_wstring(menuRate);
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
@@ -51,11 +51,14 @@ void CheckFreshProcess(const wchar_t* executable, const char* expected)
 
 int wmain(int argc, wchar_t** argv)
 {
-    if (argc == 3 && std::wstring_view(argv[1]) == L"--restore")
+    if (argc == 4 && std::wstring_view(argv[1]) == L"--restore")
     {
+        const auto menuRate = uint32_t(std::wcstoul(argv[3], nullptr, 10));
+        Check(settings::MenuAnimationRate() == menuRate, "cold hook read restores camp-menu transition speed");
         const bool expected = std::wstring_view(argv[2]) == L"1";
         Check(settings::GetConfig().saveAnywhere == expected, "startup config flag");
         Check(debug_menu::SaveAnywhereEnabled() == expected, "startup debug switch");
+        Check(settings::GetConfig().menuAnimationRate == menuRate, "startup camp-menu config field");
         return 0;
     }
     Check(argc == 1, "unexpected arguments");
@@ -63,6 +66,8 @@ int wmain(int argc, wchar_t** argv)
     Check(GetModuleFileNameW(nullptr, executable, DWORD(std::size(executable))) != 0, "own executable path");
     Check(!std::filesystem::exists("settings.ini"), "run in empty isolated directory");
     Check(!settings::GetConfig().saveAnywhere && !debug_menu::SaveAnywhereEnabled(), "missing file defaults off");
+    Check(settings::GetConfig().menuAnimationRate == 1 && settings::MenuAnimationRate() == 1,
+        "missing menu animation preference keeps the original speed");
     Check(settings::GetConfig().shadowResolution == 1 && settings::GetConfig().ambientOcclusion == 0,
         "missing shadow and AO keys retain original rendering");
     CheckFreshProcess(executable, "0");
@@ -73,9 +78,17 @@ int wmain(int argc, wchar_t** argv)
     Write("save_anywhere=2\n");
     Check(!settings::Read().saveAnywhere, "invalid key defaults off");
     Write("no_random_encounters=1\n");
-    Check(settings::Read().noRandomEncounters, "no random encounters read from INI");
+    Check(settings::Read().encounterRate == settings::EncounterRate::None, "legacy no random encounters loads None");
     Write("no_random_encounters=2\n");
-    Check(!settings::Read().noRandomEncounters, "invalid no random encounters value defaults off");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "invalid legacy value defaults Normal");
+    Write("no_random_encounters=1\nencounter_rate=1\nbattle_exp_double=1\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
+        "new encounter rate overrides legacy and EXP loads independently");
+    Write("encounter_rate=0\nno_random_encounters=1\nbattle_exp_double=2\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal && !settings::Read().battleExpDouble,
+        "new key precedence is independent of ordering; invalid EXP defaults off");
+    Write("no_random_encounters=1\nencounter_rate=garbage\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "malformed new rate overrides legacy safely");
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
         "missing fast-forward keys default to off, Hold, 2x");
     Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
@@ -84,6 +97,19 @@ int wmain(int argc, wchar_t** argv)
     Write("fast_forward=2\nfast_forward_mode=7\nfast_forward_rate=5\n");
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
         "invalid fast-forward values default to off, Hold, 2x");
+    Check(settings::Read().menuAnimationRate == 1, "missing menu animation key defaults to Normal");
+    for (const auto rate : settings::MenuAnimationRates)
+    {
+        Write(("menu_animation_rate=" + std::to_string(rate) + "\n").c_str());
+        Check(settings::Read().menuAnimationRate == rate, "supported menu animation multiplier read from INI");
+    }
+    for (const auto* text : {"menu_animation_rate=0\n", "menu_animation_rate=3\n",
+                            "menu_animation_rate=4294967295\n", "menu_animation_rate=-1\n",
+                            "menu_animation_rate=bad\n"})
+    {
+        Write(text);
+        Check(settings::Read().menuAnimationRate == 1, "invalid menu animation multiplier defaults to Normal");
+    }
 
     Write("internal_resolution=540\n");
     Check(settings::Read().internalResolution == 720, "the removed 540 render resolution loads as 720");
@@ -144,13 +170,48 @@ int wmain(int argc, wchar_t** argv)
     CheckFreshProcess(executable, "0");
 
     debug_menu::SetSaveAnywhereEnabled(true);
-    Check(settings::SaveNoRandomEncounters(true) && settings::GetConfig().noRandomEncounters &&
-          Contents().find("no_random_encounters=1\n") != std::string::npos,
-        "no random encounters persists");
+    Check(settings::SaveEncounterRate(settings::EncounterRate::Half) &&
+          settings::GetConfig().encounterRate == settings::EncounterRate::Half &&
+          Contents().find("encounter_rate=1\n") != std::string::npos,
+        "Half encounter rate persists");
+    Check(settings::SaveBattleExpDouble(true) && settings::GetConfig().battleExpDouble &&
+          Contents().find("battle_exp_double=1\n") != std::string::npos,
+        "battle EXP preference persists");
     Check(settings::SaveFastForward(true, 1, 8) && settings::GetConfig().fastForward &&
           settings::GetConfig().fastForwardRate == 8 &&
           Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\n") != std::string::npos,
         "fast-forward choices persist");
+    auto menuPreview = settings::GetConfig();
+    menuPreview.width = 2200;
+    menuPreview.encounterRate = settings::EncounterRate::Normal;
+    menuPreview.battleExpDouble = false;
+    settings::PreviewConfig(menuPreview);
+    for (const auto rate : settings::MenuAnimationRates)
+    {
+        Check(settings::SaveMenuAnimationRate(rate) && settings::GetConfig().menuAnimationRate == rate &&
+              settings::MenuAnimationRate() == rate && settings::Read().menuAnimationRate == rate &&
+              Contents().find("menu_animation_rate=" + std::to_string(rate) + "\n") != std::string::npos,
+            "menu animation multiplier persists and publishes to the hook");
+        Check(settings::Read().width == 1280, "menu animation save does not commit a graphics preview");
+        Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
+            "menu animation save retains encounter rate and battle EXP over a graphics preview");
+        CheckFreshProcess(executable, "1", rate);
+    }
+    Check(settings::SaveEncounterRate(settings::EncounterRate::None) && settings::SaveBattleExpDouble(false) &&
+          settings::Read().menuAnimationRate == 4 && settings::MenuAnimationRate() == 4,
+        "encounter and battle EXP saves retain the persisted and live animation rate");
+    Check(settings::SaveEncounterRate(settings::EncounterRate::Half) && settings::SaveBattleExpDouble(true),
+        "restore encounter and battle EXP preferences for subsequent save checks");
+    Check(std::filesystem::create_directory("settings.ini.tmp"), "block atomic settings temporary file");
+    Check(!settings::SaveMenuAnimationRate(2) && settings::GetConfig().menuAnimationRate == 4 &&
+          settings::MenuAnimationRate() == 4 && settings::Read().menuAnimationRate == 4,
+        "failed menu animation save preserves the previous runtime and disk choice");
+    Check(std::filesystem::remove("settings.ini.tmp"), "remove settings temporary-file blocker");
+    menuPreview = settings::GetConfig();
+    menuPreview.menuAnimationRate = 1;
+    settings::PreviewConfig(menuPreview);
+    Check(settings::GetConfig().menuAnimationRate == 4 && settings::MenuAnimationRate() == 4,
+        "graphics preview retains the debug menu animation choice");
     Check(settings::SaveAudioOutput(settings::AudioOutputSurround) &&
           settings::GetConfig().audioOutput == settings::AudioOutputSurround &&
           Contents().find("audio_output=1\n") != std::string::npos, "audio output persists on its own");
@@ -160,6 +221,7 @@ int wmain(int argc, wchar_t** argv)
     graphics.shadowResolution = 4;
     graphics.ambientOcclusion = 2;
     graphics.vibrationPercent = 30;
+    graphics.menuAnimationRate = 1;
     Check(settings::SaveConfig(graphics), "save ordinary settings");
     Check(settings::Read().shadowResolution == 4 && settings::Read().ambientOcclusion == 2 &&
           Contents().find("shadow_resolution=4\nambient_occlusion=2\n") != std::string::npos,
@@ -167,9 +229,12 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::GetConfig().vibrationPercent == 30 && settings::Read().vibrationPercent == 30 &&
           Contents().find("vibration=30\n") != std::string::npos, "vibration strength roundtrips");
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
-    Check(settings::Read().noRandomEncounters, "ordinary save retains no random encounters");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
+        "ordinary save retains encounter rate and battle EXP");
     Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8,
         "ordinary save retains fast-forward choices");
+    Check(settings::GetConfig().menuAnimationRate == 4 && settings::MenuAnimationRate() == 4 &&
+          settings::Read().menuAnimationRate == 4, "ordinary save retains menu animation speed");
     Check(settings::Read().audioOutput == settings::AudioOutputSurround, "ordinary save retains the audio output choice");
     Check(settings::SaveDebugLanguage(1) && settings::Read().saveAnywhere,
         "debug language save retains save-anywhere preference");
