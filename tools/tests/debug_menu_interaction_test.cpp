@@ -6,11 +6,13 @@
 #include <host_ui/host_ui.h>
 #include <host_ui/rasterizer.h>
 #include <debug/translations.h>
+#include <debug/cheat_overlay.h>
 #include <settings/config.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -28,14 +30,25 @@ struct MockServices
 {
     uint32_t selectedLanguage = 1;
     bool saveLanguageSuccess = true;
+    bool keepAudioPitch = true;
+    bool saveFastForwardSuccess = true;
+    int fastForwardSaveCalls = 0;
+    uint32_t menuAnimationRate = 1;
+    bool saveMenuAnimationSuccess = true;
+    int menuAnimationSaveCalls = 0;
     bool captureRequested = false;
     bool saveAnywhere = false;
     int partySwitchRequests = 0;
-    bool noEncounters = false;
+    settings::EncounterRate encounterRate = settings::EncounterRate::Normal;
+    int encounterRateSaveCalls = 0;
+    bool battleExpDouble = false;
     bool everyStep = false;
     bool allowVictory = true;
     bool victoryRequested = false;
     bool victoryCancelled = false;
+    bool allowSoftReset = true;
+    int softResetRequests = 0;
+    const wchar_t* softResetRefusal = nullptr;
 
     bool allowTeleport = true;
     bool allowSavePos = true;
@@ -60,6 +73,8 @@ Config GetConfig()
 {
     Config c;
     c.debugLanguage = g_mock.selectedLanguage;
+    c.fastForwardKeepAudioPitch = g_mock.keepAudioPitch;
+    c.menuAnimationRate = g_mock.menuAnimationRate;
     return c;
 }
 bool SaveDebugLanguage(uint32_t language)
@@ -68,7 +83,20 @@ bool SaveDebugLanguage(uint32_t language)
     g_mock.selectedLanguage = language;
     return true;
 }
-bool SaveFastForward(bool, uint32_t, uint32_t) { return true; }
+bool SaveFastForward(bool, uint32_t, uint32_t, bool keepAudioPitch)
+{
+    ++g_mock.fastForwardSaveCalls;
+    if (!g_mock.saveFastForwardSuccess) return false;
+    g_mock.keepAudioPitch = keepAudioPitch;
+    return true;
+}
+bool SaveMenuAnimationRate(uint32_t rate)
+{
+    ++g_mock.menuAnimationSaveCalls;
+    if (!g_mock.saveMenuAnimationSuccess) return false;
+    g_mock.menuAnimationRate = rate;
+    return true;
+}
 }
 
 namespace gpu::renderer
@@ -86,8 +114,15 @@ MapInfo GetMapInfo()
 bool SaveAnywhereEnabled() { return g_mock.saveAnywhere; }
 void SetSaveAnywhereEnabled(bool enabled) { g_mock.saveAnywhere = enabled; }
 void RequestPartySwitch() { ++g_mock.partySwitchRequests; }
-bool NoEncountersEnabled() { return g_mock.noEncounters; }
-void SetNoEncountersEnabled(bool enabled) { g_mock.noEncounters = enabled; }
+settings::EncounterRate GetEncounterRate() { return g_mock.encounterRate; }
+void SetEncounterRate(settings::EncounterRate rate)
+{
+    g_mock.encounterRate = rate;
+    g_mock.everyStep = false;
+    ++g_mock.encounterRateSaveCalls;
+}
+bool BattleExpDoubleEnabled() { return g_mock.battleExpDouble; }
+void SetBattleExpDoubleEnabled(bool enabled) { g_mock.battleExpDouble = enabled; }
 bool EncounterEveryStepEnabled() { return g_mock.everyStep; }
 void SetEncounterEveryStepEnabled(bool enabled) { g_mock.everyStep = enabled; }
 
@@ -139,6 +174,18 @@ bool RequestPoiTeleport(uint64_t)
     return true;
 }
 const wchar_t* RequestMapJump(const char*) { return nullptr; }
+
+namespace soft_reset
+{
+bool Request() { ++g_mock.softResetRequests; return g_mock.allowSoftReset; }
+const wchar_t* Status() { return L"Please wait for loading to finish"; }
+const wchar_t* TakeRefusal()
+{
+    const wchar_t* refusal = g_mock.softResetRefusal;
+    g_mock.softResetRefusal = nullptr;
+    return refusal;
+}
+}
 }
 
 int main()
@@ -185,21 +232,52 @@ int main()
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.partySwitchRequests == 1, "Party switch was not requested");
 
-    // Row 4: No Random Encounters toggles both ways
+    // Row 4: Return to title requires an explicit Yes; nested inputs stay modal.
     debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(g_mock.noEncounters, "No random encounters was not enabled");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(!g_mock.noEncounters, "No random encounters was not disabled");
+    Require(g_mock.softResetRequests == 0 && debug_menu::IsOverlayVisible(),
+        "Return to title must default to No and keep confirmation modal");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    Require(g_mock.softResetRequests == 0 && debug_menu::IsOverlayVisible() && host_ui::IsGamePaused(),
+        "Cancelling Return to title must retain the menu without submitting a reset");
+    g_mock.allowSoftReset = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.softResetRequests == 1 && debug_menu::IsOverlayVisible() && host_ui::IsGamePaused(),
+        "Refused Return to title must retain the menu and pause");
+    g_mock.allowSoftReset = true;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.softResetRequests == 2 && !debug_menu::IsOverlayVisible() && !host_ui::IsGamePaused(),
+        "Accepted Return to title must close the menu and resume guest execution");
+    debug_menu::PollResetNotice();
+    Require(!debug_menu::IsOverlayVisible() && !host_ui::IsGamePaused(),
+        "An empty reset notice must not reopen the menu");
+    g_mock.softResetRefusal = L"Please wait for saving to finish";
+    debug_menu::PollResetNotice();
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused() && !g_mock.softResetRefusal,
+        "A guest-thread refusal must be consumed and reopen the menu with the game paused");
+    debug_menu::PollResetNotice();
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused() && g_mock.softResetRequests == 2,
+        "Polling a consumed refusal must retain the menu without another reset request");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab); // Cheats
+    g_mock.softResetRefusal = L"Please wait for loading to finish";
+    debug_menu::PollResetNotice();
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused() && !g_mock.softResetRefusal,
+        "A late refusal on Cheats must retain the paused menu and consume the notice");
+    Require(!g_mock.everyStep && g_mock.encounterRate == settings::EncounterRate::Normal && g_mock.saveAnywhere,
+        "Return to title changed the player's cheat options");
 
-    // Row 5: Encounter Every Step toggles both ways
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(g_mock.everyStep, "Encounter every step was not enabled");
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(!g_mock.everyStep, "Encounter every step was not disabled");
-
-    // Row 6: Win Battle (Success and Rejection)
+    // Late refusal returns to Overview row 4, including from an already-open Cheats page.
+    // Row 5: Win Battle (Success and Rejection)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.victoryRequested, "Victory request not registered");
@@ -207,7 +285,7 @@ int main()
     g_mock.allowVictory = false;
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
 
-    // Row 7: Cancel Victory, the last Overview row
+    // Row 6: Cancel Victory, the last Overview row
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.victoryCancelled, "Cancel victory was not called");
@@ -334,6 +412,150 @@ int main()
     Require(std::wstring(debug_menu::translations::Text(L"Win Current Battle", true)) == L"当前战斗判胜", "Win battle translation to Chinese");
     Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
     Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
+
+    for (const auto& notice : {
+        std::pair{L"Return to title unavailable", L"当前无法返回标题"},
+        std::pair{L"Not available during battle", L"战斗期间不可用"},
+        std::pair{L"Please wait for loading to finish", L"请等待读取完成"},
+        std::pair{L"Please wait for saving to finish", L"请等待保存完成"},
+        std::pair{L"Close the save/load screen first", L"先关闭存档/读档画面"},
+        std::pair{L"Already at the title screen", L"当前已在标题画面"},
+        std::pair{L"Returning to title", L"正在返回标题"}})
+    {
+        Require(std::wstring(debug_menu::translations::Text(notice.first, true)) == notice.second,
+            "Return to title notice lacks its Chinese translation");
+        for (bool zh : {false, true})
+            Require(rasterizer.MeasureWString(debug_menu::translations::Text(notice.first, zh)) <= 700,
+                "Return to title notice exceeds the Overview text width");
+    }
+
+    // Live quick-tool options must fit their production text columns.
+    for (bool zh : {false, true})
+    {
+        for (const auto* key : {L"Return to title", L"Unsaved progress will be lost"})
+            Require(rasterizer.MeasureWString(debug_menu::translations::Text(key, zh)) <= 520,
+                "Return to title confirmation text exceeds the dialog width");
+        Require(rasterizer.MeasureWString(debug_menu::translations::Text(
+            L"Return to title after confirmation; unavailable in battle.", zh)) <= 700,
+            "Return to title help exceeds the Overview text width");
+        for (const auto* label : {debug_menu::cheat_overlay::FastForwardAudioLabel[zh],
+                                 debug_menu::cheat_overlay::EncounterRateLabel[zh],
+                                 debug_menu::cheat_overlay::BattleExpLabel[zh],
+                                 debug_menu::cheat_overlay::MenuAnimationLabel[zh]})
+            Require(rasterizer.MeasureWString(label) <= 170,
+                "Quick-tool label exceeds the Cheats label column");
+        for (const auto& rate : debug_menu::cheat_overlay::EncounterRateValues)
+            Require(rasterizer.MeasureWString(rate[zh]) <= 350,
+                "Encounter rate value exceeds the Cheats value column");
+        for (const auto& mode : debug_menu::cheat_overlay::FastForwardAudioValues)
+            Require(rasterizer.MeasureWString(mode[zh]) <= 350,
+                "Fast-forward audio value exceeds the Cheats value column");
+        for (const auto* value : {L"ON", L"OFF"})
+            Require(rasterizer.MeasureWString(value) <= 350,
+                "Battle EXP value exceeds the Cheats value column");
+        const std::wstring help = debug_menu::cheat_overlay::MenuAnimationHelp[zh];
+        Require(help.find(L'\n') == std::wstring::npos && rasterizer.MeasureWString(help) <= 700,
+            "Menu animations help must fit one complete line");
+        for (const auto rate : settings::MenuAnimationRates)
+            Require(rasterizer.MeasureWString(debug_menu::cheat_overlay::MenuAnimationValue(rate, zh)) <= 350,
+                "Menu animations value exceeds the Cheats value column");
+    }
+    const debug_menu::cheat_overlay::Model quickTools;
+    Require(quickTools.Rows() == 12 &&
+            (int(quickTools.Rows()) - 1) * debug_menu::cheat_overlay::QuickToolRowHeight + 23 <= 296,
+        "Quick-tool rows overlap the help area");
+
+    // Cheats -> Quick tools: the independent live options need no memory-edit
+    // confirmation and remain usable before a playable field has loaded.
+    Require(!debug_menu::cheats::session.Get().enabled, "Memory edits unexpectedly enabled");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    for(int i=0;i<4;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    Require(debug_menu::fast_forward::KeepAudioPitch(), "Fast-forward audio should initially keep pitch");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(!debug_menu::fast_forward::KeepAudioPitch() && !g_mock.keepAudioPitch,
+        "Confirm should select and persist Speed up");
+    g_mock.saveFastForwardSuccess = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(!debug_menu::fast_forward::KeepAudioPitch() && !g_mock.keepAudioPitch,
+        "Failed audio-mode save must preserve the live and persisted choice");
+    g_mock.saveFastForwardSuccess = true;
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(debug_menu::fast_forward::KeepAudioPitch() && g_mock.keepAudioPitch && g_mock.fastForwardSaveCalls == 3,
+        "Left should select Keep pitch and persist once per change");
+    Require(!debug_menu::fast_forward::GetStatus().enabled,
+        "Changing audio mode must not enable fast-forward");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.encounterRate==settings::EncounterRate::Half, "Encounter rate did not select Half");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.encounterRate==settings::EncounterRate::None, "Encounter rate did not select None");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.everyStep && g_mock.encounterRate==settings::EncounterRate::None && g_mock.encounterRateSaveCalls==2,
+        "Every step must enable the session flag and preserve the saved None choice");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(!g_mock.everyStep && g_mock.encounterRate==settings::EncounterRate::Normal,
+        "Encounter rate did not wrap from Every step to Normal and disable Every step");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.everyStep && g_mock.encounterRate==settings::EncounterRate::Normal && g_mock.encounterRateSaveCalls==3,
+        "Backward wrap to Every step must preserve the saved Normal choice");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(!g_mock.everyStep && g_mock.encounterRate==settings::EncounterRate::None,
+        "Left from Every step must select None and disable Every step");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.battleExpDouble && g_mock.encounterRate==settings::EncounterRate::None,
+        "EXP toggle changed encounter rate or failed to enable");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(!g_mock.battleExpDouble && g_mock.encounterRate==settings::EncounterRate::None,
+        "EXP toggle changed encounter rate or failed to disable");
+    Require(!debug_menu::cheats::session.Get().enabled, "Quick options enabled memory edits");
+    debug_menu::RenderOverlay(rasterizer);
+
+    // Cheats / Quick tools / Menu animations: forward/backward cycling persists each choice.
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 7: Menu animations
+    Require(g_mock.menuAnimationRate == 1, "Menu animation speed should initially be Normal");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.menuAnimationRate == 2, "Confirm should select and save Fast");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.menuAnimationRate == 4, "Right should select and save Faster");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.menuAnimationRate == 1, "Right should wrap back to Normal");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.menuAnimationRate == 4 && g_mock.menuAnimationSaveCalls == 4,
+        "Left should wrap to Faster and persist once per change");
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    debug_menu::ToggleOverlay();
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.menuAnimationRate == 1, "Reopening the debug menu must restore its persisted animation speed");
+    g_mock.saveMenuAnimationSuccess = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.menuAnimationRate == 1, "Failed animation save must preserve the persisted choice");
+    g_mock.saveMenuAnimationSuccess = true;
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.menuAnimationRate == 2, "Failed animation save must restore the row's previous choice");
+    Require(g_mock.encounterRate == settings::EncounterRate::None && !g_mock.battleExpDouble &&
+            !debug_menu::cheats::session.Get().enabled,
+        "Menu animation changes affected another quick-tool option or enabled memory edits");
+    debug_menu::RenderOverlay(rasterizer);
+
+    // Both debug-menu languages must show the complete two-line help at the
+    // production 700px content width, without an ellipsis or discarded text.
+    for(bool zh : {false,true}) for(unsigned row : {4u,5u,6u,7u}) {
+        std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
+        Require(!remaining.empty(), "Quick-tool help is missing a language");
+        for(int line=0;!remaining.empty() && line<2;++line) {
+            size_t n=remaining.size();
+            while(n>1 && rasterizer.MeasureWString(remaining.substr(0,n))>700) --n;
+            if(n<remaining.size()) {
+                const auto space=remaining.rfind(L' ',n);
+                if(space!=std::wstring::npos && space>n/2)n=space;
+            }
+            Require(rasterizer.MeasureWString(remaining.substr(0,n))<=700,"Help line exceeds content width");
+            remaining.erase(0,n);
+            while(!remaining.empty() && remaining.front()==L' ')remaining.erase(0,1);
+        }
+        Require(remaining.empty(), "Quick-tool help exceeds the two-line limit");
+    }
 
     // 6. Dismiss overlay with Cancel (B / Esc)
     debug_menu::HandleInput(debug_menu::InputAction::Cancel);

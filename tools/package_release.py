@@ -124,6 +124,8 @@ def main():
         shutil.copy2(ROOT / 'LICENSE', licenses / 'LostOdysseyRecomp.txt')
         shutil.copy2(ROOT / 'thirdparty/miniz-UNLICENSE.txt', licenses / 'miniz-UNLICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/licenses/XeGTAO.txt', licenses / 'XeGTAO.txt')
+        shutil.copy2(ROOT / 'thirdparty/signalsmith-stretch/LICENSE.txt', licenses / 'Signalsmith-Stretch.txt')
+        shutil.copy2(ROOT / 'thirdparty/signalsmith-stretch/signalsmith-linear/LICENSE.txt', licenses / 'Signalsmith-Linear.txt')
         shutil.copy2(ROOT / 'thirdparty/nlohmann-json-LICENSE.txt', licenses / 'nlohmann-json-LICENSE.txt')
         shutil.copy2(ROOT / 'thirdparty/lzokay/LICENSE', licenses / 'lzokay-LICENSE.txt')
         shutil.copy2(ROOT / 'LostOdysseyRecomp/install/FONT-PROVENANCE.md', licenses / 'FONT-PROVENANCE.md')

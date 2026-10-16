@@ -8,6 +8,12 @@ extern "C" PPC_FUNC(__imp__sub_8234B9B8);
 extern "C" PPC_FUNC(__imp__sub_8285FD88);
 extern "C" PPC_FUNC(__imp__sub_8285FDA8);
 
+namespace debug_menu::menu_animations
+{
+// debug/menu_animations.cpp: the save page's animation scope around the original.
+void TickSaveLoadMenu(PPCContext& ctx, uint8_t* base);
+}
+
 namespace
 {
 // The save/load menu state machine (r3 = menu object, stage at +20) keeps
@@ -59,7 +65,7 @@ PPC_FUNC(sub_822ED938)
         timer.f32 = ExpiredTimer;
         PPC_STORE_U32(menu + TimerOffset, timer.u32);
     }
-    __imp__sub_822ED938(ctx, base);
+    debug_menu::menu_animations::TickSaveLoadMenu(ctx, base);
 }
 
 PPC_FUNC(sub_8285FD88)

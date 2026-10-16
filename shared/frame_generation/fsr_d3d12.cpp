@@ -40,9 +40,10 @@ class FsrSession final : public D3D12Session {
     DXGI_FORMAT contextFormat_=DXGI_FORMAT_UNKNOWN;
     bool contextReversed_=false;
     uint64_t frame_=0;
+    UINT lastPresentCount_=0;
+    bool presentCountKnown_=false;
     std::atomic<bool> reset_{true};
     std::atomic<uint32_t> callbackError_{FFX_API_RETURN_OK};
-    std::atomic<uint64_t> generatedDispatches_{0};
     static ffxReturnCode_t Generate(ffxDispatchDescFrameGeneration* params,void* user) {
         auto& self=*static_cast<FsrSession*>(user);
         if (!params || !self.fgContext_) return FFX_API_RETURN_ERROR_PARAMETER;
@@ -51,7 +52,6 @@ class FsrSession final : public D3D12Session {
         params->minMaxLuminance[0]=0; params->minMaxLuminance[1]=1;
         const auto result=self.dispatch_(&self.fgContext_,&params->header);
         if (result!=FFX_API_RETURN_OK) self.callbackError_.store(result,std::memory_order_release);
-        else if (params->numGeneratedFrames) self.generatedDispatches_.fetch_add(1,std::memory_order_relaxed);
         return result;
     }
     bool Configure(bool enabled,std::string& reason) {
@@ -167,11 +167,15 @@ private:
     }
     bool PresentedNative(bool accepted,std::string& reason) override {
         if (!accepted && active_) { reason="FSR FG present rejected"; return false; }
-        // Dispatch callbacks are not physical presents. Keep the counters distinct.
-        if (sourceFrame_%60==0) std::fprintf(stderr,"FSR FG: generation_dispatches=%llu scope=sdk_dispatch_not_display\n",
-            static_cast<unsigned long long>(generatedDispatches_.load(std::memory_order_relaxed)));
         if (callbackError_.load(std::memory_order_acquire)!=FFX_API_RETURN_OK) { reason="FSR FG callback failure"; return false; }
         active_=accepted && prepared_;
+        // The SDK's presenter thread presents the generated and the real frame
+        // on the native swapchain; the proxy forwards GetLastPresentCount to it.
+        UINT count=0;
+        const bool queried=swapchain_ && SUCCEEDED(swapchain_->GetLastPresentCount(&count));
+        const uint32_t delta=queried && presentCountKnown_ && count>=lastPresentCount_ ? count-lastPresentCount_ : 0;
+        if (queried) { lastPresentCount_=count; presentCountKnown_=true; }
+        statistics_.Observe(queried,accepted,active_,delta);
         return true;
     }
     bool ShutdownNative(std::string& reason) override {

@@ -943,6 +943,27 @@ std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack) {
     for (auto& [key, asset] : found) result.push_back(std::move(asset));
     return result;
 }
+std::vector<ResolvedAsset> ListFonts(const LanguagePack& pack) {
+    const auto snapshot = Current();
+    if (!snapshot->enabled || !ContainedFile(snapshot->root, pack.folder / "language.ini")) return {};
+    const auto folder = pack.folder / "fonts";
+    std::map<std::string, ResolvedAsset> found;
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(folder, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        if (!it->is_regular_file(entryError) || Lower(Utf8(it->path().extension())) != ".lofont") continue;
+        // fonts/<package member path>/<font object>.lofont
+        const auto package = CanonicalTextKey(Utf8(it->path().parent_path().lexically_relative(folder)));
+        const auto font = Utf8(it->path().stem());
+        if (package.empty() || font.empty() || !ContainedFile(folder, it->path())) continue;
+        const auto key = package + "#" + font;
+        found.emplace(key, ResolvedAsset{{AssetKind::Font, key}, it->path(), pack.id, 0});
+    }
+    std::vector<ResolvedAsset> result;
+    for (auto& [key, asset] : found) result.push_back(std::move(asset));
+    return result;
+}
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};
     auto key = CanonicalKey(request.id.kind, request.id.key);

@@ -11,6 +11,7 @@
 #include <gpu/fsr_upscaler.h>
 #include <gpu/xess_upscaler.h>
 #include <gpu/present_capture.h>
+#include <gpu/loading_pacing.h>
 #include <os/capture_archive.h>
 #include <settings/config.h>
 #include <settings/restart.h>
@@ -25,6 +26,7 @@ std::unique_ptr<plume::RenderTexture> sourceOwner;
 plume::RenderTexture* source = nullptr;
 uint32_t sourceWidth = 0, sourceHeight = 0, sourceFormat = 0;
 bool sceneComposite = false;
+std::atomic<uint64_t> presentGateTimeNs{0};
 void Check(bool good, const char* message) { if (!good) throw std::runtime_error(message); }
 template<class F> auto Owner(F fn) {
     using R = std::invoke_result_t<F>;
@@ -36,7 +38,21 @@ template<class F> auto Owner(F fn) {
 }
 }
 
+namespace gpu::loading {
+// Freeze only the clock passed to the real gate; acquisition, submission and
+// presentation below still execute through production video.cpp and Plume.
+class FixturePresentGate {
+    PresentGate gate;
+public:
+    bool Accept(bool loading, uint64_t nowNs, uint32_t refreshHz) {
+        const auto fixed = fixture::presentGateTimeNs.load(std::memory_order_relaxed);
+        return gate.Accept(loading, fixed ? fixed : nowNs, refreshHz);
+    }
+};
+}
+#define PresentGate FixturePresentGate
 #include "../../LostOdysseyRecomp/gpu/video.cpp"
+#undef PresentGate
 
 namespace settings {
 Config GetConfig() { std::lock_guard lock(fixture::mutex); return fixture::config; }
@@ -52,6 +68,13 @@ HdrCalibration GetHdrCalibration() { return {}; }
 BrightnessCalibration GetBrightnessCalibration() { return {}; }
 bool SaveDisplayChoice(const std::string&, uint32_t) { return false; }
 bool SaveGraphicsBackend(GraphicsBackend) { return false; }
+void SetNeuralRenderingPreviewAvailable(bool) {}
+NeuralRenderingTuning GetNeuralRenderingTuning() { return {}; }
+namespace title_entry {
+bool HintShown() { return false; }
+float HintOpacity() { return 0.0f; }
+const Hint* DrawHint(uint32_t, uint32_t) { return nullptr; }
+}
 }
 namespace hid {
 void Init() {}
@@ -117,6 +140,23 @@ bool ReadbackResolvedSurface(uint32_t, std::vector<uint32_t>&, uint32_t&, uint32
 std::vector<uint32_t> GetResolvedAddresses() { return {}; }
 void DumpRenderTargets(const char*) {}
 }
+namespace gpu::dred {
+void ConfigureBeforeDeviceCreation(bool) {}
+bool Enabled() { return false; }
+void LogRemovedDevice(ID3D12Device*) {}
+}
+namespace modding::text_overlay {
+void StopPrebuild() {}
+}
+namespace ui::achievement_overlay {
+const Image* Update(uint32_t, uint32_t) { return nullptr; }
+}
+namespace ui::performance_overlay {
+bool Frame(uint32_t, std::chrono::steady_clock::time_point, uint32_t, uint32_t) { return false; }
+void Refresh(const Sources&) {}
+const Image& Current() { static const Image empty; return empty; }
+void Stop() {}
+}
 namespace gpu::upscaling {
 void PublishDeviceCapability(BackendDeviceSnapshot) {}
 BackendDeviceSnapshot PublishedDeviceCapability() { return {}; }
@@ -138,6 +178,9 @@ void Controller::ReleaseCompletedThrough(uint64_t) {}
 void Controller::AbandonUsesAfterDeviceLoss() {}
 void Controller::ShutdownAfterGpuDrain() {}
 const char* ProbeStateName(ProbeState) { return "stub"; }
+void Controller::ReleaseNeuralRenderingPreview() {}
+void SetLogSink(LogSink) {}
+void SetComputeShaderCompiler(ComputeShaderCompiler) {}
 }
 
 namespace {
@@ -322,6 +365,54 @@ void RunClose(const std::filesystem::path& output) {
     std::cout << "PASS present capture close\n";
 }
 
+void RunLoading(const std::string& backendName) {
+    struct Reset {
+        ~Reset() {
+            gpu::loading::SetLoading(false);
+            fixture::presentGateTimeNs = 0;
+        }
+    } reset;
+    const auto normal = PresentMarked(1, 1, RGBA(220, 0, 0), false);
+    fixture::Check(normal.available, "normal presentation before loading failed");
+    const bool normalRequest = gpu::video::g_presentationDisplay.nativeVsyncRequested;
+    const bool normalReported = gpu::video::g_swapChain->isVsyncEnabled();
+    fixture::Check(normalRequest, "normal presentation did not request vsync");
+
+    gpu::loading::SetLoading(true);
+    const auto before = gpu::video::CompletedPresentCount();
+    // A non-blocking Vulkan acquire may legitimately find no image. Give the
+    // real WSI further eligible attempts without imposing a GPU-time bound.
+    for (unsigned attempt = 0; attempt < 120 && gpu::video::CompletedPresentCount() == before; ++attempt) {
+        fixture::presentGateTimeNs = uint64_t(attempt + 1) * 1000000000ull;
+        gpu::video::PresentFrontbuffer(0x1000, fixture::sourceWidth, fixture::sourceHeight, 0);
+        std::this_thread::yield();
+    }
+    fixture::Check(gpu::video::CompletedPresentCount() > before, "loading never presented a frame");
+    fixture::Check(!gpu::video::g_presentationDisplay.nativeVsyncRequested, "loading requested host vsync");
+    const bool loadingReported = gpu::video::g_swapChain->isVsyncEnabled();
+
+    const auto accepted = gpu::video::CompletedPresentCount();
+    const auto guestFrames = gpu::video::g_guestFrames.load(std::memory_order_relaxed);
+    for (unsigned swap = 0; swap < 100; ++swap)
+        gpu::video::PresentFrontbuffer(0x1000, fixture::sourceWidth, fixture::sourceHeight, 0);
+    fixture::Check(gpu::video::CompletedPresentCount() == accepted, "excess loading swaps presented");
+    fixture::Check(gpu::video::g_guestFrames.load(std::memory_order_relaxed) == guestFrames + 100,
+        "skipped host presents swallowed guest swaps");
+
+    // Keep the same frozen instant: ending the load must bypass the gate and
+    // restore the player's normal pacing request on this very first swap.
+    gpu::loading::SetLoading(false);
+    gpu::video::PresentFrontbuffer(0x1000, fixture::sourceWidth, fixture::sourceHeight, 0);
+    fixture::Check(gpu::video::CompletedPresentCount() == accepted + 1, "first normal present was not restored");
+    fixture::Check(gpu::video::g_presentationDisplay.nativeVsyncRequested == normalRequest,
+        "normal vsync request was not restored");
+    fixture::Check(gpu::video::g_swapChain->isVsyncEnabled() == normalReported,
+        "normal reported vsync was not restored");
+    std::cout << "PASS present capture loading " << backendName
+        << " (100 host presents skipped, reported vsync " << normalReported << " -> "
+        << loadingReported << " -> " << normalReported << ")\n";
+}
+
 int main(int argc, char** argv) {
     std::string backendName = "d3d12", testCase = "three-frame", output = "out/present-capture";
     for (int i = 1; i < argc; ++i) {
@@ -335,6 +426,7 @@ int main(int argc, char** argv) {
             RunClose(output);
             return 0;
         }
+        if (testCase == "loading") _putenv_s("LO_FAST_LOADING", "1");
         const auto cache = std::filesystem::path(output) / "shader-cache";
         std::filesystem::create_directories(cache);
         _putenv_s("LO_BACKGROUND", "1");
@@ -361,7 +453,9 @@ int main(int argc, char** argv) {
         std::cout << "swapchain " << swapW << "x" << swapH << " guest " << fixture::sourceWidth << "x" << fixture::sourceHeight
             << " backend " << backendName << "\n";
 
-        if (testCase == "failure") {
+        if (testCase == "loading") {
+            RunLoading(backendName);
+        } else if (testCase == "failure") {
             const auto maps = gpu::video::PresentCaptureMapCount();
             const auto allocs = gpu::video::PresentCaptureAllocationCount();
             const auto copies = gpu::video::PresentCaptureCopyCount();

@@ -30,6 +30,20 @@
 
 </div>
 
+## 目录
+
+- [开始游戏](#开始游戏)
+- [功能](#功能)
+- [操作按键](#操作按键)
+- [调试菜单](#调试菜单)
+- [文件与目录](#文件与目录)
+- [命令行参数](#命令行参数)
+- [反馈问题](#反馈问题)
+- [实机画面](#实机画面)
+- [开发](#开发)
+- [赞助者](#赞助者)
+- [致谢与游戏数据](#致谢与游戏数据)
+
 ## 开始游戏
 
 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载对应平台的安装包。
@@ -59,7 +73,7 @@
 - **Mali 设备：** 同样会先打开 **GPU driver** 页面，在那里下载推荐的 PanVK 驱动；需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU。
 - **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。
 - **更新：** 新 APK 直接覆盖安装，存档保留。
-- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。
+- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。其中 **Keep saves in the game folder（将存档保存在游戏文件夹中）** 选项可把存档放到 `<游戏文件夹>/save/`，方便与电脑同步；默认关闭，下次启动应用时生效。
 - **日志：** **CTRL → Saves and logs → Export logs** 可以把日志导出成 ZIP，用于反馈问题（[详见](docs/INSTALLING.zh-CN.md#android-logs)）。
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
@@ -83,7 +97,7 @@
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。过场对白有单独的音量。 |
 | 输入 | 手柄、键盘和震动；Android 上有触摸按键。 |
-| Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包，以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)，其中有 [4x 高清纹理包](docs/wiki/Modding.md#4x-hd-texture-pack)的下载和安装方法。 |
+| Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包（可补充游戏字体缺少的字母），以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。现成的 Mod（例如 4x 高清纹理包）在 [Discord](https://discord.gg/z2yPct6z2w) 的 **#mods** 论坛里分享。 |
 | 成就 | 游戏的 36 个 Xbox 360 成就，解锁时显示 Xbox 360 风格的通知并播放提示音。**设置 → 系统 → 成就**列出全部成就和解锁日期，也可以把通知设为开启、静音或关闭。在 `settings.ini` 旁边放一个 `achievement.wav` 可以替换提示音。 |
 | 调试菜单 | 渲染捕获、随时存档、遇敌开关、传送、快进和修改。见[调试菜单](#调试菜单)。 |
 
@@ -120,11 +134,11 @@
 
 ### Overview：捕获与游戏操作
 
-**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**No Random Encounters（不遇敌）**、**Encounter Every Step（一步一遇敌）**，以及直接赢下当前战斗的操作。
+**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Return to title（返回标题，仅限战斗外）**，以及直接赢下当前战斗的操作。
 
 - **Capture render state：** 确认后关闭菜单。归档保存在 `captures/`，内含截图、渲染数据和日志，分享前请检查内容。
 - **Save Anywhere** 会开放原作的 **System → Save（系统 → 存档）**。
-- **No Random Encounters** 停止场景中的随机战斗，剧情战斗照常发生。**Encounter Every Step** 让每走一步都遇敌。
+- **Return to title** 会在确认后返回标题画面，未保存的进度将丢失。从开始切入战斗、胜利及结算画面，直到恢复场景或世界地图控制前均不可用。请先关闭存档/读档画面，并等待保存或读取完成后再使用。
 
 ### Teleport：当前地图内移动
 
@@ -136,14 +150,20 @@
 
 | 类别 | 功能 |
 | :--- | :--- |
-| **Quick tools** | 快进、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
+| **Quick tools** | 快进、**Encounter rate（遇敌率）**、**Battle EXP ×2（战斗经验 ×2）**、菜单动画速度、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
 | **Characters** | HP／MP、EXP（0–99，不是等级）和技能。 |
 | **Inventory** | 把物品和素材设为 1、10、50 或 99，或填满整类。在游戏背包里整理一次即可刷新显示。 |
 | **Equipment** | 修改武器、指环和饰品。 |
 | **Party** | 修改队伍成员、前后排和场景角色。 |
 | **Developer** | 原版 **EDIT MENU** 入口：开启后关闭 F1，按 **LT+RT**。 |
 
-**快进**倍率 2×–8×，按住 **LT**（**Hold**）或按一下切换（**Toggle**）。
+**Menu animations（菜单动画）**可把营地菜单打开、关闭和子菜单切换动画设为**正常（1×）**、**快速（2×）**或**更快（4×）**。选择会保存，默认正常。游戏运行和音频保持原速。
+
+**快进**倍率 2×–8×，按住 **LT**（**Hold**）或按一下切换（**Toggle**）。**变速音频**默认**保持音调**，也可选择**随速度升调**。选择会保存。
+
+**遇敌率**可选**正常**、**减半**、**关闭**或**一步一遇敌**。减半会跳过每隔一次的随机遇敌；一步一遇敌仅在有随机遇敌的区域生效。剧情战斗和 Boss 不受影响。一步一遇敌用于临时测试，重启后恢复最后选择的正常／减半／关闭。**战斗经验 ×2** 可单独开启并保存，使战斗获胜所得的经验加倍。
+
+经验按游戏原有的等级差规则计算后再翻倍，保留原有的单场上限。SP 和金币保持原样。
 
 **内存修改**默认关闭。先备份存档，开启 **Allow memory edits**，选择操作并确认 **Yes**，关闭 F1 后生效。
 
@@ -157,7 +177,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | Linux AppImage | `~/.config/lost-odyssey-recomp/` | `~/.local/share/lost-odyssey-recomp/` | `~/.local/state/lost-odyssey-recomp/` |
 | Linux Flatpak | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/config/lost-odyssey-recomp/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/data/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/.local/state/lost-odyssey-recomp/` |
 | macOS 应用 | `~/Library/Application Support/LostOdysseyRecomp/` | 同左 | `~/Library/Logs/LostOdysseyRecomp/` |
-| Android | 应用内部 | 应用内部；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
+| Android | 应用内部 | 存档默认在应用内部，可改为 `<游戏文件夹>/save/`；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` 或所选文件夹 | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
 
 | 内容 | 位置 | 说明 |
 | :--- | :--- | :--- |
@@ -192,6 +212,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | Windows 上为 `d3d12` 或 `vulkan`。 |
 | `LO_FPS` | 帧率上限；`0` 表示不限制。 |
+| `LO_FAST_LOADING=0` | 关闭加载时临时提高帧率上限。Android 和检测到电池的设备在加载时最多使用所选上限的 4 倍，最高 240 FPS；所选帧率不限制时也使用 240 FPS。 |
 | `LO_NO_UPDATE=1` | 跳过更新检查。 |
 | `LO_MODS=0` | 关闭 Mod。 |
 | `LO_AUDIO_MUTE=1` | 静音。 |

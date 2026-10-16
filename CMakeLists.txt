@@ -9,7 +9,7 @@ if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS LO_MINIMUM_MACOS)
     message(STATUS "Raising CMAKE_OSX_DEPLOYMENT_TARGET from ${CMAKE_OSX_DEPLOYMENT_TARGET} to ${LO_MINIMUM_MACOS}")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "${LO_MINIMUM_MACOS}" CACHE STRING "Minimum macOS deployment target" FORCE)
 endif()
-project(LostOdysseyRecomp VERSION 0.9.52 LANGUAGES C CXX)
+project(LostOdysseyRecomp VERSION 0.9.65 LANGUAGES C CXX)
 include(GNUInstallDirs)
 # Source version, not a release/commit or clean-checkout assertion.
 # Capture before nested projects can replace PROJECT_VERSION in their scope.
@@ -65,7 +65,13 @@ option(LO_BUILD_TOOLS "Build XenonRecomp / XenosRecomp (use tools/build_tools.ba
 option(LO_BUILD_RECOMP_LIB "Build the recompiled game code library from LostOdysseyRecompLib/ppc" ON)
 option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
 option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
+option(LO_BUILD_AUDIO_TESTS "Build the game-free fast-forward audio fixture" ON)
 option(LO_BUILD_ANDROID_RUNTIME "Enable the Android game runtime shared library" OFF)
+
+if(LO_BUILD_AUDIO_TESTS AND NOT CMAKE_CROSSCOMPILING)
+    enable_testing()
+    add_subdirectory(tools/tests/fast_forward_audio)
+endif()
 
 if(ANDROID)
     if(NOT LO_TARGET_ISA STREQUAL "aarch64")
@@ -178,8 +184,10 @@ if(LO_BUILD_MOD_TESTS)
         add_executable(LoAssetExport
             tools/tests/asset_export_cli.cpp
             LostOdysseyRecomp/modding/asset_export.cpp
+            LostOdysseyRecomp/modding/font_patch.cpp
             LostOdysseyRecomp/modding/gltf_writer.cpp
             LostOdysseyRecomp/modding/mod_api.cpp
+            LostOdysseyRecomp/modding/model_preview.cpp
             LostOdysseyRecomp/modding/text_format.cpp
             LostOdysseyRecomp/modding/text_menu.cpp
             thirdparty/lzokay/lzokay.cpp

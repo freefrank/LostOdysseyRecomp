@@ -17,6 +17,7 @@ extern "C" PPC_FUNC(__imp__sub_82309408);
 extern "C" PPC_FUNC(__imp__sub_8230B308);
 extern "C" PPC_FUNC(__imp__sub_8230D6B8);
 extern "C" PPC_FUNC(__imp__sub_8230EC88);
+extern "C" PPC_FUNC(__imp__sub_8233B380);
 extern "C" PPC_FUNC(__imp__sub_823E4B50);
 extern "C" PPC_FUNC(__imp__sub_823EFC08);
 
@@ -117,6 +118,7 @@ struct CanvasColumns
 
 thread_local uint32_t topAnchoredMinimapCanvas = 0;
 thread_local uint32_t fullMenuCanvas = 0;
+thread_local uint32_t fullOutputCanvas = 0;
 
 CanvasColumns ComposeCanvasColumns(uint32_t matrix, const gpu::aspect_layout::Scale scale, bool topAnchored)
 {
@@ -247,7 +249,7 @@ PPC_FUNC(sub_82303990)
     const uint32_t canvas = ctx.r3.u32;
     uint32_t matrix = 0;
     const auto scale = OutputScale();
-    const bool primary = !scale.IsIdentity() && IsPrimaryCanvas(canvas, matrix);
+    const bool primary = canvas != fullOutputCanvas && !scale.IsIdentity() && IsPrimaryCanvas(canvas, matrix);
     CanvasColumns original;
     std::array<uint32_t, 4> scissor{};
     if (primary)
@@ -337,6 +339,27 @@ void DrawMenuBars(const PPCContext& ctx, uint8_t* base, uint32_t canvas)
     for (uint32_t i = 0; i < originalScissor.size(); ++i)
         StoreWord(canvas + 0x2C + i * 4, originalScissor[i]);
 }
+}
+
+// Native screen-effect type 3 draws the view's colour/alpha fade. It must cover
+// the whole scene rather than receive the HUD's centred 16:9 fit. Flush both
+// boundaries so a deferred Canvas batch cannot mix the fade with fitted UI.
+PPC_FUNC(sub_8233B380)
+{
+    const uint32_t canvas = ctx.r4.u32;
+    uint32_t matrix = 0;
+    if (ctx.r8.u32 != 3 || ctx.f1.f64 == 0.0 || OutputScale().IsIdentity() || !IsPrimaryCanvas(canvas, matrix))
+    {
+        __imp__sub_8233B380(ctx, base);
+        return;
+    }
+    FlushCanvas(ctx, base, canvas);
+    const PPCContext saved = ctx;
+    const uint32_t previous = fullOutputCanvas;
+    fullOutputCanvas = canvas;
+    __imp__sub_8233B380(ctx, base);
+    FlushCanvas(saved, base, canvas);
+    fullOutputCanvas = previous;
 }
 
 // Native field minimap draw: r3 is the minimap manager and r4 is UCanvas.

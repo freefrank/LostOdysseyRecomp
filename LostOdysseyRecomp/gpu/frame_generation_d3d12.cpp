@@ -71,8 +71,8 @@ void D3D12Bridge::PrepareAfterHostDrain(const CompositeHandoff& handoff,
     std::string reason;
     Require(!recording_, "prepare overlaps previous command recording");
     const bool drained = session_->Drain(reason); Require(drained, reason);
-    // video already waited the ordinary present fence; Drain additionally
-    // establishes completion of SDK-owned asynchronous input reads.
+    // video already waited the ordinary present fence; Drain checks the FG
+    // fence signaled after the previous accepted present.
     depth_->ReleaseAfterInputDrain();
     const auto reject = [&] {
         const bool off = session_->Disable(reason); Require(off, reason);

@@ -79,6 +79,7 @@
 #include "shader/portable_shader_pack.h"
 #include "shader/portable_shader_contract.h"
 #include "shader/portable_shader_pack_location.h"
+#include "shader_preparation_request.h"
 #include "shader/resource_scan.h"
 #include "shader/source_store.h"
 #include "shader/resource_xex.h"
@@ -480,6 +481,11 @@ namespace gpu::renderer
             uint64_t nextFullScanFrame = 0;
             uint32_t writeGeneration = 0;        // guest_writes generation at the last look
             uint64_t replacementPending = 0; // fingerprint of a mod replacement still being read
+            // A texture mods can replace (eligible by shape and format, whether or not
+            // a mod has it now), made in this textureModsEpoch: re-created at its next
+            // lookup after the mod list changes in game.
+            bool modReplaceable = false;
+            uint32_t modsEpoch = 0;
 
             // The source remains BC3. Only a verified controller atlas owns an
             // optional, single-mip RGBA PlayStation child; retirement of the
@@ -868,6 +874,7 @@ namespace gpu::renderer
             std::unordered_set<PipelineKey, PipelineKeyHash> preparedPipelineKeys, usedPreparedPipelineKeys;
             std::future<gpu::pipeline_cache::WriteResult> pipelineWrite;
             bool pipelineCacheEnabled = false, pipelineRecipesDirty = false;
+            bool reprepareRequested = false;
             uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::mutex pipelineRecipeMutex;
             // Scene being drawn (debug_menu::CurrentSceneTag), checked once a frame.
@@ -1755,6 +1762,7 @@ namespace gpu::renderer
                 uint32_t format = 0, width = 0, height = 0;
                 bool blockCompressed = true;
                 std::chrono::steady_clock::time_point queued;
+                uint32_t epoch = 0; // textureModsEpoch when queued; an older read is dropped
                 std::optional<modding::TextureData> data;
                 std::string error;
                 bool bcSkipped = false;
@@ -1799,6 +1807,11 @@ namespace gpu::renderer
             static constexpr uint64_t kReplacementReadyFrames = 300;
             struct ReadyReplacement { modding::TextureData data; uint32_t format, width, height; uint64_t frame; };
             std::unordered_set<uint64_t> replacementsQueued, replacementsMissing;
+            // modding::Generation() as last seen: a change (the Mods page saved a new
+            // list, modding::Reload) starts a new epoch, and replaceable textures made
+            // in an older one are made again with the new mods.
+            uint64_t textureModsGeneration = ~0ull;
+            uint32_t textureModsEpoch = 0;
             std::unordered_map<uint64_t, ReadyReplacement> replacementsReady;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
             bool controllerAtlasPlayStationFamily = false;
@@ -5778,7 +5791,20 @@ void main()
                 scenePrefetchEnabled = !getenv("LO_NO_PIPELINE_PREFETCH");
                 // Learning remains enabled when eager creation is skipped.
                 if (getenv("LO_NO_PIPELINE_PREPARE") || getenv("LO_NO_SHADER_PREPARE") ||
-                    settings::GetConfig().skipShaderPrebuild || video::ShaderPreparationSkipped()) return;
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested) ||
+                    video::ShaderPreparationSkipped()) return;
+                if (reprepareRequested) {
+                    reprepareRequested = gpu::shader_preparation::ConsumeNextStart();
+                    if (reprepareRequested) {
+                        // The installed shader pack or startup bundle already holds the
+                        // compiled binaries. Warm every known recipe with those inputs.
+                        synchronousPreparation = true;
+                        LOG_INFO("renderer: full known pipeline preparation requested from Settings");
+                    } else {
+                        LOG_WARNING("renderer: shader preparation request could not be consumed; using normal startup policy");
+                        if (settings::GetConfig().skipShaderPrebuild) return;
+                    }
+                }
                 if (!synchronousPreparation) {
                     QueueStartupPipelines(driverCache);
                     return;
@@ -5791,7 +5817,7 @@ void main()
                     std::vector<PipelineKey> wanted;
                     std::vector<std::pair<bool, uint64_t>> load;
                     for (const auto& [key, entry] : knownRecipes) {
-                        if (!PrebuildAtStartup(entry)) { ++deferred; continue; }
+                        if (!reprepareRequested && !PrebuildAtStartup(entry)) { ++deferred; continue; }
                         Shader* vs = nullptr;
                         Shader* ps = nullptr;
                         if (FindRecipeShaders(key, vs, ps, &load) == RecipeShaderState::Unavailable) { ++missingShaders; continue; }
@@ -6735,6 +6761,7 @@ void main()
 
             void PrepareKnownShaders()
             {
+                reprepareRequested = gpu::shader_preparation::PendingNextStart();
                 video::ResetShaderPreparationSkip();
                 // A process killed while writing a startup bundle leaves its temporary file.
                 if (!shaderCacheDir.empty())
@@ -6756,7 +6783,8 @@ void main()
                     ResetTimers();
                     return;
                 }
-                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") || settings::GetConfig().skipShaderPrebuild) {
+                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") ||
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested)) {
                     LOG_INFO("renderer: shader preparation skipped by configuration or environment");
                     return;
                 }
@@ -8078,7 +8106,8 @@ void main()
                     {
                         std::lock_guard lock(reader.mutex);
                         // Without device BC (textureBcFallback) DDS payloads stay unread.
-                        reader.queue.push_back({fingerprint, format, width, height, !textureBcFallback, std::chrono::steady_clock::now()});
+                        reader.queue.push_back({fingerprint, format, width, height, !textureBcFallback, std::chrono::steady_clock::now(),
+                            textureModsEpoch});
                     }
                     if (!reader.thread.joinable()) reader.thread = std::thread([&reader] { reader.Run(); });
                     reader.wake.notify_one();
@@ -8109,10 +8138,28 @@ void main()
                     std::lock_guard lock(replacementReader.mutex);
                     done.swap(replacementReader.done);
                 }
+                if (const uint64_t generation = modding::Generation(); generation != textureModsGeneration)
+                {
+                    // The mods changed in game: what was found missing, failed or read
+                    // belongs to the old list.
+                    if (textureModsGeneration != ~0ull)
+                    {
+                        ++textureModsEpoch;
+                        replacementsQueued.clear();
+                        replacementsMissing.clear();
+                        replacementsReady.clear();
+                        textureReplacementFailures.clear();
+                        textureReplacementsLogged.clear();
+                        textureBcReplacementWarned = false;
+                        LOG_INFO("[mods] texture replacements: the mod list changed; replaceable textures are made again");
+                    }
+                    textureModsGeneration = generation;
+                }
                 const auto now = std::chrono::steady_clock::now();
                 auto& cost = replacementCost;
                 for (auto& read : done)
                 {
+                    if (read.epoch != textureModsEpoch) continue;
                     replacementsQueued.erase(read.fingerprint);
                     if (!read.data)
                     {
@@ -8442,8 +8489,10 @@ void main()
                 {
                     recentTexture = {key, it, texturesVersion};
                     HostTexture* cached = it->second.get();
-                    // An original whose mod replacement was read since: re-create it.
-                    const bool replacementArrived = cached->replacementPending && ReplacementArrived(*cached);
+                    // An original whose mod replacement was read since, or any replaceable
+                    // texture made before the mod list changed: re-create it.
+                    const bool replacementArrived = (cached->replacementPending && ReplacementArrived(*cached)) ||
+                        (cached->modReplaceable && cached->modsEpoch != textureModsEpoch);
                     // Guest bytes get another look only when they can have changed
                     // since the last one: in every frame for an untiled texture (its
                     // layout is the CPU's; the movie decoder rewrites its linear planes
@@ -8581,10 +8630,10 @@ void main()
                 // Mod replacements (docs/wiki/Modding-API.md, Runtime textures) match
                 // tiled 2D base levels by fingerprint. Resolves returned earlier;
                 // packed-tail and partial-block base levels never qualify.
-                const bool replaceable = dimension == 1 && tiled && base != 0 && sourceMip == 0 &&
+                const bool modReplaceable = dimension == 1 && tiled && base != 0 && sourceMip == 0 &&
                     (format == 2 || format == 6 || format == 18 || format == 19 || format == 20) &&
-                    std::min(width, height) > 16 && width % fi.blockWidth == 0 && height % fi.blockHeight == 0 &&
-                    modding::HasTextureReplacements();
+                    std::min(width, height) > 16 && width % fi.blockWidth == 0 && height % fi.blockHeight == 0;
+                const bool replaceable = modReplaceable && modding::HasTextureReplacements();
                 const bool logFingerprint = textureFingerprintLog && dimension == 1 && !fi.convertToRgba8;
                 const size_t baseRowBytes = size_t(blocksX) * fi.bytesPerBlock;
                 const uint64_t fingerprint = replaceable || logFingerprint
@@ -8612,6 +8661,8 @@ void main()
                 tex->guestAddress = sourceAddress;
                 tex->guestBytes = uint32_t(guestBytes);
                 tex->checkedFrame = frame;
+                tex->modReplaceable = modReplaceable;
+                tex->modsEpoch = textureModsEpoch;
                 // writeGeneration stays 0: a file read that landed before or during
                 // this upload makes the next bind look at the bytes once more.
                 if (controller_atlas::Candidate(dimension, format, originalWidth, originalHeight,
@@ -14650,8 +14701,12 @@ void main()
 
     void Draw(const DrawInfo& info)
     {
-        if (g_renderer)
+        if (g_renderer) {
+            // Includes resolve packets (RB_MODECONTROL == 6), so a native menu
+            // cannot overwrite the frontbuffer before the opening snapshot.
+            video::CaptureCalibrationSceneBeforeDraw();
             g_renderer->Draw(info);
+        }
     }
 
     bool OcclusionQueryEvent(uint32_t physicalAddress)

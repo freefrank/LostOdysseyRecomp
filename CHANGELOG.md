@@ -8,6 +8,54 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
+- Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
+- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
+- Cheats → Encounter rate offers Normal, Half, None or the temporary Every step mode, alongside a separate Battle EXP ×2 switch.
+- Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
+- The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
+- Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
+- Areas and battles load faster with a higher frame-rate limit during loading.
+
+### 简体中文
+
+- 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。
+- Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
+- 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
+- 调试菜单的 Cheats → 遇敌率可选正常、减半、关闭或临时的一步一遇敌模式，另有独立的战斗经验 ×2 开关。
+- 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
+- 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
+- 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
+- 加载地图和战斗时临时提高帧率上限，缩短等待时间。
+
+## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
+
+### English
+
+- Language packs can add missing letters to the Japanese fonts too, including the dream fonts on uncompressed pages.
+- Live mod reload keeps the active and open files safe while preparing another configuration, and edited translated text reloads from disk.
+- Memory used by a finished replacement cutscene is now released shortly after playback ends.
+- Android: Settings → System → Import discs & DLC now opens the Android importer so you can import discs and DLC (#559).
+- Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
+- The HDR and brightness calibration previews show the game scene from just before the menu opened, and the game no longer keeps copies of the screen in graphics memory while you play; turning MetalFX off also frees its memory.
+- Android: on Adreno 650 devices such as the Retroid Pocket 5, the game no longer freezes and closes during battles with Turnip drivers (#558).
+- Game folders imported before v0.9.57 store some disc files twice. At startup the game now offers to free that space, about 5.8 GB for all four discs, where the drive supports it.
+
+### 简体中文
+
+- 语言包也可以给日文字体补充缺少的字母，包括使用未压缩页面的梦境字体。
+- 实时重载 Mod 时，准备另一套配置不会删除当前或仍在使用的文件，修改后的译文也会从磁盘重新加载。
+- 替换过场视频播放结束后会及时释放所占内存。
+- Android：设置 → 系统 →“导入光盘和 DLC”现在会打开 Android 导入器，可导入光盘和 DLC（#559）。
+- 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
+- HDR 和亮度校准的预览显示打开菜单前那一刻的游戏画面，游玩时不再在显存里保留画面副本；关闭 MetalFX 后也会释放它占用的显存。
+- Android：在 Retroid Pocket 5 等 Adreno 650 设备上使用 Turnip 驱动时，游戏不再在战斗中卡死退出（#558）。
+- v0.9.57 之前导入的游戏目录里有些光盘文件存了两份。现在启动时会提示释放这部分空间（四张光盘约 5.8 GB），前提是所在磁盘支持。
+
+## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
+
+### English
+
 - Android: the sound comes back after you switch to another app or turn the screen off and return to the game (#491).
 - Android: when the screen briefly turns upright as you return to the game, the game no longer rebuilds its graphics, which could leave black blocks over characters and scenery (#492).
 - Android: the game stays in landscape; holding the device upright no longer turns it to portrait.
@@ -35,11 +83,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows, Direct3D 12: with Settings → System → Debug log on, the log records what the graphics card was doing when it stops responding. It takes effect at the next launch and costs a few percent of GPU time (#524).
 - TAA and the upscalers (DLSS, FSR, XeSS) take less CPU and GPU time; in Uhra the frame rate is about 8% higher.
 - Model mods: while you play, the game prepares the other discs' mod files in the background, so a later disc switch takes seconds instead of a minute or two.
+- Model mods: turning a mod off and on again, or going back to your previous set of mods, starts without rebuilding the mod files; the game keeps the files of the current and the previous set.
+- Settings → System → Mods applies a saved mod list without a restart: texture mods change at once, model mods from the next area you enter. Party members' models still change after a restart.
 - Windows, Vulkan: when the graphics card stops working, the closing message on AMD cards says to turn off FSR Upscaling / Radeon Super Resolution in AMD Software or to switch to DirectX 12; on any card, if it happens right after startup, the message offers to start with DirectX 12 next time (#337, #533).
 - Pressing START on the title screen opens the menu right away, without the "Updating gamer profile" message and its one-second wait.
 - Turning TAA or an upscaler off now frees the graphics memory it used once you close Settings, about 350 MB at 4K, instead of keeping it until you restart the game.
 - The achievement notification no longer draws a piece of itself over the "Y: Settings" hint on the title screen, nor over the loading bar or the performance overlay.
 - The MO2 export tool's Scan game data now lists models and animation sets; before, it found none.
+- The MO2 export tool names models with the game's own names in the chosen text language, such as "Kaim" or "Uhra - Main Street", sorts them into groups such as Party, Monsters and Maps, shows a picture of the selected model, and opens Explorer at an exported model, ready for Blender. New wiki page: Open models in Blender.
+- Windows, Direct3D 12: FSR frame generation gives a higher frame rate, most of all in battles, and the performance overlay shows its real frame rate instead of an estimate marked with ~.
+- Language packs can add the letters the game's fonts lack, such as Polish, Russian or Arabic ones: `lo_mod.py font-glyphs` draws them from a TrueType or OpenType font in the style of each game font, and `--export-assets --export-kinds fonts` exports what it needs. See [Creating mods](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack).
 
 ### 简体中文
 
@@ -70,11 +123,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows Direct3D 12：打开“设置 → 系统 → 调试日志”后，显卡停止响应时日志会记下它当时在做什么。下次启动时生效，会多占几个百分点的 GPU 时间（#524）。
 - TAA 和超分（DLSS、FSR、XeSS）占用的 CPU 和 GPU 时间更少；在乌拉，帧率约提高 8%。
 - 模型 Mod：游戏运行时会在后台准备其他光盘的 Mod 文件，之后切换光盘只要几秒，不再等一两分钟。
+- 模型 Mod：关掉再打开某个 Mod，或换回上一套 Mod 组合时，启动不再重建 Mod 文件；游戏会保留当前和上一套组合的文件。
+- 设置 → 系统 → Mod 保存后不用重启即可生效：贴图 Mod 立即生效，模型 Mod 从进入下一个区域起生效。队伍成员的模型仍需重启后更换。
 - Windows Vulkan：显卡停止工作时，AMD 显卡上的关闭提示会建议在 AMD Software 里关闭 FSR Upscaling / Radeon Super Resolution，或改用 DirectX 12；不论哪种显卡，如果刚启动就出现，提示都会询问下次是否改用 DirectX 12 启动（#337、#533）。
 - 在标题画面按 START 后直接打开菜单，不再显示“正在更新玩家档案”提示，也不再等约一秒。
 - 关闭 TAA 或超分后，退出设置时会释放它占用的显存（4K 下约 350 MB），不再一直占到重启游戏。
 - 成就通知不再在标题画面的“Y：设置”提示上，也不再在加载进度条和性能叠加层上，画出自己的一块。
 - MO2 导出工具的“Scan game data”现在会列出模型和动画；之前一个也找不到。
+- MO2 导出工具用游戏里的名字标注模型，例如“凯姆”“乌拉・中央大街”（随“Text language”切换语言），按队伍、怪物、地图等分组，显示选中模型的预览图，并能导出模型后在资源管理器中选中它，方便拖进 Blender。新增 Wiki 页面《在 Blender 中打开模型》。
+- Windows Direct3D 12：FSR 帧生成的帧率更高，战斗中最明显；性能信息显示它的实际帧率，不再是带 ~ 的估算值。
+- 语言包可以补充游戏字体缺少的字母，例如波兰语、俄语或阿拉伯语字母：`lo_mod.py font-glyphs` 用 TrueType 或 OpenType 字体按每个游戏字体的样式绘制这些字母，`--export-assets --export-kinds fonts` 导出它需要的信息。见[制作 Mod](docs/wiki/Creating-Mods.md#add-letters-the-fonts-lack)。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 

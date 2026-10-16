@@ -59,14 +59,79 @@ class ModToolsTest(unittest.TestCase):
                 (folder / name).parent.mkdir(parents=True, exist_ok=True)
                 (folder / name).write_text(json.dumps(data), encoding="utf-8")
         (pack / "language.ini").write_text("id=pt-br\nname=Português\nbase=int\n", encoding="utf-8")
+        glyphs = pack / "fonts/bin/xenon/loc/int/menu/rpfontscommon_int.xxx/Maru23.lofont"
+        glyphs.parent.mkdir(parents=True)
+        glyphs.write_bytes(b"glyphs")
         stats = mod.language_clean(pack, None, None)
         share = self.root / "share" / "pt-br"
         self.assertEqual((stats["files"], stats["entries"], stats["dropped_files"]), (1, 1, 1))
         self.assertEqual(json.loads((share / "text" / menu).read_text(encoding="utf-8")), {"a": "Estado"})
         self.assertFalse((share / "text/bin/xenon/scr").exists())
         self.assertTrue((share / "language.ini").is_file())
+        # The pack's own glyphs go with it.
+        self.assertEqual((share / glyphs.relative_to(pack)).read_bytes(), b"glyphs")
         with self.assertRaises(FileExistsError):
             mod.language_clean(pack, None, None)
+
+    def test_shaping_input(self):
+        zwj = "\u200d"
+        self.assertEqual(mod.shaping_input("\ufe91"), ("\u0628" + zwj, True, False))        # beh initial
+        self.assertEqual(mod.shaping_input("\ufe92"), (zwj + "\u0628" + zwj, True, True))   # beh medial
+        self.assertEqual(mod.shaping_input("\ufe90"), (zwj + "\u0628", False, True))        # beh final
+        self.assertEqual(mod.shaping_input("\ufe8f"), ("\u0628", False, False))             # beh isolated
+        self.assertEqual(mod.shaping_input("\ufefc"), (zwj + "\u0644\u0627", False, True))  # lam-alef final
+        self.assertEqual(mod.shaping_input("\u0640"), ("\u0640", True, True))               # tatweel
+        self.assertEqual(mod.shaping_input("A"), ("A", False, False))
+
+    def test_font_glyphs(self):
+        """A pack's letters the export's font lacks become one LOFONT1 file with outlined glyphs."""
+        try:
+            import freetype  # noqa: F401
+            import uharfbuzz  # noqa: F401
+        except ImportError:
+            self.skipTest("font-glyphs needs freetype-py and uharfbuzz")
+        candidates = [os.environ.get("LO_TEST_TTF", ""), "C:/Windows/Fonts/arial.ttf",
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"]
+        ttf = next((Path(c) for c in candidates if c and Path(c).is_file()), None)
+        if not ttf:
+            self.skipTest("no TrueType font with Arabic letters (set LO_TEST_TTF)")
+        # An export with one font: H and I drawn white with a one-pixel black outline.
+        package = "bin/xenon/loc/int/menu/rpfontscommon_int.xxx"
+        export, pack = self.root / "export", self.root / "ar"
+        page = Image.new("RGBA", (64, 32), (0, 0, 0, 0))
+        for x0 in (0, 16):
+            page.paste((0, 0, 0, 255), (x0 + 2, 4, x0 + 12, 24))
+            page.paste((255, 255, 255, 255), (x0 + 3, 5, x0 + 11, 23))
+        (export / "textures" / package).mkdir(parents=True)
+        page.save(export / "textures" / package / "Maru23_PageA.9.png")
+        meta = {"package": package, "font": "Maru23", "export_index": 6, "kerning": -2,
+                "pages": [{"export_index": 9, "name": "Maru23_PageA", "width": 64, "height": 32, "format": 7,
+                           "png": package + "/Maru23_PageA.9.png"}],
+                "glyphs": [[0x48, 0, 0, 14, 28, 0], [0x49, 16, 0, 14, 28, 0], [0x20, 32, 0, 8, 28, 0]]}
+        (export / "fonts" / package).mkdir(parents=True)
+        (export / "fonts" / package / "Maru23.json").write_text(json.dumps(meta), encoding="utf-8")
+        (pack / "text").mkdir(parents=True)
+        (pack / "language.ini").write_text("id=ar\nname=Arabic\nbase=int\n", encoding="utf-8")
+        # Beh initial, medial and final, lam-alef; H and the space are in the font already.
+        (pack / "text/x.json").write_text(json.dumps({"a": "\ufe91\ufe92\ufe90 \ufefb{E001}H"}), encoding="utf-8")
+        rows = mod.font_glyphs(export, pack, ttf)
+        self.assertEqual([(r["font"], r["glyphs"]) for r in rows], [("Maru23", 4)])
+        data = (pack / "fonts" / package / "Maru23.lofont").read_bytes()
+        magic, header, count, width, height, zero = mod.LOFONT_HEADER.unpack_from(data)
+        self.assertEqual((magic, header, count, width, zero), (mod.LOFONT_MAGIC, 32, 4, 64, 0))
+        glyphs = [mod.LOFONT_GLYPH.unpack_from(data, 32 + 12 * i) for i in range(count)]
+        self.assertEqual(sorted(g[0] for g in glyphs), [0xFE90, 0xFE91, 0xFE92, 0xFEFB])
+        self.assertTrue(all(g[4] == 28 and g[1] + g[3] <= width and g[2] + g[4] <= height for g in glyphs))
+        self.assertEqual(len(data), 32 + 12 * count + width * height * 4)
+        atlas = Image.frombytes("RGBA", (width, height), data[32 + 12 * count:])
+        medial = next(g for g in glyphs if g[0] == 0xFE92)
+        cell = atlas.crop((medial[1], medial[2], medial[1] + medial[3], medial[2] + medial[4]))
+        # The medial form joins on both sides: ink reaches the left edge and the advance on the right
+        # (the cell is two pixels wider than the advance for the font's kerning of -2).
+        alpha = cell.getchannel("A")
+        self.assertTrue(any(alpha.getpixel((0, y)) for y in range(cell.height)))
+        self.assertTrue(any(alpha.getpixel((cell.width - 3, y)) for y in range(cell.height)))
+        self.assertFalse(any(alpha.getpixel((cell.width - 1, y)) for y in range(cell.height)))
 
     def test_utf8_case(self):
         key = mod.make_key("BIN/纹理.xxx", 3, "图集")

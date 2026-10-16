@@ -103,7 +103,7 @@ my-menu=off
 - Ids without an installed mod are ignored and stay in the file, so a mod disabled in MO2 (its folder disappears) returns to its place.
 - The list orders mod folders only. Language packs have no line in it; players choose one in Settings → System → Game language.
 
-The Mods page lists the mods in this order, each with its version, author and an on/off switch; LB / RB (or the arrows beside the selected mod) move it, and the language packs follow, read-only. A mod whose `mod.ini` is rejected or says `enabled=false` shows the reason in the help line and has no switch. Save writes the mods with a valid `mod.ini` to `mod-list.ini` (other lines stay) and offers a restart; Open mods folder (Windows) opens the mods root.
+The Mods page lists the mods in this order, each with its version, author and an on/off switch; LB / RB (or the arrows beside the selected mod) move it, and the language packs follow, read-only. A mod whose `mod.ini` is rejected or says `enabled=false` shows the reason in the help line and has no switch. Save writes the mods with a valid `mod.ini` to `mod-list.ini` (other lines stay) and, when the list changed, applies it in game: `Reload` makes texture replacements follow at once, and the rebuilt model and text files are switched when the player next walks a field map (the game reloads its index), so models change from the next area (packages the game loads once at startup, such as the party members' and the fonts a language pack adds glyphs to, need a restart); Open mods folder (Windows) opens the mods root.
 
 For each resource, the first mod in this order that has it wins, with its resource line or else its overlay file. Examples, all for the texture `fp-…ab` in combined mode:
 
@@ -115,7 +115,7 @@ For each resource, the first mod in this order that has it wins, with its resour
 | `hd` has `texture:…ab=custom.lotex2` and `overlay/textures/fp-…ab.lotex2` | `hd`'s `custom.lotex2` |
 | `mods/overlay/textures/fp-…ab.lotex2` exists as well | the top-level file |
 
-Changes to the list or to the mod folders take effect at the next start (`Initialize` or `Reload`).
+Changes to the list or to the mod folders take effect at the next `Initialize` or `Reload`; the Mods page calls `Reload` when it saves a changed list.
 
 ### Manager API
 
@@ -139,7 +139,7 @@ Language packs follow the mods, by folder name, as read-only entries: `kind` is 
 overlay/images/key-fnv1a64-<hash>.lotex
 ```
 
-Compute FNV-1a-64 over canonical-key UTF-8 bytes only: offset basis `14695981039346656037`, xor each byte, multiply by `1099511628211` modulo 2^64. Format 16 lowercase hex digits. The type selects the directory, not the hash input. Reserved font payloads use `fonts/` and `.loasset`; their payload format is not defined yet. Model replacements are not hashed: they use the export's path, `overlay/models/<package path>/<object>.<export index>.glb` (glTF Binary), and are described in [Creating mods](Creating-Mods.md#replace-a-model).
+Compute FNV-1a-64 over canonical-key UTF-8 bytes only: offset basis `14695981039346656037`, xor each byte, multiply by `1099511628211` modulo 2^64. Format 16 lowercase hex digits. The type selects the directory, not the hash input. Font payloads in the overlay (`fonts/` and `.loasset`) stay reserved; glyphs for letters the fonts lack come from language packs ([Fonts](#fonts-lofont1)). Model replacements are not hashed: they use the export's path, `overlay/models/<package path>/<object>.<export index>.glb` (glTF Binary), and are described in [Creating mods](Creating-Mods.md#replace-a-model).
 
 Movies are not hashed. A movie replacement is an H.264 MP4 named after the original video's file name: `overlay/movies/<key>.mp4`, for example `overlay/movies/mv_00v.mp4`. In a mod folder's `overlay/` the file name may be in any ASCII case; in a `.loarc` archive it is lower case. The video format is described in [Creating mods](Creating-Mods.md#replace-a-cutscene-video).
 
@@ -220,12 +220,36 @@ When the game opens an archive or index of a disc or DLC folder, every translate
 
 A **language pack** is a folder in the mods root with a `language.ini` and a `text/` folder in the export's `text/` layout (`<folder>/text/<member path>.json`). `language.ini` holds `id=` (letters, digits, `-`, `_`, `.`; compared in lower case), `name=` (UTF-8, up to 64 bytes, shown in Settings) and `base=` (the three-letter language code it translates: `int`, `jpn`, `deu`, `fra`, `spa`, `ita`, `kor`, `chi` or `sch`); `#` and `;` start comments. `LanguagePacks()` lists the packs, in every mode while mods are enabled; a repeated `id` keeps the first folder by name and logs a diagnostic. Settings lists each pack whose base the edition has after the edition's own languages and stores the choice as `game_language_pack=<id>` beside `game_language=<base ID>` in `settings.ini`. The game runs as the base language. Only the selected pack applies: `ListTexts(pack)` gives its files, and each replaces any other translation of the same member path. The log reports `mods: language pack <id> (<name>, base <code>) in <folder>` at startup.
 
-Text has to use characters the game's font for that language has. The English (`int`) fonts cover ASCII and Latin-1 except `¤¥¦§¬¯±µ¶·¸¼½¾Ð×Þð÷þÿ`, plus `Œœ–—―‘’‚“”„…‹›€™←→∞★☆♪`. The credits font lacks `–`.
+Text has to use characters the game's font for that language has, or ones the pack adds ([Fonts](#fonts-lofont1)). The English (`int`) fonts cover ASCII and Latin-1 except `¤¥¦§¬¯±µ¶·¸¼½¾Ð×Þð÷þÿ`, plus `Œœ–—―‘’‚“”„…‹›€™←→∞★☆♪`. The credits font lacks `–`.
+
+## Fonts (LOFONT1)
+
+A language pack can add glyphs to the game's fonts for letters they lack. The fonts are UE3 `Font` objects in `loc/<language>/menu/rpfonts*_<language>.xxx`: a glyph table (texture rectangle and page per glyph, stored twice, as the `Characters` property and again in the native data), page textures (`Texture2D`, one mip, LZO-compressed, Xenos-tiled; DXT5, or A8R8G8B8 for the Japanese `Yume24` and `Yume66`, both supported), one `Kerning` for the whole font and a `CharRemap` from 16-bit code points to glyphs. The game advances by glyph width plus kerning; glyphs have no bearings.
+
+- Identity: `AssetKind::Font` (2). The key is `<package member path>#<font object>`, for example `bin/xenon/loc/int/menu/rpfontscommon_int.xxx#Maru23`.
+- Files: `<pack>/fonts/<package member path>/<font object>.lofont`, listed by `ListFonts(pack)`. Only the selected language pack's fonts apply; mod folders and the top-level overlay have no font files.
+- When the game opens a disc folder's archive, every package with glyph files is rebuilt with the archive overlay that also serves text and models (`modding/font_patch.h`): the glyphs go onto the font's last page below its own glyphs, and the page grows to the next power of two (at most 4096) when they do not fit. The changed `Font` and `Texture2D` objects are written at the end of the package and the export table points there. A file that cannot be used leaves that font as it was and logs a `[mods] font` warning. The glyph files are part of the mod set a live reload compares and caches, but the game reads its fonts once at startup, so changed glyphs show after a restart.
+- `--export-assets --export-kinds fonts` writes `fonts/<package path>/<font>.json`: `package`, `font`, `export_index`, `kerning`, `pages` (export index, name, width, height, pixel format and the page PNG under `textures/`) and `glyphs` (`[code point, x, y, width, height, page]`).
+
+All integers are little-endian.
+
+| Byte offset | Size | Value |
+| --- | --- | --- |
+| 0 | 12 | ASCII `LOFONT1`, CR LF, three zero bytes |
+| 12 | 4 | Header size: 32 |
+| 16 | 4 | Glyph count, 1 to 16384 |
+| 20 | 4 | Atlas width, at most 4096 and at most the width of the font's last page |
+| 24 | 4 | Atlas height, at most 4096 |
+| 28 | 4 | Reserved, 0 |
+| 32 | 12 per glyph | `u32` code point (1 to 0xFFFF), `u16` x, y, width, height in the atlas |
+| Following glyphs | width × height × 4 | RGBA atlas, rows top to bottom |
+
+A glyph is drawn as its rectangle, so its height should be the font's line height and its baseline where the font's letters have theirs. A code point the font already has is pointed at the new glyph. `tools/tests/font_patch_cli.cpp` (`LoFontPatch`) applies files to a package from a disc folder without the game and reads the result back with the settings menu's font reader.
 
 ## Trusted providers and future consumers
 
 `RegisterProvider(kind, shared_ptr<AssetProvider>)` registers at most one provider per type. It returns false for an invalid kind, null provider or occupied slot. Providers run outside the API mutex and retain shared ownership during callbacks. Exceptions, mismatched identities and non-file results are ignored. Recursive resolution skips providers to avoid recursion. `UnregisterProvider(kind, pointer)` removes only the matching instance; destruction happens outside the mutex. Providers are trusted host extensions and may resolve outside the mods root.
 
-Font registration, parsing and path conventions are extension points only. A future consumer must define its payload validator, integrate at an actual load/decode boundary, preserve original fallback, observe generation changes and add acceptance coverage. No TTF decoder is activated merely by adding a manifest line. Models have a consumer: the Windows build reads a `.glb` at the export path described above and keeps the original model when the file cannot be used. Movies have a consumer: the Windows build plays a resolved `movie` replacement in place of the original cutscene video and falls back to the original when the file cannot be played. Other platforms play the original video.
+Font registration, parsing and path conventions are extension points only. A future consumer must define its payload validator, integrate at an actual load/decode boundary, preserve original fallback, observe generation changes and add acceptance coverage. No TTF decoder is activated merely by adding a manifest line; the glyphs a language pack adds are already rasterized ([Fonts](#fonts-lofont1)). Models have a consumer: the Windows build reads a `.glb` at the export path described above and keeps the original model when the file cannot be used. Movies have a consumer: the Windows build plays a resolved `movie` replacement in place of the original cutscene video and falls back to the original when the file cannot be played. Other platforms play the original video.
 
 `Root()`, `Mode()`, `Generation()`, `Diagnostics()` and `ListMods()` support host/tool diagnostics. Diagnostics also go to stderr with the `[mods]` prefix; the snapshot retains at most 256 records. This data interface is not an operating-system sandbox against a process racing filesystem changes.

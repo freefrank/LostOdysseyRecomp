@@ -38,7 +38,8 @@ struct ResolvedAsset {
 };
 struct Diagnostic { std::filesystem::path manifest; size_t line = 0; std::string message; };
 // A mods folder with a language.ini (id, name, base) is a language pack: its
-// text/ folder holds translation JSON in the --export-assets text/ layout. It
+// text/ folder holds translation JSON in the --export-assets text/ layout, its
+// optional fonts/ folder glyphs for letters the game's fonts lack. It
 // applies only while the player has it selected in Settings, in every mode.
 // id is lower case; base is a three-letter game language code (int, jpn...).
 struct LanguagePack { std::string id, name, base; std::filesystem::path folder; };
@@ -111,6 +112,9 @@ std::vector<ResolvedAsset> ListModels();
 std::vector<LanguagePack> LanguagePacks();
 // The pack's text/ files, one per member path.
 std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack);
+// The pack's fonts/ files (glyphs it adds to the game's fonts, modding/font_patch.h):
+// fonts/<package member path>/<font>.lofont, keyed <package member path>#<font>.
+std::vector<ResolvedAsset> ListFonts(const LanguagePack& pack);
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
 // Opens a resolved file at its first byte; length is its size. An archive
 // entry ends before the archive does, so readers stop at length.

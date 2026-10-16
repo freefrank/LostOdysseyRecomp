@@ -1,0 +1,28 @@
+<resources>
+    <string name="saves_title">저장 파일과 로그</string>
+    <string name="save_location_toggle">게임 폴더에 저장 파일 보관</string>
+    <string name="save_location_help">기본값은 꺼짐입니다. &lt;게임 폴더&gt;/save/userNN/에 save.bin, .lo-content 및 슬롯 파일을 저장합니다. Windows와 같은 구조이므로 PC의 save 폴더와 동기화할 수 있습니다. CTRL → 게임 폴더에서 읽고 쓸 수 있는 폴더를 선택하세요. 전환 전에 복사본을 바이트 단위로 검증하고 원본은 백업으로 남깁니다.</string>
+    <string name="save_location_restart_help">변경은 다음 앱 시작 시 게임이 저장하기 전에 적용됩니다. 앱을 완전히 닫고 다시 여세요. 게임 폴더가 없거나 쓸 수 없으면 이번 실행은 비공개 백업을 사용하며 알림을 표시합니다. 접근이 복구되면 그동안의 진행 상황을 병합하며 충돌은 직접 선택합니다. 두 기기에서 게임을 닫은 상태로 동기화하세요.</string>
+    <string name="save_location_current">이번 실행의 저장 위치: %1$s</string>
+    <string name="save_location_pending">다음 시작 시 적용: %1$s</string>
+    <string name="save_location_private">앱 비공개 저장소</string>
+    <string name="save_location_fixed">게임 폴더 저장 위치: %1$s</string>
+    <string name="save_location_warning_title">저장 위치</string>
+    <string name="save_location_fallback">게임 폴더에 접근할 수 없거나 비공개 저장 파일을 병합해야 합니다. 이번 실행은 아래의 비공개 백업을 사용합니다. 게임 폴더 설정은 켜진 상태로 유지되며 저장 파일은 삭제하지 않았습니다.</string>
+    <string name="save_location_failed">저장 위치를 변경하지 못했습니다. 이번 실행은 아래 위치를 계속 사용합니다. CTRL → 저장 파일과 로그에서 다시 시도하세요. 원본 저장 파일은 삭제하지 않았습니다.</string>
+    <string name="save_location_conflict">대상 슬롯이 더 새롭거나 저장 시각은 같지만 내용이 다릅니다. 저장 위치는 변경하지 않았습니다. CTRL → 저장 파일과 로그에서 사용할 버전을 선택하세요.</string>
+    <string name="save_location_resolve">저장 파일 충돌 확인…</string>
+    <string name="save_location_conflict_title">다음 시작에 사용할 저장 파일</string>
+    <string name="save_location_conflict_message">슬롯: %1$s\n\n원본: %2$s\n대상: %3$s\n\n대상 유지는 충돌 슬롯을 보존하고 원본 복사는 덮어씁니다. 원본은 백업으로 남습니다. 이 확인은 현재 파일에만 적용됩니다. 다음 시작 전에 어느 쪽이든 바뀌면 다시 선택해야 합니다.</string>
+    <string name="save_location_use_source">원본 복사</string>
+    <string name="save_location_use_destination">대상 유지</string>
+    <string name="save_location_cancel">취소</string>
+    <string name="save_location_ok">확인</string>
+    <string name="save_location_queued">다음 앱 시작에 적용하도록 저장했습니다.</string>
+    <string name="save_location_no_game">먼저 CTRL → 게임 폴더에서 읽고 쓸 수 있는 게임 폴더를 선택하세요.</string>
+    <string name="save_location_import_running">저장 파일을 가져오기 전에 게임을 닫으세요.</string>
+    <string name="save_import_close_title">게임을 닫고 가져올까요?</string>
+    <string name="save_import_close_message">가져오기 전에 게임을 닫아야 합니다. 마지막 저장 이후의 진행 상황은 잃게 됩니다. 저장 화면을 다시 열어 ZIP을 선택할 수 있습니다.</string>
+    <string name="save_import_close_action">닫고 가져오기</string>
+    <string name="save_location_cancel_pending">예약된 변경 취소</string>
+</resources>

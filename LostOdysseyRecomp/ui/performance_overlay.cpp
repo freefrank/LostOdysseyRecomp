@@ -207,7 +207,6 @@ struct Values {
     double fps = 0, frameMs = 0;
     int cpu = -1, gpu = -1;  // percent; -1 unknown
     double fgFps = -1;       // -1 while frame generation is off
-    bool fgEstimated = false; // rendered FPS times the multiplier; shown with ~
 };
 
 // One row of fields separated by dividers. Labels sit on the values' baseline;
@@ -307,7 +306,7 @@ void Draw(const Values& values, const Sources& sources) {
         if (values.fgFps >= 0) {
             row.Divider();
             row.Label("FG", kFgLabel);
-            row.Value((values.fgEstimated ? U"~" : U"") + Number(values.fgFps, 0), kFpsValue);
+            row.Value(Number(values.fgFps, 0), kFpsValue);
             row.Unit("FPS");
         }
         row.Divider();
@@ -386,13 +385,9 @@ void Refresh(const Sources& sources) {
         // No completed timestamp in the window: unsupported or not started yet.
         if (detailed && sources.gpuBusy > g.window.gpu)
             values.gpu = int(std::lround(std::min(100.0, (sources.gpuBusy - g.window.gpu) / (seconds * 1e9) * 100.0)));
-        if (detailed && sources.frameGeneration && g.window.frameGeneration) {
-            if (!sources.presentedFrames) {
-                values.fgFps = values.fps * sources.fgMultiplier;
-                values.fgEstimated = true;
-            } else if (sources.presentedFrames >= g.window.presented)
-                values.fgFps = (sources.presentedFrames - g.window.presented) / seconds;
-        }
+        // No presents counted in the window (the count query failed): no FG value.
+        if (detailed && sources.frameGeneration && g.window.frameGeneration && sources.presentedFrames > g.window.presented)
+            values.fgFps = (sources.presentedFrames - g.window.presented) / seconds;
         Draw(values, sources);
     }
     g.baseline = false;

@@ -728,12 +728,296 @@ def language_clean(pack: Path, original: Path | None, output: Path | None) -> di
         stats["entries"] += len(kept)
     target.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ini, target / "language.ini")
+    if (pack / "fonts").is_dir():
+        # Glyphs made with font-glyphs are the pack's own artwork.
+        shutil.copytree(pack / "fonts", target / "fonts")
     settings = dict(line.split("=", 1) for line in ini.read_text(encoding="utf-8-sig").splitlines()
                     if "=" in line and not line.lstrip().startswith(("#", ";")))
     if settings.get("name", "").strip() == settings.get("id", "").strip():
         print("warning: language.ini still has name= set to the id; Settings will show it as the language name")
     stats["output"] = str(target)
     return stats
+
+
+# LOFONT1: glyphs a language pack adds to one of the game's fonts (format in docs/wiki/Modding-API.md).
+LOFONT_HEADER = struct.Struct("<12sIIIII")  # magic + 3 zero bytes, header size, glyphs, width, height, 0
+LOFONT_MAGIC = b"LOFONT1\r\n\0\0\0"
+LOFONT_GLYPH = struct.Struct("<IHHHH")
+TEXT_TOKEN = re.compile(r"\{[0-9A-Fa-f]{4}(?::[0-9A-Fa-f]{4})?\}")
+
+
+def pack_characters(pack: Path) -> set[str]:
+    """Every character the pack's translations use, without the game's {XXXX} codes."""
+    chars: set[str] = set()
+    for file in sorted((pack / "text").rglob("*.json")):
+        data = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"{file}: not a JSON object")
+        for value in data.values():
+            if isinstance(value, str):
+                chars.update(TEXT_TOKEN.sub("", value))
+    return {c for c in chars if ord(c) >= 32 and ord(c) <= 0xFFFF}
+
+
+ZWJ = "‍"
+DECOMPOSITION_FORMS = {"<initial>": (True, False), "<medial>": (True, True), "<final>": (False, True), "<isolated>": (False, False)}
+
+
+def shaping_input(ch: str) -> tuple[str, bool, bool]:
+    """Text that makes a shaper draw this character, and whether it joins on its visual left and right.
+    A presentation form (U+FB50..U+FEFF) becomes its letters between zero-width joiners: modern
+    fonts draw those forms through OpenType shaping and do not map the code points themselves."""
+    import unicodedata
+    if ch == "ـ":  # tatweel
+        return ch, True, True
+    tag, _, rest = unicodedata.decomposition(ch).partition(" ")
+    if tag not in DECOMPOSITION_FORMS:
+        return ch, False, False
+    letters = "".join(chr(int(h, 16)) for h in rest.split())
+    left, right = DECOMPOSITION_FORMS[tag]
+    # Logical order: a letter that joins on its left joins the next letter, on its right the previous one.
+    return (ZWJ if right else "") + letters + (ZWJ if left else ""), left, right
+
+
+class GlyphPainter:
+    """Shapes text with HarfBuzz and draws it with FreeType: fill plus an outline grown around it."""
+
+    def __init__(self, ttf_path: Path, size: float):
+        try:
+            import uharfbuzz as hb
+            from fontTools.pens.freetypePen import FreeTypePen  # needs freetype-py
+            from fontTools.ttLib import TTFont
+        except ImportError as exc:
+            raise ValueError("font-glyphs requires fontTools, freetype-py and uharfbuzz: "
+                             "python -m pip install fonttools freetype-py uharfbuzz") from exc
+        self.hb, self.pen_type = hb, FreeTypePen
+        self.tt = TTFont(str(ttf_path))
+        self.glyph_set = self.tt.getGlyphSet()
+        self.order = self.tt.getGlyphOrder()
+        self.cmap = self.tt.getBestCmap()
+        self.font = hb.Font(hb.Face(hb.Blob.from_file_path(str(ttf_path))))
+        self.scale = size / self.tt["head"].unitsPerEm
+
+    def covers(self, text: str) -> bool:
+        return all(ord(c) in self.cmap for c in text if c != ZWJ)
+
+    def draw(self, text: str, baseline: int, height: int, stroke: int, fill, outline_colour, joins=(False, False)):
+        """One glyph cell (RGBA, `height` tall) and the ink box on the uncut canvas, or None for no ink."""
+        from fontTools.pens.transformPen import TransformPen
+        from PIL import Image, ImageFilter
+        buf = self.hb.Buffer()
+        buf.add_str(text)
+        buf.guess_segment_properties()
+        self.hb.shape(self.font, buf, {})
+        pen = self.pen_type(self.glyph_set)
+        x = 0
+        for info, pos in zip(buf.glyph_infos, buf.glyph_positions):
+            self.glyph_set[self.order[info.codepoint]].draw(TransformPen(pen, (1, 0, 0, 1, x + pos.x_offset, pos.y_offset)))
+            x += pos.x_advance
+        advance = max(1, round(x * self.scale))
+        margin = advance + 4 * stroke + 16
+        width = advance + 2 * margin
+        coverage = pen.image(width=width, height=height, transform=(self.scale, 0, 0, self.scale, margin, height - baseline)).getchannel("A")
+        cell = Image.new("RGBA", (width, height), tuple(outline_colour) + (0,))
+        if stroke:
+            cell.putalpha(coverage.filter(ImageFilter.MaxFilter(2 * stroke + 1)))
+        face = Image.new("RGBA", (width, height), tuple(fill) + (0,))
+        face.putalpha(coverage)
+        cell.alpha_composite(face)
+        box = cell.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+        join_left, join_right = joins
+        # Cut where the letter joins: the neighbour continues the stroke, so no outline there.
+        left = margin if join_left or not box else min(margin, box[0])
+        right = margin + advance if join_right or not box else max(margin + advance, box[2])
+        return cell.crop((left, 0, right, height)), box
+
+
+def pixels(image) -> list[tuple[int, int, int, int]]:
+    data = image.convert("RGBA").tobytes()
+    return [tuple(data[i:i + 4]) for i in range(0, len(data), 4)]
+
+
+def ink_box(image, threshold: int = 24) -> tuple[int, int, int, int] | None:
+    return image.getchannel("A").point(lambda v: 255 if v > threshold else 0).getbbox()
+
+
+# Letters to size a font by when it has no H (Japanese fonts with kana and kanji only):
+# measured against a font of the same export that has both.
+STAND_INS = "口あアの一日十0123456789"
+
+
+class FontCrops:
+    """Glyph pictures of an exported font."""
+
+    def __init__(self, meta: dict, textures: Path):
+        self.meta, self.textures, self.pages = meta, textures, {}
+        self.glyphs = {g[0]: g[1:] for g in meta["glyphs"]}
+
+    def crop(self, cp: int):
+        from PIL import Image
+        x, y, w, h, page = self.glyphs[cp]
+        if page not in self.pages:
+            self.pages[page] = Image.open(self.textures / self.meta["pages"][page]["png"]).convert("RGBA")
+        return self.pages[page].crop((x, y, x + w, y + h))
+
+    def box(self, cp: int):
+        return ink_box(self.crop(cp)) if cp in self.glyphs else None
+
+
+def h_from_stand_in(font: FontCrops, others: list[FontCrops]) -> tuple[int, int, int] | None:
+    """(stand-in, H top, H bottom) for a font without H, from a font that has H and the same stand-in.
+
+    The H is placed where it would stand relative to the stand-in in that font: its height and its
+    bottom as fractions of the stand-in's ink height."""
+    for ch in STAND_INS:
+        mine = font.box(ord(ch))
+        if not mine:
+            continue
+        for other in others:
+            h, ref = other.box(0x48), other.box(ord(ch))
+            if not h or not ref or ref[3] == ref[1]:
+                continue
+            unit, own = ref[3] - ref[1], mine[3] - mine[1]
+            bottom = mine[3] + (h[3] - ref[3]) * own / unit
+            return ord(ch), round(bottom - (h[3] - h[1]) * own / unit), round(bottom)
+    return None
+
+
+def font_reference(meta: dict, textures: Path, others: list[FontCrops] = ()) -> dict:
+    """Cell height, the 'H' ink box, outline width and colours of an exported font.
+
+    A font without H and I is measured by a stand-in letter it shares with one of `others`."""
+    font = FontCrops(meta, textures)
+    glyphs = font.glyphs
+    crop = font.crop
+    if 0x48 in glyphs and 0x49 in glyphs:
+        letter_h = crop(0x48)
+        box = ink_box(letter_h)
+        if not box:
+            raise ValueError("the H glyph is empty")
+        h_top, h_bottom, stroke_letter = box[1], box[3], 0x49
+    else:
+        found = h_from_stand_in(font, [o for o in others if o.meta is not meta])
+        if not found:
+            raise ValueError("the font has no H or I, and no letter shared with a font that has them")
+        stroke_letter, h_top, h_bottom = found
+        letter_h = crop(stroke_letter)
+    heights = sorted(g[3] for g in glyphs.values())
+    # Outline: dark opaque pixels before the first bright one across the middle of I.
+    letter_i = crop(stroke_letter)
+    row = [letter_i.getpixel((x, letter_i.height // 2)) for x in range(letter_i.width)]
+    outline, started = 0, False
+    for r, g, b, a in row:
+        if a > 128 and max(r, g, b) < 128:
+            outline += 1
+            started = True
+        elif started or (a > 128 and max(r, g, b) >= 128):
+            break
+    both = pixels(letter_h) + pixels(letter_i)
+    bright = [p for p in both if p[3] > 200 and max(p[:3]) >= 160]
+    dark = [p for p in both if p[3] > 200 and max(p[:3]) < 96]
+    median = lambda found, fallback: tuple(sorted(c[i] for c in found)[len(found) // 2] for i in range(3)) if found else fallback
+    return {"height": heights[len(heights) // 2], "h_top": h_top, "h_bottom": h_bottom, "outline": max(1, min(outline, 3)) if dark else 0,
+            "fill": median(bright, (255, 255, 255)), "outline_colour": median(dark, (0, 0, 0)), "glyphs": glyphs}
+
+
+def font_glyphs(export: Path, pack: Path, ttf_path: Path, only: set[str] | None = None, extra: str = "",
+                scale: float = 1.0) -> list[dict]:
+    """LOFONT1 files with the glyphs a language pack uses that the game's fonts lack."""
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ValueError("font-glyphs requires Pillow: python -m pip install Pillow") from exc
+    ini = {}
+    for line in (pack / "language.ini").read_text(encoding="utf-8-sig").splitlines():
+        if "=" in line and not line.lstrip().startswith(("#", ";")):
+            key, _, value = line.partition("=")
+            ini[key.strip()] = value.strip()
+    base = ini.get("base", "int")
+    wanted = pack_characters(pack) | set(extra)
+    fonts_root, textures = export / "fonts", export / "textures"
+    if not fonts_root.is_dir() or not textures.is_dir():
+        raise ValueError(f"{export} needs fonts/ and textures/: run --export-assets with --export-kinds textures,fonts")
+    probe = GlyphPainter(ttf_path, 100)
+    results = []
+    metas = [json.loads(f.read_text(encoding="utf-8")) for f in sorted(fonts_root.rglob("*.json"))]
+    metas = [m for m in metas if m["package"].endswith(f"_{base}.xxx")]
+    # Fonts with an H, same package first: what a font without H is measured against.
+    others = [FontCrops(m, textures) for m in metas if any(g[0] == 0x48 for g in m["glyphs"])]
+    for meta in metas:
+        package, name = meta["package"], meta["font"]
+        if only and name not in only:
+            continue
+        try:
+            ref = font_reference(meta, textures, sorted(others, key=lambda o: o.meta["package"] != package))
+        except ValueError as exc:
+            results.append({"font": name, "package": package, "skipped": str(exc)})
+            continue
+        missing = sorted(c for c in wanted if ord(c) not in ref["glyphs"] and not c.isspace())
+        shaped = {ch: shaping_input(ch) for ch in missing}
+        unsupported = "".join(ch for ch in missing if not probe.covers(shaped[ch][0]))
+        drawable = [ch for ch in missing if ch not in unsupported]
+        if not drawable:
+            if unsupported:
+                results.append({"font": name, "package": package, "skipped": f"the TTF has none of {unsupported}"})
+            continue
+        cell, stroke, fill, dark = ref["height"], ref["outline"], ref["fill"], ref["outline_colour"]
+        # Size: the TTF's H as tall as the game's H (heights scale with the size), then
+        # smaller until every new glyph fits the cell.
+        _, box = probe.draw("H", cell * 2, cell * 4, stroke, fill, dark)
+        size = max(4.0, (ref["h_bottom"] - ref["h_top"] - 2 * stroke) * 100 / max(1, box[3] - box[1] - 2 * stroke) * scale)
+        while True:
+            painter = GlyphPainter(ttf_path, size)
+            _, box = painter.draw("H", cell * 2, cell * 4, stroke, fill, dark)
+            baseline = ref["h_bottom"] + cell * 2 - box[3]  # the H stands where the game's does
+            top = bottom = None
+            for ch in drawable:
+                _, ink = painter.draw(shaped[ch][0], baseline + cell, cell * 3, stroke, fill, dark)
+                if ink:
+                    top = ink[1] - cell if top is None else min(top, ink[1] - cell)
+                    bottom = ink[3] - cell if bottom is None else max(bottom, ink[3] - cell)
+            if top is not None and bottom - top > cell and size > 4:
+                size *= 0.95
+                continue
+            if top is not None:
+                # Keep the shared baseline unless a glyph would leave the cell.
+                shift = -(bottom - cell) if bottom > cell else 0
+                baseline += shift - min(0, top + shift)
+            break
+        width = meta["pages"][-1]["width"]
+        kerning = meta["kerning"]
+        cells = []
+        for ch in drawable:
+            text_in, join_left, join_right = shaped[ch]
+            image, _ = painter.draw(text_in, baseline, cell, stroke, fill, dark, (join_left, join_right))
+            if kerning < 0:
+                # The game advances by width + kerning: pad so the advance is the ink's width.
+                padded = Image.new("RGBA", (image.width - kerning, cell), (0, 0, 0, 0))
+                padded.paste(image, (0, 0))
+                image = padded
+            if image.width > width:
+                raise ValueError(f"{name}: glyph U+{ord(ch):04X} is wider than the page ({image.width} > {width})")
+            cells.append((ord(ch), image))
+        # Rows of cells, one transparent pixel between them.
+        x = y = 0
+        placed = []
+        for cp, image in cells:
+            if x + image.width > width:
+                x, y = 0, y + cell + 1
+            placed.append((cp, x, y, image))
+            x += image.width + 1
+        atlas = Image.new("RGBA", (width, y + cell), (0, 0, 0, 0))
+        records = b""
+        for cp, gx, gy, image in placed:
+            atlas.paste(image, (gx, gy))
+            records += LOFONT_GLYPH.pack(cp, gx, gy, image.width, image.height)
+        data = LOFONT_HEADER.pack(LOFONT_MAGIC, LOFONT_HEADER.size, len(placed), atlas.width, atlas.height, 0) + records + atlas.tobytes()
+        target_file = pack / "fonts" / PurePosixPath(package) / f"{name}.lofont"
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_bytes(data)
+        results.append({"font": name, "package": package, "glyphs": len(placed), "size": round(size, 1),
+                        "atlas": f"{atlas.width}x{atlas.height}", "file": str(target_file), "unsupported": unsupported})
+    return results
 
 
 def overlay_to_mod(mods: Path, identity: str, priority: int = 0, meta: dict | None = None,
@@ -1147,6 +1431,15 @@ def main(argv: list[str] | None = None) -> int:
     clean_parser.add_argument("--original", type=Path,
                               help="untranslated export (default: original/ beside the pack, from --export-language-pack)")
     clean_parser.add_argument("--output", type=Path, help="new folder (default: share/<pack folder name> beside the pack)")
+    glyph_parser = sub.add_parser("font-glyphs", help="draw the letters a language pack uses that the game's fonts lack "
+                                  "into <pack>/fonts/ (LOFONT1)")
+    glyph_parser.add_argument("pack", type=Path, help="the pack folder (holds language.ini and text/)")
+    glyph_parser.add_argument("--export", type=Path, required=True,
+                              help="--export-assets folder made with --export-kinds textures,fonts")
+    glyph_parser.add_argument("--ttf", type=Path, required=True, help="TrueType/OpenType font to draw the letters with")
+    glyph_parser.add_argument("--fonts", help="comma-separated game font names to cover (default: every font of the base language)")
+    glyph_parser.add_argument("--chars", default="", help="extra characters to draw even if the text does not use them yet")
+    glyph_parser.add_argument("--scale", type=float, default=1.0, help="size factor on top of matching the game's H (default 1)")
     archive_parser = sub.add_parser("archive", help="copy an api_version=2 mod folder, packing its overlay/ files into one overlay.loarc")
     archive_parser.add_argument("src", type=Path, help="the mod folder (mod.ini and overlay/)")
     archive_parser.add_argument("dest", type=Path, help="the new mod folder")
@@ -1241,6 +1534,14 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{name}\t{size}")
             else:
                 print(f"Extracted {len(entries)} file(s) to {args.dest}")
+        elif args.command == "font-glyphs":
+            only = {name.strip() for name in args.fonts.split(",") if name.strip()} if args.fonts else None
+            for row in font_glyphs(args.export, args.pack, args.ttf, only, args.chars, args.scale):
+                if "skipped" in row:
+                    print(f"{row['package']} {row['font']}: skipped ({row['skipped']})")
+                else:
+                    print(f"{row['package']} {row['font']}: {row['glyphs']} glyphs at {row['size']} px, atlas {row['atlas']}"
+                          + (f"; not in the TTF: {row['unsupported']}" if row["unsupported"] else ""))
         elif args.command == "language-clean":
             stats = language_clean(args.pack, args.original, args.output)
             print(f"Kept {stats['entries']} translated entries in {stats['files']} files; dropped "

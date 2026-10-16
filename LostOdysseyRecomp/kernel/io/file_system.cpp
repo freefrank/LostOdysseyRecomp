@@ -4,6 +4,7 @@
 #include "io_diagnostics.h"
 #include "file_system_test.h"
 #include <cerrno>
+#include <cstdlib>
 #include <limits>
 #include <mutex>
 #include <cpu/guest_thread.h>
@@ -16,6 +17,8 @@
 #include <os/user_paths.h>
 #ifdef _WIN32
 #include <io.h>
+#else
+#include <fcntl.h>
 #endif
 
 static std::mutex g_lastOpenedMutex;
@@ -109,6 +112,11 @@ namespace
     std::mutex g_discMutex;
     std::filesystem::path g_saveRoot;
     std::filesystem::path g_cacheRoot;
+#if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+    bool g_sharedSaves = false;
+    std::mutex g_saveWriterMutex;
+    std::set<std::filesystem::path> g_saveWriters;
+#endif
 
     // Guest structures (big-endian in guest memory).
     struct X_FILE_NETWORK_OPEN_INFORMATION
@@ -228,10 +236,18 @@ struct FileHandle : KernelObject
     // Language packs: bytes served from memory over and after the file
     // (modding/text_overlay.h); size then includes them, fileSize does not.
     std::vector<modding::text_overlay::Range> ranges;
+    std::shared_ptr<void> cachePin; // overflow archive's cache set, until this handle closes
     uint64_t fileSize = 0;
     bool writable = false;
     // Writable save file: synced to disk before it closes.
     bool durable = false;
+    // Android shared storage must never expose an in-place, partial save.bin.
+    // The stream stays on the working copy after each atomic publication.
+    std::filesystem::path saveWorkingPath;
+    std::filesystem::path saveWriterKey;
+    bool saveDirty = false;
+    bool saveFailed = false;
+    bool PublishSave();
 
     // Directory enumeration state
     std::vector<std::filesystem::directory_entry> entries;
@@ -239,17 +255,7 @@ struct FileHandle : KernelObject
     size_t nextEntry = 0;
     bool enumerated = false;
 
-    ~FileHandle() override
-    {
-        if (file)
-        {
-            if (durable && !FileSystem::SyncFile(file))
-                LOG_WARNING("could not sync save file '{}'", FileSystem::PathUtf8(path));
-            fclose(file);
-        }
-        io_diagnostics::RecordEvent(io_diagnostics::Stage::Destroyed, "FileHandle", &diagnostic,
-            g_memory.MapVirtual(this), &path, IoGuestPcr(), &ioMutex, this);
-    }
+    ~FileHandle() override;
 
     kernel::wait::Event completion{true, true};
     kernel::wait::Target* WaitTarget() override { return &completion; }
@@ -268,7 +274,11 @@ void FileSystem::Init(const std::filesystem::path& gameRoot)
     g_discRoot = gameRoot;
     g_discIdentity = DiscSet::ReadIdentity(gameRoot);
     const auto dataRoot = os::user_paths::UsePortableLayout() ? std::filesystem::current_path() : os::user_paths::DataDir();
-    g_saveRoot = dataRoot / "save";
+    g_saveRoot = os::user_paths::SaveDir();
+#if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+    const char* sharedSaves = std::getenv("LO_SAVE_SHARED");
+    g_sharedSaves = sharedSaves && std::strcmp(sharedSaves, "1") == 0;
+#endif
     g_cacheRoot = dataRoot / "cache";
     std::error_code ec;
     std::filesystem::create_directories(g_saveRoot, ec);
@@ -308,6 +318,11 @@ bool FileSystem::SelectDisc(uint32_t discNumber)
 }
 
 std::filesystem::path FileSystem::GetGameRoot() { return g_gameRoot; }
+std::filesystem::path FileSystem::GetDiscRoot()
+{
+    std::lock_guard lock(g_discMutex);
+    return g_discRoot;
+}
 std::filesystem::path FileSystem::GetSaveRoot() { return g_saveRoot; }
 std::filesystem::path FileSystem::GetCacheRoot() { return g_cacheRoot; }
 std::filesystem::path GetGamePath() { return g_gameRoot; }
@@ -367,6 +382,99 @@ bool FileSystem::WriteFileDurably(const std::filesystem::path& path, const void*
         return false;
     }
     return true;
+}
+
+bool FileHandle::PublishSave()
+{
+    if (saveFailed)
+        return false;
+    if (!saveDirty)
+        return true;
+
+    // Do not rename the open stream: later writes to its old inode would no
+    // longer update the visible save. Publish a complete, synced sibling copy.
+    auto temporary = path;
+    temporary += ".tmp";
+    bool copied = fflush(file) == 0;
+    std::FILE* source = nullptr;
+    std::FILE* target = nullptr;
+    if (copied)
+    {
+#ifdef _WIN32
+        source = _wfopen(saveWorkingPath.c_str(), L"rb");
+#else
+        source = fopen(saveWorkingPath.c_str(), "rb");
+#endif
+        target = source ? OpenHostFile(temporary, true) : nullptr;
+        copied = source && target;
+    }
+    if (copied)
+    {
+        std::array<char, 64 * 1024> buffer;
+        size_t count;
+        while ((count = fread(buffer.data(), 1, buffer.size(), source)) != 0)
+            if (fwrite(buffer.data(), 1, count, target) != count)
+            {
+                copied = false;
+                break;
+            }
+        copied = copied && !ferror(source) && FileSystem::SyncFile(target);
+    }
+    if (source) copied = fclose(source) == 0 && copied;
+    if (target) copied = fclose(target) == 0 && copied;
+    std::error_code ec;
+    if (copied)
+    {
+        std::filesystem::rename(temporary, path, ec);
+        copied = !ec;
+#ifndef _WIN32
+        if (copied)
+        {
+            const int directory = open(path.parent_path().c_str(), O_RDONLY | O_DIRECTORY);
+            copied = directory >= 0 && fsync(directory) == 0;
+            if (directory >= 0) close(directory);
+        }
+#endif
+    }
+    if (!copied)
+    {
+        // A failed transfer or publication must never be retried by close:
+        // the working stream could contain only part of the requested write.
+        saveFailed = true;
+        std::filesystem::remove(temporary, ec);
+        return false;
+    }
+    saveDirty = false;
+    return true;
+}
+
+FileHandle::~FileHandle()
+{
+    if (file)
+    {
+        if (!saveWorkingPath.empty())
+        {
+            if (!saveFailed && !PublishSave())
+                LOG_WARNING("could not publish save file '{}'", FileSystem::PathUtf8(path));
+        }
+        else if (durable && !FileSystem::SyncFile(file))
+            LOG_WARNING("could not sync save file '{}'", FileSystem::PathUtf8(path));
+        fclose(file);
+    }
+    if (!saveWorkingPath.empty())
+    {
+        std::error_code ec;
+        std::filesystem::remove(saveWorkingPath, ec);
+    }
+#if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+    if (!saveWriterKey.empty())
+    {
+        std::lock_guard lock(g_saveWriterMutex);
+        g_saveWriters.erase(saveWriterKey);
+    }
+#endif
+    io_diagnostics::RecordEvent(io_diagnostics::Stage::Destroyed, "FileHandle", &diagnostic,
+        g_memory.MapVirtual(this), &path, IoGuestPcr(), &ioMutex, this);
 }
 
 static bool StartsWithNoCase(std::string_view s, std::string_view prefix)
@@ -537,8 +645,9 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
     const bool wantWrite = (DesiredAccess & 0x40000000) != 0 || (DesiredAccess & 0x2) != 0 || (DesiredAccess & 0x4) != 0;
     // A mod overflow archive the patched index names lives in the mod cache.
     bool overflow = false;
+    std::shared_ptr<void> cachePin;
     if (!wantWrite && !hostPath.empty())
-        if (auto cached = modding::text_overlay::OverflowArchive(hostPath); !cached.empty())
+        if (auto cached = modding::text_overlay::OverflowArchive(hostPath, &cachePin); !cached.empty())
         {
             hostPath = std::move(cached);
             overflow = true;
@@ -592,6 +701,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
 
     auto handle = CreateKernelObject<FileHandle>();
     handle->path = hostPath;
+    handle->cachePin = std::move(cachePin);
 
     if (isDir || ((CreateOptions & FILE_DIRECTORY_FILE) && !exists))
     {
@@ -602,6 +712,7 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
     else
     {
         const char* mode = "rb";
+        std::filesystem::path openedPath = hostPath;
         if (wantWrite)
         {
             if (!exists || information == 2 || information == 3)
@@ -609,11 +720,51 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
             else
                 mode = "r+b";
             std::filesystem::create_directories(hostPath.parent_path(), ec);
+            const auto relative = hostPath.lexically_normal().lexically_relative(g_saveRoot.lexically_normal());
+            handle->durable = !relative.empty() && *relative.begin() != "..";
+#if LO_PLATFORM_ANDROID || defined(LO_STORAGE_TESTING)
+            if (g_sharedSaves && handle->durable && _stricmp(hostPath.filename().string().c_str(), "save.bin") == 0)
+            {
+                const auto key = std::filesystem::absolute(hostPath, ec).lexically_normal();
+                if (ec)
+                {
+                    DestroyKernelObject(handle);
+                    if (IoStatusBlock) { IoStatusBlock->Status = STATUS_ACCESS_DENIED; IoStatusBlock->Information = 0; }
+                    return STATUS_ACCESS_DENIED;
+                }
+                {
+                    std::lock_guard lock(g_saveWriterMutex);
+                    if (!g_saveWriters.insert(key).second)
+                    {
+                        DestroyKernelObject(handle);
+                        constexpr uint32_t sharingViolation = 0xC0000043u;
+                        if (IoStatusBlock) { IoStatusBlock->Status = sharingViolation; IoStatusBlock->Information = 0; }
+                        return sharingViolation;
+                    }
+                    handle->saveWriterKey = key;
+                }
+                handle->saveWorkingPath = hostPath.parent_path() / ("." + hostPath.filename().string() + ".lo-working");
+                openedPath = handle->saveWorkingPath;
+                if (exists && information == 1)
+                {
+                    std::filesystem::copy_file(hostPath, openedPath, std::filesystem::copy_options::overwrite_existing, ec);
+                    if (ec)
+                    {
+                        DestroyKernelObject(handle);
+                        if (IoStatusBlock) { IoStatusBlock->Status = STATUS_ACCESS_DENIED; IoStatusBlock->Information = 0; }
+                        return STATUS_ACCESS_DENIED;
+                    }
+                }
+                // Merely opening an existing save for overwrite is not a
+                // completed save. Keep its last version until actual IO.
+                handle->saveDirty = !exists;
+            }
+#endif
         }
 #ifdef _WIN32
-        handle->file = _wfopen(hostPath.c_str(), mode == std::string("rb") ? L"rb" : mode == std::string("w+b") ? L"w+b" : L"r+b");
+        handle->file = _wfopen(openedPath.c_str(), mode == std::string("rb") ? L"rb" : mode == std::string("w+b") ? L"w+b" : L"r+b");
 #else
-        handle->file = fopen(hostPath.c_str(), mode);
+        handle->file = fopen(openedPath.c_str(), mode);
 #endif
         if (!handle->file)
         {
@@ -623,11 +774,6 @@ static uint32_t OpenFileHandle(be<uint32_t>* FileHandleOut, uint32_t DesiredAcce
             return STATUS_ACCESS_DENIED;
         }
         handle->writable = wantWrite;
-        if (wantWrite)
-        {
-            const auto relative = hostPath.lexically_normal().lexically_relative(g_saveRoot.lexically_normal());
-            handle->durable = !relative.empty() && *relative.begin() != "..";
-        }
         _fseeki64(handle->file, 0, SEEK_END);
         handle->size = handle->fileSize = uint64_t(_ftelli64(handle->file));
         _fseeki64(handle->file, 0, SEEK_SET);
@@ -823,6 +969,14 @@ uint32_t NtWriteFile(uint32_t handleValue, uint32_t Event, uint32_t ApcRoutine, 
         status = seekOk && written == Length && flushOk ? STATUS_SUCCESS : 0xC0000185u;
         handle->position = offset + written;
         handle->size = std::max(handle->size, handle->position);
+        if (!handle->saveWorkingPath.empty())
+        {
+            handle->saveDirty = true;
+            if (status != STATUS_SUCCESS)
+                handle->saveFailed = true;
+            else if (!handle->PublishSave())
+                status = kStatusIoDeviceError;
+        }
         trace.SetResult(status, uint32_t(written));
         trace.SetStage(io_diagnostics::Stage::TransferDone);
     }
@@ -855,7 +1009,8 @@ uint32_t NtFlushBuffersFile(uint32_t handleValue, XIO_STATUS_BLOCK* IoStatusBloc
         trace.Acquired(handle->diagnostic, &handle->ioMutex, handle->path, handle.get());
         FileIoLock ioLock(handle->ioMutex, trace);
         // FlushFileBuffers rejects read-only handles; they have nothing to write.
-        const bool flushed = handle->writable ? FileSystem::SyncFile(handle->file) : fflush(handle->file) == 0;
+        const bool flushed = !handle->saveWorkingPath.empty() ? handle->PublishSave() :
+            handle->writable ? FileSystem::SyncFile(handle->file) : fflush(handle->file) == 0;
         status = flushed ? STATUS_SUCCESS : 0xC0000185u;
         trace.SetStage(io_diagnostics::Stage::TransferDone);
     }
@@ -1015,7 +1170,10 @@ uint32_t NtSetInformationFile(uint32_t handleValue, XIO_STATUS_BLOCK* IoStatusBl
             LOG_KERNEL("ignoring allocation hint {}", size);
         }
         else if (fflush(handle->file) != 0)
+        {
             status = FileIoError(errno);
+            if (!handle->saveWorkingPath.empty()) handle->saveFailed = true;
+        }
         else
         {
 #ifdef _WIN32
@@ -1027,7 +1185,16 @@ uint32_t NtSetInformationFile(uint32_t handleValue, XIO_STATUS_BLOCK* IoStatusBl
                 status = FileIoError(errno);
 #endif
             if (status == STATUS_SUCCESS)
+            {
                 handle->size = size;
+                if (!handle->saveWorkingPath.empty())
+                {
+                    handle->saveDirty = true;
+                    if (!handle->PublishSave()) status = kStatusIoDeviceError;
+                }
+            }
+            else if (!handle->saveWorkingPath.empty())
+                handle->saveFailed = true;
         }
         break;
     }

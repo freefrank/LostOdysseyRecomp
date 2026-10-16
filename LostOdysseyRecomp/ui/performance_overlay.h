@@ -27,9 +27,7 @@ struct Sources {
     uint32_t renderWidth = 0, renderHeight = 0;
     uint32_t outputWidth = 0, outputHeight = 0; // the upscaler's output; 0 without one
     bool frameGeneration = false;    // a provider generates frames
-    uint64_t presentedFrames = 0;    // its cumulative presents, generated frames included;
-                                     // 0 when it counts none (D3D12 FSR)
-    uint32_t fgMultiplier = 2;       // without a count: output frames per rendered frame
+    uint64_t presentedFrames = 0;    // its cumulative presents, generated frames included
     uint64_t gpuBusy = 0;            // gpu::gpu_busy::Total()
 };
 

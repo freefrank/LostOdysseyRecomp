@@ -81,5 +81,26 @@ int main()
     Check(!os::user_paths::IsExecutableDirWritable(root / "missing"), "missing directory reported writable");
     fs::remove_all(root, error);
 #endif
+    // An explicit shared save root is independent of profile/config paths.
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", "");
+#else
+    unsetenv("LO_SAVE_DIR");
+#endif
+    const auto defaultSave = (os::user_paths::UsePortableLayout() ? fs::current_path() : os::user_paths::DataDir()) / "save";
+    Check(os::user_paths::SaveDir() == defaultSave, "default save path changed");
+    const auto sharedSave = fs::temp_directory_path() / "lo-shared-save";
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", sharedSave.string().c_str());
+#else
+    setenv("LO_SAVE_DIR", sharedSave.c_str(), 1);
+#endif
+    Check(os::user_paths::SaveDir() == sharedSave, "save override ignored");
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", "");
+#else
+    setenv("LO_SAVE_DIR", "", 1);
+#endif
+    Check(os::user_paths::SaveDir() == defaultSave, "empty save override did not use the default");
     std::cout << "PASS: user paths fixture\n";
 }

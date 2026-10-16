@@ -10,10 +10,12 @@
 #include "translations.h"
 #include "achievements_page.h"
 #include "mods_page.h"
+#include <patches/mod_hot_reload.h>
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_generation_settings.h>
+#include <gpu/shader_preparation_request.h>
 #include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
@@ -21,6 +23,9 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if LO_PLATFORM_ANDROID
+#include <SDL3/SDL_system.h>
+#endif
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
@@ -118,6 +123,8 @@ int importChoice = 1;
 bool importLaunchPending = false;
 bool shaderBundlePrompt = false;
 int shaderBundleChoice = 1;
+bool shaderPreparationPrompt = false;
+int shaderPreparationChoice = 1;
 // Mods page (System → Mods). The mods are listed when it opens; the order and
 // switches stay unsaved until Save. modsSaved is the order saved in this run,
 // applied at the next start; reopening the page shows it.
@@ -550,9 +557,17 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
                 folder};
     if (modsFocus == rows.open)
         return {Tr(L"Opens the mods folder in File Explorer.", L"在檔案總管中開啟 mods 資料夾。"), folder};
+    // A saved list being applied (patches/mod_hot_reload.h): one line for every row.
+    // The party's models are loaded once at startup and stay, so they need a restart.
+    if (const auto reload = mod_hot_reload::GetStatus(); reload.Pending())
+        return {Tr(L"Models update in the next area; party members after a restart.", L"模型從下一個區域起更新，隊伍成員需重新啟動後更新。"),
+                reload.phase == mod_hot_reload::Phase::Preparing && reload.total
+                    ? std::wstring(Tr(L"Preparing mods", L"正在準備 Mod")) + L"  " + std::to_wstring(reload.done) + L" / " +
+                          std::to_wstring(reload.total)
+                    : std::wstring{}};
     if (modsFocus == rows.save)
-        return {Tr(L"Saves the order and the switches. They apply after the game restarts.",
-                   L"儲存順序與開關。重新啟動遊戲後生效。"),
+        return {Tr(L"Saves the order and switches. Textures change at once, models in the next area.",
+                   L"儲存順序與開關。貼圖立即生效，模型在下一個區域生效。"),
                 Tr(L"When two mods change the same file, the one higher in the list wins.",
                    L"兩個 Mod 修改同一個檔案時，清單中較上方的優先。")};
     const int index = rows.EntryAt(modsFocus, modsEntries.size());
@@ -1591,6 +1606,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
+        addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -1633,14 +1649,17 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");
     if (tab == 3 && row == SystemModsRow)
-        next.help = Tr(L"Turn installed mods on or off and change their order. Changes apply after a restart.",
-                       L"開關已安裝的 Mod 並調整順序。重新啟動後生效。");
+        next.help = Tr(L"Turn installed mods on or off and change their order, without a restart.",
+                       L"開關已安裝的 Mod 並調整順序，無需重新啟動。");
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
     if (tab == 3 && row == SystemShaderBundleRow)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
+    if (tab == 3 && row == SystemShaderPreparationRow)
+        next.help = Tr(L"Prepares shaders before play at the next start. Reuses the bundle and cache.",
+                       L"下次啟動時在遊玩前準備著色器，並重用著色器包與快取。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
         next.help = Tr(L"Cutscene dialogue volume. Voices in battle follow Sound effects. Applies from the next scene.",
                        L"過場動畫中的對白音量。戰鬥中的語音跟隨音效音量。從下一個場景起套用。");
@@ -1991,6 +2010,14 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
         next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = shaderBundleChoice;
+    }
+    if (shaderPreparationPrompt)
+    {
+        next.dialogTitle = Tr(L"Prepare shaders again", L"重新準備著色器");
+        next.dialogMessage = Tr(L"Run shader preparation before playing at the next start?",
+                                L"下次啟動時在遊玩前執行著色器準備嗎？");
+        next.dialogChoices = {Tr(L"Prepare again", L"重新準備"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = shaderPreparationChoice;
     }
     if (modsDiscardPrompt || controlsDiscardPrompt)
     {
@@ -2518,6 +2545,7 @@ PPC_FUNC(sub_822F19B0)
         importPrompt = false;
         importLaunchPending = false;
         shaderBundlePrompt = false;
+        shaderPreparationPrompt = false;
         modsOpen = false;
         modsDiscardPrompt = false;
         restartForMods = false;
@@ -2799,6 +2827,25 @@ PPC_FUNC(sub_822F19B0)
 #endif
                 }
             }
+        }
+        Publish(base, config);
+        return;
+    }
+    if (shaderPreparationPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            shaderPreparationChoice = std::min(selected, 1);
+        if (input & 3) shaderPreparationChoice = 1 - shaderPreparationChoice;
+        if (input & 0x2000) shaderPreparationChoice = 1;
+        if (input & 0x3000)
+        {
+            shaderPreparationPrompt = false;
+            if (shaderPreparationChoice == 0)
+                status = gpu::shader_preparation::RequestNextStart()
+                    ? Tr(L"Full shader preparation will run at the next start.",
+                         L"下次啟動時會完整準備著色器。")
+                    : Tr(L"Could not schedule preparation. Check the settings folder.",
+                         L"無法安排著色器準備。請確認設定目錄可寫入。");
         }
         Publish(base, config);
         return;
@@ -3212,6 +3259,10 @@ PPC_FUNC(sub_822F19B0)
                 LOG_INFO("settings: mod list saved ({} mods)", order.size());
                 // Saving the order this run started with needs no restart.
                 if (order == modsRunning) status = Tr(L"Mod list saved.", L"Mod 清單已儲存。");
+                // The mods switch while the game runs (patches/mod_hot_reload.h): textures
+                // at once, models from the next area; the help line says so meanwhile.
+                else if (mod_hot_reload::Request())
+                    modsRunning = order;
                 else
                 {
                     restartPrompt = savedRestartPrompt = restartForMods = true;
@@ -3778,14 +3829,31 @@ PPC_FUNC(sub_822F19B0)
     }
     if ((input & 0x1000) && tab == 3 && row == SystemImportRow)
     {
+#if LO_PLATFORM_ANDROID
+        // RuntimeActivity handles this on the UI thread and keeps the game
+        // alive until the player confirms an import in GameFolderActivity.
+        // 0x8000 is RuntimeActivity.COMMAND_OPEN_GAME_FOLDER.
+        if (!SDL_SendAndroidMessage(0x8000, 0))
+        {
+            importLaunchPending = true;
+            restart::ReportLaunchFailure();
+        }
+#else
         importPrompt = true;
         importChoice = 1;
+#endif
         status.clear();
     }
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
     {
         shaderBundlePrompt = true;
         shaderBundleChoice = 1;
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemShaderPreparationRow)
+    {
+        shaderPreparationPrompt = true;
+        shaderPreparationChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 &&

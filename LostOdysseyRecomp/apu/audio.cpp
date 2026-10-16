@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "audio.h"
 #include "audio_callback.h"
+#include "fast_forward_audio.h"
 #include "matrix_surround.h"
 #include "test_signal.h"
 #include <cpu/guest_thread.h>
@@ -18,6 +19,9 @@ namespace apu
     namespace
     {
         detail::AudioCallback g_client;
+        detail::FastForwardAudio g_fastForwardAudio;
+        std::atomic<bool> g_resetFastForwardAudio{ false };
+        std::array<float, XAUDIO_NUM_CHANNELS> g_lastAudioSamples{};
         std::atomic<uint32_t> g_framesSubmitted{ 0 };
         os::GuestCodeThread g_thread; // runs the guest audio callback
         std::atomic<bool> g_running{ false };
@@ -52,9 +56,8 @@ namespace apu
         std::atomic<uint32_t> g_clockResets{ 0 };
         // Guest frames per output frame in this period: 1, or under
         // fast-forward up to its rate. The driver runs the guest callback this
-        // many times per period and SubmitFrame averages each run of this many
-        // samples into one, so the game's sound keeps pace with its boosted
-        // clock and plays higher, like a tape.
+        // many times per period. SubmitFrame shortens them by the same factor,
+        // preserving pitch unless the user selects the old Speed up mode.
         std::atomic<uint32_t> g_guestFramesPerOutput{ 1 };
         // Driver thread: the most guest frames a fast-forward period may run.
         constexpr uint32_t kMaxBoostFrames = 8;
@@ -278,6 +281,15 @@ namespace apu
                     {
                         g_client.Dispatch([&](uint32_t callback, uint32_t param)
                         {
+                            // Unregister can run on another guest thread or
+                            // inside an earlier callback of this boosted group.
+                            // Only this driver touches the processor's state.
+                            if (g_resetFastForwardAudio.load(std::memory_order_relaxed)
+                                && g_resetFastForwardAudio.exchange(false, std::memory_order_relaxed))
+                            {
+                                g_fastForwardAudio.Reset();
+                                g_lastAudioSamples.fill(0);
+                            }
                             ctx.ppcContext.r3.u64 = param;
                             g_memory.FindFunction(callback)(ctx.ppcContext, g_memory.base);
                         });
@@ -382,58 +394,27 @@ namespace apu
     void UnregisterClient()
     {
         g_client.Unregister();
+        g_resetFastForwardAudio.store(true, std::memory_order_relaxed);
         std::lock_guard lock(g_deviceMutex);
         if (g_stream) SDL_ClearAudioStream(g_stream);
     }
 
     static void EmitFrame(const uint32_t* words);
 
-    // Averages runs of `rate` guest samples (big-endian float planes of
-    // XAUDIO_NUM_SAMPLES) into whole output frames. Frames arrive one at a
-    // time while the driver waits in Dispatch.
-    static void DecimateFrame(const uint32_t* words, uint32_t rate, bool restart)
-    {
-        static std::array<uint32_t, XAUDIO_NUM_SAMPLES * XAUDIO_NUM_CHANNELS> output;
-        static std::array<float, XAUDIO_NUM_CHANNELS> sum{};
-        static uint32_t summed = 0, written = 0;
-        if (restart)
-        {
-            summed = written = 0;
-            sum.fill(0);
-        }
-        for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
-        {
-            for (uint32_t c = 0; c < XAUDIO_NUM_CHANNELS; ++c)
-            {
-                const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
-                sum[c] += std::isfinite(value) ? value : 0;
-            }
-            if (++summed < rate) continue;
-            for (uint32_t c = 0; c < XAUDIO_NUM_CHANNELS; ++c)
-                output[c * XAUDIO_NUM_SAMPLES + written] = ByteSwap(std::bit_cast<uint32_t>(sum[c] / float(rate)));
-            sum.fill(0);
-            summed = 0;
-            if (++written == XAUDIO_NUM_SAMPLES)
-            {
-                written = 0;
-                EmitFrame(output.data());
-            }
-        }
-    }
-
     void SubmitFrame(const void* samples)
     {
         if (!samples) return;
         const auto* words = static_cast<const uint32_t*>(samples);
-        // A rate change starts a new run; a partial output frame is dropped.
-        static uint32_t decimating = 0;
-        if (const uint32_t rate = g_guestFramesPerOutput.load(std::memory_order_relaxed); rate > 1)
+        const uint32_t rate = g_guestFramesPerOutput.load(std::memory_order_relaxed);
+        if (rate > 1 || g_fastForwardAudio.Active())
         {
-            DecimateFrame(words, rate, rate != decimating);
-            decimating = rate;
+            if (rate > 1 && !g_fastForwardAudio.Active())
+                g_fastForwardAudio.StartFrom(g_lastAudioSamples);
+            g_fastForwardAudio.Process(words, rate, debug_menu::fast_forward::KeepAudioPitch(), EmitFrame);
             return;
         }
-        decimating = 0;
+        // Normal playback goes straight to the original mixer: no stretch
+        // buffers, conversions, FFTs or allocations on this path.
         EmitFrame(words);
     }
 
@@ -475,14 +456,18 @@ namespace apu
             }
         }
         float peak = 0;
+        float channel[6];
         for (uint32_t i = 0; i < XAUDIO_NUM_SAMPLES; ++i)
         {
-            float channel[6];
             for (uint32_t c = 0; c < 6; ++c)
             {
                 const float value = std::bit_cast<float>(ByteSwap(words[c * XAUDIO_NUM_SAMPLES + i]));
                 channel[c] = std::isfinite(value) ? value : 0;
             }
+            // Keep the guest boundary before speaker-test/UI overlays: those
+            // are applied again by this mixer when the stretched frame arrives.
+            if (i + 1 == XAUDIO_NUM_SAMPLES)
+                std::copy_n(channel, XAUDIO_NUM_CHANNELS, g_lastAudioSamples.begin());
             if (testOn) pan.Next(channel);
             if (ui && uiPosition + i < ui->size())
             {

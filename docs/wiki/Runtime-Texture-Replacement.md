@@ -17,4 +17,4 @@ In a test over 86 disc-1 field maps and 19 battles, 98.1% of the eligible upload
 - **Video memory.** There is no video memory budget yet, so a large pack can use a lot of video memory, especially as RGBA8. Prefer DDS payloads, which are about 4 to 8 times smaller.
 - **GPUs without BC support.** DDS replacements are skipped there and the originals stay (some Mali GPUs). RGBA8 replacements still load but need much more memory.
 - **Shimmer.** Where the game samples only the top level of a texture, a larger replacement can shimmer when it is shown smaller.
-- **Other resources.** Models, font files and metrics, and movies have no runtime consumers; adding a file for them does nothing. Fonts of the native menu are limited to their texture pages (see [Modding](Modding.md)).
+- **Other resources.** Models and movies have their own formats, and language packs add letters to fonts (see [Modding](Modding.md)); a texture pack does not change them. Fonts of the native menu are limited to their texture pages.

@@ -12,9 +12,9 @@ python -m pip install Pillow
 python -B -m unittest tools.tests.mod_catalog_test tools.tests.mod_tools_test -v
 ```
 
-The C++ target checks identity normalization, mod folder priorities and disabled mods, format v2 metadata and overlay discovery, `mod-list.ini` order and the manager's save, generation/reload, provider fallback and recursion, external-manager isolation, invalid modes, payload identity/size/format checks for images, runtime textures (LOTEX2, RGBA8 and DDS) and text, language packs, path traversal and bounded manifests. Symlink checks run when the host permits creating symlinks. Concurrent readers exercise immutable snapshots.
+The C++ target checks identity normalization, mod folder priorities and disabled mods, format v2 metadata and overlay discovery, `mod-list.ini` order and the manager's save, generation/reload, provider fallback and recursion, external-manager isolation, invalid modes, payload identity/size/format checks for images, runtime textures (LOTEX2, RGBA8 and DDS) and text, language packs and their font files, path traversal and bounded manifests. Symlink checks run when the host permits creating symlinks. Concurrent readers exercise immutable snapshots.
 
-Python checks cover canonical keys and a fixed FNV path vector, UTF-8 identities, RGBA file layout, CSV filtering/deduplication, generated specifications, mod folder and overlay ZIPs, mod folder and overlay texture packs (RGBA8 and DDS), `init` from an export index, `overlay-to-mod` moves, dry run, refusals and rollback, `language-clean`, deterministic output, duplicate identities, invalid dimensions, input containment, no-overwrite behavior and failed-output cleanup.
+Python checks cover canonical keys and a fixed FNV path vector, UTF-8 identities, RGBA file layout, CSV filtering/deduplication, generated specifications, mod folder and overlay ZIPs, mod folder and overlay texture packs (RGBA8 and DDS), `init` from an export index, `overlay-to-mod` moves, dry run, refusals and rollback, `language-clean` (with the pack's fonts), the presentation forms `font-glyphs` shapes and a LOFONT1 file drawn from a system TrueType font (skipped without `freetype-py`, `uharfbuzz` or a font with Arabic letters; `LO_TEST_TTF` names one), deterministic output, duplicate identities, invalid dimensions, input containment, no-overwrite behavior and failed-output cleanup.
 
 The asset inventory has its own checks, listed in `tools/asset_inventory/README.md`. Nothing tests `tools/modding/publish_wiki.py` or the Wiki pages; see [Wiki publication](#wiki-publication) for how to check them by hand.
 
@@ -35,6 +35,8 @@ A synthetic payload test proves the wire contract and loader behavior. It does n
 Textures: export some textures (see [Creating mods](Creating-Mods.md#export-the-original-assets)), then run `lo_mod.py texture-pack --test tint` on the export. In game, the surfaces that use those textures turn reddish, and with Settings → System → Debug log on the log shows `[mods] texture <fingerprint> replaced` lines. Repeat with `--test nearest4`: the picture must look unchanged. A real upscale is judged by looking at it, with the originals as the reference.
 
 Text: install a language pack, pick it in Settings → System → Game language, restart, and check that the startup log lists it (`mods: language pack ...`) and that the translated lines appear. Pick another language and confirm the pack's lines no longer appear.
+
+Fonts: `LoFontPatch --disc <disc1> --member bin/xenon/loc/int/menu/rpfontscommon_int.xxx --out <folder> --self-test` (a target of the runtime build) adds three test glyphs to every font of the package, checks that the two glyph tables agree and every page decodes, and reads each font back with the settings menu's reader; `--add <font>=<file.lofont>` applies a pack's files instead and writes the pages for a look. `LoModelImport ... --language-pack <id>` takes the runtime path (mod listing, index patch, archive tail) for one package. In the game, a pack with glyph files logs `[mods] font: N glyph files ...` at startup and its letters appear in menus, item text and dialogue.
 
 ## External-manager acceptance
 

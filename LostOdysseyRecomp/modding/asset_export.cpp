@@ -1,7 +1,9 @@
 #include "asset_export.h"
+#include "font_patch.h"
 #include "fpi_index.h"
 #include "gltf_writer.h"
 #include "mod_api.h"
+#include "model_preview.h"
 #include "text_format.h"
 #include "ue3_package.h"
 #include "xenos_texture.h"
@@ -18,8 +20,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -685,6 +689,40 @@ void AttachTextures(const Package &package, Model &model, TextureCache &cache, c
     }
 }
 
+// --export-preview: the model drawn with its colour textures, decoded in memory.
+size_t WritePreview(const fs::path &file, const Package &package, const Model &model)
+{
+    std::vector<Image> images;
+    std::map<int32_t, size_t> decoded; // texture export -> index in images, or SIZE_MAX
+    std::vector<size_t> slots(model.materials.size(), SIZE_MAX);
+    for (size_t i = 0; i < model.materials.size(); ++i)
+    {
+        const auto ref = BaseColorTexture(package, model.materials[i]);
+        if (!ref) continue;
+        const auto [it, added] = decoded.emplace(ref, SIZE_MAX);
+        if (added)
+        {
+            try
+            {
+                images.push_back(DecodeTexture(package, *package.ExportAt(ref)));
+                it->second = images.size() - 1;
+            }
+            catch (const std::exception &) {} // Drawn untextured.
+        }
+        slots[i] = it->second;
+    }
+    std::vector<model_preview::Texture> textures(slots.size());
+    for (size_t i = 0; i < slots.size(); ++i)
+        if (slots[i] != SIZE_MAX)
+        {
+            const auto &image = images[slots[i]];
+            textures[i] = {image.width, image.height, image.channels, image.pixels.data(),
+                           image.channels == 4 && std::string_view(image.format->name) == "DXT1"};
+        }
+    auto still = model_preview::Render(model.mesh, textures);
+    return WritePng(file, Image{still.width, still.height, 3, nullptr, std::move(still.rgb)});
+}
+
 // An AnimSet: track bone names and its sequences, keyed for glTF.
 struct AnimSetData
 {
@@ -835,7 +873,7 @@ struct Stats
     std::vector<ModelRow> models;
     std::map<std::string, uint64_t> formats, skipped, examples;
     std::vector<std::string> notes;
-    uint64_t textureBytes = 0, movies = 0, movieBytes = 0, modelBytes = 0, packages = 0, notPackages = 0;
+    uint64_t textureBytes = 0, movies = 0, movieBytes = 0, modelBytes = 0, packages = 0, notPackages = 0, fonts = 0;
     void Skipped(const std::string &reason, const std::string &detail)
     {
         ++skipped[reason];
@@ -852,7 +890,7 @@ struct Stats
         for (auto &note : other.notes)
             if (examples[note.substr(0, note.find(':'))]++ < 5) notes.push_back(std::move(note));
         textureBytes += other.textureBytes; movies += other.movies; movieBytes += other.movieBytes; modelBytes += other.modelBytes;
-        packages += other.packages; notPackages += other.notPackages;
+        packages += other.packages; notPackages += other.notPackages; fonts += other.fonts;
     }
     uint64_t SkippedTotal() const
     {
@@ -970,12 +1008,55 @@ bool IsPackage(const std::vector<uint8_t> &bytes)
 // A SkeletalMesh an AnimSet can be written with: its package, export index and
 // lower-case bone names.
 struct Skeleton { Job job; uint32_t index = 0; std::string root; std::set<std::string> bones; };
+
+// Animation sets name their skeleton only through bone names; each character's
+// root bone name is unique, and its SkeletalMesh is in a *_m package. only: a
+// file name ("/pc_000a0_m.xxx") to read that package alone.
+std::vector<Skeleton> ReadSkeletons(const std::vector<Disc> &discs, std::string_view only = {})
+{
+    std::vector<Skeleton> skeletons;
+    std::set<std::string> visited;
+    for (const auto &disc : discs)
+        for (const auto &entry : disc.entries)
+        {
+            const auto &archive = disc.archives[entry.archive];
+            if (!entry.path.ends_with(only.empty() ? std::string_view("_m.xxx") : only) || !visited.insert(entry.path).second ||
+                archive.empty() || entry.offset > disc.archiveSizes[entry.archive] ||
+                entry.size > disc.archiveSizes[entry.archive] - entry.offset)
+                continue;
+            try
+            {
+                Job job{Job::Kind::Package, entry.path, archive, entry.offset, entry.size, {}};
+                const auto bytes = ReadPackageBytes(job);
+                if (!IsPackage(bytes)) continue;
+                const Package package(bytes);
+                for (size_t index = 0; index < package.exports.size(); ++index)
+                {
+                    const auto &e = package.exports[index];
+                    if (package.ClassName(e) != "SkeletalMesh" || e.name.starts_with("Default__")) continue;
+                    try
+                    {
+                        const auto model = ReadSkeletalMesh(package, e);
+                        Skeleton skeleton{job, uint32_t(index), Lower(model.mesh.bones[0].name), {}};
+                        for (const auto &bone : model.mesh.bones) skeleton.bones.insert(Lower(bone.name));
+                        skeletons.push_back(std::move(skeleton));
+                    }
+                    catch (const std::exception &) {} // Counted when the model itself is exported.
+                }
+            }
+            catch (const std::exception &) {}
+        }
+    return skeletons;
+}
+
 struct Context
 {
     const Request &request;
-    fs::path textures, models, animations;
+    fs::path textures, models, animations, fonts;
     const std::set<std::string> *select = nullptr; // list.csv names, or null for everything
-    const std::vector<Skeleton> *skeletons = nullptr;
+    const std::vector<Disc> *discs = nullptr;
+    // Every skeleton, read on first use (the whole set of *_m packages).
+    std::function<const std::vector<Skeleton> &()> skeletons;
 };
 
 // The model an AnimSet moves: the one whose root bone is the set's first track,
@@ -1008,13 +1089,23 @@ void ExportModel(const Job &job, const Package &package, size_t index, const std
     std::string file = job.path;
     if (!context.request.list)
     {
-        const auto name = FileStem(e.name) + "." + std::to_string(index) + ".glb";
+        const auto preview = context.request.preview;
+        const auto name = FileStem(e.name) + "." + std::to_string(index) + (preview ? ".png" : ".glb");
         const auto directory = context.models / FromUtf8(job.path);
         CreateDirectories(directory);
-        if (context.request.modelTextures) AttachTextures(package, model, cache, directory);
-        const auto glb = gltf::Write(model.mesh, e.name);
-        WriteFile(directory / FromUtf8(name), glb.data(), glb.size());
-        stats.modelBytes += glb.size();
+        if (preview)
+        {
+            try { stats.modelBytes += WritePreview(directory / FromUtf8(name), package, model); }
+            catch (const OutputError &) { throw; }
+            catch (const std::exception &error) { stats.Skipped("model_unreadable", key + ": " + error.what()); return; }
+        }
+        else
+        {
+            if (context.request.modelTextures) AttachTextures(package, model, cache, directory);
+            const auto glb = gltf::Write(model.mesh, e.name);
+            WriteFile(directory / FromUtf8(name), glb.data(), glb.size());
+            stats.modelBytes += glb.size();
+        }
         file = job.path + "/" + name;
     }
     stats.models.push_back({false, key, file, package.ClassName(e), {}, model.vertices, model.triangles,
@@ -1036,9 +1127,22 @@ void ExportAnimSet(const Job &job, const Package &package, size_t index, const s
     for (const auto &sequence : set.sequences) frames += sequence.frames;
     ModelRow row{true, key, job.path, "AnimSet", {}, uint32_t(set.sequences.size()), uint32_t(set.tracks.size()), frames};
     if (context.request.list) { stats.models.push_back(std::move(row)); return; }
-    const auto *source = FindSkeleton(*context.skeletons, set);
+    // Usually <code>_m.xxx holds the model of <code>_Root (bs_001a_Root moves
+    // bs_001a0_m). For a selection (the MO2 tool's preview), read that package
+    // before all of them.
+    const Skeleton *source = nullptr;
+    std::vector<Skeleton> likely;
+    if (const auto root = Lower(set.tracks[0]); context.select && root.ends_with("_root") && root.size() > 5)
+    {
+        const auto code = root.substr(0, root.size() - 5);
+        likely = ReadSkeletons(*context.discs, "/" + code + "_m.xxx");
+        if (likely.empty()) likely = ReadSkeletons(*context.discs, "/" + code + "0_m.xxx");
+        source = FindSkeleton(likely, set);
+    }
+    if (!source) source = FindSkeleton(context.skeletons(), set);
     if (!source) { stats.Skipped("animation_without_model", key + " (" + set.tracks[0] + ")"); return; }
     Model model;
+    const auto directory = context.animations / FromUtf8(job.path);
     try
     {
         std::vector<uint8_t> bytes;
@@ -1053,12 +1157,21 @@ void ExportAnimSet(const Job &job, const Package &package, size_t index, const s
         Require(source->index < owner->exports.size(), "model export missing");
         model = ReadSkeletalMesh(*owner, owner->exports[source->index]);
         row.model = source->job.path + ":" + owner->exports[source->index].name;
+        if (context.request.preview)
+        {
+            // The model in its bind pose, textured from its own package.
+            const auto name = FileStem(e.name) + "." + std::to_string(index) + ".png";
+            CreateDirectories(directory);
+            stats.modelBytes += WritePreview(directory / FromUtf8(name), *owner, model);
+            row.file = job.path + "/" + name;
+            stats.models.push_back(std::move(row));
+            return;
+        }
     }
     catch (const OutputError &) { throw; }
     catch (const std::exception &error) { stats.Skipped("animation_model_unreadable", key + ": " + error.what()); return; }
     if (!Animate(model.mesh, set)) { stats.Skipped("animation_without_model", key + " (no matching bones)"); return; }
     const auto name = FileStem(e.name) + "." + std::to_string(index) + ".glb";
-    const auto directory = context.animations / FromUtf8(job.path);
     CreateDirectories(directory);
     const auto glb = gltf::Write(model.mesh, e.name);
     WriteFile(directory / FromUtf8(name), glb.data(), glb.size());
@@ -1068,6 +1181,44 @@ void ExportAnimSet(const Job &job, const Package &package, size_t index, const s
 }
 
 // list: the texture's headers only, no decode, fingerprint or PNG.
+// One font's metrics and glyph table (modding/font_patch.h FontInfo) as
+// fonts/<package path>/<font>.json, for tools that draw glyphs a language pack adds.
+void ExportFont(const Job &job, const Package &package, std::span<const uint8_t> bytes, size_t index, const Context &context, Stats &stats)
+{
+    const auto &e = package.exports[index];
+    try
+    {
+        const font_patch::FontInfo *font = nullptr;
+        const auto fonts = font_patch::ReadFonts(bytes);
+        for (const auto &f : fonts) if (f.exportIndex == index) font = &f;
+        if (!font) throw std::runtime_error("not read");
+        std::string json = "{\n  \"package\": \"" + job.path + "\",\n  \"font\": \"" + font->name + "\",\n  \"export_index\": " +
+                           std::to_string(index) + ",\n  \"kerning\": " + std::to_string(font->kerning) + ",\n  \"pages\": [";
+        for (size_t p = 0; p < font->pages.size(); ++p)
+        {
+            const auto &page = font->pages[p];
+            json += std::string(p ? "," : "") + "\n    {\"export_index\": " + std::to_string(page.exportIndex) + ", \"name\": \"" + page.name +
+                    "\", \"width\": " + std::to_string(page.width) + ", \"height\": " + std::to_string(page.height) +
+                    ", \"format\": " + std::to_string(page.format) + ", \"png\": \"" + job.path + "/" + FileStem(page.name) + "." +
+                    std::to_string(page.exportIndex) + ".png\"}";
+        }
+        json += "\n  ],\n  \"glyphs\": [";
+        for (size_t g = 0; g < font->glyphs.size(); ++g)
+        {
+            const auto &glyph = font->glyphs[g];
+            json += std::string(g ? "," : "") + "\n    [" + std::to_string(glyph.codepoint) + ", " + std::to_string(glyph.x) + ", " +
+                    std::to_string(glyph.y) + ", " + std::to_string(glyph.width) + ", " + std::to_string(glyph.height) + ", " +
+                    std::to_string(glyph.page) + "]";
+        }
+        json += "\n  ]\n}\n";
+        const auto directory = context.fonts / FromUtf8(job.path);
+        CreateDirectories(directory);
+        WriteFile(directory / FromUtf8(FileStem(e.name) + ".json"), json.data(), json.size());
+        ++stats.fonts;
+    }
+    catch (const std::exception &error) { stats.Skipped("font_unreadable", job.path + "#" + std::to_string(index) + ":" + e.name + ": " + error.what()); }
+}
+
 void ExportPackage(const Job &job, const Context &context, Stats &stats)
 {
     const auto &request = context.request;
@@ -1092,6 +1243,11 @@ void ExportPackage(const Job &job, const Context &context, Stats &stats)
         const auto &e = package->exports[index];
         if (e.name.starts_with("Default__")) continue;
         const auto className = package->ClassName(e);
+        if (request.fonts && className == "Font" && !list && !e.name.starts_with("Default__"))
+        {
+            ExportFont(job, *package, bytes, index, context, stats);
+            continue;
+        }
         const auto kind = request.textures ? Classify(className) : TextureClass::None;
         const auto mesh = request.models ? ClassifyMesh(className) : MeshClass::None;
         const bool animation = request.animations && className == "AnimSet";
@@ -1240,6 +1396,279 @@ std::string Csv(std::string_view value)
     for (const char c : value) { if (c == '"') quoted += '"'; quoted += c; }
     return quoted + "\"";
 }
+
+// ---- Readable names (--export-list) ------------------------------------------
+// The MO2 tool labels models with the game's own names, from every language on
+// the discs:
+//  - places: loc/<l>/field/name_data.xml (UTF-16 XML). LocationName2 starts
+//    with the map's script ("u36_0_scrw ...") or battle map ("map_u10_b1 ...");
+//    the name is LocationName1, else the rest of LocationName2.
+//  - the party: column 1 of the battle name table loc/<l>/battle/text/namedata.bin,
+//    entries 0..8, are pc_000..pc_080 (resourcechara.bin below lists the same
+//    nine characters first, in that order).
+//  - other battle characters: sys/battle/data/resourcechara/resourcechara.bin
+//    gives each battle model a Japanese working name; one that is also an entry
+//    of the Japanese name table (column 2, monsters, else column 1), as it is or
+//    without a note in brackets at its end, takes that entry in each language.
+//    A model several characters share takes the entry most of them match.
+struct NameRow { std::string code, source, group, language, name; };
+
+std::optional<std::vector<uint8_t>> ReadMember(const std::vector<Disc> &discs, std::string_view path)
+{
+    for (const auto &disc : discs)
+        for (const auto &entry : disc.entries)
+        {
+            if (entry.path != path) continue;
+            const auto &archive = disc.archives[entry.archive];
+            if (archive.empty() || entry.offset > disc.archiveSizes[entry.archive] ||
+                entry.size > disc.archiveSizes[entry.archive] - entry.offset)
+                continue;
+            try
+            {
+                auto bytes = ReadExtent(archive, entry.offset, entry.size);
+                if (bytes.size() >= 3 && std::memcmp(bytes.data(), "cpx", 3) == 0 && !cpx::Decode(bytes, bytes)) continue;
+                return bytes;
+            }
+            catch (const std::exception &) {}
+        }
+    return std::nullopt;
+}
+
+// Without spaces, ideographic spaces (U+3000) or line breaks at either end.
+std::string Trim(std::string_view value)
+{
+    constexpr std::string_view wide = "\xe3\x80\x80";
+    for (bool again = true; again;)
+    {
+        again = false;
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t' || value.front() == '\r' || value.front() == '\n'))
+            value.remove_prefix(1), again = true;
+        while (!value.empty() && (value.back() == ' ' || value.back() == '\t' || value.back() == '\r' || value.back() == '\n'))
+            value.remove_suffix(1), again = true;
+        if (value.starts_with(wide)) value.remove_prefix(wide.size()), again = true;
+        if (value.ends_with(wide)) value.remove_suffix(wide.size()), again = true;
+    }
+    return std::string(value);
+}
+
+bool Unnamed(const std::string &name) { return name.empty() || name == "None" || name == "(blank)"; }
+
+void AppendUtf8(std::string &out, uint32_t c)
+{
+    if (c < 0x80) out += char(c);
+    else if (c < 0x800) { out += char(0xc0 | c >> 6); out += char(0x80 | (c & 0x3f)); }
+    else if (c < 0x10000) { out += char(0xe0 | c >> 12); out += char(0x80 | (c >> 6 & 0x3f)); out += char(0x80 | (c & 0x3f)); }
+    else
+    {
+        out += char(0xf0 | c >> 18); out += char(0x80 | (c >> 12 & 0x3f));
+        out += char(0x80 | (c >> 6 & 0x3f)); out += char(0x80 | (c & 0x3f));
+    }
+}
+
+std::string DecodeEntities(std::string_view value)
+{
+    std::string out;
+    for (size_t i = 0; i < value.size(); ++i)
+    {
+        const auto end = value[i] == '&' ? value.find(';', i) : std::string_view::npos;
+        if (end == std::string_view::npos || end - i > 10) { out += value[i]; continue; }
+        const auto entity = value.substr(i + 1, end - i - 1);
+        if (entity == "amp") out += '&';
+        else if (entity == "lt") out += '<';
+        else if (entity == "gt") out += '>';
+        else if (entity == "quot") out += '"';
+        else if (entity == "apos") out += '\'';
+        else if (entity.starts_with('#'))
+        {
+            const bool hex = entity.size() > 1 && (entity[1] == 'x' || entity[1] == 'X');
+            const auto digits = std::string(entity.substr(hex ? 2 : 1));
+            char *stop = nullptr;
+            const auto code = std::strtoul(digits.c_str(), &stop, hex ? 16 : 10);
+            if (digits.empty() || *stop || code == 0 || code > 0x10ffff) { out += value[i]; continue; }
+            AppendUtf8(out, uint32_t(code));
+        }
+        else { out += value[i]; continue; }
+        i = end;
+    }
+    return out;
+}
+
+// name_data.xml: (code, name) per map in file order, first name of a code only.
+std::vector<std::pair<std::string, std::string>> ReadPlaces(std::span<const uint8_t> bytes)
+{
+    std::u16string units;
+    for (size_t i = bytes.size() >= 2 && bytes[0] == 0xff && bytes[1] == 0xfe ? 2 : 0; i + 1 < bytes.size(); i += 2)
+        units += char16_t(bytes[i] | bytes[i + 1] << 8);
+    const std::u16string_view text = units;
+    auto attribute = [](std::u16string_view element, std::u16string_view name) {
+        const auto at = element.find(name);
+        if (at == std::u16string_view::npos) return std::string();
+        const auto begin = at + name.size(), end = element.find(u'"', begin);
+        if (end == std::u16string_view::npos) return std::string();
+        return Trim(DecodeEntities(text::EncodeUnits(element.substr(begin, end - begin))));
+    };
+    std::vector<std::pair<std::string, std::string>> places;
+    std::set<std::string> seen;
+    for (auto at = text.find(u"<FieldNameData"); at != std::u16string_view::npos; at = text.find(u"<FieldNameData", at + 1))
+    {
+        const auto end = text.find(u"/>", at);
+        if (end == std::u16string_view::npos) break;
+        const auto element = text.substr(at, end - at);
+        // The leading space keeps SubLocationName and WorldLocationName out.
+        const auto where = attribute(element, u" LocationName2=\"");
+        const auto space = where.find(' ');
+        auto code = Lower(where.substr(0, space));
+        if (code.ends_with("_scrw")) code.resize(code.size() - 5);
+        else if (code.starts_with("map_")) code.erase(0, 4);
+        else continue;
+        auto name = attribute(element, u" LocationName1=\"");
+        if (Unnamed(name)) name = space == std::string::npos ? std::string() : Trim(where.substr(space + 1));
+        if (code.empty() || Unnamed(name) || !seen.insert(code).second) continue;
+        places.emplace_back(std::move(code), std::move(name));
+    }
+    return places;
+}
+
+// resourcechara.bin, big endian: the end of the records, the string table and
+// its count, then 0xd0-byte records from 0x10 whose u16 at +2 is the name and at
+// +4 the model package ("en_043a0_m.en_043a0_m"). The table has an (offset,
+// bytes) pair per UTF-16 string, offsets counted from the table.
+// Returns (model code, Japanese working name) in record order.
+std::vector<std::pair<std::string, std::string>> ReadBattleCharacters(std::span<const uint8_t> bytes)
+{
+    auto u32 = [&](size_t p) {
+        Require(p <= bytes.size() && bytes.size() - p >= 4, "resourcechara.bin is truncated");
+        return uint32_t(bytes[p]) << 24 | uint32_t(bytes[p + 1]) << 16 | uint32_t(bytes[p + 2]) << 8 | bytes[p + 3];
+    };
+    auto u16 = [&](size_t p) { Require(p <= bytes.size() && bytes.size() - p >= 2, "resourcechara.bin is truncated");
+                               return uint16_t(bytes[p] << 8 | bytes[p + 1]); };
+    const auto recordsEnd = u32(0), table = u32(4), count = u32(8);
+    Require(recordsEnd <= bytes.size() && table <= bytes.size() && count <= (bytes.size() - table) / 8, "invalid resourcechara.bin");
+    auto string = [&](uint32_t i) {
+        if (i == 0 || i >= count) return std::u16string();
+        const auto offset = u32(table + size_t(i) * 8), size = u32(table + size_t(i) * 8 + 4) & ~1u;
+        if (offset > bytes.size() - table || size > bytes.size() - table - offset) return std::u16string();
+        auto units = text::ReadUtf16Be(bytes.subspan(table + offset, size));
+        if (const auto nul = units.find(u'\0'); nul != std::u16string::npos) units.resize(nul);
+        return units;
+    };
+    auto code = [](const std::u16string &package) {
+        // pc_000a0, en_043b0, np_u41a0: two letters, '_', three, a letter, a digit.
+        std::string value;
+        for (const auto c : package.substr(0, package.find(u'.'))) value += c < 0x80 ? char(c) : '?';
+        if (value.size() != 10 || !value.ends_with("_m") || value[2] != '_') return std::string();
+        value.resize(8);
+        for (const size_t i : {0, 1, 6}) if (value[i] < 'a' || value[i] > 'z') return std::string();
+        for (const size_t i : {3, 4, 5}) if (!((value[i] >= 'a' && value[i] <= 'z') || (value[i] >= '0' && value[i] <= '9'))) return std::string();
+        return value[7] >= '0' && value[7] <= '9' ? value : std::string();
+    };
+    std::vector<std::pair<std::string, std::string>> characters;
+    for (size_t p = 0x10; p + 0xd0 <= recordsEnd; p += 0xd0)
+    {
+        auto model = code(string(u16(p + 4)));
+        auto name = Trim(text::EncodeUnits(string(u16(p + 2))));
+        if (!model.empty() && !name.empty()) characters.emplace_back(std::move(model), std::move(name));
+    }
+    return characters;
+}
+
+// The name table entry ("<index>.<column>") a Japanese working name stands for,
+// or empty. byName: per column, each Japanese name's lowest index (the base
+// character comes before its variants).
+std::string NameTableKey(const std::map<std::string, std::string> (&byName)[2], const std::string &working)
+{
+    // "ガードアーマー(ウーラ)" -> "ガードアーマー"; also with full-width brackets.
+    auto stripped = working;
+    if (stripped.ends_with(")") || stripped.ends_with("\xef\xbc\x89"))
+    {
+        const auto ascii = stripped.rfind('('), wide = stripped.rfind("\xef\xbc\x88");
+        const auto at = ascii == std::string::npos ? wide : wide == std::string::npos ? ascii : std::max(ascii, wide);
+        if (at != std::string::npos && at > 0) stripped = Trim(stripped.substr(0, at));
+    }
+    for (const auto &candidate : {working, stripped})
+        for (const auto &column : byName)
+            if (const auto it = column.find(candidate); it != column.end()) return it->second;
+    return {};
+}
+
+std::vector<NameRow> ReadNames(const std::vector<Disc> &discs)
+{
+    // Languages: the folders under bin/xenon/loc with either name source.
+    constexpr std::string_view loc = "bin/xenon/loc/", places = "/field/name_data.xml", table = "/battle/text/namedata.bin";
+    std::set<std::string> languages;
+    for (const auto &disc : discs)
+        for (const auto &entry : disc.entries)
+            if (entry.path.starts_with(loc) && (entry.path.ends_with(places) || entry.path.ends_with(table)))
+            {
+                const auto language = entry.path.substr(loc.size(), entry.path.find('/', loc.size()) - loc.size());
+                if (!language.empty() && language.find('/') == std::string::npos) languages.insert(language);
+            }
+    std::vector<NameRow> rows;
+    std::map<std::string, std::map<std::string, std::string>> tables; // language -> "<index>.<column>" -> name
+    for (const auto &language : languages)
+    {
+        const auto placesPath = std::string(loc) + language + std::string(places);
+        if (const auto bytes = ReadMember(discs, placesPath))
+            for (auto &[code, name] : ReadPlaces(*bytes)) rows.push_back({code, placesPath, "place", language, name});
+        const auto tablePath = std::string(loc) + language + std::string(table);
+        if (const auto bytes = ReadMember(discs, tablePath))
+        {
+            try
+            {
+                auto &names = tables[language];
+                for (auto &entry : text::Parse(text::Format::StringBank, *bytes)) names[entry.key] = Trim(entry.text);
+            }
+            catch (const std::exception &) { tables.erase(language); }
+        }
+    }
+    for (const auto &[language, names] : tables)
+        for (int member = 0; member < 9; ++member)
+            if (const auto it = names.find(std::to_string(member) + ".1"); it != names.end() && !Unnamed(it->second))
+                rows.push_back({"pc_0" + std::to_string(member) + "0", std::string(loc) + language + std::string(table),
+                                "character", language, it->second});
+
+    constexpr std::string_view characters = "bin/xenon/sys/battle/data/resourcechara/resourcechara.bin";
+    const auto japanese = tables.find("jpn");
+    const auto bytes = japanese == tables.end() ? std::nullopt : ReadMember(discs, characters);
+    if (!bytes) return rows;
+    std::vector<std::pair<std::string, std::string>> battle;
+    try { battle = ReadBattleCharacters(*bytes); }
+    catch (const std::exception &) { return rows; }
+    // byName[0]: column 2 (monsters), byName[1]: column 1 (characters).
+    std::map<std::string, std::string> byName[2];
+    std::map<std::string, long> lowest[2];
+    for (const auto &[key, name] : japanese->second)
+    {
+        const auto column = key.substr(std::min(key.find('.'), key.size()));
+        const int slot = column == ".2" ? 0 : column == ".1" ? 1 : -1;
+        if (slot < 0 || Unnamed(name)) continue;
+        const long index = std::strtol(key.c_str(), nullptr, 10);
+        auto &first = lowest[slot].try_emplace(name, index).first->second;
+        if (index <= first) { first = index; byName[slot][name] = key; }
+    }
+    // model code -> name table key -> (characters matching it, first record)
+    std::map<std::string, std::map<std::string, std::pair<size_t, size_t>>> votes;
+    for (size_t record = 0; record < battle.size(); ++record)
+    {
+        const auto &[model, working] = battle[record];
+        if (model.starts_with("pc_")) continue; // The party, named above; their models also stand in for others.
+        if (const auto key = NameTableKey(byName, working); !key.empty())
+        {
+            auto &vote = votes[model].try_emplace(key, 0, record).first->second;
+            ++vote.first;
+        }
+    }
+    for (const auto &[model, keys] : votes)
+    {
+        const auto best = std::min_element(keys.begin(), keys.end(), [](const auto &a, const auto &b) {
+            return a.second.first != b.second.first ? a.second.first > b.second.first : a.second.second < b.second.second;
+        });
+        for (const auto &[language, names] : tables)
+            if (const auto it = names.find(best->first); it != names.end() && !Unnamed(it->second))
+                rows.push_back({model, std::string(characters), "character", language, it->second});
+    }
+    return rows;
+}
 }
 
 // The DLC replaces some text files: on the discs the DLC dungeon lines are
@@ -1259,6 +1688,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         option = true;
         if (argument == "--export-list") { parsed.list = true; continue; }
         if (argument == "--export-model-textures") { parsed.modelTextures = true; continue; }
+        if (argument == "--export-preview") { parsed.preview = true; continue; }
         const bool known = argument == "--export-assets" || argument == "--export-kinds" || argument == "--export-filter" ||
                            argument == "--export-select" || argument == "--export-language" ||
                            argument == "--export-language-pack";
@@ -1295,7 +1725,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
         }
         else
         {
-            parsed.textures = parsed.movies = parsed.pngs = parsed.text = parsed.models = parsed.animations = false;
+            parsed.textures = parsed.movies = parsed.pngs = parsed.text = parsed.models = parsed.animations = parsed.fonts = false;
             size_t begin = 0;
             while (begin <= value.size())
             {
@@ -1307,7 +1737,8 @@ std::optional<Request> ParseArguments(int argc, char **argv)
                 else if (kind == "text") parsed.text = true;
                 else if (kind == "models") parsed.models = true;
                 else if (kind == "animations") parsed.animations = true;
-                else parsed.error = "unknown export kind '" + kind + "' (expected textures,fingerprints,movies,text,models,animations)";
+                else if (kind == "fonts") parsed.fonts = true;
+                else parsed.error = "unknown export kind '" + kind + "' (expected textures,fingerprints,movies,text,models,animations,fonts)";
                 begin = end + 1;
             }
         }
@@ -1316,7 +1747,7 @@ std::optional<Request> ParseArguments(int argc, char **argv)
     if (parsed.output.empty() && parsed.error.empty()) parsed.error = "--export-assets <output folder> is required";
     if (!parsed.languagePack.empty())
     {
-        parsed.textures = parsed.movies = parsed.pngs = parsed.models = parsed.animations = false;
+        parsed.textures = parsed.movies = parsed.pngs = parsed.models = parsed.animations = parsed.fonts = false;
         parsed.text = true;
         if (parsed.language.empty()) parsed.language = "int";
     }
@@ -1407,7 +1838,7 @@ int Run(const Request &request, const fs::path &gameRoot)
         if (select.empty()) return Fail(Utf8(request.select) + " names nothing to export");
     }
     const auto textures = output / "textures", movies = output / "movies";
-    const auto models = output / "models", animations = output / "animations";
+    const auto models = output / "models", animations = output / "animations", fonts = output / "fonts";
     const auto pack = request.languagePack.empty() ? fs::path{} : output / FromUtf8(request.languagePack);
     const auto texts = pack.empty() ? output / "text" : pack / "text";
     // The untranslated copy that language-clean compares the pack with.
@@ -1422,10 +1853,11 @@ int Run(const Request &request, const fs::path &gameRoot)
             if (request.text) CreateDirectories(texts);
             if (request.models) CreateDirectories(models);
             if (request.animations) CreateDirectories(animations);
+            if (request.fonts) CreateDirectories(fonts);
         }
     }
     catch (const std::exception &failure) { return Fail(failure.what()); }
-    const bool packages = request.textures || request.models || request.animations;
+    const bool packages = request.textures || request.models || request.animations || request.fonts;
 
     // One job per FPI path; a path repeated on later discs is the same file
     // when its size matches (the four-disc census found no content variants).
@@ -1519,43 +1951,14 @@ int Run(const Request &request, const fs::path &gameRoot)
     // Largest first keeps the four workers busy until the end.
     std::stable_sort(jobs.begin(), jobs.end(), [](const Job &a, const Job &b) { return a.size > b.size; });
 
-    // Animation sets name their skeleton only through bone names; each character's
-    // root bone name is unique, and its SkeletalMesh is in a *_m package.
+    // Read once, by the first animation set that needs them (models and lists never do).
     std::vector<Skeleton> skeletons;
-    if (request.animations && !request.list)
-    {
-        std::set<std::string> visited;
-        for (const auto &disc : discs)
-            for (const auto &entry : disc.entries)
-            {
-                const auto &archive = disc.archives[entry.archive];
-                if (!entry.path.ends_with("_m.xxx") || !visited.insert(entry.path).second || archive.empty() ||
-                    entry.offset > disc.archiveSizes[entry.archive] || entry.size > disc.archiveSizes[entry.archive] - entry.offset)
-                    continue;
-                try
-                {
-                    Job job{Job::Kind::Package, entry.path, archive, entry.offset, entry.size, {}};
-                    const auto bytes = ReadPackageBytes(job);
-                    if (!IsPackage(bytes)) continue;
-                    const Package package(bytes);
-                    for (size_t index = 0; index < package.exports.size(); ++index)
-                    {
-                        const auto &e = package.exports[index];
-                        if (package.ClassName(e) != "SkeletalMesh" || e.name.starts_with("Default__")) continue;
-                        try
-                        {
-                            const auto model = ReadSkeletalMesh(package, e);
-                            Skeleton skeleton{job, uint32_t(index), Lower(model.mesh.bones[0].name), {}};
-                            for (const auto &bone : model.mesh.bones) skeleton.bones.insert(Lower(bone.name));
-                            skeletons.push_back(std::move(skeleton));
-                        }
-                        catch (const std::exception &) {} // Counted when the model itself is exported.
-                    }
-                }
-                catch (const std::exception &) {}
-            }
-    }
-    const Context context{request, textures, models, animations, select.empty() ? nullptr : &select, &skeletons};
+    std::once_flag skeletonsRead;
+    auto allSkeletons = [&]() -> const std::vector<Skeleton> & {
+        std::call_once(skeletonsRead, [&] { skeletons = ReadSkeletons(discs); });
+        return skeletons;
+    };
+    const Context context{request, textures, models, animations, fonts, select.empty() ? nullptr : &select, &discs, allSkeletons};
 
     std::mutex mutex;
     std::atomic<size_t> next{0};
@@ -1609,26 +2012,33 @@ int Run(const Request &request, const fs::path &gameRoot)
     for (const auto &row : total.models) ++(row.animation ? animationCount : modelCount);
     if (request.list)
     {
-        // kind,name,path,width,height,format,language,entries,bytes: name is the
-        // texture, model or animation set key, the movie's output file name or
-        // the text member path. Models put vertices, triangles, the class and
+        // kind,name,path,width,height,format,language,entries,bytes,label: name is
+        // the texture, model or animation set key, the movie's output file name
+        // or the text member path. Models put vertices, triangles, the class and
         // bones in width, height, format and entries; animation sets put
-        // sequences, tracks, AnimSet and frames there.
+        // sequences, tracks, AnimSet and frames there. With models or animation
+        // sets, "name" rows give a map or character code (name), the file it
+        // comes from (path), place or character (format), the language and the
+        // game's name for it (label).
         std::sort(total.rows.begin(), total.rows.end(), [](const Row &a, const Row &b) { return a.key < b.key; });
         std::sort(total.movieRows.begin(), total.movieRows.end(), [](const MovieRow &a, const MovieRow &b) { return a.path < b.path; });
         std::sort(total.texts.begin(), total.texts.end(), [](const TextRow &a, const TextRow &b) { return a.path < b.path; });
-        std::string csv = "kind,name,path,width,height,format,language,entries,bytes\n";
+        std::string csv = "kind,name,path,width,height,format,language,entries,bytes,label\n";
         for (const auto &row : total.rows)
             csv += "texture," + Csv(row.key) + "," + Csv(row.file) + "," + std::to_string(row.width) + "," +
-                   std::to_string(row.height) + "," + row.format + ",,,\n";
+                   std::to_string(row.height) + "," + row.format + ",,,,\n";
         for (const auto &row : total.movieRows)
-            csv += "movie," + Csv(row.name) + "," + Csv(row.path) + ",,,,,," + std::to_string(row.bytes) + "\n";
+            csv += "movie," + Csv(row.name) + "," + Csv(row.path) + ",,,,,," + std::to_string(row.bytes) + ",\n";
         for (const auto &row : total.texts)
             csv += "text," + Csv(row.path) + "," + Csv(row.path) + ",,," + text::Name(row.format) + "," + row.language + "," +
-                   std::to_string(row.entries) + ",\n";
+                   std::to_string(row.entries) + ",,\n";
         for (const auto &row : total.models)
             csv += std::string(row.animation ? "animation," : "model,") + Csv(row.key) + "," + Csv(row.file) + "," +
-                   std::to_string(row.a) + "," + std::to_string(row.b) + "," + row.className + ",," + std::to_string(row.c) + ",\n";
+                   std::to_string(row.a) + "," + std::to_string(row.b) + "," + row.className + ",," + std::to_string(row.c) + ",,\n";
+        if (request.models || request.animations)
+            for (const auto &row : ReadNames(discs))
+                csv += "name," + Csv(row.code) + "," + Csv(row.source) + ",,," + row.group + "," + row.language + ",,," +
+                       Csv(row.name) + "\n";
         try { WriteFile(output / "list.csv", csv.data(), csv.size()); }
         catch (const std::exception &failure) { return Fail(failure.what()); }
         std::printf("listed %zu textures, %zu movies, %zu text files, %zu models, %zu animation sets, skipped %llu\n",
@@ -1706,7 +2116,7 @@ int Run(const Request &request, const fs::path &gameRoot)
             for (const auto &name : dlcNames) summary += " " + name;
         }
         summary += std::string("\nkinds:") + (request.textures ? " textures" : "") + (request.movies ? " movies" : "") +
-                   (request.text ? " text" : "") + (request.models ? " models" : "") + (request.animations ? " animations" : "") +
+                   (request.text ? " text" : "") + (request.models ? " models" : "") + (request.animations ? " animations" : "") + (request.fonts ? " fonts" : "") +
                    (request.modelTextures ? " (with model textures)" : "");
         summary += "\nfilter: " + (request.filter.empty() ? std::string("(none)") : request.filter);
         if (!select.empty()) summary += "\nselection: " + std::to_string(select.size()) + " names from " + Utf8(request.select);
@@ -1720,6 +2130,7 @@ int Run(const Request &request, const fs::path &gameRoot)
         for (const auto &format : kFormats)
             summary += "  " + std::string(format.name) + ": " + std::to_string(total.formats[format.name]) + "\n";
         summary += "movies: " + std::to_string(total.movies) + " (" + std::to_string(total.movieBytes) + " bytes)\n";
+        if (request.fonts) summary += "fonts: " + std::to_string(total.fonts) + "\n";
         summary += "models: " + std::to_string(modelCount) + ", animation sets: " + std::to_string(animationCount) + " (" +
                    std::to_string(total.modelBytes) + " glTF bytes)\n";
         summary += "packages read: " + std::to_string(total.packages) + " (" + std::to_string(total.notPackages) +

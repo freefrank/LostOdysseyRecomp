@@ -1,0 +1,28 @@
+<resources>
+    <string name="saves_title">存檔與記錄</string>
+    <string name="save_location_toggle">將存檔保存在遊戲資料夾中</string>
+    <string name="save_location_help">預設關閉。使用 &lt;遊戲資料夾&gt;/save/userNN/（save.bin、.lo-content 及欄位內的其他檔案），與 Windows 格式相同。將此 save 資料夾與 PC 的 save 資料夾同步。請先在 CTRL → 遊戲資料夾選擇可讀寫的位置。切換前會複製並逐位元組驗證，原檔案保留為備份。</string>
+    <string name="save_location_restart_help">設定在下次應用程式啟動、遊戲寫入存檔前生效，請完全關閉後重新開啟。遊戲資料夾遺失或無法寫入時，本次使用私人備份並顯示提示。恢復存取後會合併期間的新進度，衝突存檔由你選擇。僅在兩台裝置均關閉遊戲時同步。</string>
+    <string name="save_location_current">本次存檔位置：%1$s</string>
+    <string name="save_location_pending">下次啟動套用：%1$s</string>
+    <string name="save_location_private">應用程式私人儲存空間</string>
+    <string name="save_location_fixed">遊戲資料夾存檔：%1$s</string>
+    <string name="save_location_warning_title">存檔位置</string>
+    <string name="save_location_fallback">遊戲資料夾無法存取，或私人存檔仍待合併。本次使用下方的私人備份。遊戲資料夾存檔選項保持開啟，沒有刪除任何存檔。</string>
+    <string name="save_location_failed">無法切換存檔位置，本次繼續使用下方顯示的位置。請開啟 CTRL → 存檔與記錄重試。原存檔沒有刪除。</string>
+    <string name="save_location_conflict">部分目標欄位較新，或儲存時間相同但內容不同。存檔位置尚未切換，請開啟 CTRL → 存檔與記錄選擇使用哪個版本。</string>
+    <string name="save_location_resolve">檢視存檔衝突…</string>
+    <string name="save_location_conflict_title">選擇下次啟動使用的存檔</string>
+    <string name="save_location_conflict_message">欄位：%1$s\n\n複製來源：%2$s\n目標位置：%3$s\n\n「保留目標」保留這些衝突欄位；「複製來源」會覆蓋它們。原檔案保留為備份。確認只適用於目前這批檔案；下次啟動前任何一側有變化，都需要重新選擇。</string>
+    <string name="save_location_use_source">複製來源</string>
+    <string name="save_location_use_destination">保留目標</string>
+    <string name="save_location_cancel">取消</string>
+    <string name="save_location_ok">確定</string>
+    <string name="save_location_queued">已儲存，將在下次應用程式啟動時生效。</string>
+    <string name="save_location_no_game">請先在 CTRL → 遊戲資料夾選擇可讀寫的遊戲資料夾。</string>
+    <string name="save_location_import_running">請關閉遊戲後再匯入存檔。</string>
+    <string name="save_import_close_title">關閉遊戲以匯入存檔？</string>
+    <string name="save_import_close_message">匯入前需要關閉遊戲，上次儲存後的進度將會遺失。隨後會重新開啟存檔頁面，讓你選擇 ZIP 檔案。</string>
+    <string name="save_import_close_action">關閉遊戲並匯入</string>
+    <string name="save_location_cancel_pending">取消待套用的切換</string>
+</resources>

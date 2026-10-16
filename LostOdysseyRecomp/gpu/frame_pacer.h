@@ -73,17 +73,23 @@ private:
     Clock::time_point m_next{};
 };
 
-// Only the known interval-2 path is changed. Preserve immediate, interval-1,
-// interval-3, flags and every caller other than the identified present site.
+// Normal pacing only changes the known interval-2 path. Loading also releases
+// interval-1, used by Continue/New Game. Preserve other intervals, flags and
+// every caller other than the identified present site.
 // The virtual display stays at 60 Hz. From 60 FPS up, wait on the host's native
 // frame deadline instead of an integer number of guest vblanks: 90 cannot be
 // represented that way, and at 60 a frame that misses one vblank would wait
 // for the next and halve the frame rate. Host vsync is separate (frame_rate.h).
 // Zero is the existing LO_FPS uncapped diagnostic.
 // Do not scale the PPC timebase, engine delta, audio or virtual vblank clocks.
-constexpr uint32_t MapPresentInterval(uint32_t value, uint32_t caller, uint32_t fps, bool unsynced = false)
+constexpr uint32_t MapPresentInterval(uint32_t value, uint32_t caller, uint32_t fps, bool unsynced = false, bool loading = false)
 {
-    if (caller != 0x827B4A4C || (value & 0xFF00u) != 0x200u)
+    if (caller != 0x827B4A4C)
+        return value;
+    const auto interval = value & 0xFF00u;
+    if (loading && (interval == 0x100u || interval == 0x200u))
+        return value & ~0xFF00u;
+    if (interval != 0x200u)
         return value;
     // VSync Off and VRR own their deadline even at 30; integer guest vblanks
     // would quantize a 57 FPS VRR ceiling. Other callers/intervals and every

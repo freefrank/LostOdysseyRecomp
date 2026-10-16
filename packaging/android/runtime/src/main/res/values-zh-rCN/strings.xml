@@ -1,0 +1,28 @@
+<resources>
+    <string name="saves_title">存档与日志</string>
+    <string name="save_location_toggle">将存档保存在游戏文件夹中</string>
+    <string name="save_location_help">默认关闭。使用 &lt;游戏文件夹&gt;/save/userNN/（save.bin、.lo-content 及槽位内的其他文件），与 Windows 格式相同。将此 save 文件夹与 PC 的 save 文件夹同步。请先在 CTRL → 游戏文件夹中选择可读写的位置。切换前会复制并逐字节校验，原文件保留为备份。</string>
+    <string name="save_location_restart_help">设置在下次应用启动、游戏写入存档之前生效，请完全关闭后重新打开。游戏文件夹丢失或不可写时，本次使用私有备份并显示提示。恢复访问后会合并期间的新进度，冲突存档由你选择。仅在两台设备均关闭游戏时同步。</string>
+    <string name="save_location_current">本次存档位置：%1$s</string>
+    <string name="save_location_pending">下次启动应用：%1$s</string>
+    <string name="save_location_private">应用私有存储</string>
+    <string name="save_location_fixed">游戏文件夹存档：%1$s</string>
+    <string name="save_location_warning_title">存档位置</string>
+    <string name="save_location_fallback">游戏文件夹无法访问，或私有存档尚待合并。本次使用下方的私有备份。游戏文件夹存档选项保持开启，没有删除任何存档。</string>
+    <string name="save_location_failed">无法切换存档位置，本次继续使用下方显示的位置。请打开 CTRL → 存档与日志重试。原存档没有删除。</string>
+    <string name="save_location_conflict">部分目标槽位较新，或保存时间相同但内容不同。存档位置尚未切换，请打开 CTRL → 存档与日志选择使用哪个版本。</string>
+    <string name="save_location_resolve">查看存档冲突…</string>
+    <string name="save_location_conflict_title">选择下次启动使用的存档</string>
+    <string name="save_location_conflict_message">槽位：%1$s\n\n复制来源：%2$s\n目标位置：%3$s\n\n“保留目标”保留这些冲突槽位；“复制来源”会覆盖它们。原文件保留为备份。确认只适用于当前这批文件；下次启动前任何一侧有变化，都需要重新选择。</string>
+    <string name="save_location_use_source">复制来源</string>
+    <string name="save_location_use_destination">保留目标</string>
+    <string name="save_location_cancel">取消</string>
+    <string name="save_location_ok">确定</string>
+    <string name="save_location_queued">已保存，将在下次应用启动时生效。</string>
+    <string name="save_location_no_game">请先在 CTRL → 游戏文件夹中选择可读写的游戏文件夹。</string>
+    <string name="save_location_import_running">请关闭游戏后再导入存档。</string>
+    <string name="save_import_close_title">关闭游戏以导入存档？</string>
+    <string name="save_import_close_message">导入前需要关闭游戏，上次保存后的进度会丢失。随后会重新打开存档页面，让你选择 ZIP 文件。</string>
+    <string name="save_import_close_action">关闭游戏并导入</string>
+    <string name="save_location_cancel_pending">取消待应用的切换</string>
+</resources>

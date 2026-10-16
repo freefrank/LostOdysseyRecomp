@@ -23,10 +23,13 @@ function(lo_add_header_test name source)
 endfunction()
 if(NOT ANDROID)
 lo_add_header_test(LoPollWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
+lo_add_header_test(LoMenuAnimationsTest ${CMAKE_SOURCE_DIR}/tools/tests/menu_animations_test.cpp)
 lo_add_header_test(LoHdrOutputTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_output_test.cpp)
 lo_add_header_test(LoShadowResolutionTest ${CMAKE_SOURCE_DIR}/tools/tests/shadow_resolution_test.cpp)
 lo_add_header_test(LoHdrSceneShaderTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_scene_shader_test.cpp)
 lo_add_header_test(LoTimeFieldsTest ${CMAKE_SOURCE_DIR}/tools/tests/time_fields_test.cpp)
+lo_add_header_test(LoLoadingStateTest ${CMAKE_SOURCE_DIR}/tools/tests/loading_state_test.cpp)
+lo_add_header_test(LoSoftResetTest ${CMAKE_SOURCE_DIR}/tools/tests/soft_reset_test.cpp)
 lo_add_header_test(LoNotifiedWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/notified_wait_test.cpp)
 lo_add_header_test(LoFrameGenerationPresentTest ${CMAKE_SOURCE_DIR}/tools/tests/frame_generation_present_test.cpp)
 lo_add_header_test(LoMetalFxFgPolicyTest ${CMAKE_SOURCE_DIR}/tools/tests/streamline_fg/metalfx_policy_test.cpp)
@@ -35,6 +38,7 @@ lo_add_header_test(LoFsrQueuePlanTest ${CMAKE_SOURCE_DIR}/tools/tests/streamline
 lo_add_header_test(LoFrameGenerationSettingsTest ${CMAKE_SOURCE_DIR}/tools/tests/frame_generation_settings_test.cpp)
 target_compile_definitions(LoFrameGenerationSettingsTest PRIVATE LO_ENABLE_D3D12_FG=1 FRAMEGEN_WITH_DLSS=1 FRAMEGEN_WITH_FSR=1)
 lo_add_header_test(LoShaderPrebuildIoTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_prebuild_io_test.cpp)
+lo_add_header_test(LoShaderPreparationRequestTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_preparation_request_test.cpp)
 lo_add_header_test(LoPlumeLogTest ${CMAKE_SOURCE_DIR}/tools/tests/plume_log_test.cpp)
 target_include_directories(LoPlumeLogTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
 lo_add_header_test(LoParticleMaterialCompatTest ${CMAKE_SOURCE_DIR}/tools/tests/particle_material_compat_test.cpp)
@@ -54,6 +58,10 @@ if(MSVC)
     target_compile_options(LoExternalUpdateNoticeTest PRIVATE /utf-8)
 endif()
 lo_add_header_test(LoImportGameTest ${CMAKE_SOURCE_DIR}/tools/tests/import_game_test.cpp)
+lo_add_header_test(LoCompactionPromptTest ${CMAKE_SOURCE_DIR}/tools/tests/compaction_prompt_test.cpp)
+if(MSVC)
+    target_compile_options(LoCompactionPromptTest PRIVATE /utf-8)
+endif()
 lo_add_header_test(LoImportIsoLocatorTest ${CMAKE_SOURCE_DIR}/tools/tests/import_iso_locator_test.cpp)
 target_sources(LoImportIsoLocatorTest PRIVATE ${LO_RUNTIME_ROOT}/install/import_image.cpp)
 lo_add_header_test(LoInstallerControllerTest ${CMAKE_SOURCE_DIR}/tools/tests/installer_controller_test.cpp)
@@ -166,6 +174,8 @@ target_include_directories(LostOdysseyRecomp PRIVATE "${CMAKE_CURRENT_BINARY_DIR
 # a release that leaves that code alone keeps the cache, any change rebuilds it.
 set(LO_MODS_BUILDER_SOURCES ${LO_RUNTIME_SOURCES})
 list(FILTER LO_MODS_BUILDER_SOURCES INCLUDE REGEX "/modding/")
+# The asset exporter (--export-assets, the MO2 tool) rebuilds nothing.
+list(FILTER LO_MODS_BUILDER_SOURCES EXCLUDE REGEX "/modding/(asset_export|gltf_writer|model_preview)\\.")
 list(APPEND LO_MODS_BUILDER_SOURCES "${LO_RUNTIME_ROOT}/gpu/shader/cpx_decode.h" "${LO_RUNTIME_ROOT}/os/json.h")
 set(LO_MODS_BUILDER_LIST "${CMAKE_CURRENT_BINARY_DIR}/lo_mods_builder_sources.txt")
 list(JOIN LO_MODS_BUILDER_SOURCES "\n" LO_MODS_BUILDER_LINES)
@@ -390,6 +400,7 @@ target_link_libraries(LoLogCaptureTest PRIVATE fmt::fmt)
 # overlay, without guest/GPU work.
 add_executable(LoModelImport EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tools/tests/model_import_cli.cpp
+    ${LO_RUNTIME_ROOT}/modding/font_patch.cpp
     ${LO_RUNTIME_ROOT}/modding/gltf_reader.cpp
     ${LO_RUNTIME_ROOT}/modding/model_import.cpp
     ${LO_RUNTIME_ROOT}/modding/mod_api.cpp
@@ -399,8 +410,21 @@ add_executable(LoModelImport EXCLUDE_FROM_ALL
 target_include_directories(LoModelImport PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoModelImport PRIVATE cxx_std_20)
 target_compile_definitions(LoModelImport PRIVATE NOMINMAX)
-target_link_libraries(LoModelImport PRIVATE fmt::fmt Threads::Threads)
+target_link_libraries(LoModelImport PRIVATE fmt::fmt lo_menu_lzo Threads::Threads)
 set_target_properties(LoModelImport PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+
+# Language-pack glyphs (modding/font_patch.h) on a font package from a disc,
+# checked with the settings menu's reader, without guest/GPU work.
+add_executable(LoFontPatch EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/font_patch_cli.cpp
+    ${LO_RUNTIME_ROOT}/modding/font_patch.cpp
+    ${LO_RUNTIME_ROOT}/modding/mod_api.cpp
+    ${LO_RUNTIME_ROOT}/settings/menu_assets.cpp)
+target_include_directories(LoFontPatch PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoFontPatch PRIVATE cxx_std_20)
+target_compile_definitions(LoFontPatch PRIVATE NOMINMAX)
+target_link_libraries(LoFontPatch PRIVATE lo_menu_lzo Threads::Threads)
+set_target_properties(LoFontPatch PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
 
 # Background archive publication and failure recovery, without guest/GPU work.
 if(WIN32)

@@ -15,7 +15,8 @@
 // pointed there with their new sizes. The game's loader takes offsets and
 // sizes from the index, so rebuilt files may be longer. The rebuilt indexes and
 // files are kept in cache/mods (LO_MODS_CACHE_DIR; none keeps them in memory)
-// with a key of what they were made from, so later starts read them from there.
+// with a key of what they were made from, so later starts read them from there;
+// each folder keeps the sets of its last two mod setups.
 // See docs/notes/language-pack-research.zh-CN.md.
 namespace modding::text_overlay
 {
@@ -29,6 +30,7 @@ struct Range
     uint64_t offset = 0, size = 0;
     std::shared_ptr<const std::vector<uint8_t>> bytes; // in memory, or
     std::shared_ptr<CachedFile> file;                  // a cache file
+    std::shared_ptr<void> cachePin;                    // keeps the cache set while a handle holds this range
     // Copies count bytes from at (counted from offset); false if the cache file cannot be read.
     bool Read(uint64_t at, uint8_t *out, size_t count) const;
 };
@@ -42,7 +44,7 @@ std::vector<Range> RangesFor(const std::filesystem::path &file);
 // can address in one) go into overflow archives the patched index adds
 // (fpi_overflow.h). For an overflow archive of a folder whose files were
 // rebuilt: its file in the mod cache, opened in its place; otherwise empty.
-std::filesystem::path OverflowArchive(const std::filesystem::path &file);
+std::filesystem::path OverflowArchive(const std::filesystem::path &file, std::shared_ptr<void> *cachePin = nullptr);
 
 // Whether a language pack has a translation for this key of this member
 // (for host text that replaces game text, such as the Quit to Desktop row).
@@ -62,4 +64,24 @@ void StopPrebuild();
 // files replace other mods' translations of the same files. Set before the
 // game opens its archives.
 void SelectLanguagePack(const std::string &id);
+
+// Live reload after the mod list changes in game (modding/hot_reload.h runs it).
+// PrepareReload lists the mods again (call modding::Reload first) and, on a
+// thread, prepares discFolder's rebuilt files for them: Ready, or Unchanged when
+// the mods give the files in use. ArmReload makes the next open of that
+// folder's LO.fpi switch to them (Committed): the game is about to reload its
+// index, after closing every archive. The other discs' files are made again for
+// the new mods. EndReload drops whatever is left (Idle).
+enum class ReloadState { Idle, Preparing, Ready, Unchanged, Armed, Committed, Failed };
+struct ReloadStatus
+{
+    ReloadState state = ReloadState::Idle;
+    uint32_t done = 0, total = 0; // packages, while Preparing
+    std::string error;            // Failed
+};
+void PrepareReload(const std::filesystem::path &discFolder);
+ReloadStatus GetReloadStatus();
+bool ArmReload(); // false unless Ready
+void DisarmReload(); // back to Ready when the game did not reload its index
+void EndReload();
 }

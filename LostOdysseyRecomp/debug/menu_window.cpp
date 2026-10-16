@@ -29,7 +29,7 @@ namespace debug_menu
             const auto now = clock::now();
             const auto status = fast_forward::GetStatus();
             const bool changed = !logged || status.enabled != last.enabled || status.mode != last.mode ||
-                status.multiplier != last.multiplier || status.active != last.active;
+                status.multiplier != last.multiplier || status.active != last.active || status.keepAudioPitch != last.keepAudioPitch;
             if (changed)
             {
                 last = status;
@@ -38,9 +38,10 @@ namespace debug_menu
             if (!skipped || (logged && now - lastLine < std::chrono::seconds(2)))
                 return;
             if (logged || status.enabled)
-                LOG_NOTICE("fast-forward: {} {} {}x, {}{}", status.enabled ? "enabled" : "disabled",
+                LOG_NOTICE("fast-forward: {} {} {}x, {}, audio {}{}", status.enabled ? "enabled" : "disabled",
                     status.mode == fast_forward::Mode::Toggle ? "toggle" : "hold", status.multiplier,
                     status.active ? "running" : "not running",
+                    status.keepAudioPitch ? "keep pitch" : "speed up",
                     skipped > 1 ? fmt::format(" ({} changes)", skipped) : std::string());
             logged = true;
             lastLine = now;
@@ -60,10 +61,12 @@ namespace debug_menu
             const auto config = settings::GetConfig();
             fast_forward::SetRate(config.fastForwardRate);
             fast_forward::SetMode(config.fastForwardMode == 1 ? fast_forward::Mode::Toggle : fast_forward::Mode::Hold);
+            fast_forward::SetKeepAudioPitch(config.fastForwardKeepAudioPitch);
             fast_forward::Enable(config.fastForward);
             return true;
         }();
         (void)restored;
+        PollResetNotice();
         cheats::PollHostControls();
         LogFastForward();
         if (IsOverlayVisible())

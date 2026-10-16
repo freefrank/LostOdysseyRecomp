@@ -493,6 +493,107 @@ std::string ReadText(const std::filesystem::path& path)
     return {bytes.begin(), bytes.end()};
 }
 
+void RunCompactionEstimateTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-compaction-estimate-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    for (uint32_t n = 1; n <= 4; ++n)
+    {
+        const auto disc = root / ("disc" + std::to_string(n));
+        std::filesystem::create_directories(disc);
+        std::ofstream(disc / "same.fpd", std::ios::binary) << "same";
+        std::ofstream(disc / "ignored.bin", std::ios::binary) << "not an archive";
+        std::ofstream(disc / "different-size.fpd", std::ios::binary) << std::string(n, 'x');
+    }
+    Require(install::EstimateCompactGameDataBytes(root) == 12,
+            "estimate did not count three duplicate archive copies or counted other sizes/files");
+    Require(install::EstimateCompactGameDataBytes(root / "disc1") == 12,
+            "estimate did not accept a disc folder");
+
+    std::filesystem::remove(root / "disc4" / "same.fpd");
+    std::filesystem::create_hard_link(root / "disc3" / "same.fpd", root / "disc4" / "same.fpd");
+    Require(install::EstimateCompactGameDataBytes(root) == 8,
+            "estimate counted a mixed group's linked copies as separate storage");
+    std::filesystem::create_hard_link(root / "disc2" / "same.fpd", root / "outside.fpd");
+    Require(install::EstimateCompactGameDataBytes(root) == 4,
+            "estimate counted storage retained by an external hard link");
+    std::filesystem::remove(root / "outside.fpd");
+    for (uint32_t n = 2; n <= 4; ++n)
+    {
+        const auto path = root / ("disc" + std::to_string(n)) / "same.fpd";
+        std::filesystem::remove(path);
+        std::filesystem::create_hard_link(root / "disc1" / "same.fpd", path);
+    }
+    Require(install::EstimateCompactGameDataBytes(root) == 0,
+            "estimate counted already linked archives");
+
+    std::filesystem::remove_all(root / "disc2");
+    std::filesystem::remove_all(root / "disc3");
+    std::filesystem::remove(root / "disc4" / "same.fpd");
+    std::ofstream(root / "disc4" / "same.fpd", std::ios::binary) << "same";
+    Require(install::EstimateCompactGameDataBytes(root) == 4,
+            "missing middle discs prevented detection on retained discs");
+    std::filesystem::remove_all(root / "disc4");
+    Require(install::EstimateCompactGameDataBytes(root) == 0 &&
+            install::EstimateCompactGameDataBytes(root / "missing") == 0,
+            "missing discs or installation contributed to the estimate");
+    Require(!std::filesystem::exists(root / ".import.lock"), "read-only estimate created an import lock");
+    std::cout << "[PASS] compaction estimate: copies, mixed/all hard links, external links, sizes, missing discs" << std::endl;
+}
+
+void RunGameDataSharingProbeTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-sharing-probe-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { install::SetTestShareFailure({}); std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    for (const auto disc : {"disc1", "disc4"})
+    {
+        std::filesystem::create_directories(root / disc);
+        std::ofstream(root / disc / "same.fpd", std::ios::binary) << "same";
+    }
+    const auto estimate = install::EstimateCompactGameDataBytes(root);
+    Require(estimate == 4, "probe fixture did not contain a duplicate archive");
+    const auto checkUnchanged = [&] {
+        size_t entries = 0;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+        {
+            ++entries;
+            Require(entry.path().filename() == "disc1" || entry.path().filename() == "disc4" ||
+                    entry.path().filename() == "same.fpd", "sharing probe left a temporary file or directory");
+        }
+        Require(entries == 4 && ReadText(root / "disc1/same.fpd") == "same" &&
+                ReadText(root / "disc4/same.fpd") == "same", "sharing probe changed an archive");
+        Require(install::EstimateCompactGameDataBytes(root) == estimate &&
+                !SameFile(root / "disc1/same.fpd", root / "disc4/same.fpd"),
+                "sharing probe compacted archives or changed their estimate");
+    };
+    install::SetTestShareFailure("no-clone");
+    Require(install::CanShareGameData(root), "hard-link-capable storage failed the sharing probe");
+    checkUnchanged();
+    Require(install::CanShareGameData(root / "disc4"), "sharing probe did not accept a disc folder");
+    checkUnchanged();
+    install::SetTestShareFailure("link");
+    Require(!install::CanShareGameData(root), "unsupported sharing passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure("rename");
+    Require(!install::CanShareGameData(root), "interrupted replacement passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure({});
+    Require(!install::CanShareGameData(root / "missing"), "missing installation passed the sharing probe");
+    std::filesystem::remove_all(root / "disc1");
+    std::filesystem::remove_all(root / "disc4");
+    Require(!install::CanShareGameData(root) && std::filesystem::is_empty(root),
+            "sharing probe created missing disc directories");
+    std::cout << "[PASS] sharing probe: hard links, unsupported sharing, interrupted replacement, cleanup, missing discs" << std::endl;
+}
+
 // Archives identical on several discs are stored once, by import or by compaction;
 // different archives, indexes and failed or interrupted links keep plain copies.
 void RunSharedArchiveTest()
@@ -612,11 +713,13 @@ int main(int argc, char** argv)
     }
     if (argc > 1 && std::string(argv[1]) == "--shared")
     {
-        try { RunSharedArchiveTest(); return 0; }
+        try { RunCompactionEstimateTest(); RunGameDataSharingProbeTest(); RunSharedArchiveTest(); return 0; }
         catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
     }
     std::cout << "Starting LoImportGameTest..." << std::endl;
     RunDlcIoTest();
+    RunCompactionEstimateTest();
+    RunGameDataSharingProbeTest();
     RunSharedArchiveTest();
 
     const auto uniqueId = std::chrono::steady_clock::now().time_since_epoch().count();

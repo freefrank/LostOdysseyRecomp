@@ -335,8 +335,18 @@ void Languages(const fs::path& root) {
     const auto texts = ListTexts(packs[0]);
     assert(texts.size() == 1 && texts[0].id.key == menu && texts[0].modId == "pt-br");
     assert(ListTexts().empty()); // A pack applies only when selected.
+    // fonts/<package path>/<font>.lofont, keyed <package path>#<font>; the font name keeps its case.
+    const std::string fonts = "bin/xenon/loc/int/menu/rpfontscommon_int.xxx";
+    Write(root / "pt/fonts" / fonts / "Maru23.lofont", "x");
+    Write(root / "pt/fonts/BIN/Xenon/loc/int/menu/rpfontstitle_int.xxx/Title.LOFONT", "x");
+    Write(root / "pt/fonts" / fonts / "notes.txt", "x");
+    Write(root / "pt/fonts/Loose.lofont", "x");
+    Reload();
+    const auto glyphs = ListFonts(LanguagePacks()[0]);
+    assert(glyphs.size() == 2 && glyphs[0].id.kind == AssetKind::Font && glyphs[0].id.key == fonts + "#Maru23" &&
+           glyphs[1].id.key == "bin/xenon/loc/int/menu/rpfontstitle_int.xxx#Title" && glyphs[0].modId == "pt-br");
     Env("LO_MODS_MODE", "overlay"); Reload(); assert(LanguagePacks().size() == 1);
-    Env("LO_MODS", "0"); Reload(); assert(LanguagePacks().empty() && ListTexts(packs[0]).empty());
+    Env("LO_MODS", "0"); Reload(); assert(LanguagePacks().empty() && ListTexts(packs[0]).empty() && ListFonts(packs[0]).empty());
     Env("LO_MODS", nullptr); Env("LO_MODS_MODE", nullptr);
     for (const auto* dir : {"pt", "bad", "zz-copy"}) fs::remove_all(root / dir);
     Reload(); assert(LanguagePacks().empty());

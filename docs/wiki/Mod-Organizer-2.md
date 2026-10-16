@@ -109,7 +109,7 @@ In the menu bar, choose **Tools > Tool Plugins > Export Lost Odyssey assets**.
      - **Models**: every 3D model as a glTF `.glb` file (about 4 GB). **With textures**, on by default, also links each material's colour texture to its model.
      - **Animations**: each animation set with the character model it moves, as a glTF `.glb` file (about 2.5 GB).
      - Models and Animations are off by default because of their size.
-   - **Filter** (optional): export only files whose path contains this text, for example `rpmenurescommon` (the menu artwork). Leave it empty to export everything.
+   - **Filter** (optional): export only files whose path contains this text, for example `rpmenurescommon` (the menu artwork). After **Scan game data** (see [Preview what will be exported](#preview-what-will-be-exported)) it also matches the names in the table, such as `Kaim` or `Uhra`, and **Start** exports exactly the rows the table shows. Leave it empty to export everything.
    - **Text language**: the language of the exported text. **All languages** exports every language on your discs.
    - **Language pack**: leave it empty here. See [Make a language pack](#make-a-language-pack).
 2. Press **Start**. The bar shows the progress. A full export takes about a minute on an SSD.
@@ -125,23 +125,32 @@ If it fails, the window shows the reason:
 | `has no LostOdysseyRecomp.exe` or `Could not start LostOdysseyRecomp.exe` | **Game folder** is not the folder that has `LostOdysseyRecomp.exe`. Press **Change...**, and fix MO2's own folder as in [If MO2 points to the wrong folder](#if-mo2-points-to-the-wrong-folder). |
 | `cannot list assets; update the game` | Your `LostOdysseyRecomp.exe` is older than the tool. Update the game. |
 | `cannot export models, animations or selections; update the game` | Your `LostOdysseyRecomp.exe` is older than the models, animations and **Export selected** options. Update the game. |
+| `cannot draw previews; update the game` | Your `LostOdysseyRecomp.exe` is older than the model pictures. Update the game. |
 
 ### Preview what will be exported
 
 The window can list the files an export would write before you start it.
 
-1. Press **Scan game data**. The game lists all its textures, movies and text once. It takes about 10 seconds on an SSD. The list is saved, so the next time you open the window it shows at once. After a game update, press **Scan game data** again; the old list is not used for the new version.
-2. The table shows what the current settings would export. It changes as you tick **Export** boxes or change **Filter**, **Text language** or **Language pack**. The line under it counts the files, for example `14 textures, 0 movies, 0 text files will be exported`.
+1. Press **Scan game data**. The game lists all its textures, movies, text, models and animations once. It takes about 15 seconds on an SSD. The list is saved, so the next time you open the window it shows at once. After a game update, press **Scan game data** again; the old list is not used for the new version.
+2. The table shows what the current settings would export. It changes as you tick **Export** boxes or change **Filter**, **Show**, **Text language** or **Language pack**. The line under it counts the files, for example `14 textures, 0 movies, 0 text files, 0 models, 0 animation sets will be exported`.
+   - **Group** sorts the rows by what they are: Party, NPCs, Animals, Monsters, Maps, Battle arenas, World map, Weapons, Objects, Effects, Cutscenes, Other, Movies and Text.
+   - **Name** puts the game's own name in front of the file's code, for example `Kaim (pc_000a0_m)`, `Flame Beast (en_043a0_m)` or `Uhra - Main Street (u36_0) / StaticMesh_705` (a piece of that map). The names come from your game's text, in the language picked in **Text language**; with **All languages**, or when the game has no name in that language, they are English. Rows the game gives no name keep their code, for example battle arenas, effects, weapons and most NPCs.
+   - **Show** (above the table, right) shows one group only, for example **Monsters**. **Filter** finds names and paths, for example `kaim` or `main street`. With either of them set, **Start** exports exactly the rows in the table.
+   - If models show only codes and the line under the table says `Update the game and scan again`, your `LostOdysseyRecomp.exe` is older than this tool. Update the game, then press **Scan game data**.
 3. Click a row to preview it on the right:
    - **Texture**: the image, with its size and format.
    - **Movie**: its name and size. Press **Play** to export that movie and open it in your video player.
    - **Text**: the first 200 lines of the JSON file.
-   - **Model** or **Animation**: its name, path and counts (vertices, triangles and bones; or sequences, tracks and frames), with an **Open model** or **Open animation** button. The button exports only that row and opens it in your default 3D viewer (Windows 3D Viewer or Blender).
-   The first preview of a file takes a moment. Closing the window deletes the preview files.
+   - **Model**: a picture of the model with its colours, seen from the front at an angle, with its counts (vertices, triangles and bones). The window shows `Drawing a preview...` for under a second first.
+   - **Animation**: a picture of the character the animations move, standing still, with its counts (sequences, tracks and frames). To watch the animations, open the file in Blender.
+   - **Export and show the file** (models and animations): exports only that row as a `.glb` file and opens Explorer with the file selected. Drag it into Blender: see [Open models in Blender](Open-Models-in-Blender.md). The path is also shown under the button.
+   The first preview of a texture, movie or text file takes a moment. Closing the window deletes those preview files. Model pictures are kept (the last 400) and **Export and show the file** copies for 14 days, in MO2's `plugins\data\lostodysseyrecomp_export` folder.
 4. Double-click a row to put its path into **Filter**. **Start** then exports only that package, movie or text file.
 5. Select several rows with Ctrl or Shift, then press **Export selected (N)** to export only those rows, where N is the number selected. The button is off while **Language pack** holds an id.
 
 ![The export window after a scan, filtered to rpmenurescommon_int, with a menu texture previewed](images/mo2/export-preview.webp)
+
+![The export window with Models ticked, filtered to kaim, and Kaim's model previewed on the right](images/mo2/export-model-preview.webp)
 
 ### What you get
 
@@ -159,6 +168,7 @@ Next steps:
 
 - Repaint or upscale textures: [Make a texture pack](Creating-Mods.md#make-a-texture-pack-experimental).
 - Translate text: [Translate the game's text](Creating-Mods.md#translate-the-games-text-experimental).
+- Look at a model or play its animations: [Open models in Blender](Open-Models-in-Blender.md).
 - Edit a character model: [Replace a model](Creating-Mods.md#replace-a-model).
 
 The tool reads the game folder directly, not through MO2, so it exports the original game files, not your installed mods. With the DLC installed, files the DLC changes come from the DLC.

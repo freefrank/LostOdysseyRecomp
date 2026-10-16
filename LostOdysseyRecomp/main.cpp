@@ -37,6 +37,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
 #include "modding/text_overlay.h"
@@ -164,9 +165,14 @@ static int CompactGameDataCommand(const std::filesystem::path& gameRoot)
             }
         });
         const auto after = std::filesystem::space(gameRoot, ec).available;
-        LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
-                   "{} archive bytes stored once in all, {} not shared",
-                   result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
+        if (!result.replaced && result.sharedBytes > 0)
+            LOG_NOTICE("compact game data: Already done: these files are stored once (about {:.1f} GB saved); "
+                       "{} copies replaced, {} archive bytes stored once in all, {} not shared",
+                       double(result.sharedBytes) / 1'000'000'000.0, result.replaced, result.sharedBytes, result.failed);
+        else
+            LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
+                       "{} archive bytes stored once in all, {} not shared",
+                       result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
         return 0;
     }
     catch (const std::exception& error)
@@ -630,6 +636,9 @@ int main(int argc, char* argv[])
 
     LOG_INFO("game root: {}", FileSystem::PathUtf8(gameRoot));
 
+    // The startup offer and compaction finish before any disc archive opens.
+    if (!prepareShadersOnly)
+        install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
     XamInit();
 

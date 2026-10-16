@@ -1,5 +1,6 @@
 #include "config.h"
 #include <debug/fast_forward.h>
+#include <atomic>
 #include <gpu/frame_rate.h>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,7 @@ namespace settings
 namespace
 {
 std::mutex mutex;
+std::atomic<uint32_t> menuAnimationRate{1};
 // One settings.ini line: no line breaks, bounded like the adapter/display names it stores.
 std::string TextValue(std::string text)
 {
@@ -30,6 +32,7 @@ std::string PackId(std::string text)
 }
 Config Validate(Config value)
 {
+    value.encounterRate = ValidEncounterRate(value.encounterRate);
     value.gpuDevice = TextValue(std::move(value.gpuDevice));
     value.displayName = TextValue(std::move(value.displayName));
     value.gameLanguagePack = PackId(std::move(value.gameLanguagePack));
@@ -98,6 +101,8 @@ Config Validate(Config value)
     namespace ff = debug_menu::fast_forward;
     if (std::find(std::begin(ff::Rates), std::end(ff::Rates), value.fastForwardRate) == std::end(ff::Rates))
         value.fastForwardRate = 2;
+    if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
+        value.menuAnimationRate = 1;
     if (value.uiLanguage > 4)
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
@@ -136,6 +141,7 @@ Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
+    bool hasEncounterRate = false, legacyNoEncounters = false;
     bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
@@ -148,6 +154,7 @@ Config Read()
         const auto name = key.substr(0, equal);
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
+        if (name == "encounter_rate") { hasEncounterRate = true; value.encounterRate = EncounterRate::Normal; }
         if (name == "internal_resolution") value.internalResolution = 0;
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         if (name == "aspect_ratio") hasAspectRatio = true;
@@ -301,13 +308,21 @@ Config Read()
         else if (key == "save_anywhere" && number <= 1)
             value.saveAnywhere = number == 1;
         else if (key == "no_random_encounters" && number <= 1)
-            value.noRandomEncounters = number == 1;
+            legacyNoEncounters = number == 1;
+        else if (key == "encounter_rate")
+            value.encounterRate = ValidEncounterRate(EncounterRate(number));
+        else if (key == "battle_exp_double" && number <= 1)
+            value.battleExpDouble = number == 1;
         else if (key == "fast_forward" && number <= 1)
             value.fastForward = number == 1;
         else if (key == "fast_forward_mode")
             value.fastForwardMode = number;
         else if (key == "fast_forward_rate")
             value.fastForwardRate = number;
+        else if (key == "fast_forward_keep_pitch" && number <= 1)
+            value.fastForwardKeepAudioPitch = number == 1;
+        else if (key == "menu_animation_rate")
+            value.menuAnimationRate = number;
         else if (key == "audio_output")
             value.audioOutput = number;
         else if (key == "audio_matrix_rear")
@@ -319,10 +334,13 @@ Config Read()
             // Unknown values keep the safe package default (enabled).
             if (number <= 1) value.automaticUpdates = number == 1;
         }
+        else if (key == "ask_compact_game_data" && number <= 1)
+            value.askCompactGameData = number == 1;
         else if (key == "debug_log" && number <= 1)
             value.debugLog = number == 1;
     }
     if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
+    if (!hasEncounterRate && legacyNoEncounters) value.encounterRate = EncounterRate::None;
     // Profiles written before automatic peak detection use their stored peak
     // as an explicit choice. A fresh profile follows the current display.
     if (hasHdrPeakNits && !hasHdrPeakAuto) value.hdrPeakAutomatic = false;
@@ -335,7 +353,11 @@ Config Read()
 }
 Config &Current()
 {
-    static Config config = Read();
+    static Config config = [] {
+        auto value = Read();
+        menuAnimationRate.store(value.menuAnimationRate, std::memory_order_relaxed);
+        return value;
+    }();
     return config;
 }
 // Debug-menu choices are saved on their own, never through a graphics save.
@@ -344,6 +366,7 @@ void CopyFastForward(Config &to, const Config &from)
     to.fastForward = from.fastForward;
     to.fastForwardMode = from.fastForwardMode;
     to.fastForwardRate = from.fastForwardRate;
+    to.fastForwardKeepAudioPitch = from.fastForwardKeepAudioPitch;
 }
 } // namespace
 void ConfigureGameLanguages(const std::filesystem::path &xexPath)
@@ -390,8 +413,10 @@ void PreviewConfig(const Config &value)
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
     merged.saveAnywhere = Current().saveAnywhere;
-    merged.noRandomEncounters = Current().noRandomEncounters;
+    merged.encounterRate = Current().encounterRate;
+    merged.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(merged, Current());
+    merged.menuAnimationRate = Current().menuAnimationRate;
     merged.audioOutput = Current().audioOutput;
     Current() = merged;
 }
@@ -463,6 +488,7 @@ static bool WriteConfig(const Config &value)
            << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\nask_compact_game_data=" << (value.askCompactGameData ? 1 : 0)
            << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
            << "\naudio_matrix_rear=" << value.audioMatrixRear
@@ -472,10 +498,13 @@ static bool WriteConfig(const Config &value)
            << "\nachievement_sound=" << (value.achievementSound ? 1 : 0)
            << "\nperformance_overlay=" << value.performanceOverlay
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
-           << "\nno_random_encounters=" << (value.noRandomEncounters ? 1 : 0)
+           << "\nencounter_rate=" << uint32_t(value.encounterRate)
+           << "\nbattle_exp_double=" << (value.battleExpDouble ? 1 : 0)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)
            << "\nfast_forward_mode=" << value.fastForwardMode
-           << "\nfast_forward_rate=" << value.fastForwardRate << '\n';
+           << "\nfast_forward_rate=" << value.fastForwardRate
+           << "\nfast_forward_keep_pitch=" << (value.fastForwardKeepAudioPitch ? 1 : 0)
+           << "\nmenu_animation_rate=" << value.menuAnimationRate << '\n';
     output.flush();
     if (!output)
         return false;
@@ -500,8 +529,10 @@ bool SaveConfig(const Config &requested)
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
     value.saveAnywhere = Current().saveAnywhere;
-    value.noRandomEncounters = Current().noRandomEncounters;
+    value.encounterRate = Current().encounterRate;
+    value.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(value, Current());
+    value.menuAnimationRate = Current().menuAnimationRate;
     value.audioOutput = Current().audioOutput;
     if (!WriteConfig(value)) return false;
     Current() = value;
@@ -562,25 +593,52 @@ bool SaveSaveAnywhere(bool enabled)
     Current().saveAnywhere = enabled;
     return true;
 }
-bool SaveNoRandomEncounters(bool enabled)
+bool SaveEncounterRate(EncounterRate rate)
 {
     std::lock_guard lock(mutex);
     auto persisted = Read();
-    persisted.noRandomEncounters = enabled;
+    persisted.encounterRate = ValidEncounterRate(rate);
     if (!WriteConfig(persisted)) return false;
-    Current().noRandomEncounters = enabled;
+    Current().encounterRate = persisted.encounterRate;
     return true;
 }
-bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate)
+bool SaveBattleExpDouble(bool enabled)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.battleExpDouble = enabled;
+    if (!WriteConfig(persisted)) return false;
+    Current().battleExpDouble = enabled;
+    return true;
+}
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch)
 {
     std::lock_guard lock(mutex);
     auto persisted = Read();
     persisted.fastForward = enabled;
     persisted.fastForwardMode = mode;
     persisted.fastForwardRate = rate;
+    persisted.fastForwardKeepAudioPitch = keepAudioPitch;
     persisted = Validate(persisted);
     if (!WriteConfig(persisted)) return false;
     CopyFastForward(Current(), persisted);
     return true;
+}
+bool SaveMenuAnimationRate(uint32_t rate)
+{
+    std::lock_guard lock(mutex);
+    // Keep unconfirmed graphics previews out of this debug-only save.
+    auto persisted = Read();
+    persisted.menuAnimationRate = rate;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    Current().menuAnimationRate = persisted.menuAnimationRate;
+    menuAnimationRate.store(persisted.menuAnimationRate, std::memory_order_relaxed);
+    return true;
+}
+uint32_t MenuAnimationRate()
+{
+    Current(); // Initialize the persisted choice once before reading its atomic mirror.
+    return menuAnimationRate.load(std::memory_order_relaxed);
 }
 } // namespace settings

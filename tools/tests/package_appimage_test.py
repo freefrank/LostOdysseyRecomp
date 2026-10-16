@@ -441,6 +441,10 @@ class PackageAppImageTests(unittest.TestCase):
             gtao_license = fake_root / 'thirdparty/licenses/XeGTAO.txt'
             gtao_license.parent.mkdir(parents=True, exist_ok=True)
             gtao_license.write_text('mock XeGTAO license', encoding='utf-8')
+            for relative in ('LICENSE.txt', 'signalsmith-linear/LICENSE.txt'):
+                audio_license = fake_root / 'thirdparty/signalsmith-stretch' / relative
+                audio_license.parent.mkdir(parents=True, exist_ok=True)
+                audio_license.write_text('mock MIT license', encoding='utf-8')
 
             listing = io.StringIO()
             with patch.object(module, 'ROOT', fake_root):
@@ -450,6 +454,8 @@ class PackageAppImageTests(unittest.TestCase):
             files = set(listing.getvalue().splitlines())
             self.assertIn('usr/bin/ngx/libnvidia-ngx-dlss.so.310.9.1', files)
             self.assertIn('usr/share/licenses/lost-odyssey-recomp/NVIDIA-DLSS/LICENSE.txt', files)
+            self.assertIn('usr/share/licenses/lost-odyssey-recomp/Signalsmith-Stretch.txt', files)
+            self.assertIn('usr/share/licenses/lost-odyssey-recomp/Signalsmith-Linear.txt', files)
             self.assertIn('usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt', files)
             # Nothing linuxdeploy rewrites may hold or alias the snippet.
             self.assertEqual([name for name in files

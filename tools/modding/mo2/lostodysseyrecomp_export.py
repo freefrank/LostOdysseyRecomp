@@ -5,9 +5,11 @@
 # LostOdysseyRecomp.exe --export-assets in the game folder (outside MO2's
 # virtual file system) and writes textures, movies, text, 3D models and animations (glTF) from
 # your own game data to a new folder. Use the result as reference for your mods; do
-# not share it. "Scan game data" lists everything once and shows what the current
-# settings would export, with a preview of the selected texture, movie, text file,
-# model or animation set. Select rows (Ctrl/Shift) and use "Export selected" to export only those.
+# not share it. "Scan game data" lists everything once, grouped and named with the
+# game's own place and character names, and shows what the current settings would
+# export, with a preview of the selected texture, movie, text file, model or
+# animation set (a picture the game draws). Select rows (Ctrl/Shift) and use
+# "Export selected" to export only those.
 
 from __future__ import annotations
 
@@ -19,9 +21,10 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from functools import partial
 
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QProcess, Qt, QTimer, QUrl
+from PyQt6.QtCore import QAbstractTableModel, QDir, QModelIndex, QProcess, Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -67,6 +70,8 @@ OLD_GAME = "This version of LostOdysseyRecomp cannot list assets; update the gam
 OLD_GAME_NEW = (
     "This version of LostOdysseyRecomp cannot export models, animations or selections; update the game."
 )
+OLD_GAME_PREVIEW = "This version of LostOdysseyRecomp cannot draw previews; update the game."
+OLD_GAME_NAMES = "Update the game and scan again to see place and character names."
 KIND_ARGUMENT = {"texture": "textures", "movie": "movies", "text": "text", "model": "models",
                  "animation": "animations"}
 # A scan lists every kind; the boxes only filter the table. The exporter's
@@ -87,11 +92,34 @@ def game_folder_problem(folder: str) -> str:
     if not os.path.isfile(os.path.join(folder, GAME_BINARY)):
         return f"{folder} has no {GAME_BINARY}."
     return ""
-COLUMNS = ("Kind", "Name", "Size", "Format / Language", "Path")
-# Catalog row: list.csv columns, then the lower-cased path for the filter.
-KIND, NAME, PATH, WIDTH, HEIGHT, FORMAT, LANGUAGE, ENTRIES, SIZE, LOWER = range(10)
+COLUMNS = ("Kind", "Group", "Name", "Size", "Format / Language", "Path")
+# Catalog row: list.csv columns (label: the game's name on "name" rows), then
+# the text the filter searches and the row's group.
+KIND, NAME, PATH, WIDTH, HEIGHT, FORMAT, LANGUAGE, ENTRIES, SIZE, LABEL, LOWER, GROUP = range(12)
 PREVIEW_LINES = 200
 PREVIEW_CHARS = 40000
+# Groups by the folder a file comes from, in table order.
+GROUP_FOLDERS = (
+    ("Party", ("bin/xenon/chr/pc/",)),
+    ("NPCs", ("bin/xenon/chr/npcmain/", "bin/xenon/chr/npc/")),
+    ("Animals", ("bin/xenon/chr/animal/",)),
+    ("Monsters", ("bin/xenon/chr/enemy/", "bin/xenon/chr/boss/")),
+    ("Maps", ("bin/xenon/field/",)),
+    ("Battle arenas", ("bin/xenon/battle/",)),
+    ("World map", ("bin/xenon/world/",)),
+    ("Weapons", ("bin/xenon/obj/weapon/",)),
+    ("Objects", ("bin/xenon/obj/",)),
+    ("Effects", ("bin/xenon/vfx/",)),
+    ("Cutscenes", ("bin/xenon/event/",)),
+)
+GROUPS = tuple(name for name, _ in GROUP_FOLDERS) + ("Other", "Movies", "Text")
+ALL_GROUPS = "All groups"
+# Map folders (bin/xenon/field/u36_0/) and character codes in file and object
+# names: pc_000a0_m, en_043a0_bx, rt0230_pc040a0_d (a cutscene), np_u41a0.
+PLACE = re.compile(r"^bin/xenon/(?:field|battle)/([a-z0-9]+_[a-z0-9]+)/")
+CHARACTER = re.compile(r"(?:^|_)(pc|mn|np|no|en|bs|an)_?([a-z0-9]{3})([a-z][0-9])(?=_|$)")
+PREVIEW_KEEP = 400  # Preview pictures kept in the plugin's data folder.
+EXPORT_DAYS = 14  # Days an "Export and show" copy is kept there.
 
 
 def clean_language_pack(pack: str) -> tuple[str, int, int]:
@@ -180,6 +208,18 @@ def unknown_option(line: str) -> bool:
         or "models" in text or "animations" in text or "model-textures" in text
 
 
+def exported_file(folder: str, kind_folder: str, key: str) -> str:
+    """The file an export wrote for a key (models/index.csv), or empty."""
+    base = os.path.join(folder, kind_folder)
+    try:
+        with open(os.path.join(base, "index.csv"), encoding="utf-8", newline="") as file:
+            found = next((r for r in csv.DictReader(file) if r.get("key") == key), None)
+    except (OSError, csv.Error):
+        return ""
+    path = os.path.join(base, os.path.normpath(found["file"])) if found and found.get("file") else ""
+    return path if os.path.isfile(path) else ""
+
+
 def write_selection(path: str, names: list[str]) -> None:
     """The --export-select file: one list.csv name per line."""
     with open(path, "w", encoding="utf-8", newline="\n") as file:
@@ -187,7 +227,8 @@ def write_selection(path: str, names: list[str]) -> None:
 
 
 def read_catalog(path: str) -> list[list[str]]:
-    """Reads list.csv from --export-list; raises OSError or ValueError."""
+    """Reads list.csv from --export-list; raises OSError or ValueError. Lists of
+    older games have no label column and no "name" rows."""
     rows: list[list[str]] = []
     with open(path, encoding="utf-8", newline="") as file:
         reader = csv.reader(file)
@@ -196,8 +237,66 @@ def read_catalog(path: str) -> list[list[str]]:
             raise ValueError("This is not a list.csv from the exporter.")
         for line in reader:
             if len(line) >= 9:
-                rows.append(line[:9] + [line[PATH].lower()])
+                rows.append(line[:9] + [line[9] if len(line) > 9 else "", line[PATH].lower(), ""])
     return rows
+
+
+def catalog_names(rows: list[list[str]]) -> dict[str, dict[str, str]]:
+    """The game's place and character names from the "name" rows: language ->
+    map or character code (u36_0, pc_000, en_043a0) -> name."""
+    names: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if row[KIND] == "name" and row[LABEL]:
+            names.setdefault(row[LANGUAGE], {}).setdefault(row[NAME], row[LABEL])
+    return names
+
+
+def row_group(row: list[str]) -> str:
+    if row[KIND] == "movie":
+        return "Movies"
+    if row[KIND] == "text":
+        return "Text"
+    path = row[PATH].lower()
+    for name, folders in GROUP_FOLDERS:
+        if path.startswith(folders):
+            return name
+    return "Other"
+
+
+def row_label(row: list[str], names: dict[str, str]) -> str:
+    """The Name column: the object, with the game's name of its place or character
+    in front when the game has one: "Uhra - Main Street (u36_0) / StaticMesh_705",
+    "Kaim (pc_000a0_m)". Without one it stays the code."""
+    name = catalog_name(row)
+    if row[KIND] not in ("texture", "model", "animation"):
+        return name
+    path = row[PATH].lower()
+    place = PLACE.match(path)
+    if place:
+        where = names.get(place[1])
+        return f"{where} ({place[1]}) / {name}" if where else name
+    stem = os.path.splitext(path.rsplit("/", 1)[-1])[0]
+    for text in (stem, name.lower()):
+        match = CHARACTER.search(text)
+        if match:
+            code = f"{match[1]}_{match[2]}{match[3]}"
+            # Party members by character, any outfit: pc_000a0, pc_000d0 -> pc_000.
+            who = names.get(code) or (names.get(code[:6]) if code.startswith("pc_") else None)
+            return f"{who} ({name})" if who else name
+    return name
+
+
+def label_rows(rows: list[list[str]], names: dict[str, dict[str, str]], language: str) -> None:
+    """Fills each row's group, label and filter text in the given language (English
+    where that language has no name), then sorts the rows by group and label."""
+    chosen = dict(names.get("int", {}))
+    chosen.update(names.get(language, {}))
+    for row in rows:
+        row[GROUP] = row_group(row)
+        row[LABEL] = row_label(row, chosen)
+        row[LOWER] = f"{row[PATH]} {row[NAME]} {row[LABEL]}".lower()
+    order = {name: index for index, name in enumerate(GROUPS)}
+    rows.sort(key=lambda row: (order.get(row[GROUP], len(order)), row[LABEL].lower(), row[NAME]))
 
 
 class CatalogModel(QAbstractTableModel):
@@ -212,6 +311,9 @@ class CatalogModel(QAbstractTableModel):
 
     def row_at(self, index: QModelIndex) -> list[str] | None:
         return self._rows[index.row()] if index.isValid() else None
+
+    def rows(self) -> list[list[str]]:
+        return self._rows
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._rows)
@@ -231,10 +333,11 @@ class CatalogModel(QAbstractTableModel):
         column = index.column()
         if role == Qt.ItemDataRole.DisplayRole:
             return (
-                row[KIND], catalog_name(row), catalog_size(row), catalog_format(row), row[PATH]
+                row[KIND], row[GROUP], row[LABEL] or catalog_name(row), catalog_size(row),
+                catalog_format(row), row[PATH],
             )[column]
-        if role == Qt.ItemDataRole.ToolTipRole and column in (1, 4):
-            return row[NAME] if column == 1 else row[PATH]
+        if role == Qt.ItemDataRole.ToolTipRole and column in (2, 5):
+            return row[NAME] if column == 2 else row[PATH]
         return None
 
 
@@ -283,15 +386,18 @@ class ExportDialog(QDialog):
         self._session = ""  # Temp folder for scans and previews, removed on close.
         self._jobs = 0
         self._catalog: list[list[str]] = []
+        self._names: dict[str, dict[str, str]] = {}  # The game's place and character names.
+        self._labelled = ""  # Language the catalog's labels are in.
         self._wanted: list[str] | None = None  # Selected row.
         self._play: list[str] | None = None  # Movie, model or animation set to open once exported.
         self._busy = False
         self._new_options = False  # The running export needs a newer game build.
         self._helper: QProcess | None = None
-        self._helper_job: tuple[tuple, str] | None = None
+        self._helper_job: tuple[tuple, str, bool] | None = None  # Key, folder, preview picture.
         self._helper_errors: list[str] = []
         self._done: dict[tuple, str] = {}  # Job key -> export folder.
         self._failed: dict[tuple, str] = {}
+        self._saved: dict[tuple, str] = {}  # Job key -> where "Export and show" put the file.
         self._output = ""
         self._process: QProcess | None = None
         self._buffer = ""
@@ -346,7 +452,9 @@ class ExportDialog(QDialog):
         kinds.addWidget(self._animations)
         kinds.addStretch(1)
         self._filter = QLineEdit()
-        self._filter.setPlaceholderText("optional: only names containing this text")
+        self._filter.setPlaceholderText(
+            "optional: only files whose path contains this text; after Scan game data also names, such as Kaim"
+        )
         self._language = QComboBox()
         for label, code in LANGUAGES:
             self._language.addItem(label, code)
@@ -366,6 +474,7 @@ class ExportDialog(QDialog):
             box.toggled.connect(self._schedule_refresh)
         self._models.toggled.connect(self._model_textures.setEnabled)
         self._filter.textChanged.connect(self._schedule_refresh)
+        self._language.currentIndexChanged.connect(self._relabel)
         self._language.currentIndexChanged.connect(self._schedule_refresh)
         self._pack.textChanged.connect(self._schedule_refresh)
         self._pack.textChanged.connect(self._update_export_selected)
@@ -377,6 +486,12 @@ class ExportDialog(QDialog):
         self._scan = QPushButton("Scan game data")
         self._scan.setToolTip("List every texture, movie, text file, model and animation set once, to preview an export")
         self._scan.clicked.connect(self._begin_scan)
+        self._group = QComboBox()
+        self._group.addItem(ALL_GROUPS)
+        for name in GROUPS:
+            self._group.addItem(name)
+        self._group.setToolTip("Show only one group, such as the party, monsters or maps")
+        self._group.currentIndexChanged.connect(self._schedule_refresh)
         self._count = QLabel(SCAN_HINT)
         self._count.setWordWrap(True)
         self._model = CatalogModel(self)
@@ -391,7 +506,7 @@ class ExportDialog(QDialog):
         self._table.verticalHeader().hide()
         self._table.verticalHeader().setDefaultSectionSize(22)
         self._table.horizontalHeader().setStretchLastSection(True)
-        for column, width in enumerate((70, 220, 90, 120)):
+        for column, width in enumerate((70, 90, 300, 90, 110)):
             self._table.setColumnWidth(column, width)
         self._table.doubleClicked.connect(self._use_path)
         self._table.selectionModel().currentRowChanged.connect(self._selected)
@@ -402,6 +517,8 @@ class ExportDialog(QDialog):
         scan_row = QHBoxLayout()
         scan_row.addWidget(self._scan)
         scan_row.addStretch(1)
+        scan_row.addWidget(QLabel("Show"))
+        scan_row.addWidget(self._group)
         left_layout.addLayout(scan_row)
         left_layout.addWidget(self._table, 1)
         left_layout.addWidget(self._count)
@@ -432,16 +549,26 @@ class ExportDialog(QDialog):
         movie_layout.addStretch(1)
         self._model_info = QLabel("")
         self._model_info.setWordWrap(True)
+        self._model_image = ImageLabel()
+        self._model_image.setMinimumSize(160, 160)
+        self._model_status = QLabel("")
+        self._model_status.setWordWrap(True)
+        self._model_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._model_note = QLabel("")
         self._model_note.setWordWrap(True)
-        self._open_model_button = QPushButton("Open")
+        self._model_note.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._open_model_button = QPushButton("Export and show the file")
+        self._open_model_button.setToolTip(
+            "Export this row as a .glb file and show it in Explorer, ready to drag into Blender"
+        )
         self._open_model_button.clicked.connect(self._open_model_clicked)
         model_page = QWidget()
         model_layout = QVBoxLayout(model_page)
         model_layout.addWidget(self._model_info)
+        model_layout.addWidget(self._model_image, 1)
+        model_layout.addWidget(self._model_status)
         model_layout.addWidget(self._open_model_button)
         model_layout.addWidget(self._model_note)
-        model_layout.addStretch(1)
         self._pages = QStackedWidget()
         for page in (self._message, image_page, self._preview_text, movie_page, model_page):
             self._pages.addWidget(page)
@@ -499,6 +626,7 @@ class ExportDialog(QDialog):
 
         self.finished.connect(self._cleanup)
         self._show_game_folder()
+        self._prune_kept()
         self._load_cache()
 
     def _show_game_folder(self) -> None:
@@ -536,7 +664,9 @@ class ExportDialog(QDialog):
         # Previews and the catalog belong to the other folder's game.
         self._done.clear()
         self._failed.clear()
+        self._saved.clear()
         self._catalog = []
+        self._names = {}
         self._model.set_rows([])
         self._count.setText(SCAN_HINT)
         self._status.setText("")
@@ -583,7 +713,7 @@ class ExportDialog(QDialog):
         for widget in (
             self._folder, self._textures, self._movies, self._text, self._filter,
             self._language, self._pack, self._start, self._clean, self._scan, self._change,
-            self._models, self._animations,
+            self._models, self._animations, self._group,
         ):
             widget.setEnabled(not busy)
         self._model_textures.setEnabled(not busy and self._models.isChecked())
@@ -624,6 +754,15 @@ class ExportDialog(QDialog):
         exe = os.path.join(self._game_dir, GAME_BINARY)
         if not os.path.isfile(exe):
             self._fail(f"{GAME_BINARY} was not found in {self._game_dir}.")
+            return
+        if not pack and self._catalog and self._narrowed():
+            # Filter also matches names, which the exporter does not know: export
+            # exactly the rows the table shows.
+            rows = self._model.rows()
+            if not rows:
+                self._fail("No row matches Filter and Show, so there is nothing to export.")
+                return
+            self._export_rows(output, exe, rows)
             return
         arguments = ["--export-assets", output]
         if pack:
@@ -666,6 +805,10 @@ class ExportDialog(QDialog):
             arguments.append("--export-model-textures")
         return arguments
 
+    def _narrowed(self) -> bool:
+        """True when Filter or Show leaves out rows the export kinds would include."""
+        return bool(self._filter.text().strip()) or self._group.currentText() != ALL_GROUPS
+
     def _begin_selected(self) -> None:
         rows = self._selected_rows()
         if not rows or self._running() or self._pack.text().strip():
@@ -676,6 +819,9 @@ class ExportDialog(QDialog):
         exe = self._exe()
         if exe is None:
             return
+        self._export_rows(output, exe, rows)
+
+    def _export_rows(self, output: str, exe: str, rows: list[list[str]]) -> None:
         selection_file = self._session_dir("select") + ".txt"
         try:
             write_selection(selection_file, [row[NAME] for row in rows])
@@ -831,10 +977,27 @@ class ExportDialog(QDialog):
         if not path or not os.path.isfile(path):
             return
         try:
-            self._catalog = read_catalog(path)
+            self._set_catalog(read_catalog(path))
         except (OSError, ValueError, csv.Error):
-            self._catalog = []
+            self._set_catalog([])
         self._refresh()
+
+    def _set_catalog(self, rows: list[list[str]]) -> None:
+        self._names = catalog_names(rows)
+        self._catalog = [row for row in rows if row[KIND] != "name"]
+        self._labelled = ""
+        self._relabel()
+
+    def _names_language(self) -> str:
+        """Names follow Text language where the game has them, else English."""
+        language = self._language.currentData() or "int"
+        return language if language in self._names else "int"
+
+    def _relabel(self, *_) -> None:
+        language = self._names_language()
+        if self._catalog and language != self._labelled:
+            label_rows(self._catalog, self._names, language)
+            self._labelled = language
 
     def _begin_scan(self) -> None:
         if self._running():
@@ -866,7 +1029,7 @@ class ExportDialog(QDialog):
             self._log.setPlainText("\n".join(self._errors[-20:]) or "No error message was printed.")
             self._log.show()
             return
-        self._catalog = rows
+        self._set_catalog(rows)
         self._status.setText(message or "Scan finished.")
         self._refresh()
 
@@ -909,9 +1072,11 @@ class ExportDialog(QDialog):
             self._count.setText(SCAN_HINT)
             return
         kinds, language, text = self._selection()
+        group = self._group.currentText()
         rows = [
             row for row in self._catalog
             if row[KIND] in kinds
+            and (group == ALL_GROUPS or row[GROUP] == group)
             and (not text or text in row[LOWER])
             and (row[KIND] != "text" or not language or row[LANGUAGE] == language)
         ]
@@ -920,10 +1085,11 @@ class ExportDialog(QDialog):
         for row in rows:
             counts[row[KIND]] += 1
         movies = "movie" if counts["movie"] == 1 else "movies"
-        self._count.setText(
-            f"{counts['texture']:,} textures, {counts['movie']:,} {movies}, "
-            f"{counts['text']:,} text files, {counts['model']:,} models, {counts['animation']:,} animation sets will be exported"
-        )
+        text = (f"{counts['texture']:,} textures, {counts['movie']:,} {movies}, {counts['text']:,} text files, "
+                f"{counts['model']:,} models, {counts['animation']:,} animation sets will be exported")
+        if not self._names and (counts["model"] or counts["animation"]):
+            text += ". " + OLD_GAME_NAMES
+        self._count.setText(text)
         self._selected(self._table.currentIndex())
 
     def _use_path(self, index: QModelIndex) -> None:
@@ -937,6 +1103,12 @@ class ExportDialog(QDialog):
         self._wanted = self._model.row_at(index)
         if self._wanted is None:
             self._show_message("Select a row to preview it.")
+        # A slow preview for a row the user has left would hold up the new one.
+        if self._helper_job is not None and self._play is None:
+            wanted = self._wanted
+            keys = () if wanted is None else (self._job(wanted)[0], self._preview_key(wanted))
+            if self._helper_job[0] not in keys:
+                self._stop_helper()
         self._pump()
 
     def _show_message(self, text: str) -> None:
@@ -956,14 +1128,24 @@ class ExportDialog(QDialog):
         else:
             detail = (f"{row[FORMAT]}\n{int(row[WIDTH] or 0):,} vertices, "
                       f"{int(row[HEIGHT] or 0):,} triangles, {row[ENTRIES]} bones")
-        self._model_info.setText(f"{catalog_name(row)}\n{detail}\n{row[PATH]}")
+        self._model_info.setText(f"{row[LABEL] or catalog_name(row)}\n{detail}\n{row[PATH]}")
         self._model_note.setText(note)
-        self._open_model_button.setText("Open animation" if row[KIND] == "animation" else "Open model")
         self._open_model_button.setEnabled(self._play is None)
         self._pages.setCurrentIndex(4)
 
-    def _job(self, row: list[str]) -> tuple[tuple, list[str]]:
-        """Cache key and exporter arguments that produce the row's files."""
+    def _show_preview(self, row: list[str], picture: str = "", message: str = "") -> None:
+        pixmap = QPixmap(picture) if picture else None
+        if picture and (pixmap is None or pixmap.isNull()):
+            message, pixmap = "The preview picture could not be read.", None
+        self._model_image.set_source(pixmap)
+        if pixmap is not None:
+            message = ("The character these animations move, standing still. Blender plays the animations."
+                       if row[KIND] == "animation" else "")
+        self._model_status.setText(message)
+
+    def _job(self, row: list[str], preview: bool = False) -> tuple[tuple, list[str]]:
+        """Cache key and exporter arguments that produce the row's files, or with
+        preview its picture."""
         kind, path = row[KIND], row[PATH]
         if kind == "text":
             arguments = ["--export-kinds", "text", "--export-filter", path.lower()]
@@ -972,12 +1154,54 @@ class ExportDialog(QDialog):
             return ("text", path, row[LANGUAGE]), arguments
         if kind in GLB_KINDS:  # The key is selected through a one-line file, see _start_helper.
             arguments = ["--export-kinds", KIND_ARGUMENT[kind]]
+            if preview:
+                return self._preview_key(row), arguments + ["--export-preview"]
             textures = kind == "model" and self._model_textures.isChecked()
             if textures:
                 arguments.append("--export-model-textures")
             return (kind, row[NAME], textures), arguments
         name = "textures" if kind == "texture" else "movies"
         return (kind, path), ["--export-kinds", name, "--export-filter", path.lower()]
+
+    @staticmethod
+    def _preview_key(row: list[str]) -> tuple:
+        return ("preview", row[NAME])
+
+    def _game_stamp(self) -> str:
+        """Changes when the game folder or its LostOdysseyRecomp.exe changes."""
+        try:
+            info = os.stat(os.path.join(self._game_dir, GAME_BINARY))
+        except OSError:
+            return ""
+        return f"{os.path.normcase(os.path.abspath(self._game_dir))}|{info.st_size}|{info.st_mtime_ns}"
+
+    def _kept_path(self, folder: str, *parts) -> str:
+        """A file or folder in the plugin's data folder named after the game and
+        parts, or empty without a data folder."""
+        stamp = self._game_stamp()
+        if not self._cache_dir or not stamp:
+            return ""
+        name = hashlib.sha1("|".join((stamp,) + tuple(str(p) for p in parts)).encode("utf-8")).hexdigest()[:16]
+        return os.path.join(self._cache_dir, folder, name)
+
+    def _prune_kept(self) -> None:
+        """Keeps the newest preview pictures and recent "Export and show" copies."""
+        if not self._cache_dir:
+            return
+        try:
+            previews = os.path.join(self._cache_dir, "previews")
+            if os.path.isdir(previews):
+                files = sorted((entry for entry in os.scandir(previews) if entry.is_file()),
+                               key=lambda entry: entry.stat().st_mtime, reverse=True)
+                for entry in files[PREVIEW_KEEP:]:
+                    os.remove(entry.path)
+            exports = os.path.join(self._cache_dir, "exports")
+            if os.path.isdir(exports):
+                for entry in os.scandir(exports):
+                    if time.time() - entry.stat().st_mtime > EXPORT_DAYS * 86400:
+                        shutil.rmtree(entry.path, ignore_errors=True)
+        except OSError:
+            pass
 
     def _open_model_clicked(self) -> None:
         row = self._wanted
@@ -995,10 +1219,15 @@ class ExportDialog(QDialog):
         self._play = row
         self._pump()
 
-    def _next_job(self) -> list[str] | None:
-        """Serves what is cached; returns the row that needs a helper run, if any."""
+    def _next_job(self) -> tuple[list[str], bool] | None:
+        """Serves what is cached; returns the row that needs a helper run, if any,
+        and whether the run draws its preview picture."""
         if self._play is not None:
             key = self._job(self._play)[0]
+            if self._play[KIND] in GLB_KINDS and key not in self._done:
+                kept = self._kept_path("exports", *key)
+                if kept and os.path.isfile(os.path.join(kept, KIND_ARGUMENT[self._play[KIND]], "index.csv")):
+                    self._done[key] = kept  # Exported in an earlier session.
             if key in self._done:
                 if self._play[KIND] in GLB_KINDS:
                     self._open_model(self._play)
@@ -1010,7 +1239,7 @@ class ExportDialog(QDialog):
                     self._show_movie(self._wanted, "Loading preview...")
                 elif self._wanted is not None and self._wanted[KIND] in GLB_KINDS:
                     self._show_model(self._wanted, "Exporting...")
-                return self._play
+                return self._play, False
             else:
                 self._play = None
         row = self._wanted
@@ -1020,26 +1249,43 @@ class ExportDialog(QDialog):
         if row[KIND] == "movie":
             self._show_movie(row, self._failed.get(key, ""))
         elif row[KIND] in GLB_KINDS:
-            self._show_model(row, self._failed.get(key, ""))
+            self._show_model(row, self._failed.get(key) or self._saved.get(key, ""))
+            picture = self._preview_key(row)
+            kept = self._kept_path("previews", row[NAME])
+            if picture not in self._done and kept and os.path.isfile(kept + ".png"):
+                self._done[picture] = kept + ".png"
+            if picture in self._done:
+                self._show_preview(row, self._done[picture])
+            elif picture in self._failed:
+                self._show_preview(row, message=self._failed[picture])
+            else:
+                self._show_preview(row, message="Drawing a preview...")
+                return row, True
         elif key in self._done:
             self._render(row, self._done[key])
         elif key in self._failed:
             self._show_message(self._failed[key])
         else:
             self._show_message("Loading preview...")
-            return row
+            return row, False
         return None
 
     def _pump(self) -> None:
-        row = self._next_job()
-        if row is not None and self._helper is None:
-            self._start_helper(row)
+        job = self._next_job()
+        if job is not None and self._helper is None:
+            self._start_helper(*job)
 
-    def _start_helper(self, row: list[str]) -> None:
-        key, arguments = self._job(row)
+    def _start_helper(self, row: list[str], preview: bool = False) -> None:
+        key, arguments = self._job(row, preview)
         folder = self._session_dir("job")
+        if row[KIND] in GLB_KINDS and not preview:
+            # Kept for later sessions: the user may still drag the file into Blender.
+            kept = self._kept_path("exports", *key)
+            if kept:
+                shutil.rmtree(kept, ignore_errors=True)
+                folder = kept
         if row[KIND] in GLB_KINDS:
-            selection = folder + ".txt"
+            selection = self._session_dir("select") + ".txt"
             try:
                 write_selection(selection, [row[NAME]])
             except OSError as error:
@@ -1057,7 +1303,7 @@ class ExportDialog(QDialog):
         process.errorOccurred.connect(partial(self._helper_error, process))
         process.finished.connect(partial(self._helper_finished, process))
         self._helper = process
-        self._helper_job = (key, folder)
+        self._helper_job = (key, folder, preview)
         process.start()
 
     def _helper_stderr(self, process: QProcess) -> None:
@@ -1082,17 +1328,31 @@ class ExportDialog(QDialog):
     def _helper_end(self, process: QProcess, ok: bool) -> None:
         if process is not self._helper or self._helper_job is None:
             return
-        key, folder = self._helper_job
+        key, folder, preview = self._helper_job
         self._helper = None
         self._helper_job = None
         process.deleteLater()
-        if ok:
+        if ok and preview:
+            picture = exported_file(folder, "models", key[1]) or exported_file(folder, "animations", key[1])
+            if picture:
+                kept = self._kept_path("previews", key[1])
+                try:
+                    os.makedirs(os.path.dirname(kept), exist_ok=True)
+                    shutil.copyfile(picture, kept + ".png")
+                    picture = kept + ".png"
+                except OSError:
+                    pass  # Shown from the session folder instead.
+                self._done[key] = picture
+            else:
+                self._failed[key] = "The game drew no preview for this row."
+        elif ok:
             self._done[key] = folder
         else:
             no_data = any("no game data" in line for line in self._helper_errors)
-            old = key[0] in GLB_KINDS and any(unknown_option(line) for line in self._helper_errors)
+            old = key[0] in GLB_KINDS + ("preview",) and any(unknown_option(line) for line in self._helper_errors)
             self._failed[key] = (
-                OLD_GAME_NEW if old else NO_DATA if no_data else "\n".join(self._helper_errors[-10:])
+                (OLD_GAME_PREVIEW if preview else OLD_GAME_NEW) if old
+                else NO_DATA if no_data else "\n".join(self._helper_errors[-10:])
             )
         self._pump()
 
@@ -1154,24 +1414,25 @@ class ExportDialog(QDialog):
             self._failed[key] = "The exporter did not write this movie."
 
     def _open_model(self, row: list[str]) -> None:
+        """Shows the exported .glb in Explorer, selected, to drag into Blender."""
         key = self._job(row)[0]
-        base = os.path.join(self._done[key], KIND_ARGUMENT[row[KIND]])
-        path = ""
-        try:
-            with open(os.path.join(base, "index.csv"), encoding="utf-8", newline="") as file:
-                found = next((r for r in csv.DictReader(file) if r.get("key") == row[NAME]), None)
-            if found:
-                path = os.path.join(base, os.path.normpath(found["file"]))
-        except OSError:
-            pass
-        if not os.path.isfile(path):
+        path = exported_file(self._done[key], KIND_ARGUMENT[row[KIND]], row[NAME])
+        if not path:
+            base = os.path.join(self._done[key], KIND_ARGUMENT[row[KIND]])
             files = glob.glob(os.path.join(glob.escape(base), "**", "*.glb"), recursive=True)
             path = files[0] if files else ""
-        if path:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-        else:
+        if not path:
             self._failed[key] = "The exporter did not write this file."
             self._show_model(row, self._failed[key])
+            return
+        path = os.path.normpath(path)
+        if os.name == "nt":
+            QProcess.startDetached("explorer.exe", ["/select,", QDir.toNativeSeparators(path)])
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
+        self._saved[key] = (f"Saved as {path}\nDrag this file into Blender's window to open it "
+                            f"(wiki page Open models in Blender).")
+        self._show_model(row, self._saved[key])
 
 
 class LostOdysseyRecompExport(mobase.IPluginTool):
@@ -1194,7 +1455,7 @@ class LostOdysseyRecompExport(mobase.IPluginTool):
         return "Exports the original textures, movies, text, models and animations from your own game data."
 
     def version(self) -> mobase.VersionInfo:
-        return mobase.VersionInfo(1, 3, 1, 0)
+        return mobase.VersionInfo(1, 4, 0, 0)
 
     def requirements(self) -> list[mobase.IPluginRequirement]:
         return [mobase.PluginRequirementFactory.gameDependency(GAME_NAME)]
