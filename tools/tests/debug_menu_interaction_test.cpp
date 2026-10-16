@@ -6,6 +6,7 @@
 #include <host_ui/host_ui.h>
 #include <host_ui/rasterizer.h>
 #include <debug/translations.h>
+#include <debug/cheat_overlay.h>
 #include <settings/config.h>
 
 #include <cstdio>
@@ -31,7 +32,8 @@ struct MockServices
     bool captureRequested = false;
     bool saveAnywhere = false;
     int partySwitchRequests = 0;
-    bool noEncounters = false;
+    settings::EncounterRate encounterRate = settings::EncounterRate::Normal;
+    bool battleExpDouble = false;
     bool everyStep = false;
     bool allowVictory = true;
     bool victoryRequested = false;
@@ -86,8 +88,10 @@ MapInfo GetMapInfo()
 bool SaveAnywhereEnabled() { return g_mock.saveAnywhere; }
 void SetSaveAnywhereEnabled(bool enabled) { g_mock.saveAnywhere = enabled; }
 void RequestPartySwitch() { ++g_mock.partySwitchRequests; }
-bool NoEncountersEnabled() { return g_mock.noEncounters; }
-void SetNoEncountersEnabled(bool enabled) { g_mock.noEncounters = enabled; }
+settings::EncounterRate GetEncounterRate() { return g_mock.encounterRate; }
+void SetEncounterRate(settings::EncounterRate rate) { g_mock.encounterRate = rate; }
+bool BattleExpDoubleEnabled() { return g_mock.battleExpDouble; }
+void SetBattleExpDoubleEnabled(bool enabled) { g_mock.battleExpDouble = enabled; }
 bool EncounterEveryStepEnabled() { return g_mock.everyStep; }
 void SetEncounterEveryStepEnabled(bool enabled) { g_mock.everyStep = enabled; }
 
@@ -185,21 +189,14 @@ int main()
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.partySwitchRequests == 1, "Party switch was not requested");
 
-    // Row 4: No Random Encounters toggles both ways
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(g_mock.noEncounters, "No random encounters was not enabled");
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(!g_mock.noEncounters, "No random encounters was not disabled");
-
-    // Row 5: Encounter Every Step toggles both ways
+    // Row 4: Encounter Every Step toggles both ways
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.everyStep, "Encounter every step was not enabled");
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(!g_mock.everyStep, "Encounter every step was not disabled");
 
-    // Row 6: Win Battle (Success and Rejection)
+    // Row 5: Win Battle (Success and Rejection)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.victoryRequested, "Victory request not registered");
@@ -207,7 +204,7 @@ int main()
     g_mock.allowVictory = false;
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
 
-    // Row 7: Cancel Victory, the last Overview row
+    // Row 6: Cancel Victory, the last Overview row
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.victoryCancelled, "Cancel victory was not called");
@@ -334,6 +331,48 @@ int main()
     Require(std::wstring(debug_menu::translations::Text(L"Win Current Battle", true)) == L"当前战斗判胜", "Win battle translation to Chinese");
     Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
     Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
+
+    // Cheats -> Quick tools: the independent live options need no memory-edit
+    // confirmation and remain usable before a playable field has loaded.
+    Require(!debug_menu::cheats::session.Get().enabled, "Memory edits unexpectedly enabled");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    for(int i=0;i<4;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.encounterRate==settings::EncounterRate::Half, "Encounter rate did not select Half");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.encounterRate==settings::EncounterRate::None, "Encounter rate did not select None");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.encounterRate==settings::EncounterRate::Normal, "Encounter rate did not wrap to Normal");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.encounterRate==settings::EncounterRate::None, "Encounter rate did not wrap backwards");
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.battleExpDouble && g_mock.encounterRate==settings::EncounterRate::None,
+        "EXP toggle changed encounter rate or failed to enable");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(!g_mock.battleExpDouble && g_mock.encounterRate==settings::EncounterRate::None,
+        "EXP toggle changed encounter rate or failed to disable");
+    Require(!debug_menu::cheats::session.Get().enabled, "Quick options enabled memory edits");
+    debug_menu::RenderOverlay(rasterizer);
+
+    // Both debug-menu languages must show the complete two-line help at the
+    // production 700px content width, without an ellipsis or discarded text.
+    for(bool zh : {false,true}) for(unsigned row : {4u,5u}) {
+        std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
+        Require(!remaining.empty(), "Quick-tool help is missing a language");
+        for(int line=0;!remaining.empty() && line<2;++line) {
+            size_t n=remaining.size();
+            while(n>1 && rasterizer.MeasureWString(remaining.substr(0,n))>700) --n;
+            if(n<remaining.size()) {
+                const auto space=remaining.rfind(L' ',n);
+                if(space!=std::wstring::npos && space>n/2)n=space;
+            }
+            Require(rasterizer.MeasureWString(remaining.substr(0,n))<=700,"Help line exceeds content width");
+            remaining.erase(0,n);
+            while(!remaining.empty() && remaining.front()==L' ')remaining.erase(0,1);
+        }
+        Require(remaining.empty(), "Quick-tool help exceeds the two-line limit");
+    }
 
     // 6. Dismiss overlay with Cancel (B / Esc)
     debug_menu::HandleInput(debug_menu::InputAction::Cancel);

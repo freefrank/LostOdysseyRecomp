@@ -9,6 +9,7 @@
 #include "gpu/upscaling_plan.h"
 #include "../../shared/frame_generation/core.h"
 #include "hid/input_map.h"
+#include "encounter_rate.h"
 namespace settings
 {
 // Persisted 2 (the removed exclusive fullscreen) loads as Borderless.
@@ -177,7 +178,8 @@ struct Config
     // 1 FPS, 2 Detailed (upscaler, FG, CPU and GPU load). Applied live.
     uint32_t performanceOverlay = 0;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
-    bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
+    EncounterRate encounterRate = EncounterRate::Normal; // Debug-only walking encounters.
+    bool battleExpDouble = false; // Debug-only battle reward preference.
     // Debug-menu fast-forward, persisted like saveAnywhere: switch, 0 Hold / 1 Toggle,
     // multiplier (one of debug_menu::fast_forward::Rates).
     bool fastForward = false;
@@ -191,7 +193,8 @@ void PreviewConfig(const Config &config);
 bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
-bool SaveNoRandomEncounters(bool enabled);
+bool SaveEncounterRate(EncounterRate rate);
+bool SaveBattleExpDouble(bool enabled);
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate);
 bool SaveAudioOutput(uint32_t output);
 // The player moved the window to another display (Win+Shift+arrow, dragging):

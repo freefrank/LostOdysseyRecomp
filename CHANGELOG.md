@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Cheats now offers Normal, Half or None for random encounters and a separate Battle EXP ×2 switch.
+
+### 简体中文
+
+- 调试菜单的 Cheats 页新增正常、减半或关闭随机遇敌，以及独立的战斗经验 ×2 开关。
+
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 
 ### English

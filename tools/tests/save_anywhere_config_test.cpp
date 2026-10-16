@@ -73,9 +73,17 @@ int wmain(int argc, wchar_t** argv)
     Write("save_anywhere=2\n");
     Check(!settings::Read().saveAnywhere, "invalid key defaults off");
     Write("no_random_encounters=1\n");
-    Check(settings::Read().noRandomEncounters, "no random encounters read from INI");
+    Check(settings::Read().encounterRate == settings::EncounterRate::None, "legacy no random encounters loads None");
     Write("no_random_encounters=2\n");
-    Check(!settings::Read().noRandomEncounters, "invalid no random encounters value defaults off");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "invalid legacy value defaults Normal");
+    Write("no_random_encounters=1\nencounter_rate=1\nbattle_exp_double=1\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
+        "new encounter rate overrides legacy and EXP loads independently");
+    Write("encounter_rate=0\nno_random_encounters=1\nbattle_exp_double=2\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal && !settings::Read().battleExpDouble,
+        "new key precedence is independent of ordering; invalid EXP defaults off");
+    Write("no_random_encounters=1\nencounter_rate=garbage\n");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "malformed new rate overrides legacy safely");
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
         "missing fast-forward keys default to off, Hold, 2x");
     Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
@@ -144,9 +152,13 @@ int wmain(int argc, wchar_t** argv)
     CheckFreshProcess(executable, "0");
 
     debug_menu::SetSaveAnywhereEnabled(true);
-    Check(settings::SaveNoRandomEncounters(true) && settings::GetConfig().noRandomEncounters &&
-          Contents().find("no_random_encounters=1\n") != std::string::npos,
-        "no random encounters persists");
+    Check(settings::SaveEncounterRate(settings::EncounterRate::Half) &&
+          settings::GetConfig().encounterRate == settings::EncounterRate::Half &&
+          Contents().find("encounter_rate=1\n") != std::string::npos,
+        "Half encounter rate persists");
+    Check(settings::SaveBattleExpDouble(true) && settings::GetConfig().battleExpDouble &&
+          Contents().find("battle_exp_double=1\n") != std::string::npos,
+        "battle EXP preference persists");
     Check(settings::SaveFastForward(true, 1, 8) && settings::GetConfig().fastForward &&
           settings::GetConfig().fastForwardRate == 8 &&
           Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\n") != std::string::npos,
@@ -167,7 +179,8 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::GetConfig().vibrationPercent == 30 && settings::Read().vibrationPercent == 30 &&
           Contents().find("vibration=30\n") != std::string::npos, "vibration strength roundtrips");
     Check(settings::Read().saveAnywhere, "ordinary save retains debug-only preference");
-    Check(settings::Read().noRandomEncounters, "ordinary save retains no random encounters");
+    Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
+        "ordinary save retains encounter rate and battle EXP");
     Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8,
         "ordinary save retains fast-forward choices");
     Check(settings::Read().audioOutput == settings::AudioOutputSurround, "ordinary save retains the audio output choice");

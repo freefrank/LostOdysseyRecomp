@@ -134,11 +134,11 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 ### Overview: captures and game actions
 
-**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **No Random Encounters**, **Encounter Every Step** and an action that wins the current battle.
+**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Encounter Every Step** and an action that wins the current battle.
 
 - **Capture render state:** confirm it, then close the menu. The archive is saved in `captures/` with screenshots, rendering data and logs; look through it before sharing.
 - **Save Anywhere** turns on the game's own **System → Save**.
-- **No Random Encounters** stops random battles in the field; story battles still happen. **Encounter Every Step** starts a random battle on every step.
+- **Encounter Every Step** starts a random battle on every step in areas with random encounters.
 
 ### Teleport: positions within the current map
 
@@ -150,7 +150,7 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 | Category | What it does |
 | :--- | :--- |
-| **Quick tools** | Fast-forward, **Allow memory edits**, gold and HP/MP. |
+| **Quick tools** | Fast-forward, **Encounter rate**, **Battle EXP ×2**, **Allow memory edits**, gold and HP/MP. |
 | **Characters** | HP/MP, EXP (0–99, not the level) and skills. |
 | **Inventory** | Set items and materials to 1, 10, 50 or 99, or fill whole categories. Sort the in-game inventory to refresh it. |
 | **Equipment** | Weapon, ring and accessory changes. |
@@ -158,6 +158,10 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 | **Developer** | The original **EDIT MENU**: enable it, close F1, press **LT+RT**. |
 
 **Fast-forward** runs at 2×–8× while you hold **LT** (**Hold**) or after you press it (**Toggle**).
+
+**Encounter rate** offers **Normal**, **Half** and **None**. Half skips every other random encounter; story battles and bosses are unaffected. **Battle EXP ×2** is a separate switch for experience earned from won battles. Both choices are saved.
+
+The EXP bonus applies after the game's level-based calculation and keeps its normal per-battle cap. SP and gold stay the same.
 
 **Memory edits** are off by default. Back up your save, turn on **Allow memory edits**, choose an action, confirm **Yes** and close F1 to apply it.
 

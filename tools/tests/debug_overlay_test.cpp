@@ -92,8 +92,10 @@ MapInfo GetMapInfo() { return {}; }
 bool SaveAnywhereEnabled() { return g_saveAnywhere.load(); }
 void SetSaveAnywhereEnabled(bool enabled) { g_saveAnywhere = enabled; }
 void RequestPartySwitch() {}
-bool NoEncountersEnabled() { return false; }
-void SetNoEncountersEnabled(bool) {}
+settings::EncounterRate GetEncounterRate() { return settings::EncounterRate::Normal; }
+void SetEncounterRate(settings::EncounterRate) {}
+bool BattleExpDoubleEnabled() { return false; }
+void SetBattleExpDoubleEnabled(bool) {}
 bool EncounterEveryStepEnabled() { return false; }
 void SetEncounterEveryStepEnabled(bool) {}
 bool RequestVictory() { return true; }
@@ -174,11 +176,8 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::Cancel); // Dismiss picker
     debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 4: memory edits confirmation
+    for(int i=0;i<6;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 6: memory edits confirmation
     g_playStation = false;
     const auto confirmReference = renderFrame();
     g_playStation = true;

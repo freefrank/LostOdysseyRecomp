@@ -195,8 +195,8 @@ namespace debug_menu
                 g_overlayState.selectedRow--;
             return;
         case InputAction::Down:
-            // Overview ends at row 7; Teleport ends at row 8 (Debug Event Room).
-            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 7 : 8))
+            // Overview ends at row 6; Teleport ends at row 8 (Debug Event Room).
+            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 : 8))
                 g_overlayState.selectedRow++;
             return;
         default:
@@ -210,10 +210,9 @@ namespace debug_menu
             // 1: Render Capture
             // 2: Save Anywhere
             // 3: Force RB party switch
-            // 4: No Random Encounters
-            // 5: Encounter Every Step (beside No Random Encounters)
-            // 6: Win Battle
-            // 7: Cancel Battle Request
+            // 4: Encounter Every Step
+            // 5: Win Battle
+            // 6: Cancel Battle Request
             if (action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right)
             {
                 switch (g_overlayState.selectedRow)
@@ -247,13 +246,9 @@ namespace debug_menu
                 }
                 case 4:
                     stateLock.unlock();
-                    debug_menu::SetNoEncountersEnabled(!debug_menu::NoEncountersEnabled());
-                    return;
-                case 5:
-                    stateLock.unlock();
                     debug_menu::SetEncounterEveryStepEnabled(!debug_menu::EncounterEveryStepEnabled());
                     return;
-                case 6:
+                case 5:
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
@@ -263,7 +258,7 @@ namespace debug_menu
                         : (zh ? L"无法请求判胜（当前无活跃战斗）" : L"Cannot request victory (no active battle)"));
                     return;
                 }
-                case 7:
+                case 6:
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
@@ -508,15 +503,11 @@ namespace debug_menu
             host_ui::DrawButton(r, btnX + saveBtnW + saveGap, contentY + 2 * rowH + 8, saveBtnW, 30,
                 zh ? L"强制开启 RB 换人" : L"Force RB Party Switch", state.selectedRow == 3);
 
-            // 4: No Random Encounters (below Save Anywhere) & 5: Encounter Every Step (beside it)
-            const bool noEncounters = debug_menu::NoEncountersEnabled();
-            std::wstring encounterText = zh ? (noEncounters ? L"不遇敌: 开启" : L"不遇敌: 关闭")
-                                            : (noEncounters ? L"No Random Encounters: ON" : L"No Random Encounters: OFF");
-            host_ui::DrawButton(r, btnX, contentY + 3 * rowH + 12, saveBtnW, 30, encounterText, state.selectedRow == 4);
+            // 4: Encounter Every Step (the persisted encounter rate lives in Cheats).
             const bool everyStep = debug_menu::EncounterEveryStepEnabled();
             std::wstring everyStepText = zh ? (everyStep ? L"一步一遇敌: 开启" : L"一步一遇敌: 关闭")
                                             : (everyStep ? L"Encounter Every Step: ON" : L"Encounter Every Step: OFF");
-            host_ui::DrawButton(r, btnX + saveBtnW + saveGap, contentY + 3 * rowH + 12, saveBtnW, 30, everyStepText, state.selectedRow == 5);
+            host_ui::DrawButton(r, btnX, contentY + 3 * rowH + 12, btnW, 30, everyStepText, state.selectedRow == 4);
 
             // Map info display (Centered)
             auto mapInfo = debug_menu::GetMapInfo();
@@ -532,14 +523,14 @@ namespace debug_menu
             int mapTextW = r.MeasureWString(mapText);
             r.DrawWString(panelX + (panelW - mapTextW) / 2, contentY + 4 * rowH + 16, mapText, host_ui::MakeColor(255, 180, 210, 240));
 
-            // 6: Win Battle & 7: Cancel Victory (Side by side, centered total 520px)
+            // 5: Win Battle & 6: Cancel Victory (Side by side, centered total 520px)
             int battleGap = 16;
             int battleBtnW = (btnW - battleGap) / 2; // 252
             std::wstring winText = zh ? L"当前战斗判胜" : L"Win Current Battle";
-            host_ui::DrawButton(r, btnX, contentY + 5 * rowH + 16, battleBtnW, 30, winText, state.selectedRow == 6);
+            host_ui::DrawButton(r, btnX, contentY + 5 * rowH + 16, battleBtnW, 30, winText, state.selectedRow == 5);
 
             std::wstring cancelWinText = zh ? L"取消判胜请求" : L"Cancel Victory Request";
-            host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 5 * rowH + 16, battleBtnW, 30, cancelWinText, state.selectedRow == 7);
+            host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 5 * rowH + 16, battleBtnW, 30, cancelWinText, state.selectedRow == 6);
 
             const wchar_t* rawBStat = debug_menu::Status();
             if (rawBStat && *rawBStat)
