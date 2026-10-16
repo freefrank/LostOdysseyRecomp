@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Settings → Graphics → Dynamic shadows has a Low choice: only the 8 largest characters and objects on screen cast shadows, which lightens the GPU load in busy areas.
 - Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
 - Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
 - After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
@@ -19,6 +20,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 设置 → 图像 → 动态阴影新增“低”：只给画面上最大的 8 个角色和物体画阴影，减轻人多场景的 GPU 负担。
 - 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。
 - Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
 - 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
@@ -61,7 +63,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android: the game stays in landscape; holding the device upright no longer turns it to portrait.
 - Depth of field at 0% and Bloom off now skip the game's blur passes for those effects instead of only hiding them, so they take less GPU time: in Uhra about 13% less per frame. The picture stays the same.
 - New Settings → Graphics → Graphics preset: both choices run the original 720p at 30 FPS. Low-end also turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter, for weak hardware; Original brings the game's effects back.
-- Settings → Graphics → Dynamic shadows has a Low choice: only characters and objects on screen cast shadows, at most the 8 largest. In Uhra's main street it takes about a third less GPU time than On.
 - Music and cutscene audio no longer go missing, and battle music no longer plays on after a battle, when the game's sound requests pile up (#497, #499).
 - The game handles its sound requests about ten times faster, so they no longer pile up in busy scenes (#497).
 - Fast-forward now speeds up sound and music too.
@@ -101,7 +102,6 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Android：游戏固定横屏，竖着拿设备时不再转成竖屏。
 - 景深设为 0% 或关闭泛光后，游戏会跳过这两种效果的模糊渲染，而不只是把结果隐藏，GPU 耗时更少：在乌拉每帧约少 13%。画面不变。
 - 新增“设置 → 图像 → 画质预设”：两个选项都以原版的 720p、30 FPS 运行。低配还会关闭动态阴影、动态模糊、景深和泛光，并使用标准缩放过滤，适合较弱的硬件；原版恢复游戏原有的效果。
-- 设置 → 图像 → 动态阴影新增“低”：只给画面上的角色和物体画阴影，最多 8 个最大的。在 Uhra 主街，GPU 时间比“开”少约三分之一。
 - 游戏的声音请求积压时，音乐和过场声音不再缺失，战斗结束后战斗音乐也不再继续播放（#497、#499）。
 - 游戏处理声音请求的速度提高到约十倍，繁忙场景里请求不再积压（#497）。
 - 快进时声音和音乐也一起加速。
