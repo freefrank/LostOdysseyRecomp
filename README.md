@@ -134,11 +134,11 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 ### Overview: captures and game actions
 
-**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Encounter Every Step** and an action that wins the current battle.
+**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Return to title** and an action that wins the current battle.
 
 - **Capture render state:** confirm it, then close the menu. The archive is saved in `captures/` with screenshots, rendering data and logs; look through it before sharing.
 - **Save Anywhere** turns on the game's own **System → Save**.
-- **Encounter Every Step** starts a random battle on every step in areas with random encounters.
+- **Return to title** asks for confirmation before returning to the title screen. Unsaved progress will be lost. Close the save/load screen and wait for saving or loading to finish before using it.
 
 ### Teleport: positions within the current map
 
@@ -161,7 +161,7 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 **Fast-forward** runs at 2×–8× while you hold **LT** (**Hold**) or after you press it (**Toggle**). **Fast-forward audio** defaults to **Keep pitch**; choose **Speed up** to raise the pitch with the speed. The choice is saved.
 
-**Encounter rate** offers **Normal**, **Half** and **None**. Half skips every other random encounter; story battles and bosses are unaffected. **Battle EXP ×2** is a separate switch for experience earned from won battles. Both choices are saved.
+**Encounter rate** offers **Normal**, **Half**, **None** and **Every step**. Half skips every other random encounter; Every step starts a battle on each step in areas with random encounters. Story battles and bosses are unaffected. Every step is a temporary testing aid: restarting restores your last Normal/Half/None choice. **Battle EXP ×2** is a separate, saved switch for experience earned from won battles.
 
 The EXP bonus applies after the game's level-based calculation and keeps its normal per-battle cap. SP and gold stay the same.
 

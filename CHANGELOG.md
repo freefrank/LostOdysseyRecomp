@@ -8,9 +8,10 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Debug Menu → Overview → Return to title lets you return to the title screen after confirming that unsaved progress will be lost (#592).
 - Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
 - After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
-- Cheats now offers Normal, Half or None for random encounters and a separate Battle EXP ×2 switch.
+- Cheats → Encounter rate offers Normal, Half, None or the temporary Every step mode, alongside a separate Battle EXP ×2 switch.
 - Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
 - The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
 - Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
@@ -18,9 +19,10 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 调试菜单 → Overview → 返回标题：确认放弃未保存的进度后，可返回标题画面（#592）。
 - Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
 - 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
-- 调试菜单的 Cheats 页新增正常、减半或关闭随机遇敌，以及独立的战斗经验 ×2 开关。
+- 调试菜单的 Cheats → 遇敌率可选正常、减半、关闭或临时的一步一遇敌模式，另有独立的战斗经验 ×2 开关。
 - 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
 - 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
 - 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。

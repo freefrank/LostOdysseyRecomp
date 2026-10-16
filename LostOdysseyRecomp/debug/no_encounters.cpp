@@ -23,14 +23,12 @@ namespace
 
     // Not persisted: a player must not reboot into a battle on every step.
     // LO_DEBUG_ENCOUNTER_EVERY_STEP=1 turns it on at startup for harnesses and
-    // restores Normal for this session (settings.ini untouched).
+    // leaves the last persisted Normal/Half/None preference untouched.
     std::atomic<bool>& EveryStep()
     {
         static std::atomic<bool> everyStep{[] {
             const char* env = std::getenv("LO_DEBUG_ENCOUNTER_EVERY_STEP");
             const bool on = env && std::strcmp(env, "1") == 0;
-            if (on)
-                Requested().store(settings::EncounterRate::Normal, std::memory_order_relaxed);
             return on;
         }()};
         return everyStep;
@@ -39,20 +37,19 @@ namespace
 
 settings::EncounterRate debug_menu::GetEncounterRate()
 {
-    EveryStep(); // apply the env override before the first read
     return Requested().load(std::memory_order_relaxed);
 }
 
 void debug_menu::SetEncounterRate(settings::EncounterRate rate)
 {
-    EveryStep(); // initialize the env override before applying a menu choice
+    const bool wasEveryStep = EveryStep().exchange(false, std::memory_order_relaxed);
     rate = settings::ValidEncounterRate(rate);
-    if (Requested().exchange(rate, std::memory_order_relaxed) != rate)
+    if (Requested().exchange(rate, std::memory_order_relaxed) != rate || wasEveryStep)
         halfDraws.store(0, std::memory_order_relaxed);
     if (!settings::SaveEncounterRate(rate))
         LOG_WARNING("debug menu: failed to persist encounter rate setting");
     LOG_INFO("debug menu: encounter rate {}", uint32_t(rate));
-    if (rate != settings::EncounterRate::Normal && EveryStep().exchange(false, std::memory_order_relaxed))
+    if (wasEveryStep)
         LOG_INFO("debug menu: encounter every step false");
 }
 
@@ -65,8 +62,6 @@ void debug_menu::SetEncounterEveryStepEnabled(bool enabled)
 {
     EveryStep().store(enabled, std::memory_order_relaxed);
     LOG_INFO("debug menu: encounter every step {}", enabled);
-    if (enabled && GetEncounterRate() != settings::EncounterRate::Normal)
-        SetEncounterRate(settings::EncounterRate::Normal);
 }
 
 // The walking encounter update sub_829E3048 accumulates the distance walked

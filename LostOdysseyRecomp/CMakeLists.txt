@@ -29,6 +29,7 @@ lo_add_header_test(LoShadowResolutionTest ${CMAKE_SOURCE_DIR}/tools/tests/shadow
 lo_add_header_test(LoHdrSceneShaderTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_scene_shader_test.cpp)
 lo_add_header_test(LoTimeFieldsTest ${CMAKE_SOURCE_DIR}/tools/tests/time_fields_test.cpp)
 lo_add_header_test(LoLoadingStateTest ${CMAKE_SOURCE_DIR}/tools/tests/loading_state_test.cpp)
+lo_add_header_test(LoSoftResetTest ${CMAKE_SOURCE_DIR}/tools/tests/soft_reset_test.cpp)
 lo_add_header_test(LoNotifiedWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/notified_wait_test.cpp)
 lo_add_header_test(LoFrameGenerationPresentTest ${CMAKE_SOURCE_DIR}/tools/tests/frame_generation_present_test.cpp)
 lo_add_header_test(LoMetalFxFgPolicyTest ${CMAKE_SOURCE_DIR}/tools/tests/streamline_fg/metalfx_policy_test.cpp)

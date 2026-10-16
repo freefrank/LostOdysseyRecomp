@@ -66,6 +66,7 @@ namespace debug_menu
             return true;
         }();
         (void)restored;
+        PollResetNotice();
         cheats::PollHostControls();
         LogFastForward();
         if (IsOverlayVisible())

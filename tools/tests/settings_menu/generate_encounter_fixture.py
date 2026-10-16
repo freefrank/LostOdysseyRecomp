@@ -189,13 +189,20 @@ int main() {
     Check(Draw(0)==1,"tour overrides Half");
     Check(Draw()==1,"tour does not consume Half's alternation");
     debug_menu::SetEncounterEveryStepEnabled(true);
-    Check(debug_menu::GetEncounterRate()==EncounterRate::Normal && Draw()==1,
-        "Every Step restores Normal and permits the original battle");
+    Check(debug_menu::GetEncounterRate()==EncounterRate::Half && Draw()==1 &&
+        settings::Read().encounterRate==EncounterRate::Half,
+        "Every Step permits the original battle without persisting over Half");
     debug_menu::SetEncounterRate(EncounterRate::Half);
     Check(!debug_menu::EncounterEveryStepEnabled() && Draw()==0,"Half disables Every Step");
     debug_menu::SetEncounterEveryStepEnabled(true);
     debug_menu::SetEncounterRate(EncounterRate::None);
     Check(!debug_menu::EncounterEveryStepEnabled() && Draw()==0,"None disables Every Step");
+    debug_menu::SetEncounterEveryStepEnabled(true);
+    Check(debug_menu::GetEncounterRate()==EncounterRate::None && Draw()==1 &&
+        settings::Read().encounterRate==EncounterRate::None,
+        "Every Step overrides None without changing the saved preference");
+    debug_menu::SetEncounterRate(EncounterRate::Normal);
+    Check(!debug_menu::EncounterEveryStepEnabled() && Draw()==1,"Normal disables Every Step");
     Check(originalCalls==wrapperCalls,"every wrapper invocation runs the original draw");
     fs::current_path(previous); fs::remove_all(scratch);
     std::printf("PASS production encounter hook/config: 100 successful walking draws -> Normal=%u Half=%u None=%u; caller/tour/Every Step and migration verified\n",normal,half,none);

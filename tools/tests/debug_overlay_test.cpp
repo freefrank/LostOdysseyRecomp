@@ -22,6 +22,10 @@ std::mutex g_fixtureMutex;
 debug_menu::TeleportSnapshot g_teleport;
 std::atomic<bool> g_saveAnywhere{false};
 std::atomic<bool> g_playStation{false};
+std::atomic<settings::EncounterRate> g_encounterRate{settings::EncounterRate::Normal};
+std::atomic<bool> g_everyStep{false};
+std::atomic<uint32_t> g_debugLanguage{0};
+std::atomic<const wchar_t*> g_resetRefusal{nullptr};
 
 void Require(bool condition, const char* message)
 {
@@ -63,10 +67,10 @@ namespace settings
 Config GetConfig()
 {
     Config config;
-    config.debugLanguage = 0;
+    config.debugLanguage = g_debugLanguage.load();
     return config;
 }
-bool SaveDebugLanguage(uint32_t) { return true; }
+bool SaveDebugLanguage(uint32_t language) { g_debugLanguage = language; return true; }
 bool SaveFastForward(bool, uint32_t, uint32_t, bool) { return true; }
 bool SaveMenuAnimationRate(uint32_t) { return true; }
 }
@@ -94,15 +98,21 @@ MapInfo GetMapInfo() { return {}; }
 bool SaveAnywhereEnabled() { return g_saveAnywhere.load(); }
 void SetSaveAnywhereEnabled(bool enabled) { g_saveAnywhere = enabled; }
 void RequestPartySwitch() {}
-settings::EncounterRate GetEncounterRate() { return settings::EncounterRate::Normal; }
-void SetEncounterRate(settings::EncounterRate) {}
+settings::EncounterRate GetEncounterRate() { return g_encounterRate.load(); }
+void SetEncounterRate(settings::EncounterRate rate) { g_encounterRate = rate; g_everyStep = false; }
 bool BattleExpDoubleEnabled() { return false; }
 void SetBattleExpDoubleEnabled(bool) {}
-bool EncounterEveryStepEnabled() { return false; }
-void SetEncounterEveryStepEnabled(bool) {}
+bool EncounterEveryStepEnabled() { return g_everyStep.load(); }
+void SetEncounterEveryStepEnabled(bool enabled) { g_everyStep = enabled; }
 bool RequestVictory() { return true; }
 void CancelVictory() {}
 const wchar_t* Status() { return L""; }
+namespace soft_reset
+{
+bool Request() { return false; }
+const wchar_t* Status() { return L"Return to title unavailable"; }
+const wchar_t* TakeRefusal() { return g_resetRefusal.exchange(nullptr); }
+}
 }
 
 int main(int argc, char** argv)
@@ -137,6 +147,20 @@ int main(int argc, char** argv)
         std::filesystem::create_directories(argv[1]);
         SavePpm(std::filesystem::path(argv[1]) / name, frame);
     };
+    const auto requireResetNotice = [&](const wchar_t* text) {
+        host_ui::PixelBuffer expected;
+        Require(expected.Resize(), "reset notice reference allocation failed");
+        host_ui::Rasterizer rasterizer(expected);
+        const uint32_t color = host_ui::MakeColor(255, 120, 220, 150);
+        rasterizer.DrawWString((1280 - rasterizer.MeasureWString(text)) / 2, 572, text, color);
+        for (int y = 572; y < 590; ++y)
+            for (int x = 260; x < 1020; ++x)
+            {
+                const auto pixel = size_t(y) * host_ui::kOverlayWidth + x;
+                Require((frame.pixels[pixel] == color) == (expected.pixels[pixel] == color),
+                    "guest-thread refusal did not render the complete localized notice");
+            }
+    };
 
     const auto overviewReference = renderFrame();
     capture("overview-reference.ppm");
@@ -148,6 +172,45 @@ int main(int argc, char** argv)
     g_playStation = false;
     Require(renderFrame() == overviewReference, "debug footer did not restore after controller switch");
 
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    debug_menu::PollResetNotice();
+    Require(!debug_menu::IsOverlayVisible() && !host_ui::IsGamePaused(),
+        "empty reset notice unexpectedly opened the overlay");
+    g_resetRefusal = L"Please wait for saving to finish";
+    debug_menu::PollResetNotice();
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused(),
+        "late refusal did not reopen and pause the overlay");
+    const auto refusalReference = renderFrame();
+    capture("return-to-title-late-refusal-en.ppm");
+    requireResetNotice(L"Please wait for saving to finish");
+    debug_menu::PollResetNotice();
+    Require(renderFrame() == refusalReference, "consumed reset notice changed the overlay again");
+
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab); // Cheats already open when refusal arrives
+    g_resetRefusal = L"Please wait for loading to finish";
+    debug_menu::PollResetNotice();
+    renderFrame();
+    capture("return-to-title-visible-cheats-refusal-en.ppm");
+    requireResetNotice(L"Please wait for loading to finish");
+    g_resetRefusal = L"Close the save/load screen first";
+    debug_menu::PollResetNotice();
+    renderFrame();
+    capture("return-to-title-storage-screen-refusal-en.ppm");
+    requireResetNotice(L"Close the save/load screen first");
+
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    const auto resetNoReference = renderFrame();
+    capture("return-to-title-en-no.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    const auto resetYesReference = renderFrame();
+    capture("return-to-title-en-yes.ppm");
+    Require(RegionDiffers(resetNoReference, resetYesReference, 400, 393, 480, 38),
+        "Return to title Yes/No selection did not render");
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    Require(debug_menu::IsOverlayVisible(), "cancel closed overlay instead of Return to title confirmation");
+    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
+
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Chinese debug UI
     const auto chineseReference = renderFrame();
     g_playStation = true;
@@ -155,6 +218,23 @@ int main(int argc, char** argv)
     capture("overview-zh-playstation.ppm");
     Require(RegionDiffers(chineseReference, chinesePlayStation, 260, 594, 760, 22),
             "Chinese debug footer did not update for PlayStation prompts");
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
+    g_resetRefusal = L"Please wait for loading to finish";
+    debug_menu::PollResetNotice();
+    Require(debug_menu::IsOverlayVisible() && host_ui::IsGamePaused(),
+        "Chinese late refusal did not reopen and pause the overlay");
+    renderFrame();
+    capture("return-to-title-late-refusal-zh-playstation.ppm");
+    requireResetNotice(L"请等待读取完成");
+    g_resetRefusal = L"Close the save/load screen first";
+    debug_menu::PollResetNotice();
+    renderFrame();
+    capture("return-to-title-storage-screen-refusal-zh-playstation.ppm");
+    requireResetNotice(L"先关闭存档/读档画面");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    renderFrame();
+    capture("return-to-title-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Cancel);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     renderFrame();
@@ -165,6 +245,12 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("encounter-rate-zh-playstation.ppm");
+    for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Right);
+    renderFrame();
+    capture("encounter-every-step-zh-playstation.ppm");
+    Require(g_everyStep && g_encounterRate == settings::EncounterRate::None,
+        "Chinese encounter row did not select session-only Every step");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // Restore Normal
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("battle-exp-zh-playstation.ppm");
@@ -185,6 +271,12 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("encounter-rate-en.ppm");
+    for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Right);
+    renderFrame();
+    capture("encounter-every-step-en.ppm");
+    Require(g_everyStep && g_encounterRate == settings::EncounterRate::None,
+        "English encounter row did not select session-only Every step");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // Restore Normal
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("battle-exp-en.ppm");

@@ -27,7 +27,10 @@ inline constexpr const wchar_t* FastForwardAudioHelp[] = {
     L"保持音调让人声和音乐维持原调；随速度升调会按加速倍率提高音调。"};
 inline constexpr const wchar_t* EncounterRateLabel[] = {L"Encounter rate",L"遇敌率"};
 inline constexpr const wchar_t* EncounterRateValues[][2] = {
-    {L"Normal",L"正常"}, {L"Half",L"减半"}, {L"None",L"关闭"}};
+    {L"Normal",L"正常"}, {L"Half",L"减半"}, {L"None",L"关闭"}, {L"Every step",L"一步一遇敌"}};
+inline unsigned EncounterRateIndex() {
+    return debug_menu::EncounterEveryStepEnabled() ? 3 : unsigned(debug_menu::GetEncounterRate());
+}
 inline constexpr const wchar_t* BattleExpLabel[] = {L"Battle EXP ×2",L"战斗 EXP ×2"};
 inline constexpr const wchar_t* MenuAnimationLabel[] = {L"Menu animations",L"菜单动画"};
 inline constexpr const wchar_t* MenuAnimationValues[][2] = {
@@ -161,7 +164,9 @@ struct Model {
             } else if (row==4) {
                 fast_forward::SetKeepAudioPitch(!speed.keepAudioPitch);
             } else if (row==5) {
-                debug_menu::SetEncounterRate(settings::EncounterRate(Wrap(unsigned(debug_menu::GetEncounterRate()),direction,3)));
+                const unsigned rate=Wrap(EncounterRateIndex(),direction,unsigned(std::size(EncounterRateValues)));
+                if (rate==3) debug_menu::SetEncounterEveryStepEnabled(true);
+                else debug_menu::SetEncounterRate(settings::EncounterRate(rate));
             } else if (row==6) {
                 debug_menu::SetBattleExpDoubleEnabled(!debug_menu::BattleExpDoubleEnabled());
             } else if (row==7) {
@@ -230,8 +235,8 @@ inline const wchar_t* ResultText(cheats::Result result,bool zh) {
 inline const wchar_t* QuickToolHelp(unsigned row,bool zh) {
     if(row==4) return FastForwardAudioHelp[zh];
     if(row==5) return zh
-        ? L"仅影响步行随机遇敌；减半模式交替跳过成功判定，剧情与首领战不受影响。"
-        : L"Walking encounters only. Half skips alternate successful draws; story and boss fights are unchanged.";
+        ? L"仅影响步行遇敌；减半交替跳过成功判定，一步一遇敌不保存。剧情与首领战不受影响。"
+        : L"Walking only. Half skips alternate draws; Every step is not saved. Story and boss fights are unchanged.";
     if(row==6) return zh
         ? L"战斗经验加倍，SP 与金币不变。"
         : L"Doubles battle EXP. SP and gold stay unchanged.";
@@ -277,7 +282,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
             ? (zh ? L"按住" : L"Hold") : (zh ? L"切换" : L"Toggle"));
         row(3,zh ? L"加速倍率" : L"Speed multiplier",std::to_wstring(speed.multiplier)+L"x");
         row(4,FastForwardAudioLabel[zh],FastForwardAudioValues[speed.keepAudioPitch ? 0:1][zh]);
-        row(5,EncounterRateLabel[zh],EncounterRateValues[unsigned(debug_menu::GetEncounterRate())][zh]);
+        row(5,EncounterRateLabel[zh],EncounterRateValues[EncounterRateIndex()][zh]);
         row(6,BattleExpLabel[zh],debug_menu::BattleExpDoubleEnabled() ? L"ON":L"OFF");
         row(7,MenuAnimationLabel[zh],MenuAnimationValue(m.menuAnimationRate,zh));
         row(8,zh ? L"允许内存修改" : L"Allow memory edits",s.enabled ? L"ON":L"OFF");
