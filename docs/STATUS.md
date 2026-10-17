@@ -2,7 +2,46 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.0 published — 2026-10-17
+
+[v1.0.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.0) was published at 2026-10-17T07:19:07Z by the workflow's own publish step. The maintainer verified on 2026-10-17 that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.0` at commit `df388a0e`, the release PR [#600](https://github.com/freefrank/LostOdysseyRecomp/pull/600). The previous release is v0.9.65, published 2026-10-15T21:15:30Z at `298b3e8f`. The Discord announcement workflow succeeded at 2026-10-17T07:19:09Z. The release body matches the [Changelog, v1.0.0](../CHANGELOG.md#v100--2026-10-17) section.
+
+The release run is Gitea run 1489, `release.yml` on `refs/tags/v1.0.0`. Create draft, Prepare FSR Vulkan build inputs, Windows Release, Linux Release, Android Release and Publish complete release all succeeded.
+
+Assets, as recorded by the maintainer on 2026-10-17 (bytes and SHA-256):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.0.zip` | 153,255,519 | `adc30cb392d0fb842169269e9ebfbfbf2aee593a431c10d528fcd2bdcf6f2a67` |
+| `LostOdysseyRecomp-linux-x64-v1.0.0.AppImage` | 79,047,160 | `f35e663eed345a3db6bd2586a776ed373a1893f8d68ebbd0e25621cb9b243cf3` |
+| `LostOdysseyRecomp-linux-x64-v1.0.0.flatpak` | 55,605,464 | `be35cb4444162aae90534ba3834a85fca86266ed18723ffe6bcd69124497ea6c` |
+| `LostOdysseyRecomp-android-arm64-v1.0.0.apk` | 47,187,839 | `99a526f0ecf9a77d19ac921d2fa943458c12d088483a9890f230fc232a1a4dd1` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.0.dmg` | 65,478,738 | `a8341f535cf4130f04d5dec3f2a264efd383f9f148705d12f28e262b92a22f97` |
+
+The PortForge manifest `.forge.json` is set to 1.0.0 in the same change as this record.
+
+What the release contains since v0.9.65, grouped (one line each; details in the Changelog):
+
+- Desktop: Discord Rich Presence ([#598](https://github.com/freefrank/LostOdysseyRecomp/pull/598)).
+- Title screen: free and open-source credit ([#599](https://github.com/freefrank/LostOdysseyRecomp/pull/599)).
+- Debug Menu: Return to title, outside battles ([#594](https://github.com/freefrank/LostOdysseyRecomp/pull/594), discussion [#592](https://github.com/freefrank/LostOdysseyRecomp/discussions/592)).
+- Android: saves can stay in the game folder ([#590](https://github.com/freefrank/LostOdysseyRecomp/pull/590), issue [#587](https://github.com/freefrank/LostOdysseyRecomp/issues/587)).
+- Encounter rate and Battle EXP ×2 cheats (issue [#586](https://github.com/freefrank/LostOdysseyRecomp/issues/586)).
+- Fast-forward keeps the original audio pitch by default.
+- Camp menu animation speed (issue [#577](https://github.com/freefrank/LostOdysseyRecomp/issues/577)).
+- Post-battle transition covers the screen at 4:3 (issue [#582](https://github.com/freefrank/LostOdysseyRecomp/issues/582)).
+- Disc dedupe message (issue [#575](https://github.com/freefrank/LostOdysseyRecomp/issues/575)).
+- Dynamic shadows Low ([#548](https://github.com/freefrank/LostOdysseyRecomp/pull/548)).
+
+Shader packs: not republished. The contracts are unchanged (d3d12 `05fd9431…`, vulkan and metal `03ef0787…`). `tools/release/publish_shader_packs.py --check` passed in the pre-release check of `release/v1.0.0` (`31a2b7ae`, the same tree as `df388a0e`).
+
+macOS: the disk image was built on the maintainer's M1 Max from the tag with `mac-release-sdl3.sh v1.0.0 v1.0.0 tag package` (SDL release-3.4.18) and uploaded to the draft release before publication. `hdiutil verify` reports it VALID, `codesign --verify` passes and `CFBundleShortVersionString` is 1.0.0. The pre-check of `release/v1.0.0` also built ([macOS releases](MACOS_RELEASE.md#v100-image)).
+
+Acceptance: none. No user acceptance testing of the published v1.0.0 packages was done, and no game run with them is recorded in this file. The maintainer has not accepted v1.0.0. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v0.9.65 published — 2026-10-15
+
+Update, 2026-10-17: v0.9.65 stopped being the latest release when [v1.0.0](#v100-published--2026-10-17) was published at 2026-10-17T07:19:07Z. The record below is unchanged.
 
 [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) was published at 2026-10-15T21:15:30Z by the workflow's own publish step. It is not a draft or pre-release and is the latest release (`gh release view` reports `isDraft` and `isPrerelease` false, and `gh release list` marks it Latest; checked 2026-10-15 at about 21:17Z). It was cut from annotated tag `v0.9.65` at commit `298b3e8f`, the merge of PR [#572](https://github.com/freefrank/LostOdysseyRecomp/pull/572) (merged 2026-10-15T20:52:37Z). The version number is the maintainer's choice: v0.9.57 plus 0.0.8.
 
