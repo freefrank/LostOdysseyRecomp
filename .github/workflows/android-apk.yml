@@ -61,7 +61,7 @@ jobs:
           path: |
             ${{ env.LO_ANDROID_CI_CACHE }}/gradle/caches
             ${{ env.LO_ANDROID_CI_CACHE }}/gradle/wrapper
-          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
+          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle', 'packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: android-gradle-${{ runner.os }}-
       - name: Cache Android compiler objects
         uses: actions/cache@v4

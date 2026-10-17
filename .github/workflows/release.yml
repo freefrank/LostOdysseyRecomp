@@ -72,7 +72,7 @@ jobs:
             out/fsr-shaders-vk
             out/fsr-shaders-dx12
             out/fsr-adapter-dx12
-          key: Windows-fsr-c6efa6bf7f2027b3ec94f28578bb5965eabb9e55-${{ steps.fsr-versions.outputs.xenos }}-${{ hashFiles('tools/fsr/**') }}
+          key: Windows-fsr-c6efa6bf7f2027b3ec94f28578bb5965eabb9e55-${{ steps.fsr-versions.outputs.xenos }}-${{ hashFiles('tools/fsr/**', 'LostOdysseyRecomp/gpu/shaders/fsr_prepare.*') }}
       - name: Checkout pinned FidelityFX SDK
         if: steps.fsr-cache.outputs.cache-hit != 'true'
         run: |
@@ -528,7 +528,7 @@ jobs:
           path: |
             ${{ env.LO_ANDROID_CI_CACHE }}/gradle/caches
             ${{ env.LO_ANDROID_CI_CACHE }}/gradle/wrapper
-          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
+          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle', 'packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: android-gradle-${{ runner.os }}-
       - name: Cache Android compiler objects
         uses: actions/cache@v4

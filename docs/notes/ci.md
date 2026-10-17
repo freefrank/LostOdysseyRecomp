@@ -86,7 +86,7 @@ Hosted jobs restore these inputs through `actions/cache@v4`; the workflow files 
 | DLSS SDK | `<OS>-dlss-<pinned commit>-<fetch-helper hash>` |
 | Streamline ZIP | `Windows-streamline-v2.14.1-<prepare-helper hash>` |
 | XeSS ZIP | `Windows-xess-v3.0.2-<prepare-helper hash>` |
-| FSR inputs | `Windows-fsr-<FidelityFX pin>-<XenosRecomp commit>-<FSR-tools hash>` |
+| FSR inputs | `Windows-fsr-<FidelityFX pin>-<XenosRecomp commit>-<FSR-tools/adapter-shaders hash>` |
 | Linux ccache (3 GB) | `Linux-ccache-clang18-v1-<build-input hash>-<commit>-<run-id>`; restore by build-input hash, then compiler prefix |
 | Android SDK / NDK | `android-sdk-Linux-cmdline11076708-api35-build35-ndk28.2.13676358-cmake3.22.1-v1` |
 | Android DXC | `android-dxc-Linux-ndk28.2.13676358-<DXC/CI-script hash>` |

@@ -19,6 +19,9 @@ cmdline_tools_url=${LO_ANDROID_CMDLINE_TOOLS:-https://dl.google.com/android/repo
 jobs=${LO_BUILD_JOBS:-$(nproc)}
 
 export ANDROID_HOME="$cache/android-sdk"
+# Hosted Ubuntu defines ANDROID_SDK_ROOT for its preinstalled SDK. Keep both
+# variables on the SDK restored above so Gradle and sdkmanager agree.
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export LO_DXC_CACHE_DIR="$cache/android-dxc"
 export GRADLE_USER_HOME="$cache/gradle"
 export ANDROID_USER_HOME="$cache/android-user-home"
