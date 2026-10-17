@@ -482,6 +482,169 @@ jobs:
             ${{ env.FLATPAK_OUTPUT }}/source.json
           if-no-files-found: error
 
+  release-macos:
+    name: macOS Release
+    needs: [create-draft-release]
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '3'
+      CCACHE_DIR: ${{ github.workspace }}/out/ccache-macos
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: '1'
+      CCACHE_MAXSIZE: 3G
+    steps:
+      - name: Validate requested tag
+        if: env.RELEASE_TAG != ''
+        run: |
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9][0-9A-Za-z.+-]*$ ]]; then
+            echo "Expected a version tag starting with v." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build tools
+        run: |
+          test "$(uname -m)" = arm64
+          brew install ninja ccache
+          python -m pip install numpy pillow
+      - name: Resolve toolchain and SDL cache identity
+        id: macos-inputs
+        run: |
+          {
+            xcrun clang --version
+            xcrun --show-sdk-version
+            cmake --version
+            ninja --version
+            ccache --version
+          } > "$RUNNER_TEMP/macos-toolchain.txt"
+          cat "$RUNNER_TEMP/macos-toolchain.txt"
+          echo "toolchain=$(shasum -a 256 "$RUNNER_TEMP/macos-toolchain.txt" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          sdl=$(git rev-parse HEAD:thirdparty/SDL)
+          # Match the SDL3 release configuration used for the M1 Max DMGs.
+          test "$sdl" = 829a65d769d935c4852f8159e964312c0957260a
+          echo "sdl=$sdl" >> "$GITHUB_OUTPUT"
+      - name: Cache SDL build
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/build/macos/thirdparty/SDL
+            out/build/macos/.ninja_log
+            out/build/macos/.ninja_deps
+          key: macOS-sdl3-arm64-min15-v1-${{ steps.macos-inputs.outputs.sdl }}-${{ steps.macos-inputs.outputs.toolchain }}-${{ hashFiles('CMakeLists.txt', 'thirdparty/CMakeLists.txt', 'tools/patches/plume-*.patch') }}
+      - name: Cache macOS compiler objects
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: macOS-ccache-arm64-min15-v1-${{ steps.macos-inputs.outputs.toolchain }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', '.gitmodules', 'tools/patches/**') }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            macOS-ccache-arm64-min15-v1-${{ steps.macos-inputs.outputs.toolchain }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', '.gitmodules', 'tools/patches/**') }}-
+            macOS-ccache-arm64-min15-v1-${{ steps.macos-inputs.outputs.toolchain }}-
+      - name: Configure compiler cache
+        run: |
+          {
+            echo "CMAKE_C_COMPILER_LAUNCHER=$(command -v ccache)"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=$(command -v ccache)"
+          } >> "$GITHUB_ENV"
+          ccache --zero-stats
+      - name: Retrieve private build input
+        uses: actions/checkout@v4
+        with:
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 77f076e0e03966736cbf8919ce793bafadce82d9
+          path: out/build-input
+          sparse-checkout: |
+            /default.xex
+          sparse-checkout-cone-mode: false
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          persist-credentials: false
+      - name: Verify private build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Apply dependency patches
+        run: |
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
+          git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-macos.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch
+      - name: Build recompiler tools
+        run: |
+          cmake -S tools/xexdump -B out/build/tools -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
+          cmake --build out/build/tools --target XenonRecomp XenonAnalyse xexdump
+      - name: Generate game code
+        run: |
+          out/build/tools/xexdump LostOdysseyRecompLib/private/disc1/default.xex LostOdysseyRecompLib/private/image_disc1.bin
+          python tools/ppc_codegen.py generate --executable out/build/tools/XenonRecomp/XenonRecomp/XenonRecomp
+      - name: Build macOS runtime and shader pack tool
+        run: |
+          cmake -S . -B out/build/macos -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
+          cmake --build out/build/macos --target LostOdysseyRecomp LoShaderPackTool
+      - name: Check shader pack coverage for this runtime
+        run: |
+          tool=$(find out/build/macos -name LoShaderPackTool -type f | head -n 1)
+          python tools/release/publish_shader_packs.py --check --tool "$tool" --image LostOdysseyRecompLib/private/image_disc1.bin
+      - name: Package macOS disk image
+        run: |
+          args=(--build out/build/macos --output out/releases --dmg)
+          if [ -n "$RELEASE_TAG" ]; then args+=(--version "$RELEASE_TAG"); fi
+          python tools/package_macos.py "${args[@]}"
+      - name: Download parity reference (rehearsal only)
+        if: env.RELEASE_TAG == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out/macos-reference out/macos-validation
+          gh release download v1.0.1 --pattern '*.dmg' --dir out/macos-reference
+          gh api repos/freefrank/LostOdysseyRecomp/releases/tags/v1.0.1 > out/macos-validation/reference-release.json
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          assets = json.loads(Path('out/macos-validation/reference-release.json').read_text())['assets']
+          reference = Path('out/macos-reference/LostOdysseyRecomp-macos-arm64-v1.0.1.dmg')
+          asset = next(asset for asset in assets if asset['name'] == reference.name)
+          digest = hashlib.sha256(reference.read_bytes()).hexdigest()
+          assert digest == 'e961bb827a31ba4746076ce3bc4d4609f0996a2baad4de683503d53fba042326', 'Reference DMG differs from the recorded M1 Max package'
+          assert asset['digest'] == f'sha256:{digest}' and asset['size'] == reference.stat().st_size
+          print(f'Reference: {reference.name}, sha256:{digest}')
+          PY
+      - name: Verify DMG, minimum OS and no-data load; compare rehearsal layout
+        run: |
+          images=(out/releases/*.dmg)
+          test "${#images[@]}" -eq 1
+          args=(--dmg "${images[0]}" --expected-version "$(cat out/build/macos/LostOdysseyRecomp/source-version.txt)" --output out/macos-validation)
+          if [ -z "$RELEASE_TAG" ]; then
+            args+=(--compare out/macos-reference/LostOdysseyRecomp-macos-arm64-v1.0.1.dmg)
+          fi
+          python tools/release/verify_macos_package.py "${args[@]}"
+      - name: Compiler cache statistics
+        if: always() && env.CMAKE_CXX_COMPILER_LAUNCHER != ''
+        run: ccache --show-stats || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-macos-arm64
+          path: out/releases/LostOdysseyRecomp-macos-arm64-*.dmg
+          if-no-files-found: error
+      - name: Upload macOS validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-validation
+          path: out/macos-validation
+          if-no-files-found: ignore
+
   release-android:
     name: Android Release
     needs: [create-draft-release]
@@ -584,7 +747,7 @@ jobs:
     permissions:
       contents: write
       actions: write
-    needs: [release-windows, release-linux, release-android]
+    needs: [release-windows, release-linux, release-android, release-macos]
     if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -605,6 +768,7 @@ jobs:
             "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.AppImage"
             "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.flatpak"
             "dist/LostOdysseyRecomp-android-arm64-${RELEASE_TAG}.apk"
+            "dist/LostOdysseyRecomp-macos-arm64-${RELEASE_TAG}.dmg"
           )
           existing=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
           missing=()
@@ -636,11 +800,10 @@ jobs:
               f'LostOdysseyRecomp-linux-x64-{tag}.AppImage',
               f'LostOdysseyRecomp-linux-x64-{tag}.flatpak',
               f'LostOdysseyRecomp-android-arm64-{tag}.apk',
+              f'LostOdysseyRecomp-macos-arm64-{tag}.dmg',
           }
           names = {asset['name'] for asset in assets}
-          # The macOS disk image is built on a Mac and uploaded separately.
-          optional = {f'LostOdysseyRecomp-macos-arm64-{tag}.dmg'}
-          assert expected <= names <= expected | optional, 'Expected the installable packages and at most the macOS disk image; shader packs live on the shader-packs release'
+          assert names == expected and len(assets) == len(expected), 'Expected exactly five installable packages; shader packs live on the shader-packs release'
           assert all(asset['size'] > 0 and asset['state'] == 'uploaded' for asset in assets), 'Incomplete release upload'
           PY
           if [ "$(jq -r '.isDraft' release.json)" != true ]; then
