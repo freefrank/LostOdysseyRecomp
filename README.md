@@ -242,11 +242,11 @@ See [Building](docs/BUILDING.md), [Developer tools](tools/README.md), the [roadm
 
 ## Sponsors
 
-Thank you to **Frenzy Fresh**, **José Antonio Martínez Godoy**, **C_BAR**, **Arakon**, **Efren V**, **Torresmo**, **doc_haz**, **Whitesun** and **Cristian** for supporting the project on [Ko-fi](https://ko-fi.com/dotslash).
+Thank you to **CarlosVonSexron**, **Atlas**, **stratosG**, **iambRad**, **Frenzy Fresh**, **José Antonio Martínez Godoy**, **C_BAR**, **Arakon**, **Efren V**, **Torresmo**, **doc_haz**, **Whitesun** and **Cristian** on [Ko-fi](https://ko-fi.com/dotslash), and to **Norghat**, **Morgan** and one anonymous supporter on [Buy Me a Coffee](https://buymeacoffee.com/dotslash), for supporting the project.
 
 ## Credits and game data
 
-Thanks to everyone who sent pull requests and patches: [MikeRavenelle](https://github.com/MikeRavenelle), [dj5927](https://github.com/dj5927), [Xarishark](https://github.com/Xarishark), [navjack](https://github.com/navjack), [frankzzz](https://github.com/frankzzz) and [cngjd](https://github.com/cngjd). The macOS port started from MikeRavenelle's Apple Silicon work.
+Thanks to everyone who sent pull requests and patches: [MikeRavenelle](https://github.com/MikeRavenelle), [dj5927](https://github.com/dj5927), [Xarishark](https://github.com/Xarishark), [navjack](https://github.com/navjack), [frankzzz](https://github.com/frankzzz), [cngjd](https://github.com/cngjd), [faisalkindi](https://github.com/faisalkindi) and [Ad0ky](https://github.com/Ad0ky). The macOS port started from MikeRavenelle's Apple Silicon work, and Ad0ky ported the game to the Nintendo Switch on the `LostOdysseyNX` branch.
 
 With research and tools from [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp), [re:Blue](https://github.com/zolaware/reblue), [XenonRecomp](https://github.com/hedge-dev/XenonRecomp), [XenosRecomp](https://github.com/hedge-dev/XenosRecomp), [plume](https://github.com/renderbag/plume) and [Xenia](https://github.com/xenia-project/xenia). Audio uses the [Xenia FFmpeg fork](https://github.com/xenia-project/FFmpeg) ([license](thirdparty/ffmpeg-LICENSE.txt)). The Android Turnip GPU drivers come from the driver list of the [Eden](https://git.eden-emu.dev/eden-emu/eden) emulator and load through [libadrenotools](https://github.com/bylaws/libadrenotools); the Mali PanVK driver comes from [panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android).
 
