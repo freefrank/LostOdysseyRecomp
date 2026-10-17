@@ -128,6 +128,12 @@ public:
         }));
     }
 
+    std::vector<std::chrono::steady_clock::time_point> HandshakeTimes() const
+    {
+        std::lock_guard lock(mutex_);
+        return handshakeTimes_;
+    }
+
 private:
     bool Accept()
     {
@@ -197,6 +203,8 @@ private:
         {
             std::lock_guard lock(mutex_);
             frames_.push_back(frame);
+            if (frame.opcode == Opcode::Handshake)
+                handshakeTimes_.push_back(std::chrono::steady_clock::now());
         }
         if (behavior_ == Behavior::Silent) return;
         if (frame.opcode == Opcode::Handshake)
@@ -255,6 +263,7 @@ private:
     std::thread thread_;
     mutable std::mutex mutex_;
     std::vector<Frame> frames_;
+    std::vector<std::chrono::steady_clock::time_point> handshakeTimes_;
 #ifdef _WIN32
     HANDLE pipe_ = INVALID_HANDLE_VALUE;
 #else
@@ -452,15 +461,38 @@ void Unresponsive()
 
 void Retry()
 {
+    FakeServer closing(PrivateEndpoint(), Behavior::Close);
+    Client retrying;
+    const auto retryOptions = Options(closing.Endpoint());
+    retrying.Publish({1, "Uhra", Mode::Exploring});
+    retrying.Start(retryOptions);
+    std::jthread publisher([&](std::stop_token stop) {
+        while (!stop.stop_requested())
+        {
+            retrying.Publish({1, "Uhra", Mode::Exploring});
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    Check(Wait([&] { return closing.Handshakes() >= 1; }), "retry fixture observes the first connection");
+    // Delay the observer beyond the reconnect period. A zero-handshake assertion
+    // after sleeps would fail under this same scheduling delay; actual event
+    // intervals remain meaningful even if several connections have occurred.
+    std::this_thread::sleep_for(300ms);
+    Check(Wait([&] { return closing.Handshakes() >= 2; }), "CLOSE reconnects while snapshots keep arriving");
+    publisher.request_stop();
+    publisher.join();
+    retrying.Stop();
+    const auto times = closing.HandshakeTimes();
+    for (size_t i = 1; i < times.size(); ++i)
+        Check(times[i] - times[i - 1] >= retryOptions.reconnect, "snapshots do not shorten the reconnect interval");
+
     const auto endpoint = PrivateEndpoint();
     Client client;
     client.Publish({1, "Uhra", Mode::Exploring});
     client.Start(Options(endpoint));
-    std::this_thread::sleep_for(60ms);
+    std::this_thread::sleep_for(300ms);
     FakeServer server(endpoint);
     for (int i = 0; i < 1000; ++i) client.Publish({1, "Uhra", Mode::Exploring});
-    std::this_thread::sleep_for(60ms);
-    Check(server.Handshakes() == 0, "snapshots do not wake absent-client retry timer");
     Check(Wait([&] { return !server.Activities().empty(); }), "slow reconnect finds newly started Discord");
     client.Stop();
 
