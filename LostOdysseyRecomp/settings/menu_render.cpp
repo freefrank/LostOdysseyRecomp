@@ -50,6 +50,15 @@ namespace
     constexpr int kHintX = 1036, kHintY = 646, kHintKey = 22, kHintWidth = 180, kHintHeight = 28;
     constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
                   kHintBottom = kHintY + kHintHeight + 4;
+    // Share the legend's centred canvas and safe margin, leaving a gap before
+    // its key. Both lines also clear the achievement toast's shadow above.
+    constexpr int kCreditX = 64, kCreditY = 654, kCreditWidth = 948, kCreditLineHeight = 20;
+    int CreditTop(const Canvas &output)
+    {
+        // On a tall output the centred 16:9 canvas ends above the window's
+        // bottom. Keep the credit below the output-anchored toast there too.
+        return kCreditY + (output.scale > 0 ? int(std::floor(output.offsetY / output.scale)) : 0);
+    }
 
     // The help box under the list: one line at 20 pt, or the help over the
     // notice at 16 pt each.
@@ -99,12 +108,12 @@ namespace
     // the body face, or the Abc face when only it has every character. Null:
     // the host font draws it.
     const settings::menu_assets::Font *GameFace(const settings::menu_assets::Assets *assets,
-                                                const std::wstring &value, int size)
+                                                const std::wstring &value, int size, bool creditSeparators = false)
     {
         if (!assets || value.empty()) return nullptr;
         const auto covers = [&](const settings::menu_assets::Font &font) {
             return font.height && std::all_of(value.begin(), value.end(), [&](wchar_t c) {
-                return c == L' ' || font.glyphs.contains(uint32_t(c));
+                return c == L' ' || (creditSeparators && c == L'·') || font.glyphs.contains(uint32_t(c));
             });
         };
         const auto *face = size >= 32 && !assets->title.glyphs.empty() ? &assets->title : &assets->body;
@@ -113,23 +122,24 @@ namespace
     }
 
     // Unscaled width of a string in a game face, spaces as drawn.
-    double FaceAdvance(const settings::menu_assets::Font &font, const std::wstring &value)
+    double FaceAdvance(const settings::menu_assets::Font &font, const std::wstring &value, bool creditSeparators = false)
     {
         double advance = 0;
         for (const auto c : value)
-            advance += c == L' ' ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
+            advance += c == L' ' || (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+                           ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
         return advance;
     }
 
     // Glyph scale of a game face: the size asked for, limited by the box
     // height (`fitted` false) and also by its width (`fitted` true).
     double FaceRatio(const settings::menu_assets::Font &font, const std::wstring &value, int w, int h, int size,
-                     bool fitted)
+                     bool fitted, bool creditSeparators = false)
     {
         const double desired = size >= 32 ? size * 1.25 : size * 1.30;
         const double unconstrained = std::min(desired / font.height, double(h) / font.height);
         if (!fitted) return unconstrained;
-        return std::min(unconstrained, std::max(1.0, double(w - 8)) / std::max(1.0, FaceAdvance(font, value)));
+        return std::min(unconstrained, std::max(1.0, double(w - 8)) / std::max(1.0, FaceAdvance(font, value, creditSeparators)));
     }
 
     // Output width of a string in the host font at a glyph scale.
@@ -335,11 +345,14 @@ settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
 {
     // Rounded like RasterizeMenu's own rectangles.
     const Canvas c(nullptr, width, height);
+    const int creditY = CreditTop(c);
     const auto edge = [](double value, uint32_t limit) {
         return size_t(std::clamp(int(std::lround(value)), 0, int(limit)));
     };
-    return {edge(c.offsetX + kHintLeft * c.scale, width), edge(c.offsetY + kHintTop * c.scale, height),
-            edge(c.offsetX + kHintRight * c.scale, width), edge(c.offsetY + kHintBottom * c.scale, height)};
+    return {edge(c.offsetX + (kCreditX - 8) * c.scale, width),
+            edge(c.offsetY + std::min(kHintTop, creditY - 4) * c.scale, height),
+            edge(c.offsetX + kHintRight * c.scale, width),
+            edge(c.offsetY + std::max(kHintBottom, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
 }
 
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
@@ -683,9 +696,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
-                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true) {
+                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true,
+                     bool creditSeparators = false) {
         const std::wstring value = prompts ? PromptText(source, current.playStationPrompts) : source;
-        if (const auto *selectedFont = GameFace(current.assets.get(), value, size))
+        if (const auto *selectedFont = GameFace(current.assets.get(), value, size, creditSeparators))
         {
             const auto &font = *selectedFont;
 #ifdef LO_MENU_RENDER_TRACE
@@ -693,8 +707,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 #endif
             // Measure spaces the way they are drawn below, or right-aligned
             // and centered text with spaces runs past its box.
-            const double advance = FaceAdvance(font, value);
-            const double ratio = FaceRatio(font, value, w, h, size, true);
+            const double advance = FaceAdvance(font, value, creditSeparators);
+            const double ratio = FaceRatio(font, value, w, h, size, true, creditSeparators);
             double left = x;
             if (alignment == 1) left += (w - advance * ratio) * .5;
             else if (alignment == 2) left += w - advance * ratio;
@@ -702,6 +716,18 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             for (const auto c : value)
             {
                 if (c == L' ') { left += (font.height * 0.3) * ratio; continue; }
+                if (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+                {
+                    // INT's menu faces lack U+00B7. Draw only that separator
+                    // here so the fixed credit retains the menu font throughout.
+                    const double step = font.height * 0.3 * ratio;
+                    const double cx = left + step / 2, cy = top + font.height * ratio / 2;
+                    const double radius = font.height * ratio * 0.055;
+                    if (edge) Ellipse(canvas, cx, cy, radius + 0.6, radius + 0.6, 0, edge);
+                    Ellipse(canvas, cx, cy, radius, radius, 0, color);
+                    left += step;
+                    continue;
+                }
                 const auto &g = font.glyphs.at(uint32_t(c));
                 sprite(font.pages[g.page], int(g.x), int(g.y), int(g.width), int(g.height),
                        left, top, g.width * ratio, g.height * ratio, 255, false, color, edge);
@@ -816,7 +842,15 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         // the menu font. Drawn over black and over white: the difference is
         // the coverage, so the legend keeps the font's outline in straight alpha.
         const uint32_t face = MakeColor(255, 196, 197, 194);
+        const int creditY = CreditTop(output);
+        const std::wstring refund = Translate(current.language, L"If you paid for this, ask for a refund.",
+                                              L"本移植免費開源。如果你是花錢買到的，請申請退款。");
         const auto legend = [&] {
+            text(kCreditX, creditY, kCreditWidth, kCreditLineHeight,
+                 L"Lost Odyssey Recomp · Free & open source · github.com/freefrank/LostOdysseyRecomp",
+                 14, face, false, 0, outline, 12, false, true);
+            text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
+                 14, face, false, 0, outline, 12, false);
             text(kHintX, kHintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
             text(kHintX + kHintKey, kHintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
                  false, 0, outline, 12);
@@ -825,6 +859,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         const std::vector<uint32_t> overBlack = pixels;
         std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
         legend();
+        const int creditRight = rect(kCreditX, creditY, kCreditWidth, 2 * kCreditLineHeight)[2];
         for (size_t i = 0; i < pixels.size(); ++i)
         {
             auto &p = pixels[i];
@@ -835,7 +870,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             const auto channel = [&](int c) {
                 return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
             };
-            p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha));
+            // Dim the credit and its outline together without changing the
+            // Settings legend. This is cached with the raster, not per frame.
+            const int opacity = i % width < size_t(creditRight) ? 184 : 255;
+            p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
         }
         return true;
     }

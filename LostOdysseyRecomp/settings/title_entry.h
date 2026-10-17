@@ -5,8 +5,8 @@
 
 namespace settings::title_entry
 {
-// The title menu's Settings legend ("Y: Settings"), drawn by presentation over
-// the game frame. Shown while the title menu is idle and Y would open Settings,
+// The title menu's free-port credit and Settings legend ("Y: Settings"), drawn
+// by presentation over the game frame. Shown while the title menu is idle and Y would open Settings,
 // not otherwise (Settings open, transitions, Press START); its opacity starts
 // after a short delay, in which presentation can prepare it, and fades in.
 bool HintShown();

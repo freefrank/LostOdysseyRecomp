@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- The title screen shows Lost Odyssey Recomp's free and open-source notice, project address and a refund reminder for anyone who paid for the port.
 - Desktop: Discord Rich Presence shows your location, disc and current activity; Settings → System → Discord status turns it on or off.
 - Settings → Graphics → Dynamic shadows has a Low choice: only the 8 largest characters and objects on screen cast shadows, which lightens the GPU load in busy areas.
 - Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- 标题画面新增 Lost Odyssey Recomp 免费开源署名、项目地址，以及付费购买后申请退款的提示。
 - 桌面版：Discord 状态显示当前地点、光盘和活动，可在“设置 → 系统 → Discord 状态”中开关。
 - 设置 → 图像 → 动态阴影新增“低”：只给画面上最大的 8 个角色和物体画阴影，减轻人多场景的 GPU 负担。
 - 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。

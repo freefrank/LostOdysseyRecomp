@@ -174,7 +174,7 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         snapshot.help = Translate(language, L"Y: Settings", L"Y：設定");
         if (keyboard)
             snapshot.help[0] = L'S';
-        // Only the legend's own rectangle of the output is rasterized.
+        // Only the credit and legend's footer rectangle is rasterized.
         const auto bounds = TitleHintBounds(outputWidth, outputHeight);
         std::vector<uint32_t> pixels;
         if (RasterizeMenu(snapshot, outputWidth, outputHeight, pixels) &&
