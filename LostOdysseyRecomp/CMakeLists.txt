@@ -805,6 +805,14 @@ if(WIN32)
     endif()
 endif()
 
+add_executable(LoSaveWorkerRequestTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/save_worker_request_test.cpp)
+target_include_directories(LoSaveWorkerRequestTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_features(LoSaveWorkerRequestTest PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(LoSaveWorkerRequestTest PRIVATE /utf-8)
+endif()
+
 add_executable(LoQuitTextHookTest EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tools/tests/quit_text_hook_test.cpp)
 target_include_directories(LoQuitTextHookTest PRIVATE ${LO_RUNTIME_ROOT})
