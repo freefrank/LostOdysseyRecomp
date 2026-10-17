@@ -2,7 +2,40 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.2 published — 2026-10-17
+
+[v1.0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.2) was published at 2026-10-17T23:20:12Z by the workflow's own publish step. A GitHub API read on 2026-10-17 shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.2` at commit `45f404e0`, the release PR [#619](https://github.com/freefrank/LostOdysseyRecomp/pull/619). The previous release is v1.0.1, published 2026-10-17T20:16:12Z at `ff2a6749`. The Discord announcement step succeeded at 2026-10-17T23:20:14Z. The release body matches the [Changelog, v1.0.2](../CHANGELOG.md#v102--2026-10-17) section.
+
+The release run is GitHub Actions run [39077929788](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39077929788), `Release` on tag `v1.0.2`. Every job succeeded: Create draft release, Prepare FSR Vulkan build inputs, Windows Release, Linux Release, Android Release, macOS Release and Publish complete release.
+
+Changes since v1.0.1:
+
+- PR [#616](https://github.com/freefrank/LostOdysseyRecomp/pull/616) (`0cba9a27`): Direct3D 12 fixes two resource-lifetime bugs that can cause device removal. A draw's descriptor sets could be recorded into another GPU slot's command list after a mid-draw upload-ring flush, and an HDR sidecar's framebuffer cache entries outlived the sidecar. The fixes were made for [#614](https://github.com/freefrank/LostOdysseyRecomp/issues/614), [#524](https://github.com/freefrank/LostOdysseyRecomp/issues/524) and [#462](https://github.com/freefrank/LostOdysseyRecomp/pull/462), but they are not confirmed as those crashes' cause.
+- PR [#617](https://github.com/freefrank/LostOdysseyRecomp/pull/617) (`1948add2`): Debug log is on by default, including existing installs. The new settings key is `diagnostic_log`; the old `debug_log` key is ignored. D3D12 DRED comes on with it. Measured log size is about 43–76 KiB per minute. A DRED ABBA run on an RTX 5080 at 4K showed no measurable cost.
+- PR [#618](https://github.com/freefrank/LostOdysseyRecomp/pull/618) (`22401420`): The save worker's four request entries are serialized under its critical section, fixing a race that could leave the save menu stuck ([#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615)). On psvita with a forced 100 ms gap, the original stalled in 4 of 4 runs and the fix in 0 of 40.
+- PR [#591](https://github.com/freefrank/LostOdysseyRecomp/pull/591) (`aa114c1d`, merged after v1.0.1): right-to-left language packs.
+
+Assets, as listed by the GitHub release API on 2026-10-17 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.2.zip` | 153,298,559 | `172d5ee37793ec97b95a86a73f0ae637817c7d6554d6bb98c4bd41689433d79a` |
+| `LostOdysseyRecomp-linux-x64-v1.0.2.AppImage` | 79,108,600 | `7f477c2a6d0b5d006db0dea43a90e26bad20a1bd90866d90b38375afed9e2bf0` |
+| `LostOdysseyRecomp-linux-x64-v1.0.2.flatpak` | 55,587,648 | `8c9d42e3afb3c81a90151b24c17200e671202832fb60b947883869db665fa774` |
+| `LostOdysseyRecomp-android-arm64-v1.0.2.apk` | 47,243,487 | `498e56ee51b4c5ff382295243e4e457c8ac796a3e31f98fbef3946916faf72a4` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.2.dmg` | 63,918,325 | `9ce06908b360865062d215d8016ccde902bd45ad95b52d5a6df6aafb62caf3f0` |
+
+Shader packs: the Linux and macOS jobs' shader-pack checks passed in this run. The macOS image was built by the GitHub Actions macOS Release job, not on a maintainer's Mac ([macOS releases](MACOS_RELEASE.md#v102-image)).
+
+Issues, read from GitHub on 2026-10-17: [#614](https://github.com/freefrank/LostOdysseyRecomp/issues/614) and [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) are open. [#524](https://github.com/freefrank/LostOdysseyRecomp/issues/524) was closed at 2026-10-17T07:22:12Z, before this release. Neither closure nor publication is reporter acceptance, and no reporter confirmation is recorded for these fixes.
+
+Validation: the psvita and RTX 5080 measurements above are the runtime checks recorded for these changes. No game run with the published packages is recorded here.
+
+Acceptance: none. The maintainer has not accepted v1.0.2. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.1 published — 2026-10-17
+
+Update, 2026-10-17: v1.0.1 stopped being the latest release when [v1.0.2](#v102-published--2026-10-17) was published at 2026-10-17T23:20:12Z. The record below is unchanged.
 
 [v1.0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.1) was published at 2026-10-17T20:16:12Z by the workflow's own publish step. The maintainer verified that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.1` at commit `ff2a6749`, the release PR [#607](https://github.com/freefrank/LostOdysseyRecomp/pull/607). The previous release is v1.0.0, published 2026-10-17T07:19:07Z at `df388a0e`. The Discord announcement workflow succeeded at 2026-10-17T20:16:13Z. The release body matches the [Changelog, v1.0.1](../CHANGELOG.md#v101--2026-10-17) section.
 
