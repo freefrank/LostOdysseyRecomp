@@ -42,11 +42,12 @@ other package jobs' development naming.
   `Info.plist`, and requires macOS 15.0 in both the app metadata and main
   executable's `minos`. A headless load check with no game data verifies that
   the packaged executable loads and exits at the missing-data boundary.
-- The migration rehearsal compares the mounted package's file list,
-  `Info.plist`, linked libraries and `minos` against a read-only download of the
-  published v1.0.1 image. Development version strings may differ; missing payload
-  files or libraries fail the comparison. This is migration evidence, not a
-  permanent dependency on the older release.
+- The [migration rehearsal](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39069968544/job/117505393583)
+  matched the read-only v1.0.1 reference with no differences: all 22 file/symlink
+  entries, the complete `Info.plist` (version `1.0.1`), all 24 linked-library
+  records, arm64 architecture, `minos 15.0` and SDK 26.5. The temporary download
+  and comparison steps were then removed; future releases do not depend on the
+  older image.
 - The job uploads the DMG as an Actions artifact. Publication waits for this job
   and requires exactly five installable assets: Windows ZIP, Linux AppImage,
   Linux Flatpak, Android APK and macOS DMG.
