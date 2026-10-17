@@ -1660,8 +1660,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Shows your location and activity on Discord. Applies and saves immediately.",
                        L"在 Discord 顯示目前地點與活動。立即套用並儲存。");
     if (tab == 3 && row == SystemDebugLogRow)
-        next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
-                       L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
+        next.help = Tr(L"Writes detailed logs in logs/ to help diagnose problems. On by default. Applies when saved.",
+                       L"在 logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
     if (tab == 3 && row == SystemAchievementsRow)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");

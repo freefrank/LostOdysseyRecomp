@@ -3836,6 +3836,28 @@ int main(int argc, char** argv)
             }
             std::puts("PASS Discord preference default, INI validation and On/Off roundtrip");
             writeIni("");
+            Require(settings::Config{}.debugLog && settings::Read().debugLog,
+                    "debug log defaults on in new settings");
+            for (const auto* contents : {"debug_log=0\n", "debug_log=1\n", "diagnostic_log=2\n",
+                                         "diagnostic_log=-1\n", "diagnostic_log=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().debugLog, "legacy and invalid keys keep the enabled diagnostic default");
+            }
+            for (const bool enabled : {false, true})
+            {
+                writeIni(enabled ? "diagnostic_log=1\ndebug_log=0\n" : "diagnostic_log=0\ndebug_log=1\n");
+                auto diagnostic = settings::Read();
+                Require(diagnostic.debugLog == enabled, "diagnostic_log wins over the legacy key");
+                Require(settings::SaveConfig(diagnostic) && settings::GetConfig().debugLog == enabled &&
+                        settings::Read().debugLog == enabled, "diagnostic preference saves and reloads both modes");
+                std::ifstream diagnosticIni("settings.ini");
+                const std::string text((std::istreambuf_iterator<char>(diagnosticIni)), std::istreambuf_iterator<char>());
+                Require(text.find(enabled ? "\ndiagnostic_log=1\n" : "\ndiagnostic_log=0\n") != std::string::npos &&
+                        text.find("debug_log=") == std::string::npos, "save writes only the new diagnostic key");
+            }
+            std::puts("PASS diagnostic log default, legacy migration, validation and On/Off roundtrip");
+            writeIni("");
             Require(settings::Read().askCompactGameData, "missing compaction preference offers to free disk space");
             writeIni("ask_compact_game_data=0\n");
             Require(!settings::Read().askCompactGameData, "Don't ask again reads from INI");
@@ -3850,7 +3872,7 @@ int main(int argc, char** argv)
             Require(settings::SaveConfig(compact) && !settings::GetConfig().askCompactGameData &&
                     !settings::Read().askCompactGameData, "Don't ask again persists through save and reload");
             compact = settings::Read();
-            compact.debugLog = true;
+            compact.debugLog = false;
             Require(settings::SaveConfig(compact) && !settings::Read().askCompactGameData,
                     "saving another setting preserves Don't ask again");
             {

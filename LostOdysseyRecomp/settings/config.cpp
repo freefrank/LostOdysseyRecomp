@@ -338,7 +338,8 @@ Config Read()
             value.askCompactGameData = number == 1;
         else if (key == "discord_status" && number <= 1)
             value.discordStatus = number == 1;
-        else if (key == "debug_log" && number <= 1)
+        // Ignore the old debug_log key: saved defaults were indistinguishable from opt-outs.
+        else if (key == "diagnostic_log" && number <= 1)
             value.debugLog = number == 1;
     }
     if (!hasAntialiasing) value.antialiasing = value.fxaa ? 1u : 0u;
@@ -492,7 +493,7 @@ static bool WriteConfig(const Config &value)
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
            << "\ndiscord_status=" << (value.discordStatus ? 1 : 0)
            << "\nask_compact_game_data=" << (value.askCompactGameData ? 1 : 0)
-           << "\ndebug_log=" << (value.debugLog ? 1 : 0)
+           << "\ndiagnostic_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput
            << "\naudio_matrix_rear=" << value.audioMatrixRear
            << "\nvoice_volume=" << value.voiceVolume

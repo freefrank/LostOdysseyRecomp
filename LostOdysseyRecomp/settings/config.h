@@ -170,7 +170,7 @@ struct Config
     bool automaticUpdates = true;
     bool discordStatus = true; // Discord Rich Presence; desktop only. Applied live.
     bool askCompactGameData = true; // Offer to share duplicate disc archives before the game starts.
-    bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
+    bool debugLog = true; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
     uint32_t audioMatrixRear = 110; // Matrix surround rear angle, 90-150 degrees in 10 degree steps. Applied live.
     uint32_t voiceVolume = 100; // Cutscene dialogue, 0-100, in place of the Sound effects volume. Applied live.
