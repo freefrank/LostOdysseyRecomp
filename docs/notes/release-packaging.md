@@ -68,8 +68,7 @@ out/release-venv/Scripts/python.exe tools/package_release.py
 ```
 
 The dedicated `out/build/release` directory uses clang-cl, Release and static CRT.
-`LO_BUILD_JOBS` defaults to 4. The Gitea release workflow uses 24 on T640 (64 threads,
-128 GB, shared with the Linux release VM) and ccache; the GitHub fallback uses 2 to limit memory pressure from the generated C++ files. Existing development builds are not overwritten.
+`LO_BUILD_JOBS` defaults to 4. The GitHub-hosted Windows release workflow also uses 4 to limit memory pressure from the generated C++ files, without ccache because it rejects the clang-cl C++23 flag. Existing development builds are not overwritten.
 
 Packaging uses the pinned Microsoft DXC v1.8.2407 x64 `dxcompiler.dll` and `dxil.dll` pair
 already staged beside the tested build. The pair is byte-checked against the official archive
@@ -88,19 +87,18 @@ the embedded installer font.
 
 ## Release CI
 
-Pull request checks and release packaging run on Gitea; see
-[Pull request checks and releases on Gitea](ci-gitea.md). `.gitea/workflows/release.yml`
-builds when a `v*` tag is pushed to `zkx` or when started manually. Windows jobs run on
-T640 and the Linux AppImage and Flatpak on a privileged docker runner. Private inputs are
-fetched from a pinned commit of `freefrank/LostOdysseyRecomp-build-inputs` with the
-`LO_GITHUB_TOKEN` Gitea secret, the same fine-grained GitHub token that creates and
-publishes the GitHub release. Pull-request workflows never access that repository.
-Each run produces downloadable Gitea artifacts; a version tag also creates a **draft**
-GitHub release. After both platforms have built, the publish job uploads the Gitea
-artifacts to the draft and publishes it once all three packages are present.
-
-`.github/workflows/release.yml` is the manual-only GitHub fallback. It uses hosted
-runners and the read-only deploy key in the `LO_BUILD_INPUT_KEY` Actions secret.
+Pull request checks and release packaging run on GitHub-hosted runners; see
+[GitHub Actions checks and releases](ci.md). `.github/workflows/release.yml`
+builds when a `v*` tag is pushed to `origin` or when started manually. Windows jobs use
+`windows-2022`; Linux and Android jobs use `ubuntu-22.04`. Flatpak uses `sudo` on the
+hosted Ubuntu machine. Private inputs are fetched from pinned commits of
+`freefrank/LostOdysseyRecomp-build-inputs` with the existing read-only SSH deploy key
+in `LO_BUILD_INPUT_KEY`. GitHub release writes use `GITHUB_TOKEN` with explicit job permissions.
+Each run produces immutable GitHub Actions v4 artifacts; a version tag also creates a
+**draft** GitHub release. After all package jobs succeed, the publish job downloads the
+Windows ZIP, AppImage, Flatpak and Android APK, uploads missing assets and verifies
+that the release contains exactly those four packages and an optional manually built
+macOS disk image. An empty `release_tag` dispatch is build-only and leaves the release untouched.
 
 Draft release notes come from the matching version section in the tagged `CHANGELOG.md`.
 `tools/release/extract_release_notes.py` accepts a linked or plain version heading (for example,
@@ -111,7 +109,7 @@ Run the focused extraction checks with
 `python -m unittest discover -s tools/tests -p test_release_notes.py -v`.
 
 The public checkout intentionally does not contain the original XEX or generated PPC files.
-The private repository contains only the supported Disc 1 default.xex and a provenance note.
+The private repository contains the supported Disc 1 default.xex and its provenance note, the Android DXC prebuilt and the project's Android debug keystore.
 The input is validated against the importer's pinned SHA256 before code generation. Game
 contents are never printed or uploaded as artifacts. Missing or wrong input fails the build.
 For another private repository, update the checkout repository/ref and install a read-only

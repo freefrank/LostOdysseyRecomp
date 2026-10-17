@@ -129,7 +129,7 @@
 
 | 文档 | 类型 |
 |---|---|
-| [Pull request checks and releases on Gitea](ci-gitea.md) | 参考 |
+| [GitHub Actions checks and releases](ci.md) | 参考 |
 | [Android ARM64 DXC 构建（2026-10-02）](android-dxc-build-2026-10-02.md) | 参考 |
 
 ## 分诊与发布

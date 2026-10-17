@@ -1,57 +1,35 @@
-# Repository synchronization
+# Repository publication
 
-Develop in the main checkout. Remote names are local configuration: run `git remote -v`
-before a push. In the current checkout, `origin` points to the GitHub repository and
-`zkx` points to the Gitea mirror. Do not assume a remote named `github` exists. The
-earlier `out/github-release` export is a historical preparation artifact, not a second
-development checkout.
-
-After an authorized push has been requested, review and commit the intended changes,
-then publish the same explicit revision to the verified remotes. Reuse the relevant
-passing checks; a push alone does not require another build or game run.
+Develop in an isolated worktree and verify remote names with `git remote -v` before a push. `origin` is the public GitHub repository, `freefrank/LostOdysseyRecomp`. Publish reviewed changes on a feature branch and open a pull request; follow the maintainer's review gate before merging. Reuse relevant passing checks; a push alone does not require another build or game run.
 
 ```powershell
-$publishRevision = git rev-parse refs/heads/main
-git -c push.followTags=false push origin "${publishRevision}:refs/heads/main"
-git -c push.followTags=false push zkx "${publishRevision}:refs/heads/main"
-git ls-remote origin refs/heads/main
-git ls-remote zkx refs/heads/main
+$publishBranch = git branch --show-current
+$publishRevision = git rev-parse HEAD
+git -c push.followTags=false push origin "${publishRevision}:refs/heads/${publishBranch}"
+git ls-remote origin "refs/heads/${publishBranch}"
 ```
 
-Both readback hashes must equal `$publishRevision`. Stop if a push fails; resolve
-connection, authentication or divergent-history errors without force-pushing.
-Review the unpublished diff for private/generated content before publication.
+The readback hash must equal `$publishRevision`. Stop if a push fails; resolve connection, authentication or divergent-history errors without force-pushing. Review the unpublished diff for private or generated content before publication.
 
-Since 2026-09-30 the FG contract (including the reusable FG core), FG game integration compile and
-review-regression pull request checks run as Gitea Actions on the `zkx` remote. A branch push to `zkx`
-starts them (subject to each workflow's path filter), and each result is reported back
-to the GitHub commit as `gitea/<workflow>`. Since 2026-10-01 release packaging runs
-on Gitea as well: a `v*` tag pushed to `zkx` builds the Windows ZIP, AppImage and
-Flatpak and publishes them to the GitHub release. The matching GitHub workflows are
-manual-only; the Mod API and Wiki workflow and issue triage stay on GitHub Actions.
-See [Pull request checks and releases on Gitea](notes/ci-gitea.md) for pushing,
-reading results and the required Gitea secret.
+All CI/CD runs on GitHub Actions using GitHub-hosted runners. Pushes and pull requests start the native checks when their path filters match; manual dispatch can run a skipped workflow on a branch. There is no second CI remote to push to. See [GitHub Actions checks and releases](notes/ci.md) for workflows, results, credentials and caches.
 
-The legacy `tools/push_all.ps1` helper still hardcodes `origin` and `github`.
-With this checkout's `origin`/`zkx` configuration, even `-CheckOnly` cannot complete.
-Its public-baseline, attribution and tracked-path checks remain useful historical
-implementation detail, but the helper needs a separate remote-selection update
-before it is usable here. Do not rename remotes merely to follow an old example.
+The legacy `tools/push_all.ps1` helper hardcodes `origin` and `github`. It needs a separate remote-selection update before use with this publication path. Do not rename remotes merely to follow an old example.
 
-The pre-cleanup history is retained only on Gitea in
-`archive/pre-public-cleanup-2026-09-05`. Never merge this branch into `main` or
-publish it to GitHub. Do not use `--all`, `--mirror`, or automatic tag pushing.
-Release tags must be created from reviewed public commits and pushed explicitly
-to both remotes, GitHub first, because the Gitea release workflow creates the
-draft with `gh release create --verify-tag`:
+The pre-cleanup history was retained only on the former Gitea mirror in `archive/pre-public-cleanup-2026-09-05`. This is historical storage, not a publication remote. Never merge that branch into `main` or publish it to GitHub. Do not use `--all`, `--mirror` or automatic tag pushing.
+
+Release tags must be created from reviewed public commits and pushed explicitly to `origin`. A `v*` tag starts the release pipeline, creates a draft and builds the Windows ZIP, AppImage, Flatpak and Android APK. Upload the separately built macOS disk image to the draft before publication ([macOS releases](MACOS_RELEASE.md)).
 
 ```powershell
 git push origin refs/tags/vX.Y.Z
-git push zkx refs/tags/vX.Y.Z
+gh run list --repo freefrank/LostOdysseyRecomp --workflow release.yml
 ```
 
-The push to `zkx` starts the release build. Check the Gitea run and the
-published assets before announcing the release.
+For a build-only rehearsal, dispatch the workflow on the intended branch with an empty `release_tag`:
 
-Personal game data, saves, generated sources and analysis outputs stay ignored.
-Dependency submodules retain their upstream histories and licenses.
+```powershell
+gh workflow run release.yml --repo freefrank/LostOdysseyRecomp --ref <branch> -f release_tag=
+```
+
+Check the GitHub run and published assets before announcing a release. The publish job dispatches the Discord announcement workflow after publication; build-only rehearsals do not publish or announce anything.
+
+Personal game data, saves, generated sources and analysis outputs stay ignored. Dependency submodules retain their upstream histories and licenses.

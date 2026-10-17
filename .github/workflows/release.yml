@@ -266,6 +266,9 @@ jobs:
 
   release-linux:
     name: Linux Release
+    # The reuse check must be able to see the tag's draft release.
+    permissions:
+      contents: write
     needs: [create-draft-release, prepare-fsr]
     # Build the runtime AND all bundled dependencies against glibc 2.35.
     runs-on: ubuntu-22.04

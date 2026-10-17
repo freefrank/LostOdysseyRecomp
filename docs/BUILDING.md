@@ -129,7 +129,7 @@ Building the native Linux ELF works on Linux distributions (such as Ubuntu or Ma
 SDL 3.4.18 itself is vendored in the repository tree. Its CMake stops when X11
 is found without the extension headers it uses, so install the X11, Wayland and
 audio development packages from [SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies);
-the Linux job in `.gitea/workflows/release.yml` lists the Ubuntu set.
+the Linux job in `.github/workflows/release.yml` lists the Ubuntu set.
 
 ### Linux PowerPC source generation
 
@@ -345,7 +345,7 @@ Generated baseline mappings, branch targets, import listings and Ghidra exports 
 
 ## Verification
 
-Use `tools\test.bat --list` to select checks, then run only the relevant suites, for example `tools\test.bat shaders pipeline`. Runtime suites use an existing CMake build root (`--build-dir out/build/release` by default), with their target built explicitly; the runner does not implicitly build the game. See the [test guide](../tools/tests/README.md) for per-suite build commands, prerequisites and CI separation. The FG contract (including the reusable FG core), FG game integration compile and review-regression pull request checks run on Gitea Actions; see [Pull request checks and releases on Gitea](notes/ci-gitea.md).
+Use `tools\test.bat --list` to select checks, then run only the relevant suites, for example `tools\test.bat shaders pipeline`. Runtime suites use an existing CMake build root (`--build-dir out/build/release` by default), with their target built explicitly; the runner does not implicitly build the game. See the [test guide](../tools/tests/README.md) for per-suite build commands, prerequisites and CI separation. The FG contract (including the reusable FG core), FG game integration compile, review-regression and Android APK workflows run on GitHub-hosted runners; see [GitHub Actions checks and releases](notes/ci.md) for their triggers.
 
 [Rendering tests](notes/rendering-validation.md) cover memory aliases, shader ALU, stencil and texture layout. [Audio notes](notes/audio-output.md) cover `LoXmaLoopTest`; [storage notes](archive/notes/save-storage.md) describe `LoStorageTest`. Some investigation targets and input hooks remain local changes; consult [status](STATUS.md) before expecting them in a clean checkout.
 

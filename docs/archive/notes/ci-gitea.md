@@ -1,4 +1,8 @@
-# Pull request checks and releases on Gitea
+# Gitea CI history — 2026-09-30 to 2026-10-17
+
+> Historical record. The runner setup, commands, tokens and timing measurements below describe the retired Gitea configuration. The migration replaces it with [GitHub Actions](../../notes/ci.md); do not use these commands to start current checks or releases. Original results and validation limits are preserved.
+
+## Original setup
 
 Since 2026-09-30 the short Windows/Linux pull request checks below run on
 Gitea Actions at `git.zkx.ca`; GitHub queues were too slow for these short
@@ -8,7 +12,7 @@ copies were removed on 2026-10-02. The macOS arm64
 workflow is an explicit exception: on `macos-26`, pushes to `main` and pull
 requests targeting `main` build libraries and tests without game data; it does
 not link the complete game runtime. Full ARM64 runtime and gameplay evidence
-is recorded in [development status](../STATUS.md). The Mod Wiki publication
+is recorded in [development status](../../STATUS.md). The Mod Wiki publication
 and issue triage stay on GitHub.
 
 | Workflow (`.gitea/workflows/`) | Jobs | Runner |
@@ -92,7 +96,7 @@ its "Check published shader packs" step runs
 `tools/release/publish_shader_packs.py --check` against the same image: a tagged
 release stops unless the published index lists a pack for each of the runtime's
 contracts, and a branch build only warns
-([procedure](../PORTABLE_SHADER_PACK.md#runtime-contract-and-release-check-after-v0725)).
+([procedure](../../PORTABLE_SHADER_PACK.md#runtime-contract-and-release-check-after-v0725)).
 That was three contracts (Vulkan, DirectX 12 and Metal) in v0.7.35; since PR #152
 (shipped in v0.8.0) Metal and Android read the Vulkan pack, so a runtime has two:
 Vulkan and DirectX 12.
@@ -102,7 +106,7 @@ packages, plus the Android APK from v0.8.5) and accepts at most
 one more asset, `LostOdysseyRecomp-macos-arm64-<tag>.dmg`. CI cannot link the
 Mac runtime without game data, so that disk image is built on a Mac and
 uploaded to the release by hand (for v0.7.35, to the draft before the publish
-job ran; see [macOS releases](../MACOS_RELEASE.md)).
+job ran; see [macOS releases](../../MACOS_RELEASE.md)).
 
 The Gitea job token cannot reach GitHub, so every GitHub operation uses
 `LO_GITHUB_TOKEN` with `GH_REPO` pinned to `freefrank/LostOdysseyRecomp`:
@@ -131,7 +135,7 @@ the first real GitHub write (draft creation, upload, publication) through
 `LO_GITHUB_TOKEN`; earlier runs were build-only or the read-only v0.7.20
 rehearsal (run 55). A separate check of the published Windows ZIP found its
 SHA-256 equal to GitHub's digest and a manifest with version `v0.7.25`; see
-[STATUS](../STATUS.md#v0725-published--2026-10-01). A green run shows that the
+[STATUS](../../STATUS.md#v0725-published--2026-10-01). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Second release, 2026-10-02: v0.7.35 (tag commit `95f2c89`) was built and
@@ -148,7 +152,7 @@ the first version release held to that check. The macOS disk image was already
 on the draft, uploaded by hand (GitHub dates the asset 09:01:25Z), and the set
 check accepted it as the one optional asset. The `shader-packs` prerelease did
 not change, and no game run was made with the packages; see
-[STATUS](../STATUS.md#v0735-published--2026-10-02). A green run shows that the
+[STATUS](../../STATUS.md#v0735-published--2026-10-02). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Third release, 2026-10-03: v0.8.0 (tag commit `eddbb7d`) was built and published
@@ -162,7 +166,7 @@ The workflow had no Android job then. The macOS disk image was uploaded to the
 draft by hand (GitHub dates the asset 06:22:26Z). The Android APK was added to the
 published release by hand afterwards (GitHub dates the asset 08:03:03Z). This
 record does not include the output of the run's "Check published shader packs"
-step. See [STATUS](../STATUS.md#v080-published--2026-10-03).
+step. See [STATUS](../../STATUS.md#v080-published--2026-10-03).
 
 Fourth release, 2026-10-03: v0.8.5 (tag commit `30a76ac`) was built and published
 by [run 212](https://git.zkx.ca/freefrank/LostOdysseyRecomp/actions/runs/212)
@@ -178,7 +182,7 @@ publish job ran. The published `shader-packs` index already covered this runtime
 contracts: `publish_shader_packs.py --check` passed on the Mac before the tag, and
 the release's Linux job, which makes the same check mandatory for a tag, succeeded
 (its step output was not read here). No game run was made with the packages; see
-[STATUS](../STATUS.md#v085-published--2026-10-03). A green run shows that the
+[STATUS](../../STATUS.md#v085-published--2026-10-03). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Fifth release, 2026-10-03: v0.8.6 (tag commit `b639c39`) was built and published
@@ -197,7 +201,7 @@ branch. It printed the contracts `d3d12 239f8775...` and `vulkan eecb4425...`
 (the values already recorded for v0.8.5) and "The shader-packs index lists packs
 for all renderers of this runtime". As the tag is set, a failing check would have
 stopped the job. No game run was made with the packages; see
-[STATUS](../STATUS.md#v086-published--2026-10-03). A green run shows that the
+[STATUS](../../STATUS.md#v086-published--2026-10-03). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Sixth release, 2026-10-03: v0.8.7 (tag commit `a45bc74`) was built and published
@@ -211,7 +215,7 @@ passed from the tag to publication. The macOS disk image was uploaded to the
 draft by hand (GitHub dates the asset 23:29:05Z to 23:29:25Z), before the
 publish job ran. No shader pack was published for the release; the Linux job's
 mandatory shader-pack check passed and its output was not read. No game run was
-made with the packages; see [STATUS](../STATUS.md#v087-published--2026-10-03). A
+made with the packages; see [STATUS](../../STATUS.md#v087-published--2026-10-03). A
 green run shows that the pipeline works, not that the release has been played or
 accepted.
 
@@ -226,9 +230,9 @@ passed from the run start to publication. The macOS disk image was uploaded to
 the draft by hand (GitHub dates the asset 05:18:43Z), before the publish job ran.
 The translator change in PR #186 changed both pack contracts, so new packs were
 published to the `shader-packs` prerelease before the tag (05:14-05:17Z; see the
-[pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-04-packs-for-translator-version-27));
+[pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-04-packs-for-translator-version-27));
 the Linux job's mandatory check passed and its output was not read. No game run
-was made with the packages; see [STATUS](../STATUS.md#v0810-published--2026-10-04).
+was made with the packages; see [STATUS](../../STATUS.md#v0810-published--2026-10-04).
 A green run shows that the pipeline works, not that the release has been played
 or accepted.
 
@@ -245,10 +249,10 @@ The macOS disk image was uploaded to the draft by hand (GitHub dates the asset
 job's mandatory check ran at 11:48:13-11:48:16Z and passed, and its log, read for
 this record, printed the contracts of v0.8.10 (`d3d12 48cf14e3...`, `vulkan
 a7d1ab94...`) and that the index lists packs for all renderers of this runtime
-(see the [pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-04-later-no-new-packs-for-v0815-and-v0821)).
+(see the [pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-04-later-no-new-packs-for-v0815-and-v0821)).
 This run was recorded after the release, not when it was published. No game run
 with the packages is recorded; see
-[STATUS](../STATUS.md#v0815-published--2026-10-04). A green run shows that the
+[STATUS](../../STATUS.md#v0815-published--2026-10-04). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Ninth release, 2026-10-04: v0.8.21 (tag commit `37ffd02`) was built and published
@@ -265,7 +269,7 @@ the Linux job's mandatory check ran at 21:58:07-21:58:10Z and passed, and its lo
 read for this record, printed the same contracts as v0.8.10 and v0.8.15; the same
 `--check` run on Windows with `LoShaderPackTool` from the tag tree printed them
 too. No game run with the packages is recorded; see
-[STATUS](../STATUS.md#v0821-published--2026-10-04). A green run shows that the
+[STATUS](../../STATUS.md#v0821-published--2026-10-04). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Tenth release, 2026-10-05: v0.8.30 (tag commit `f1ebdc05`) was built and published
@@ -283,9 +287,9 @@ carries the Intel XeSS libraries (PR #236, which downloads the pinned XeSS SDK
 v0.8.21 and its contents were not inspected for this record. No shader pack was
 published: `publish_shader_packs.py --check` passed against the existing index
 before the tag was pushed (see the
-[pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-05-no-new-packs-for-v0830)).
+[pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-05-no-new-packs-for-v0830)).
 No game run with the packages is recorded; see
-[STATUS](../STATUS.md#v0830-published--2026-10-05). A green run shows that the
+[STATUS](../../STATUS.md#v0830-published--2026-10-05). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Eleventh release, 2026-10-06: v0.8.37 (tag commit `bfa6c824`) was built and
@@ -300,10 +304,10 @@ the public release. The macOS disk image was built on the Mac from the tag and
 uploaded to the draft by hand (GitHub dates the asset 07:26:12Z) while the CI
 builds were running. No shader pack was published: the shader sources equal
 those of v0.8.30 and the Linux job's pack check succeeded (see the
-[pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-06-no-new-packs-for-v0837)).
+[pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-06-no-new-packs-for-v0837)).
 The job timings were read through the Gitea API by the maintainer's session and
 are not re-read here. No game run with the packages is recorded; see
-[STATUS](../STATUS.md#v0837-published--2026-10-06). A green run shows that the
+[STATUS](../../STATUS.md#v0837-published--2026-10-06). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Twelfth release, 2026-10-06: v0.8.39 (tag commit `fd7d82ce`) was built and
@@ -319,10 +323,10 @@ from the tag and uploaded to the draft by hand at about 08:27:46Z (GitHub dates
 the asset 08:27:47Z), right after the draft was created and before the CI
 packages (dated 08:47:37Z). No shader pack was published: the translator
 contracts equal those of v0.8.30 and the Linux job's pack check succeeded (see the
-[pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-06-later-no-new-packs-for-v0839)).
+[pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-06-later-no-new-packs-for-v0839)).
 The job timings were read through the Gitea API by the maintainer's session and
 are not re-read here. No game run with the packages is recorded; see
-[STATUS](../STATUS.md#v0839-published--2026-10-06). A green run shows that the
+[STATUS](../../STATUS.md#v0839-published--2026-10-06). A green run shows that the
 pipeline works, not that the release has been played or accepted.
 
 Thirteenth release, 2026-10-06: v0.8.44 (tag commit `504e7cd0`) was built and
@@ -334,10 +338,10 @@ release. Per-job timings were not read for this record. The macOS disk image
 was built on the Mac from the tag and uploaded to the draft by hand (GitHub
 dates the asset 17:09:34Z), before the CI packages (dated 17:33:15Z). No shader
 pack was published: the translator contracts equal those of v0.8.30 (see the
-[pack reference](../PORTABLE_SHADER_PACK.md#update-2026-10-06-later-still-no-new-packs-for-v0844)).
+[pack reference](../../PORTABLE_SHADER_PACK.md#update-2026-10-06-later-still-no-new-packs-for-v0844)).
 The run status and timestamps were read through the Gitea API by the
 maintainer's session and are not re-read here. No game run with the packages is
-recorded; see [STATUS](../STATUS.md#v0844-published--2026-10-06). A green run
+recorded; see [STATUS](../../STATUS.md#v0844-published--2026-10-06). A green run
 shows that the pipeline works, not that the release has been played or accepted.
 
 Differences from the GitHub release workflow:
