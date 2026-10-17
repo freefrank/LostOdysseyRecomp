@@ -368,6 +368,7 @@ void Ipc()
 {
     FakeServer server;
     Client client;
+    for (int i = 0; i < 100; ++i) client.Publish({2, "Superseded " + std::to_string(i), Mode::Exploring});
     client.Publish({2, "Great Gate", Mode::Exploring});
     client.Start(Options(server.Endpoint()));
     Check(Wait([&] { return !server.Activities().empty(); }), "fake IPC receives activity after READY");
@@ -379,10 +380,15 @@ void Ipc()
     }), "PING echoed as PONG");
     const auto activity = server.Activities().front();
     Check(activity["args"]["pid"] == ProcessId() && activity["args"]["activity"]["state"] == "Disc 2 - Exploring", "actual process and activity JSON");
+    Check(activity["args"]["activity"]["details"] == "Great Gate", "preconnection snapshots coalesce to the latest location");
+    // Unchanged snapshots never refresh, regardless of observer scheduling.
+    // Policy() checks update deadlines with a controlled clock.
+    std::this_thread::sleep_for(300ms);
+    Check(server.Activities().size() == 1, "unchanged coalesced snapshot is not resent");
     for (int i = 0; i < 100; ++i) client.Publish({2, "Area " + std::to_string(i), Mode::Exploring});
-    std::this_thread::sleep_for(30ms);
-    Check(server.Activities().size() == 1, "burst updates coalesced behind rate limit");
     Check(Wait([&] {
+        // Publish may drop a contended write; the game's next snapshot retries it.
+        client.Publish({2, "Area 99", Mode::Exploring});
         const auto values = server.Activities();
         return values.size() >= 2 && values.back()["args"]["activity"]["details"] == "Area 99";
     }), "coalesced update sends latest location");
