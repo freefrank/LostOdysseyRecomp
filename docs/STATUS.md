@@ -2,7 +2,37 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.1 published — 2026-10-17
+
+[v1.0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.1) was published at 2026-10-17T20:16:12Z by the workflow's own publish step. The maintainer verified that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.1` at commit `ff2a6749`, the release PR [#607](https://github.com/freefrank/LostOdysseyRecomp/pull/607). The previous release is v1.0.0, published 2026-10-17T07:19:07Z at `df388a0e`. The Discord announcement workflow succeeded at 2026-10-17T20:16:13Z. The release body matches the [Changelog, v1.0.1](../CHANGELOG.md#v101--2026-10-17) section.
+
+The release run is Gitea run 1496, `release.yml` on `refs/tags/v1.0.1`. A power outage at the build host interrupted it. Android succeeded on the first attempt. Linux failed once on a transient Launchpad PPA key error (HTTP 500) and succeeded on rerun. Windows failed twice (the runner lost power, then DNS was not yet back) and succeeded on the fourth attempt. The publish job then ran and published the release.
+
+The only change since v1.0.0 is the fix for [#604](https://github.com/freefrank/LostOdysseyRecomp/issues/604) (ground flicker near balloon enemies with TAA or temporal upscaling), PR [#606](https://github.com/freefrank/LostOdysseyRecomp/pull/606) (`9c921eda`): the floor-light shader pairs VS `e810` with PS `2994` and `2f66` were added to the jittered screen-light pairs.
+
+Assets, as recorded by the maintainer on 2026-10-17 (bytes and SHA-256):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.1.zip` | 153,240,401 | `92e1b6d2eea29021bfb2d8a70c51f0054875af7fc956e90eb0116c9b6adddd69` |
+| `LostOdysseyRecomp-linux-x64-v1.0.1.AppImage` | 79,047,160 | `5e183dedfd685d0c9ac36621e941b9c8af99b9ed927f605b25f770bc90544f21` |
+| `LostOdysseyRecomp-linux-x64-v1.0.1.flatpak` | 55,602,200 | `3c6afa5f10aeb0e9b70ef84585f8b4b32099e2de400df2bdd64f1ddc47b6f4c3` |
+| `LostOdysseyRecomp-android-arm64-v1.0.1.apk` | 47,187,435 | `19e5721ee5b96a2078f9c93de345e08a4d1e097ee84d16e706573c2ba16422af` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.1.dmg` | 65,479,173 | `e961bb827a31ba4746076ce3bc4d4609f0996a2baad4de683503d53fba042326` |
+
+The PortForge manifest `.forge.json` is updated in the same change as this record.
+
+Shader packs: the contracts are unchanged (d3d12 `05fd9431…`, vulkan and metal `03ef0787…`). The pre-check of `release/v1.0.1` (`202fd1f4`, the same tree as `ff2a6749`) built, and `tools/release/publish_shader_packs.py --check` passed.
+
+macOS: the disk image was built on the maintainer's M1 Max from the tag with `mac-release-sdl3.sh v1.0.1 v1.0.1 tag package` and uploaded to the draft release before publication. `hdiutil verify` reports it VALID, `codesign --verify` passes and `CFBundleShortVersionString` is 1.0.1 ([macOS releases](MACOS_RELEASE.md#v101-image)).
+
+Validation: the fix was reproduced and verified on psvita (Radeon 8060S, Proton D3D12) with the reporter's settings before the release. No game run with the published packages is recorded, and the reporter has not confirmed the fix yet.
+
+Acceptance: none. The maintainer has not accepted v1.0.1. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.0 published — 2026-10-17
+
+Update, 2026-10-17: v1.0.0 stopped being the latest release when [v1.0.1](#v101-published--2026-10-17) was published at 2026-10-17T20:16:12Z. The record below is unchanged.
 
 [v1.0.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.0) was published at 2026-10-17T07:19:07Z by the workflow's own publish step. The maintainer verified on 2026-10-17 that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.0` at commit `df388a0e`, the release PR [#600](https://github.com/freefrank/LostOdysseyRecomp/pull/600). The previous release is v0.9.65, published 2026-10-15T21:15:30Z at `298b3e8f`. The Discord announcement workflow succeeded at 2026-10-17T07:19:09Z. The release body matches the [Changelog, v1.0.0](../CHANGELOG.md#v100--2026-10-17) section.
 
