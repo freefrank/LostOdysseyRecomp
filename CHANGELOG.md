@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## [v1.0.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.3) — 2026-10-17
+
+### English
+
+- Fixed the save menu sometimes hanging after saving, a problem introduced in v1.0.2.
+
+### 简体中文
+
+- 修复 v1.0.2 引入的存档后存档菜单偶尔卡住的问题。
+
 ## [v1.0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.2) — 2026-10-17
 
 ### English
