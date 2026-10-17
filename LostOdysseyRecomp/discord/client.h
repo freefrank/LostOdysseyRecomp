@@ -13,8 +13,8 @@
 
 namespace discord_rpc
 {
-// TODO: Replace with the maintainer's public Discord application ID before release.
-inline constexpr char kApplicationId[] = "REPLACE_WITH_DISCORD_APPLICATION_ID";
+// Public application ID for Lost Odyssey Recomp; LO_DISCORD_APP_ID overrides it.
+inline constexpr char kApplicationId[] = "1560871080275742851";
 
 // Internal options also let CPU tests use a private fake IPC endpoint and clock scale.
 struct ClientOptions
