@@ -53,6 +53,7 @@ static std::thread::id gpuOwner;
 static std::atomic<bool> idleExitChecked{false};
 static void Record(const char* event) { std::puts(event); }
 namespace os::shaderlog { void CloseForExit() { Record("shader_log_closed"); } }
+namespace discord_rpc { void Shutdown() { Record("discord_cleared"); std::fflush(stdout); } }
 namespace host_ui { void RequestStop() { Record("pause_released"); } }
 namespace modding::text_overlay { void StopPrebuild() { Record("mods_prebuild_stopped"); } }
 struct Memory {
@@ -185,8 +186,10 @@ int main(int argc, char** argv) {
             raise RuntimeError(f"Guest return failed ({mode_name}, {run.returncode}):\n{output}")
         if "shader_log_closed" not in events:
             raise RuntimeError(f"Guest return did not close the shader log ({mode_name}):\n{output}")
+        if "discord_cleared" not in events:
+            raise RuntimeError(f"Guest return did not clear Discord activity ({mode_name}):\n{output}")
         if mode_name != "already-stopped":
-            required = ["capture_drained", "gpu_owner_cleanup", "shader_log_closed"]
+            required = ["capture_drained", "gpu_owner_cleanup", "shader_log_closed", "discord_cleared"]
             cursor = -1
             for event in required:
                 cursor = events.index(event, cursor + 1)
