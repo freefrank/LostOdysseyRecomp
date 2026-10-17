@@ -95,4 +95,6 @@ Hosted jobs restore these inputs through `actions/cache@v4`; the workflow files 
 
 Android checks and release builds share these keys. SDK and FSR pins invalidate their inputs when dependencies change; compiler caches reuse unaffected objects across source revisions. Windows compilation, private game inputs and signing keys are not cached. Flatpak installs its runtime fresh on the hosted machine. There is no `LO_GIT_REFERENCE` mirror dependency.
 
+GitHub caches are scoped to the current ref and the default branch; one tag cannot restore another tag's cache. After merging CI changes, an empty-tag rehearsal on `main` can seed caches for future releases ([cache scope](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)).
+
 Migration validation and per-job wall times are tracked in [PR #608](https://github.com/freefrank/LostOdysseyRecomp/pull/608). Configuration alone does not establish a successful hosted run or runtime acceptance.
