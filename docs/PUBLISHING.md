@@ -17,7 +17,7 @@ The legacy `tools/push_all.ps1` helper hardcodes `origin` and `github`. It needs
 
 The pre-cleanup history was retained only on the former Gitea mirror in `archive/pre-public-cleanup-2026-09-05`. This is historical storage, not a publication remote. Never merge that branch into `main` or publish it to GitHub. Do not use `--all`, `--mirror` or automatic tag pushing.
 
-Release tags must be created from reviewed public commits and pushed explicitly to `origin`. A `v*` tag starts the release pipeline, creates a draft and builds the Windows ZIP, AppImage, Flatpak and Android APK. Upload the separately built macOS disk image to the draft before publication ([macOS releases](MACOS_RELEASE.md)).
+Release tags must be created from reviewed public commits and pushed explicitly to `origin`. A `v*` tag starts the release pipeline, creates a draft and builds the Windows ZIP, AppImage, Flatpak, Android APK and macOS DMG. The DMG is built on GitHub's hosted Apple Silicon runner ([macOS releases](MACOS_RELEASE.md)). Once all package jobs succeed, publication verifies exactly these five assets; no manual package build or upload is required.
 
 ```powershell
 git push origin refs/tags/vX.Y.Z

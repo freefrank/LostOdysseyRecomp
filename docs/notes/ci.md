@@ -39,24 +39,27 @@ git push origin refs/tags/vX.Y.Z
 | Windows Release | `windows-2022` | Windows x64 ZIP |
 | Linux Release | `ubuntu-22.04` | AppImage and Flatpak from one compiled AppDir |
 | Android Release | `ubuntu-22.04` | Android arm64 APK |
+| macOS Release | `macos-26` (Apple Silicon) | macOS arm64 DMG |
 | Publish complete release | `ubuntu-24.04` | Verified assets on the GitHub release, then publication |
 
-Windows builds use four compile jobs and no compiler cache: ccache rejects the Visual Studio clang-cl C++23 flag used by this build. Linux uses four jobs for dependency builds, the available CPU count for runtime targets, and a 3 GB ccache. Android uses four jobs and a 2 GB ccache. Flatpak is built on the hosted Ubuntu machine with `sudo`; it does not need a privileged self-hosted runner.
+Windows builds use four compile jobs and no compiler cache: ccache rejects the Visual Studio clang-cl C++23 flag used by this build. Linux uses four jobs for dependency builds, the available CPU count for runtime targets, and a 3 GB ccache. Android uses four jobs and a 2 GB ccache. macOS uses three jobs, caches the SDL build subtree, and uses a 3 GB ccache. Flatpak is built on the hosted Ubuntu machine with `sudo`; it does not need a privileged self-hosted runner.
 
 Build jobs upload distinct `actions/upload-artifact@v4` artifacts. The publish job downloads the package artifacts with `actions/download-artifact@v4`, uploads missing assets to the draft, and checks the exact set:
 
 ```text
-expected = Windows ZIP, Linux AppImage, Linux Flatpak, Android APK
-expected <= names <= expected | {LostOdysseyRecomp-macos-arm64-<tag>.dmg}
+expected = Windows ZIP, Linux AppImage, Linux Flatpak, Android APK, macOS DMG
+names == expected
 ```
 
-Every release asset must be uploaded and nonempty. The macOS disk image is still built on the maintainer's Mac and uploaded to the draft before publication ([macOS releases](../MACOS_RELEASE.md)). An existing release retains its reviewed notes and assets; reruns validate an already public release without changing its publication state.
+Every release asset must be uploaded and nonempty; additional assets fail verification. Publication depends on `release-macos` as well as Windows, Linux and Android. The macOS disk image is built, verified and uploaded by CI ([macOS releases](../MACOS_RELEASE.md)); there is no maintainer-Mac or manual-upload step. An existing release retains its reviewed notes and assets; reruns validate an already public release without changing its publication state.
 
-Packages contain no shader pack. The Linux job retains the mandatory `tools/release/publish_shader_packs.py --check`: tagged releases require the published `shader-packs` index to cover the runtime's Vulkan and DirectX 12 contracts. Metal and Android share the Vulkan pack. Branch rehearsals only warn if a contract is absent ([shader-pack procedure](../PORTABLE_SHADER_PACK.md#runtime-contract-and-release-check-after-v0725)).
+Packages contain no shader pack. The Linux and macOS jobs run `tools/release/publish_shader_packs.py --check`: tagged releases require the published `shader-packs` index to cover the runtime's Vulkan and DirectX 12 contracts. Metal and Android share the Vulkan pack. The Linux check warns on a missing contract during a branch rehearsal; the macOS check remains mandatory, including rehearsals ([shader-pack procedure](../PORTABLE_SHADER_PACK.md#runtime-contract-and-release-check-after-v0725)).
+
+The macOS job checks out recursive submodules, applies the repository's XenonRecomp and plume patches, fetches the pinned private `default.xex`, and generates PPC sources before building the full runtime with Apple Clang, SDL `release-3.4.18` and deployment target 15.0. It packages an ad-hoc signed, non-notarized DMG, verifies the image, signature, app version and binary `minos`, and performs a headless load check without game data. The migration rehearsal compares the mounted payload, plist and binary library imports/minos against the published v1.0.1 DMG, downloaded read-only; that baseline comparison is temporary migration validation. These checks establish package and loader behavior on the runner, not gameplay or macOS 15 runtime acceptance.
 
 ### Build-only rehearsal
 
-An empty `release_tag` builds the selected branch and keeps the Windows ZIP, AppImage, Flatpak and APK as GitHub Actions artifacts. It skips draft creation and publication, and sends no release announcement.
+An empty `release_tag` builds the selected branch and keeps the Windows ZIP, AppImage, Flatpak, APK and DMG as GitHub Actions artifacts. It skips draft creation and publication, and sends no release announcement.
 
 ```powershell
 gh workflow run release.yml --repo freefrank/LostOdysseyRecomp --ref <branch> -f release_tag=
@@ -88,10 +91,14 @@ Hosted jobs restore these inputs through `actions/cache@v4`; the workflow files 
 | XeSS ZIP | `Windows-xess-v3.0.2-<prepare-helper hash>` |
 | FSR inputs | `Windows-fsr-<FidelityFX pin>-<XenosRecomp commit>-<FSR-tools/adapter-shaders hash>` |
 | Linux ccache (3 GB) | `Linux-ccache-clang18-v1-<build-input hash>-<commit>-<run-id>`; restore by build-input hash, then compiler prefix |
+| macOS SDL build | `macOS-sdl3-arm64-min15-v1-<SDL commit>-<toolchain hash>-<CMake/plume-patch hash>`; exact-key restore |
+| macOS ccache (3 GB) | `macOS-ccache-arm64-min15-v1-<toolchain hash>-<CMake/modules/patch hash>-<commit>-<run-id>`; restore by configuration hash, then toolchain prefix |
 | Android SDK / NDK | `android-sdk-Linux-cmdline11076708-api35-build35-ndk28.2.13676358-cmake3.22.1-v1` |
 | Android DXC | `android-dxc-Linux-ndk28.2.13676358-<DXC/CI-script hash>` |
 | Gradle | `android-gradle-Linux-<Gradle-config hash>`; restore by OS prefix |
 | Android ccache (2 GB) | `android-ccache-Linux-ndk28.2.13676358-<build-script/CMake hash>-<commit>`; restore by build-input hash, then NDK prefix |
+
+The macOS toolchain hash includes Apple Clang, SDK, CMake, Ninja and ccache versions. Its SDL cache holds only the SDL build subtree and Ninja metadata; private inputs and generated PPC sources are excluded.
 
 Android checks and release builds share these keys. SDK and FSR pins invalidate their inputs when dependencies change; compiler caches reuse unaffected objects across source revisions. Windows compilation, private game inputs and signing keys are not cached. Flatpak installs its runtime fresh on the hosted machine. There is no `LO_GIT_REFERENCE` mirror dependency.
 

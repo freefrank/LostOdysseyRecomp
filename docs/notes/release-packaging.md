@@ -90,15 +90,18 @@ the embedded installer font.
 Pull request checks and release packaging run on GitHub-hosted runners; see
 [GitHub Actions checks and releases](ci.md). `.github/workflows/release.yml`
 builds when a `v*` tag is pushed to `origin` or when started manually. Windows jobs use
-`windows-2022`; Linux and Android jobs use `ubuntu-22.04`. Flatpak uses `sudo` on the
-hosted Ubuntu machine. Private inputs are fetched from pinned commits of
+`windows-2022`; Linux and Android jobs use `ubuntu-22.04`, and macOS uses the
+GitHub-hosted `macos-26` Apple Silicon runner. Flatpak uses `sudo` on the hosted
+Ubuntu machine. Private inputs are fetched from pinned commits of
 `freefrank/LostOdysseyRecomp-build-inputs` with the existing read-only SSH deploy key
 in `LO_BUILD_INPUT_KEY`. GitHub release writes use `GITHUB_TOKEN` with explicit job permissions.
 Each run produces immutable GitHub Actions v4 artifacts; a version tag also creates a
 **draft** GitHub release. After all package jobs succeed, the publish job downloads the
-Windows ZIP, AppImage, Flatpak and Android APK, uploads missing assets and verifies
-that the release contains exactly those four packages and an optional manually built
-macOS disk image. An empty `release_tag` dispatch is build-only and leaves the release untouched.
+Windows ZIP, AppImage, Flatpak, Android APK and macOS DMG, uploads missing assets
+and verifies that the release contains exactly those five packages. The macOS job
+builds and checks the complete runtime and ad-hoc signed DMG without a maintainer
+Mac or manual upload ([macOS releases](../MACOS_RELEASE.md)). An empty `release_tag`
+dispatch is build-only and leaves the release untouched.
 
 Draft release notes come from the matching version section in the tagged `CHANGELOG.md`.
 `tools/release/extract_release_notes.py` accepts a linked or plain version heading (for example,

@@ -1,40 +1,68 @@
 # macOS releases
 
-macOS support is an experimental Apple Silicon integration. v0.7.35 was the
-first release with a macOS package, followed by v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32, v0.9.52, v0.9.57, v0.9.65, v1.0.0 and v1.0.1:
-`LostOdysseyRecomp-macos-arm64-v1.0.1.dmg`, a disk image that is ad-hoc signed
-and not notarized. All of them stay that way: on 2026-10-03 the maintainer decided that
-Developer ID signing and notarization will not be done. GitHub CI builds the source
-and tests that do not require private game data; it does not link a complete
-runtime with game data, so the disk image is built on a Mac and uploaded to the
-release by hand.
+macOS support is an experimental Apple Silicon integration. Packages are ad-hoc
+signed and not notarized. On 2026-10-03 the maintainer decided that Developer ID
+signing and notarization will not be done.
 
-## Disk image (v1.0.1)
+## GitHub Actions disk image
 
-Build the runtime first using [the macOS build instructions](BUILDING.md#building-on-macos).
-Then run this on the Mac that built the executable:
+**2026-10-17:** `.github/workflows/release.yml` now builds the DMG in its
+`release-macos` job on GitHub's hosted `macos-26` Apple Silicon runner. Releases
+no longer require the maintainer's Mac or a manual upload. The records below
+preserve how earlier images were built and validated.
+
+The job checks out the same tag or branch ref as the other release jobs, with
+recursive submodules, and applies the checked-in XenonRecomp and plume patches
+(including the SDL3 and macOS patches). It builds against SDL `release-3.4.18`
+(`829a65d769d935c4852f8159e964312c0957260a`). The existing `LO_BUILD_INPUT_KEY`
+read-only deploy key fetches the pinned private Disc 1 `default.xex`; repository
+tools validate it and generate the PPC sources. Apple Clang builds the complete
+runtime in Release mode with `CMAKE_OSX_DEPLOYMENT_TARGET=15.0`.
+
+Before packaging, `tools/release/publish_shader_packs.py --check` must pass with
+the built `LoShaderPackTool`, including in build-only rehearsals. Packages contain
+no shader pack. Packaging uses:
 
 ```sh
-python3 tools/package_macos.py --build <build dir> --output <dir> --version v1.0.1 --dmg
+python3 tools/package_macos.py --build <build dir> --output <dir> --version <tag> --dmg
 ```
 
-- `--dmg` writes a compressed HFS+ disk image, with the volume name "Lost
-  Odyssey Recomp", that holds `LostOdysseyRecomp.app` and a link to
-  `/Applications`. Without it the script writes a ZIP.
-- `--version v1.0.1` sets the asset tag, so the file is named
-  `LostOdysseyRecomp-macos-arm64-v1.0.1.dmg`. Keep the `v`: the script uses
-  the text as given, and the in-game updater looks for exactly this name. Do not
-  use `--release` here; it needs a Developer ID identity, and the script exits
-  without one.
-- Without `--identity` the app is signed ad hoc and the image is not signed.
-  Neither is notarized.
-- The app declares macOS 15.0 as its minimum (`MINIMUM_MACOS` in the script,
-  matching `CMAKE_OSX_DEPLOYMENT_TARGET`), so the v0.8.0, v0.8.5, v0.8.6, v0.8.7, v0.8.10, v0.8.15, v0.8.21, v0.8.30, v0.8.37, v0.8.39, v0.8.44, v0.8.53, v0.8.61, v0.9.0, v0.9.22, v0.9.32, v0.9.52, v0.9.57, v0.9.65, v1.0.0 and v1.0.1 apps declare
-  15.0. The v0.7.35 image was made before this change and still declares 14.0; see
-  [Minimum macOS version](#minimum-macos-version).
-- Upload the image to the release by hand. The release workflow's publish step
-  accepts the four packages built by CI (Windows ZIP, AppImage, Flatpak and the
-  Android APK) and, at most, this one disk image beside them.
+The asset is `LostOdysseyRecomp-macos-arm64-<tag>.dmg`; keep the `v` in a version
+tag because the updater selects this exact name. For an empty-tag rehearsal,
+CI omits `--version` and uses
+`LostOdysseyRecomp-macos-arm64-v<source-version>-<commit>-dev.dmg`, matching the
+other package jobs' development naming.
+
+- `--dmg` writes a compressed HFS+ disk image, with the volume name "Lost Odyssey
+  Recomp", containing `LostOdysseyRecomp.app` and a link to `/Applications`.
+- Without `--identity` the app is signed ad hoc; the image is unsigned and
+  neither is notarized. CI does not pass `--release`, which requires a Developer
+  ID identity.
+- CI runs `hdiutil verify`, `codesign --verify`, checks the version in
+  `Info.plist`, and requires macOS 15.0 in both the app metadata and main
+  executable's `minos`. A headless load check with no game data verifies that
+  the packaged executable loads and exits at the missing-data boundary.
+- The migration rehearsal compares the mounted package's file list,
+  `Info.plist`, linked libraries and `minos` against a read-only download of the
+  published v1.0.1 image. Development version strings may differ; missing payload
+  files or libraries fail the comparison. This is migration evidence, not a
+  permanent dependency on the older release.
+- The job uploads the DMG as an Actions artifact. Publication waits for this job
+  and requires exactly five installable assets: Windows ZIP, Linux AppImage,
+  Linux Flatpak, Android APK and macOS DMG.
+
+For a build-only rehearsal, dispatch the intended branch with an empty tag:
+
+```sh
+gh workflow run release.yml --repo freefrank/LostOdysseyRecomp --ref <branch> -f release_tag=
+```
+
+This creates run artifacts without creating or publishing a release. SDL build
+outputs and ccache are cached with toolchain, SDL and configuration identities;
+see [CI caches](notes/ci.md#caches). A hosted build, package check or headless load
+does not establish gameplay or macOS 15 runtime acceptance.
+
+## Earlier disk images
 
 ### v1.0.1 image
 
