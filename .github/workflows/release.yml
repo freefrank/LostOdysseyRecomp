@@ -1,7 +1,6 @@
 name: Release
 
-# Tag pushes are packaged by .gitea/workflows/release.yml on git.zkx.ca; this
-# GitHub copy is a manual fallback.
+# GitHub-hosted packaging; an empty release_tag is a build-only rehearsal.
 on:
   workflow_dispatch:
     inputs:
@@ -10,8 +9,12 @@ on:
         type: string
         required: false
 
+  push:
+    tags: ['v*']
+
 env:
   RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+  GH_REPO: freefrank/LostOdysseyRecomp
 
 permissions:
   contents: read
@@ -19,10 +22,10 @@ permissions:
 jobs:
   create-draft-release:
     name: Create draft release
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
     permissions:
       contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,42 +50,53 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 180
     steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - name: Resolve FSR input versions
+        id: fsr-versions
+        run: '"xenos=$(git rev-parse HEAD:tools/XenosRecomp)" >> $env:GITHUB_OUTPUT'
+      - name: Cache generated FSR build inputs
+        id: fsr-cache
+        uses: actions/cache@v4
         with:
-          python-version: '3.12'
+          path: |
+            out/deps/fidelityfx-sdk/sdk
+            out/deps/fidelityfx-sdk/ffx-api/include
+            out/deps/fidelityfx-sdk/PrebuiltSignedDLL/amd_fidelityfx_dx12.dll
+            out/deps/fidelityfx-sdk/LICENSE.txt
+            out/fsr-shaders-vk
+            out/fsr-shaders-dx12
+            out/fsr-adapter-dx12
+          key: Windows-fsr-c6efa6bf7f2027b3ec94f28578bb5965eabb9e55-${{ steps.fsr-versions.outputs.xenos }}-${{ hashFiles('tools/fsr/**') }}
       - name: Checkout pinned FidelityFX SDK
-        uses: actions/checkout@v4
-        with:
-          repository: GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
-          ref: c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
-          path: out/deps/fidelityfx-sdk
-          sparse-checkout: |
-            /LICENSE.txt
-            /ffx-api/include/
-            /PrebuiltSignedDLL/amd_fidelityfx_dx12.dll
-            /sdk/include/
-            /sdk/src/shared/
-            /sdk/src/components/fsr3upscaler/
-            /sdk/src/backends/shared/
-            /sdk/src/backends/vk/
-            /sdk/src/backends/dx12/
-            /sdk/tools/binary_store/
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
+        if: steps.fsr-cache.outputs.cache-hit != 'true'
+        run: |
+          $dir = 'out/deps/fidelityfx-sdk'
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          git init -q $dir
+          git -C $dir remote add origin https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git
+          git -C $dir sparse-checkout set --no-cone /LICENSE.txt /ffx-api/include/ /PrebuiltSignedDLL/amd_fidelityfx_dx12.dll /sdk/include/ /sdk/src/shared/ /sdk/src/components/fsr3upscaler/ /sdk/src/backends/shared/ /sdk/src/backends/vk/ /sdk/src/backends/dx12/ /sdk/tools/binary_store/
+          git -C $dir fetch -q --depth 1 --filter=blob:none origin c6efa6bf7f2027b3ec94f28578bb5965eabb9e55
+          if ($LASTEXITCODE -ne 0) { throw 'FidelityFX SDK fetch failed.' }
+          git -C $dir checkout -q FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'FidelityFX SDK checkout failed.' }
       - name: Generate FSR Vulkan shaders
+        if: steps.fsr-cache.outputs.cache-hit != 'true'
         shell: cmd
         run: |
-          python tools/fsr/generate_shaders.py --sdk out/deps/fidelityfx-sdk --output out/fsr-shaders-vk --threads 2 || exit /b 1
+          python tools/fsr/generate_shaders.py --sdk out/deps/fidelityfx-sdk --output out/fsr-shaders-vk --threads %NUMBER_OF_PROCESSORS% || exit /b 1
           python tools/fsr/prepare_adapter_shaders.py --glslang out/deps/fidelityfx-sdk/sdk/tools/binary_store/glslangValidator.exe --output out/fsr-shaders-vk || exit /b 1
       - name: Generate FSR D3D12 shaders
+        if: steps.fsr-cache.outputs.cache-hit != 'true'
         shell: cmd
         run: |
           git submodule update --init --recursive tools/XenosRecomp || exit /b 1
-          python tools/fsr/generate_dx12_shaders.py --sdk out/deps/fidelityfx-sdk --dxc-dir tools/XenosRecomp/thirdparty/dxc-bin/bin/x64 --output out/fsr-shaders-dx12 --threads 2 || exit /b 1
+          python tools/fsr/generate_dx12_shaders.py --sdk out/deps/fidelityfx-sdk --dxc-dir tools/XenosRecomp/thirdparty/dxc-bin/bin/x64 --output out/fsr-shaders-dx12 --threads %NUMBER_OF_PROCESSORS% || exit /b 1
           python tools/fsr/prepare_adapter_shaders_dx12.py --dxc tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc.exe --output out/fsr-adapter-dx12 || exit /b 1
       - uses: actions/upload-artifact@v4
         with:
@@ -96,16 +110,16 @@ jobs:
             out/fsr-shaders-dx12
             out/fsr-adapter-dx12
           if-no-files-found: error
-          include-hidden-files: true
 
   release-windows:
     name: Windows Release
     needs: [create-draft-release, prepare-fsr]
     runs-on: windows-2022
     timeout-minutes: 180
-    permissions:
-      contents: write
     steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Validate requested tag
         if: env.RELEASE_TAG != ''
         run: |
@@ -113,18 +127,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-          submodules: recursive
           persist-credentials: false
+      - name: Checkout submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive
       - uses: actions/download-artifact@v4
         with:
           name: fsr-vulkan-build-inputs
           path: out
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Install packaging tools
-        run: python -m pip install -r tools/release/requirements.txt
-      - name: Retrieve private build input
+        run: |
+          python -m venv out/venv
+          if ($LASTEXITCODE -ne 0) { throw 'venv creation failed.' }
+          Add-Content -Path $env:GITHUB_PATH -Value (Resolve-Path out/venv/Scripts).Path
+          out/venv/Scripts/python -m pip install -r tools/release/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pip install failed.' }
+      - name: Retrieve private build inputs
         uses: actions/checkout@v4
         with:
           repository: freefrank/LostOdysseyRecomp-build-inputs
@@ -139,23 +159,46 @@ jobs:
         env:
           LO_BUILD_XEX_PATH: out/build-input/default.xex
         run: python tools/release/fetch_build_input.py
+      - name: Cache pinned NVIDIA DLSS SDK
+        uses: actions/cache@v4
+        with:
+          path: out/deps/nvidia-dlss
+          key: ${{ runner.os }}-dlss-374959484e79a640feaba44c93ac8cfb0a03f5b5-${{ hashFiles('tools/release/fetch_dlss_sdk.py') }}
       - name: Fetch NVIDIA DLSS SDK
         run: python tools/release/fetch_dlss_sdk.py --dest out/deps/nvidia-dlss
+      - name: Cache pinned NVIDIA Streamline archive
+        uses: actions/cache@v4
+        with:
+          path: out/deps/streamline-sdk-v2.14.1.zip
+          key: Windows-streamline-v2.14.1-${{ hashFiles('tools/release/prepare_streamline_sdk.py') }}
       - name: Fetch pinned NVIDIA Streamline SDK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v2.14.1 --repo NVIDIA-RTX/Streamline --pattern streamline-sdk-v2.14.1.zip --dir out/deps
-          if ($LASTEXITCODE -ne 0) { throw 'Official Streamline SDK download failed.' }
-          python tools/release/prepare_streamline_sdk.py --archive out/deps/streamline-sdk-v2.14.1.zip --dest out/deps/streamline
+          $zip = 'streamline-sdk-v2.14.1.zip'
+          New-Item -ItemType Directory -Force out/deps | Out-Null
+          if (-not (Test-Path -LiteralPath out/deps/$zip)) {
+            gh release download v2.14.1 --repo NVIDIA-RTX/Streamline --pattern $zip --dir out/deps
+            if ($LASTEXITCODE -ne 0) { throw 'Official Streamline SDK download failed.' }
+          }
+          python tools/release/prepare_streamline_sdk.py --archive out/deps/$zip --dest out/deps/streamline
           if ($LASTEXITCODE -ne 0) { throw 'Pinned Streamline SDK verification failed.' }
+      - name: Cache pinned Intel XeSS archive
+        uses: actions/cache@v4
+        with:
+          path: out/deps/XeSS_SDK_3.0.2.zip
+          key: Windows-xess-v3.0.2-${{ hashFiles('tools/release/prepare_xess_sdk.py') }}
       - name: Fetch pinned Intel XeSS SDK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v3.0.2 --repo intel/xess --pattern XeSS_SDK_3.0.2.zip --dir out/deps
-          if ($LASTEXITCODE -ne 0) { throw 'Official XeSS SDK download failed.' }
-          python tools/release/prepare_xess_sdk.py --archive out/deps/XeSS_SDK_3.0.2.zip --dest out/deps/xess
+          $zip = 'XeSS_SDK_3.0.2.zip'
+          New-Item -ItemType Directory -Force out/deps | Out-Null
+          if (-not (Test-Path -LiteralPath out/deps/$zip)) {
+            gh release download v3.0.2 --repo intel/xess --pattern $zip --dir out/deps
+            if ($LASTEXITCODE -ne 0) { throw 'Official XeSS SDK download failed.' }
+          }
+          python tools/release/prepare_xess_sdk.py --archive out/deps/$zip --dest out/deps/xess
           if ($LASTEXITCODE -ne 0) { throw 'Pinned XeSS SDK verification failed.' }
       - name: Generate game code
         shell: cmd
@@ -166,7 +209,7 @@ jobs:
       - name: Build Release
         shell: cmd
         env:
-          LO_BUILD_JOBS: '2'
+          LO_BUILD_JOBS: '4'
           LO_ENABLE_DLSS: 'ON'
           LO_REQUIRE_DLSS: 'ON'
           LO_DLSS_SDK_ROOT: out\deps\nvidia-dlss
@@ -220,24 +263,6 @@ jobs:
           name: LostOdysseyRecomp-windows-x64
           path: out/releases/LostOdysseyRecomp-*.zip
           if-no-files-found: error
-      - name: Upload Windows assets to release
-        if: env.RELEASE_TAG != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $assets = @(Get-ChildItem out/releases/LostOdysseyRecomp-*.zip | ForEach-Object FullName)
-          if ($assets.Count -eq 0) { throw 'No Windows release assets to upload.' }
-          $json = gh release view $env:RELEASE_TAG --json assets
-          if ($LASTEXITCODE -ne 0) { throw 'Release is missing.' }
-          $release = $json | ConvertFrom-Json
-          $existing = @($release.assets | ForEach-Object { $_.name })
-          $missing = @($assets | Where-Object { $existing -notcontains [IO.Path]::GetFileName($_) })
-          if ($missing.Count -eq 0) {
-            Write-Host 'Windows assets already on the release; preserving its reviewed assets.'
-            exit 0
-          }
-          gh release upload $env:RELEASE_TAG @missing
-          if ($LASTEXITCODE -ne 0) { throw 'Windows release asset upload failed.' }
 
   release-linux:
     name: Linux Release
@@ -245,10 +270,13 @@ jobs:
     # Build the runtime AND all bundled dependencies against glibc 2.35.
     runs-on: ubuntu-22.04
     timeout-minutes: 360
-    permissions:
-      contents: write
     env:
-      FLATPAK_OUTPUT: ${{ github.workspace }}/out/flatpak/ci-${{ github.run_id }}-${{ github.run_attempt }}
+      CMAKE_BUILD_PARALLEL_LEVEL: '4'
+      CCACHE_DIR: ${{ github.workspace }}/out/ccache-linux
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: '1'
+      CCACHE_MAXSIZE: 3G
+      FLATPAK_OUTPUT: ${{ github.workspace }}/out/flatpak/ci-${{ github.run_id }}
     steps:
       - name: Validate requested tag
         if: env.RELEASE_TAG != ''
@@ -297,20 +325,36 @@ jobs:
             libdbus-1-dev \
             libudev-dev \
             file \
-            wget
+            wget \
+            ccache
           # Jammy's distribution CMake predates the project's 3.28 minimum.
           python -m pip install 'cmake==3.31.6' -r tools/release/requirements.txt
           python -m unittest discover -s tools/tests -p test_appimage_compat.py
+      - name: Cache Linux compiler objects
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: Linux-ccache-clang18-v1-${{ hashFiles('tools/release/install_appimage_toolchain.sh', 'CMakeLists.txt', '.gitmodules') }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            Linux-ccache-clang18-v1-${{ hashFiles('tools/release/install_appimage_toolchain.sh', 'CMakeLists.txt', '.gitmodules') }}-
+            Linux-ccache-clang18-v1-
+      - name: Configure compiler cache
+        run: |
+          {
+            echo "CMAKE_C_COMPILER_LAUNCHER=$(command -v ccache)"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=$(command -v ccache)"
+          } >> "$GITHUB_ENV"
+          ccache --zero-stats
       - name: Retrieve private build input
         uses: actions/checkout@v4
         with:
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
           repository: freefrank/LostOdysseyRecomp-build-inputs
           ref: 77f076e0e03966736cbf8919ce793bafadce82d9
           path: out/build-input
           sparse-checkout: |
             /default.xex
           sparse-checkout-cone-mode: false
-          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
           persist-credentials: false
       - name: Verify private build input
         env:
@@ -328,6 +372,11 @@ jobs:
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18
           cmake --build out/build/tools --target XenonRecomp XenonAnalyse xexdump
+      - name: Cache pinned NVIDIA DLSS SDK
+        uses: actions/cache@v4
+        with:
+          path: out/deps/nvidia-dlss
+          key: ${{ runner.os }}-dlss-374959484e79a640feaba44c93ac8cfb0a03f5b5-${{ hashFiles('tools/release/fetch_dlss_sdk.py') }}
       - name: Fetch NVIDIA DLSS SDK
         run: python3 tools/release/fetch_dlss_sdk.py --dest out/deps/nvidia-dlss
       - name: Generate game code
@@ -350,18 +399,21 @@ jobs:
             -DSDL_PIPEWIRE=ON -DSDL_PIPEWIRE_SHARED=ON
           grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE 1' out/build/linux/thirdparty/SDL/include-config-release/build_config/SDL_build_config.h
           grep -q '^#define SDL_AUDIO_DRIVER_PIPEWIRE_DYNAMIC ' out/build/linux/thirdparty/SDL/include-config-release/build_config/SDL_build_config.h
-          cmake --build out/build/linux --target LostOdysseyRecomp --parallel 2
+          cmake --build out/build/linux --target LostOdysseyRecomp --parallel "$(nproc)"
       # Packages carry no shader pack: the game downloads the one for its
       # renderer from the shader-packs prerelease. A version needs packs for
       # all three contracts of its runtime published first.
       - name: Check published shader packs
         run: |
-          cmake --build out/build/linux --target LoShaderPackTool --parallel 20
+          cmake --build out/build/linux --target LoShaderPackTool --parallel "$(nproc)"
           tool=$(find out/build/linux -name LoShaderPackTool -type f | head -n 1)
           if ! python3 tools/release/publish_shader_packs.py --check --tool "$tool" --image LostOdysseyRecompLib/private/image_disc1.bin; then
             if [ -n "$RELEASE_TAG" ]; then exit 1; fi
             echo "::warning::No published shader packs for this runtime; a version release would stop here."
           fi
+      - name: Compiler cache statistics
+        if: always() && env.CMAKE_CXX_COMPILER_LAUNCHER != ''
+        run: ccache --show-stats || true
       - name: Install linuxdeploy
         run: |
           mkdir -p out/tools/linuxdeploy
@@ -386,34 +438,6 @@ jobs:
           name: LostOdysseyRecomp-linux-x64
           path: out/releases/LostOdysseyRecomp-*.AppImage
           if-no-files-found: error
-      - name: Upload Linux assets to release
-        if: env.RELEASE_TAG != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          linux_assets=()
-          for file in out/releases/LostOdysseyRecomp-*.AppImage; do
-            if [ -f "$file" ]; then
-              linux_assets+=("$file")
-            fi
-          done
-          if [ ${#linux_assets[@]} -eq 0 ]; then
-            echo "No Linux release assets to upload." >&2
-            exit 1
-          fi
-          existing=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
-          missing=()
-          for file in "${linux_assets[@]}"; do
-            if ! grep -Fxq -- "$(basename "$file")" <<< "$existing"; then
-              missing+=("$file")
-            fi
-          done
-          if [ "${#missing[@]}" -eq 0 ]; then
-            echo "Linux assets already on the release; preserving its reviewed assets."
-            exit 0
-          fi
-          gh release upload "$RELEASE_TAG" "${missing[@]}"
       - name: Reuse published Flatpak asset when available
         id: flatpak-release
         env:
@@ -454,25 +478,150 @@ jobs:
             ${{ env.FLATPAK_OUTPUT }}/*.flatpak
             ${{ env.FLATPAK_OUTPUT }}/source.json
           if-no-files-found: error
-      - name: Upload Flatpak to release
-        if: steps.flatpak-release.outputs.build == 'true' && env.RELEASE_TAG != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "$RELEASE_TAG" "$FLATPAK_OUTPUT/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.flatpak"
 
+  release-android:
+    name: Android Release
+    needs: [create-draft-release]
+    # Same code generation and debug signing as android-apk.yml.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    env:
+      LO_BUILD_JOBS: '4'
+      CCACHE_MAXSIZE: 2G
+      CMAKE_BUILD_PARALLEL_LEVEL: '4'
+    steps:
+      - name: Set Android cache directory
+        run: echo "LO_ANDROID_CI_CACHE=$RUNNER_TEMP/lo-android-ci" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host toolchain for the recompiler tools
+        run: bash tools/release/install_appimage_toolchain.sh
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build file unzip wget ccache openjdk-17-jdk-headless
+          python -m pip install 'cmake==3.31.6'
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+      - name: Cache Android SDK and NDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/android-sdk
+          key: android-sdk-${{ runner.os }}-cmdline11076708-api35-build35-ndk28.2.13676358-cmake3.22.1-v1
+      - name: Cache Android DXC
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/android-dxc
+          key: android-dxc-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/build-dxc.sh', 'tools/android/ci_build.sh') }}
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.LO_ANDROID_CI_CACHE }}/gradle/caches
+            ${{ env.LO_ANDROID_CI_CACHE }}/gradle/wrapper
+          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: android-gradle-${{ runner.os }}-
+      - name: Cache Android compiler objects
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/ccache
+          key: android-ccache-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/*.sh', 'CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
+          restore-keys: |
+            android-ccache-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/*.sh', 'CMakeLists.txt', 'cmake/**') }}-
+            android-ccache-${{ runner.os }}-ndk28.2.13676358-
+      - name: Retrieve private build input
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 2ba529b72c68ae2ee01903d24f7eac55cbb900df
+          path: out/build-input
+          sparse-checkout: |
+            /default.xex
+            /android/libdxcompiler.so
+            /android/debug.keystore
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify private build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Apply dependency patches
+        run: |
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+      - name: Build recompiler tools
+        run: |
+          cmake -S tools/xexdump -B out/build/tools -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18
+          cmake --build out/build/tools --target XenonRecomp XenonAnalyse xexdump
+      - name: Generate game code
+        run: |
+          out/build/tools/xexdump LostOdysseyRecompLib/private/disc1/default.xex LostOdysseyRecompLib/private/image_disc1.bin
+          python tools/ppc_codegen.py generate --executable out/build/tools/XenonRecomp/XenonRecomp/XenonRecomp
+      - name: Build the APK
+        run: bash tools/android/ci_build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-android-arm64
+          path: out/apk/*.apk
+          if-no-files-found: error
+
+  # The build jobs only produce run artifacts. Writing to the GitHub release
+  # happens here, after all platforms have built.
   publish-release:
     name: Publish complete release
-    needs: [release-windows, release-linux]
-    if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: write
+    needs: [release-windows, release-linux, release-android]
+    if: inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
+      - name: Download installable packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: LostOdysseyRecomp-*
+          path: dist
+          merge-multiple: true
+      - name: Upload installable packages to the release
+        run: |
+          set -euo pipefail
+          packages=(
+            "dist/LostOdysseyRecomp-windows-x64-${RELEASE_TAG}.zip"
+            "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.AppImage"
+            "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.flatpak"
+            "dist/LostOdysseyRecomp-android-arm64-${RELEASE_TAG}.apk"
+          )
+          existing=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+          missing=()
+          for file in "${packages[@]}"; do
+            name=$(basename "$file")
+            if grep -Fxq -- "$name" <<< "$existing"; then
+              echo "$name is already on the release; preserving the reviewed asset."
+            elif [ -f "$file" ]; then
+              missing+=("$file")
+            else
+              echo "$name is neither on the release nor among the run's artifacts." >&2
+              exit 1
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            ls -l "${missing[@]}"
+            gh release upload "$RELEASE_TAG" "${missing[@]}"
+          fi
       - name: Verify package set and publish draft
+        id: publish
         run: |
           gh release view "$RELEASE_TAG" --json assets,isDraft > release.json
           python3 - <<'PY'
@@ -483,6 +632,7 @@ jobs:
               f'LostOdysseyRecomp-windows-x64-{tag}.zip',
               f'LostOdysseyRecomp-linux-x64-{tag}.AppImage',
               f'LostOdysseyRecomp-linux-x64-{tag}.flatpak',
+              f'LostOdysseyRecomp-android-arm64-{tag}.apk',
           }
           names = {asset['name'] for asset in assets}
           # The macOS disk image is built on a Mac and uploaded separately.
@@ -495,3 +645,8 @@ jobs:
             exit 0
           fi
           gh release edit "$RELEASE_TAG" --draft=false --latest
+          echo 'published=true' >> "$GITHUB_OUTPUT"
+      # Publishing with GITHUB_TOKEN does not emit release:published workflows.
+      - name: Announce published release on Discord
+        if: steps.publish.outputs.published == 'true'
+        run: gh workflow run discord-notify.yml -f release_tag="$RELEASE_TAG" -f dry_run=false

@@ -1,0 +1,104 @@
+name: Runtime review regressions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - '.github/workflows/review-regressions.yml'
+      - 'LostOdysseyRecomp/apu/audio*'
+      - 'LostOdysseyRecomp/gpu/command_processor.*'
+      - 'LostOdysseyRecomp/gpu/indirect_buffer_guard.h'
+      - 'LostOdysseyRecomp/gpu/shader/cpx_decode.h'
+      - 'LostOdysseyRecomp/gpu/renderer.cpp'
+      - 'LostOdysseyRecomp/gpu/shader/binary_cache.h'
+      - 'LostOdysseyRecomp/gpu/shader/cache.h'
+      - 'LostOdysseyRecomp/gpu/shader/shader_store.h'
+      - 'LostOdysseyRecomp/gpu/temporal_*.h'
+      - 'LostOdysseyRecomp/gpu/texture*.h'
+      - 'LostOdysseyRecomp/kernel/imports.cpp'
+      - 'LostOdysseyRecomp/kernel/memory.*'
+      - 'LostOdysseyRecomp/kernel/io/file_system.cpp'
+      - 'LostOdysseyRecomp/main.cpp'
+      - 'LostOdysseyRecomp/modding/cpx_pack.h'
+      - 'LostOdysseyRecomp/modding/model_slot.h'
+      - 'LostOdysseyRecomp/os/platform.h'
+      - 'LostOdysseyRecomp/os/user_paths.h'
+      - 'LostOdysseyRecomp/settings/config.cpp'
+      - 'LostOdysseyRecomp/updater/**'
+      - 'packaging/linux/**'
+      - 'tools/appimage_compat.py'
+      - 'tools/capture_analysis/**'
+      - 'tools/package_appimage.py'
+      - 'tools/package_flatpak.py'
+      - 'tools/portable_shader_pack_payload.py'
+      - 'tools/release/version.py'
+      - 'tools/shader_analysis/**'
+      - 'tools/tests/**'
+  pull_request:
+    paths:
+      - '.github/workflows/review-regressions.yml'
+      - 'LostOdysseyRecomp/apu/audio*'
+      - 'LostOdysseyRecomp/gpu/command_processor.*'
+      - 'LostOdysseyRecomp/gpu/indirect_buffer_guard.h'
+      - 'LostOdysseyRecomp/gpu/shader/cpx_decode.h'
+      - 'LostOdysseyRecomp/gpu/renderer.cpp'
+      - 'LostOdysseyRecomp/gpu/shader/binary_cache.h'
+      - 'LostOdysseyRecomp/gpu/shader/cache.h'
+      - 'LostOdysseyRecomp/gpu/shader/shader_store.h'
+      - 'LostOdysseyRecomp/gpu/temporal_*.h'
+      - 'LostOdysseyRecomp/gpu/texture*.h'
+      - 'LostOdysseyRecomp/kernel/imports.cpp'
+      - 'LostOdysseyRecomp/kernel/memory.*'
+      - 'LostOdysseyRecomp/kernel/io/file_system.cpp'
+      - 'LostOdysseyRecomp/main.cpp'
+      - 'LostOdysseyRecomp/modding/cpx_pack.h'
+      - 'LostOdysseyRecomp/modding/model_slot.h'
+      - 'LostOdysseyRecomp/os/platform.h'
+      - 'LostOdysseyRecomp/os/user_paths.h'
+      - 'LostOdysseyRecomp/settings/config.cpp'
+      - 'LostOdysseyRecomp/updater/**'
+      - 'packaging/linux/**'
+      - 'tools/appimage_compat.py'
+      - 'tools/capture_analysis/**'
+      - 'tools/package_appimage.py'
+      - 'tools/package_flatpak.py'
+      - 'tools/portable_shader_pack_payload.py'
+      - 'tools/release/version.py'
+      - 'tools/shader_analysis/**'
+      - 'tools/tests/**'
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize fixture dependencies
+        run: |
+          git submodule update --init --depth 1 tools/XenonRecomp thirdparty/SDL
+          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/xxHash thirdparty/tomlplusplus
+          SUDO=$(command -v sudo || true)
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends cmake g++ python3
+      - name: Configure
+        run: cmake -S tools/tests/review_regressions -B build/review-regressions -DCMAKE_BUILD_TYPE=Debug -DLO_REVIEW_SANITIZE=ON
+      - name: Build
+        run: cmake --build build/review-regressions --parallel 4
+      - name: Test
+        run: ctest --test-dir build/review-regressions --output-on-failure --parallel 4
+      - name: Preserve regression logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-regression-logs
+          path: |
+            build/review-regressions/Testing/Temporary/LastTest.log
+            build/review-regressions/fixtures/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
