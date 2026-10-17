@@ -4901,7 +4901,19 @@ void main()
                         motionReplay->ReleaseDepthAfterGpuCompletion(texture->texture.get());
                     motionReplay->ReleaseCompletedThrough(s.motionSerial);
                 }
+                auto eraseAttachmentFramebuffers = [&](const RenderTexture* attachment) {
+                    if (!attachment) return;
+                    lastFramebuffer = nullptr;
+                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
+                        if (fb->first.first == attachment || fb->first.second == attachment)
+                            fb = framebuffers.erase(fb);
+                        else
+                            ++fb;
+                };
                 for (const auto& texture : s.retiredTextures) {
+                    // The child dies with its parent even when the parent's image is pooled.
+                    if (texture->hdrSidecar)
+                        eraseAttachmentFramebuffers(texture->hdrSidecar->texture.get());
                     // A pooled image keeps its framebuffers for the next use.
                     if (ReturnPromotionImage(*texture)) continue;
                     if (nativeVulkan && texture && texture->texture && vk_object_trace::Permit()) {
@@ -4910,12 +4922,7 @@ void main()
                             i, vk_object_trace::Id(texture->allocationSerial), vk_object_trace::Id(image.vk),
                             vk_object_trace::Id(image.imageView), vk_object_trace::Id(s.temporalSerial), vk_object_trace::Id(s.srSubmissionSerial));
                     }
-                    lastFramebuffer = nullptr;
-                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
-                        if (fb->first.first == texture->texture.get() || fb->first.second == texture->texture.get())
-                            fb = framebuffers.erase(fb);
-                        else
-                            ++fb;
+                    eraseAttachmentFramebuffers(texture->texture.get());
                 }
                 for (auto& cache : s.textureSetCache) cache.Clear();
                 s.retiredTextures.clear();
@@ -8788,7 +8795,8 @@ void main()
                 if (dred::Enabled()) tex->texture->setName(fmt::format("guest {:08x}", tex->guestAddress));
 
                 texBytes += upload.size();
-                uint64_t offset = Upload(upload.data(), upload.size(), 512);
+                const size_t keepFree = upload.size() + kUploadHeadroom <= kUploadRingSize ? kUploadHeadroom : 0;
+                uint64_t offset = Upload(upload.data(), upload.size(), 512, keepFree);
                 if (offset == UINT64_MAX)
                     return nullptr;
                 Transition(*tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
@@ -11246,6 +11254,7 @@ void main()
                     set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1], textureSwapSlots);
                     set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2], textureSwapSlots);
                 }
+                const uint64_t drawUploadGeneration = Gpu().uploadGeneration;
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
@@ -11425,6 +11434,15 @@ void main()
                         }
                     }
                     preparedIndexBuffer = uploadRing; // the ring of the slot now holding the data
+                }
+
+                // A rare large upload can change slots after acquiring this draw's sets.
+                if (Gpu().uploadGeneration != drawUploadGeneration) {
+                    ++drops.upload;
+                    static bool warned = false;
+                    if (!std::exchange(warned, true))
+                        LOG_WARNING("renderer: draw dropped after uploads changed GPU slots; descriptor sets belong to the previous slot");
+                    return;
                 }
 
                 // Record.
