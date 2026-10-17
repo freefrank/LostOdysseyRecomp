@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <optional>
 #include <utility>
 
@@ -49,6 +50,8 @@ void Client::Start(ClientOptions options, LogCallback log)
     if (worker_.joinable()) return;
     options_ = std::move(options);
     log_ = log;
+    LogFailure(log_, options_.dryRun ? "client started (dry run)" :
+        (Enabled() ? "client started (enabled)" : "client started (disabled)"));
     stopping_.store(false, std::memory_order_relaxed);
     // Kept across reconnects and On/Off toggles for the entire runtime session.
     if (!startTime_)
@@ -111,6 +114,18 @@ void Client::Run()
 {
     uint64_t nonce = 0;
     const auto pid = ProcessId();
+    // Repeated absence, rejections, or reconnects must not fill player logs.
+    // The worker owns this bounded cache; the engine never pays for diagnostics.
+    std::map<std::string, UpdatePolicy::Clock::time_point> logged;
+    auto notice = [&](const std::string& key, const std::string& message) {
+        const auto now = UpdatePolicy::Clock::now();
+        const auto previous = logged.find(key);
+        if (previous != logged.end() && now - previous->second < options_.diagnosticInterval) return;
+        if (previous == logged.end() && logged.size() >= 64) logged.erase(logged.begin());
+        logged[key] = now;
+        LogFailure(log_, message.c_str());
+    };
+    bool receivedSnapshot = false;
     while (!stopping_.load(std::memory_order_relaxed))
     {
         {
@@ -121,7 +136,18 @@ void Client::Run()
         }
         if (!Active()) continue;
         IpcTransport transport;
-        if (!options_.dryRun && (!ValidApplicationId(options_.applicationId) || !transport.Connect(options_.endpoints)))
+        auto connectResult = [&](const std::string& endpoint, uint32_t error) {
+            const auto key = error ? "connect-error-" + std::to_string(error) : "connected";
+            notice(key, std::string(error ? "connect failed" : "connected") + " endpoint=" + endpoint +
+                " error=" + std::to_string(error));
+        };
+        if (!options_.dryRun && !ValidApplicationId(options_.applicationId))
+        {
+            notice("invalid-id", "connect skipped: invalid application ID");
+            if (!WaitToRetry()) break;
+            continue;
+        }
+        if (!options_.dryRun && !transport.Connect(options_.endpoints, connectResult))
         {
             if (!WaitToRetry()) break;
             continue;
@@ -132,25 +158,34 @@ void Client::Run()
         };
         if (!options_.dryRun && !send(Opcode::Handshake, BuildHandshake(options_.applicationId)))
         {
+            notice("handshake-write", "disconnected reason=handshake write failed error=" + std::to_string(transport.LastError()));
             transport.Close();
             if (!WaitToRetry()) break;
             continue;
         }
+        if (!options_.dryRun) notice("handshake", "handshake sent");
         const auto handshakeDeadline = UpdatePolicy::Clock::now() + options_.handshakeTimeout;
         bool ready = options_.dryRun;
         bool image = true;
         bool sentActivity = false;
+        bool acceptedActivity = false;
         uint64_t activityNonce = 0;
         UpdatePolicy policy(options_.regularUpdate, options_.meaningfulUpdate);
         FrameDecoder decoder;
         std::array<uint8_t, 4096> incoming{};
         bool healthy = true;
+        std::string disconnectReason;
         while (Active() && healthy)
         {
             std::optional<Snapshot> snapshot;
             {
                 std::lock_guard lock(mutex_);
                 if (hasSnapshot_) snapshot = latest_;
+            }
+            if (snapshot && !receivedSnapshot)
+            {
+                notice("snapshot", "first game snapshot received");
+                receivedSnapshot = true;
             }
             const auto now = UpdatePolicy::Clock::now();
             if (ready && snapshot && policy.Due(*snapshot, now))
@@ -159,7 +194,12 @@ void Client::Run()
                 activityNonce = ++nonce;
                 const auto command = BuildSetActivity(pid, activity, activityNonce);
                 if (options_.dryRun) LogActivity(log_, command);
-                else if (!send(Opcode::Frame, command)) break;
+                else if (!send(Opcode::Frame, command))
+                {
+                    disconnectReason = "activity write failed error=" + std::to_string(transport.LastError());
+                    break;
+                }
+                if (!sentActivity && !options_.dryRun) notice("activity-sent", "first activity sent");
                 policy.Sent(*snapshot, now);
                 sentActivity = true;
             }
@@ -169,49 +209,63 @@ void Client::Run()
                 changed_.wait_for(lock, options_.ioTimeout, [this] { return !Active(); });
                 continue;
             }
-            if (!ready && now >= handshakeDeadline) break;
+            if (!ready && now >= handshakeDeadline) { disconnectReason = "READY timeout"; break; }
+            if (ready && !snapshot && now >= handshakeDeadline)
+                notice("no-snapshot", "READY but waiting for a game snapshot");
             const auto count = transport.Read(incoming, options_.ioTimeout);
-            if (count < 0 || (count > 0 && !decoder.Append(std::span(incoming.data(), size_t(count)))))
-                break;
+            if (count < 0) { disconnectReason = "pipe read failed or closed error=" + std::to_string(transport.LastError()); break; }
+            if (count > 0 && !decoder.Append(std::span(incoming.data(), size_t(count))))
+            { disconnectReason = "invalid frame"; break; }
             while (auto frame = decoder.Pop())
             {
                 if (frame->opcode == Opcode::Close)
                 {
+                    disconnectReason = "Discord CLOSE " + DescribeError(frame->payload);
                     healthy = false;
                     break;
                 }
                 if (frame->opcode == Opcode::Ping)
                 {
                     healthy = send(Opcode::Pong, frame->payload);
+                    if (!healthy) disconnectReason = "PONG write failed error=" + std::to_string(transport.LastError());
                     if (!healthy) break;
                 }
                 else if (frame->opcode == Opcode::Frame)
                 {
                     const auto response = ParseResponse(frame->payload);
-                    if (response.kind == Reply::Invalid) { healthy = false; break; }
+                    if (response.kind == Reply::Invalid) { disconnectReason = "invalid response JSON"; healthy = false; break; }
                     if (response.kind == Reply::Ready && !ready)
                     {
                         ready = true;
+                        notice("ready", "READY received");
                         policy.Reset();
                     }
                     if (response.kind == Reply::Error)
                     {
+                        const auto error = DescribeError(frame->payload);
+                        notice("error-" + error, "Discord ERROR " + error);
                         // A missing uploaded logo must not suppress text presence.
                         if (ready && response.activity && image && response.invalidAsset && response.nonce == activityNonce)
                         {
                             image = false;
                             policy.Reset();
                         }
-                        else { healthy = false; break; }
+                        else { disconnectReason = "Discord rejected request " + error; healthy = false; break; }
+                    }
+                    else if (ready && sentActivity && !acceptedActivity && response.activity && response.nonce == activityNonce)
+                    {
+                        acceptedActivity = true;
+                        notice("activity-accepted", "activity accepted");
                     }
                 }
                 else if (frame->opcode != Opcode::Pong)
                 {
+                    disconnectReason = "unexpected opcode";
                     healthy = false;
                     break;
                 }
             }
-            if (!decoder.IsValid()) healthy = false;
+            if (!decoder.IsValid()) { disconnectReason = "invalid frame"; healthy = false; }
         }
 
         // Best effort, bounded, and entirely off the engine thread.
@@ -219,8 +273,14 @@ void Client::Run()
         {
             const auto clear = BuildClearActivity(pid, ++nonce);
             if (options_.dryRun) LogActivity(log_, clear);
-            else if (transport.IsOpen()) send(Opcode::Frame, clear);
+            else if (transport.IsOpen())
+            {
+                if (send(Opcode::Frame, clear)) notice("clear", "activity clear sent");
+                else notice("clear-failed", "activity clear failed error=" + std::to_string(transport.LastError()));
+            }
         }
+        if (disconnectReason.empty()) disconnectReason = stopping_.load(std::memory_order_relaxed) ? "shutdown" : "setting disabled";
+        notice("disconnect-" + disconnectReason, "disconnected reason=" + disconnectReason);
         transport.Close();
         if (Active() && !WaitToRetry()) break;
     }

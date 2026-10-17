@@ -51,6 +51,8 @@ struct Response
 };
 // Reads only protocol metadata; user data in READY is neither retained nor logged.
 Response ParseResponse(std::string_view payload);
+// Log only bounded protocol error fields, never READY user data.
+std::string DescribeError(std::string_view payload);
 
 class UpdatePolicy
 {

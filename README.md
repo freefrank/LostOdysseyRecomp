@@ -99,7 +99,7 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | Input | Controllers, keyboard and rumble; touch controls on Android. |
 | Mods | Windows only: texture, model, menu and font replacements, cutscene videos, text translations and language packs (which can add letters the game's fonts lack), and PlayStation button prompts, installed by hand or with Mod Organizer 2 (its plugins are in the Windows ZIP). Other platforms may load mods but are not supported. See the [modding guide](docs/wiki/Modding.md). Ready-made mods, such as the 4x HD texture pack, are shared in the **#mods** forum on [Discord](https://discord.gg/z2yPct6z2w). |
 | Achievements | The game's 36 Xbox 360 achievements, with an Xbox 360-style notification and sound when you unlock one. **Settings → System → Achievements** lists them with your unlock dates and turns the notification on, silent or off. An `achievement.wav` next to `settings.ini` replaces the sound. |
-| Discord status | Windows, Linux and macOS: Discord Rich Presence shows your location, disc and activity. **Settings → System → Discord status** is on by default; changes take effect immediately. |
+| Discord status | Windows, Linux and macOS: Discord Rich Presence shows your location, disc and activity. **Settings → System → Discord status** is on by default; changes take effect immediately. If status is missing, check the runtime log for connection and activity diagnostics. |
 | Debug menu | Render captures, Save Anywhere, encounter switches, teleport, fast-forward and cheats. See [Debug menu](#debug-menu). |
 
 ## Controls

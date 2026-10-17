@@ -168,6 +168,21 @@ Response ParseResponse(std::string_view payload)
     return result;
 }
 
+std::string DescribeError(std::string_view payload)
+{
+    const auto json = nlohmann::json::parse(payload, nullptr, false);
+    if (!json.is_object()) return "invalid JSON";
+    const auto data = json.find("data");
+    const auto& fields = data != json.end() && data->is_object() ? *data : json;
+    nlohmann::json safe = nlohmann::json::object();
+    const auto code = fields.find("code");
+    if (code != fields.end() && code->is_number_integer()) safe["code"] = *code;
+    const auto message = fields.find("message");
+    if (message != fields.end() && message->is_string())
+        safe["message"] = DisplayText(message->get_ref<const std::string&>());
+    return safe.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+}
+
 UpdatePolicy::UpdatePolicy(std::chrono::milliseconds regular, std::chrono::milliseconds meaningful)
     : regular_(regular), meaningful_(meaningful) {}
 

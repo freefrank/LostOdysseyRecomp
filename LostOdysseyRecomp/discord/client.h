@@ -26,6 +26,7 @@ struct ClientOptions
     std::chrono::milliseconds meaningfulUpdate{5000};
     std::chrono::milliseconds handshakeTimeout{5000};
     std::chrono::milliseconds ioTimeout{200};
+    std::chrono::milliseconds diagnosticInterval{300000};
     bool dryRun = false;
 };
 

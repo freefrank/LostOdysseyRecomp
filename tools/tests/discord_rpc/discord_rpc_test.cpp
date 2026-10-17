@@ -514,10 +514,46 @@ void Retry()
 
 std::mutex logMutex;
 std::vector<Json> logs;
+std::vector<std::string> diagnostics;
 void CaptureLog(const char* value)
 {
     std::lock_guard lock(logMutex);
-    logs.push_back(Json::parse(value));
+    if (*value == '{') logs.push_back(Json::parse(value));
+    else diagnostics.emplace_back(value);
+}
+
+size_t DiagnosticCount(std::string_view text)
+{
+    std::lock_guard lock(logMutex);
+    return size_t(std::count_if(diagnostics.begin(), diagnostics.end(), [&](const auto& line) {
+        return line.find(text) != std::string::npos;
+    }));
+}
+
+void Diagnostics()
+{
+    const auto endpoint = PrivateEndpoint();
+    auto options = Options(endpoint);
+    options.reconnect = 20ms;
+    Client client;
+    client.Start(options, CaptureLog);
+    Check(Wait([] { return DiagnosticCount("connect failed endpoint=") == 1; }), "absent endpoint error is logged");
+    std::this_thread::sleep_for(100ms);
+    Check(DiagnosticCount("connect failed endpoint=") == 1, "repeated connect error is rate limited");
+    FakeServer server(endpoint, Behavior::AssetError);
+    Check(Wait([] { return DiagnosticCount("READY but waiting for a game snapshot") == 1; }), "missing feed is diagnosable");
+    Check(Wait([&] { client.Publish({1, "Uhra", Mode::Exploring}); return DiagnosticCount("activity accepted") == 1; }),
+        "late endpoint connects and activity is acknowledged");
+    client.Stop();
+    Check(DiagnosticCount("connected endpoint=") == 1, "successful endpoint is logged");
+    Check(DiagnosticCount("handshake sent") == 1 && DiagnosticCount("READY received") == 1, "handshake lifecycle is logged");
+    Check(DiagnosticCount("first activity sent") == 1 && DiagnosticCount("activity clear sent") == 1, "send and clear are logged");
+    Check(DiagnosticCount("Discord ERROR") == 1 && DiagnosticCount("Invalid large_image asset") == 1, "error code/message is logged");
+    Check(DiagnosticCount("disconnected reason=shutdown") == 1, "disconnect reason is logged");
+    Check(DiagnosticCount("not retained") == 0, "READY user data is never logged");
+    const auto safe = DescribeError(R"({"evt":"ERROR","data":{"code":4000,"message":"bad\nasset","user":{"username":"private"}}})");
+    Check(safe.find("4000") != std::string::npos && safe.find("badasset") != std::string::npos &&
+        safe.find("private") == std::string::npos, "diagnostics retain bounded error fields without user data or controls");
 }
 
 void DryRun()
@@ -552,6 +588,7 @@ int main(int argc, char** argv)
         else if (scenario == "unresponsive") Unresponsive();
         else if (scenario == "retry") Retry();
         else if (scenario == "dry-run") DryRun();
+        else if (scenario == "diagnostics") Diagnostics();
         else throw std::runtime_error("unknown scenario");
         std::printf("PASS %s\n", argv[1]);
         return 0;
