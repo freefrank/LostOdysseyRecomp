@@ -1,4 +1,5 @@
 #include <os/log_collection.h>
+#include <discord/presence.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -201,6 +202,9 @@ static int RunGuest(uint32_t entry)
     hid::SetPromptStyle(settings::GetConfig().buttonPrompts);
     hid::SetInputMaps(settings::GetConfig().controllerMap, settings::GetConfig().keyboardMap);
 
+    discord_rpc::SetEnabled(settings::GetConfig().discordStatus);
+    discord_rpc::Initialize([](const char* message) { LOG_NOTICE("discord: {}", message); });
+
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
     os::scheduling::PreferPerformanceCores(true);
@@ -216,7 +220,7 @@ static int RunGuest(uint32_t entry)
     // already stopped, still avoid global teardown while guest threads survive.
     os::shaderlog::CloseForExit();
     std::fflush(nullptr);
-    std::_Exit(EXIT_SUCCESS);
+    (discord_rpc::Shutdown(), std::_Exit(EXIT_SUCCESS));
 }
 
 #if LO_PLATFORM_ANDROID
@@ -670,7 +674,7 @@ int main(int argc, char* argv[])
         const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
-        (os::shaderlog::CloseForExit(), std::_Exit(prepared ? 0 : 1));
+        (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(prepared ? 0 : 1));
     }
 
     // macOS: AppKit accepts window work only on the process main thread, so the

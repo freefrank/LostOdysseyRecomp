@@ -42,6 +42,8 @@ on:
       - 'LostOdysseyRecomp/settings/config.cpp'
       - 'LostOdysseyRecomp/settings/encounter_rate.h'
       - 'LostOdysseyRecomp/debug/**'
+      - 'LostOdysseyRecomp/discord/**'
+      - 'tools/tests/discord_rpc/**'
       - 'tools/tests/debug_overlay_test.cpp'
       - 'tools/tests/debug_menu_interaction_test.cpp'
       - 'tools/tests/temporal_frame_inputs_test.cpp'
@@ -88,6 +90,8 @@ on:
       - 'LostOdysseyRecomp/settings/config.cpp'
       - 'LostOdysseyRecomp/settings/encounter_rate.h'
       - 'LostOdysseyRecomp/debug/**'
+      - 'LostOdysseyRecomp/discord/**'
+      - 'tools/tests/discord_rpc/**'
       - 'tools/tests/debug_overlay_test.cpp'
       - 'tools/tests/debug_menu_interaction_test.cpp'
       - 'tools/tests/temporal_frame_inputs_test.cpp'
@@ -112,6 +116,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Fetch the existing JSON header for Discord IPC contracts
+        run: |
+          git submodule update --init tools/XenonRecomp
+          git -C tools/XenonRecomp submodule update --init thirdparty/tomlplusplus
       - name: Install build tools
         if: runner.os == 'Linux'
         run: |

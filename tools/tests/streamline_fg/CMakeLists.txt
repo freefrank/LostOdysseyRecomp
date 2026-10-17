@@ -49,3 +49,6 @@ lo_fg_cpu_contract(LoFgP1PlanRegression ../frame_plan_test.cpp streamline_p1_pla
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../LostOdysseyRecomp/gpu/upscaling_plan.cpp")
 lo_fg_cpu_contract(LoFgSrLifetimeRegression ../native_dlss_submission_lifetime_test.cpp streamline_sr_lifetime)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../settings_menu" menu-contracts)
+
+# Desktop IPC contracts use a fake Discord server; no game data or client.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../discord_rpc" discord-contracts)

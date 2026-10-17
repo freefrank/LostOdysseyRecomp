@@ -208,6 +208,13 @@ debug_menu::MapInfo debug_menu::GetMapInfo() {
     return snapshot;
 }
 
+bool debug_menu::TryGetMapInfo(MapInfo& out) {
+    std::unique_lock lock(mutex, std::try_to_lock);
+    if (!lock.owns_lock()) return false;
+    out = std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2) ? MapInfo{} : snapshot;
+    return true;
+}
+
 void debug_menu::PollSceneLoads(uint8_t* base) {
     // The loader's request slots (see patches/encounter_defer.cpp): phase at +0,
     // FString name at +4, ID at +16. Slot 0 is the map jump, slot 1 the battle.

@@ -187,6 +187,9 @@ std::map<uint32_t, uint32_t> gByMovie;                  // guest movie object ->
 std::vector<Retired> gRetired;
 uint32_t gNextId = 0;
 std::condition_variable gRetiredWake;
+#if !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__NX__)
+std::atomic<uint32_t> gGuestMovie{0};
+#endif
 
 std::shared_ptr<Session> Find(uint32_t id) {
     std::lock_guard lock(gMutex);
@@ -252,6 +255,9 @@ double NowMs() {
 }
 
 void StartReplacement(uint32_t guestMovie, std::string_view name) {
+#if !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__NX__)
+    gGuestMovie.store(guestMovie, std::memory_order_relaxed);
+#endif
     {
         std::lock_guard lock(gMutex);
         RetireLocked(guestMovie, NowMs());
@@ -267,9 +273,19 @@ void StartReplacement(uint32_t guestMovie, std::string_view name) {
 }
 
 void StopReplacement(uint32_t guestMovie) {
+#if !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__NX__)
+    uint32_t active = guestMovie;
+    gGuestMovie.compare_exchange_strong(active, 0u, std::memory_order_relaxed);
+#endif
     std::lock_guard lock(gMutex);
     RetireLocked(guestMovie, NowMs());
 }
+
+#if !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__NX__)
+bool GuestPlaying() {
+    return gGuestMovie.load(std::memory_order_relaxed) != 0;
+}
+#endif
 
 uint32_t ReplacementSession(uint32_t guestMovie) {
     std::lock_guard lock(gMutex);

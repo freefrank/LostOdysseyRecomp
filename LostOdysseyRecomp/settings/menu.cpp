@@ -23,6 +23,9 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+#include <discord/presence.h>
+#endif
 #if LO_PLATFORM_ANDROID
 #include <SDL3/SDL_system.h>
 #endif
@@ -1115,6 +1118,14 @@ std::wstring DlssNotice()
         AppendSentence(text, BackendPendingSentence(running.device.backend));
     return text;
 }
+bool SystemRowHidden(int r)
+{
+#if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+    return r == SystemDiscordStatusRow;
+#else
+    return false;
+#endif
+}
 bool GraphicsRowHidden(int r)
 {
     // A page entry row shows with the setting it belongs to.
@@ -1196,7 +1207,7 @@ std::wstring FgNotice()
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
 // Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
-static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuVisibleRows);
+static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuSystemVisibleRows);
 // Moves graphics focus off a hidden row to the next visible one.
 void SkipHiddenGraphicsRow()
 {
@@ -1594,6 +1605,8 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages),
                    GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
+        addChoices(L"Discord status", L"Discord 狀態", onOff(), edit.discordStatus ? 0 : 1);
+        next.rows.back().hidden = SystemRowHidden(SystemDiscordStatusRow);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
         if (achievementSummary.empty()) RefreshAchievementSummary();
         addAction(L"Achievements", L"成就", achievementSummary.c_str());
@@ -1622,9 +1635,10 @@ void Publish(uint8_t *base, uint32_t config)
             ++visibleCount;
         }
         int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
-        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
+        const int visibleRows = VisibleRowCount(tab, !next.pageTitle.empty());
+        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - visibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
-        if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
+        if (visibleFocus >= scroll + visibleRows) scroll = visibleFocus - visibleRows + 1;
         next.scroll = scroll;
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: confirm     B: back",
@@ -1642,6 +1656,9 @@ void Publish(uint8_t *base, uint32_t config)
                  L"來自 mods 資料夾的語言包。語音等其餘內容沿用其基礎語言。重新啟動後生效。")
             : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                  L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+    if (tab == 3 && row == SystemDiscordStatusRow)
+        next.help = Tr(L"Shows your location and activity on Discord. Applies and saves immediately.",
+                       L"在 Discord 顯示目前地點與活動。立即套用並儲存。");
     if (tab == 3 && row == SystemDebugLogRow)
         next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
                        L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
@@ -2354,11 +2371,12 @@ void PointerClick(float x, float y, bool reverse)
         if (!listPage) mouseTab = int(x - 386) / MenuTabWidth;
         return;
     }
-    constexpr int height = 43;
+    const int height = MenuRowHeight(snapshot.tab, listPage);
     constexpr int top = 150;
     const int slot = int(y - top) / height;
     const int right = snapshot.reorder ? ModsMoveLeft + 2 * ModsMoveWidth + ModsMoveGap : 1026;
-    if (x < 38 || x >= right || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
+    if (x < 38 || x >= right || y < top || slot < 0 || slot >= VisibleRowCount(snapshot.tab, listPage) ||
+        (top + (slot + 1) * height) > 640)
         return;
     // Translate the clicked slot through hidden rows and the scroll window
     // back to a logical row index.
@@ -3476,7 +3494,7 @@ PPC_FUNC(sub_822F19B0)
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return (tab == 2 && GraphicsRowHidden(r)) || TitleModeHidden(tab, r);
+        return (tab == 2 && GraphicsRowHidden(r)) || (tab == 3 && SystemRowHidden(r)) || TitleModeHidden(tab, r);
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -3797,6 +3815,19 @@ PPC_FUNC(sub_822F19B0)
             }
             if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+            if (row == SystemDiscordStatusRow)
+            {
+                Config saved = GetConfig();
+                saved.discordStatus = !edit.discordStatus;
+                if (SaveConfig(saved))
+                {
+                    edit.discordStatus = saved.discordStatus;
+                    discord_rpc::SetEnabled(edit.discordStatus);
+                }
+                else status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            }
+#endif
             if (row == SystemDebugLogRow)
                 edit.debugLog = !edit.debugLog;
         }
@@ -3891,6 +3922,7 @@ PPC_FUNC(sub_822F19B0)
             graphics.gameLanguage = edit.gameLanguage;
             graphics.gameLanguagePack = edit.gameLanguagePack;
             graphics.automaticUpdates = edit.automaticUpdates;
+            graphics.discordStatus = edit.discordStatus;
             graphics.debugLog = edit.debugLog;
             edit = graphics;
             if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
@@ -3913,6 +3945,7 @@ PPC_FUNC(sub_822F19B0)
         languages.gameLanguage = edit.gameLanguage;
         languages.gameLanguagePack = edit.gameLanguagePack;
         languages.automaticUpdates = edit.automaticUpdates;
+        languages.discordStatus = edit.discordStatus;
         languages.debugLog = edit.debugLog;
         const Config before = GetConfig();
         if (restart::Required(before, languages))
@@ -4128,7 +4161,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         panels.assets = current.assets;
         panels.backdropOnly = true;
         eased = RasterizeMenu(panels, width, height, pixels) &&
-                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height));
+                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height, current.tab, !current.pageTitle.empty()));
     }
     else if (!opened && cachedWidth == width && cachedHeight == height &&
              cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)

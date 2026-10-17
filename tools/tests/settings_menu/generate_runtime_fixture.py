@@ -68,6 +68,10 @@ void SetInputMaps(const input_map::ControllerMap&, const input_map::KeyboardMap&
 uint32_t PressedSources() { return 0; }
 std::string KeyName(uint32_t scancode) { return "#" + std::to_string(scancode); }
 }
+namespace discord_rpc {
+unsigned changes=0; bool enabled=true;
+void SetEnabled(bool value){++changes;enabled=value;}
+}
 // System -> Shader bundle records nothing here.
 namespace updater::shader_pack { bool RequestRedownload(){return true;} }
 // System -> Shader preparation records nothing here.
@@ -177,6 +181,20 @@ int main(int argc, char** argv) {
             for(int i=0;i<8;++i)Check(words[i]==PPC_LOAD_U32(ConfigData+i*4),"A leaves guest settings unchanged");
         }
     }
+    // Discord applies and persists at once, without saving pending display edits.
+    settings::tab=3;settings::row=settings::SystemDiscordStatusRow;settings::edit.width=1234;
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+    tick(8);
+    Check(!settings::edit.discordStatus && !settings::savedConfig.discordStatus && !discord_rpc::enabled &&
+          discord_rpc::changes==1 && settings::savedConfig.width!=settings::edit.width,"Discord disables live and saves alone");
+    tick(4);
+    Check(settings::edit.discordStatus && settings::savedConfig.discordStatus && discord_rpc::enabled &&
+          discord_rpc::changes==2,"Discord enables live and persists");
+#else
+    tick();Check(settings::snapshot.rows[settings::SystemDiscordStatusRow].hidden,"Discord is hidden without desktop IPC");
+    settings::row=settings::SystemUpdatesRow;tick(2);Check(settings::row==settings::SystemDebugLogRow,"navigation skips Discord without desktop IPC");
+#endif
+    settings::edit=settings::savedConfig;
     // System -> Mods opens the Mods page; with no mods it says where they go, and B returns.
     settings::tab=3;settings::row=settings::SystemModsRow;tick(0x1000);
     Check(settings::modsOpen && settings::snapshot.pageTitle==L"Mods" && settings::snapshot.rows.front().name==L"No mods installed" &&
@@ -454,7 +472,8 @@ int main(int argc, char** argv) {
     settings::edit.upscaler=Upscaler::Fsr;settings::row=int(GraphicsRow::AntiAliasing);tick();
     auto click=[&](int row,float x,bool reverse){
         int visible=0;for(int i=0;i<row;++i)visible+=!settings::snapshot.rows[i].hidden;
-        settings::PointerClick(x,150.f+43.f*(visible-settings::snapshot.scroll)+12,reverse);
+        settings::PointerClick(x,150.f+settings::MenuRowHeight(settings::snapshot.tab,!settings::snapshot.pageTitle.empty())*
+            (visible-settings::snapshot.scroll)+12,reverse);
         tick();
     };
     click(int(GraphicsRow::AntiAliasing),420,false);

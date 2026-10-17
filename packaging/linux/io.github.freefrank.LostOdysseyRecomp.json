@@ -14,6 +14,21 @@
     "--filesystem=host",
     "--filesystem=/media",
     "--filesystem=/run/media",
-    "--filesystem=/mnt"
+    "--filesystem=/mnt",
+    "--filesystem=xdg-run/discord-ipc-0",
+    "--filesystem=xdg-run/discord-ipc-1",
+    "--filesystem=xdg-run/discord-ipc-2",
+    "--filesystem=xdg-run/discord-ipc-3",
+    "--filesystem=xdg-run/discord-ipc-4",
+    "--filesystem=xdg-run/discord-ipc-5",
+    "--filesystem=xdg-run/discord-ipc-6",
+    "--filesystem=xdg-run/discord-ipc-7",
+    "--filesystem=xdg-run/discord-ipc-8",
+    "--filesystem=xdg-run/discord-ipc-9",
+    "--filesystem=xdg-run/app/com.discordapp.Discord:create",
+    "--filesystem=xdg-run/app/com.discordapp.DiscordCanary:create",
+    "--filesystem=xdg-run/app/com.discordapp.DiscordPTB:create",
+    "--filesystem=xdg-run/snap.discord:create",
+    "--filesystem=xdg-run/snap.discord-canary:create"
   ]
 }

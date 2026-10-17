@@ -11,6 +11,11 @@
 // Threads: StartReplacement on the game thread; StopReplacement and the clock
 // calls on the guest render thread; FrameForDraw on the command processor thread.
 namespace movie {
+// The native WMV lifecycle, whether or not a mod provides replacement video.
+// Read-only from any thread; contains no movie filename or scenario identifier.
+#if !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__NX__)
+bool GuestPlaying();
+#endif
 // guestMovie is the FLO_MOVIE object, name the video's file name stem (mv_00v).
 // Resolves the mod asset and opens it on a decode thread; no-op without one.
 void StartReplacement(uint32_t guestMovie, std::string_view name);

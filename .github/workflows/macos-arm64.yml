@@ -105,6 +105,11 @@ jobs:
               echo "::notice::$target needs game data; skipped" >&2
             fi
           done < out/build/macos/ci-candidates.txt > out/build/macos/ci-targets.txt
+      - name: Test Discord desktop IPC (no game data)
+        run: |
+          cmake -S tools/tests/discord_rpc -B out/build/discord-rpc -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/build/discord-rpc --parallel 4
+          ctest --test-dir out/build/discord-rpc --output-on-failure
       - name: Compile MetalFX FG game integration (no game data)
         run: |
           cmake -S tools/tests/motion_replay -B out/build/metalfx-fg -G Ninja \

@@ -129,6 +129,10 @@ file(GLOB_RECURSE LO_RUNTIME_SOURCES CONFIGURE_DEPENDS
     "${LO_RUNTIME_ROOT}/*.cpp"
     "${LO_RUNTIME_ROOT}/*.h")
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "imports_stubs\\.cpp$")
+# Discord Rich Presence is a desktop host service.
+if(ANDROID OR LO_TARGET_PLATFORM STREQUAL "switch")
+    list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "/discord/")
+endif()
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "updater/posix_ui\\.cpp$")
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "gpu/shader/portable_shader_pack\\.cpp$")
 

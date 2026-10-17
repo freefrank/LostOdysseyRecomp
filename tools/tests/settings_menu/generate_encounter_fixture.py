@@ -100,6 +100,17 @@ int main() {
     using settings::EncounterRate;
     Check(settings::GetConfig().encounterRate==EncounterRate::Normal &&
         !settings::GetConfig().battleExpDouble,"safe defaults for existing profiles");
+    Check(settings::GetConfig().discordStatus,"Discord status defaults On for existing profiles");
+    for(auto text : {"", "discord_status=2\n", "discord_status=-1\n", "discord_status=bad\n"}) {
+        Write(text); Check(settings::Read().discordStatus,"missing/invalid Discord setting keeps On default");
+    }
+    for(bool enabled : {false,true}) {
+        Write(enabled ? "discord_status=1\n" : "discord_status=0\n");
+        auto discord=settings::Read();
+        Check(discord.discordStatus==enabled && settings::SaveConfig(discord) &&
+            settings::GetConfig().discordStatus==enabled && settings::Read().discordStatus==enabled,
+            "Discord status parses and roundtrips both values");
+    }
     Check(settings::GetConfig().fastForwardKeepAudioPitch,"missing fast-forward audio key keeps pitch");
     for(auto text : {"", "fast_forward_keep_pitch=2\n", "fast_forward_keep_pitch=-1\n",
                     "fast_forward_keep_pitch=4294967295\n", "fast_forward_keep_pitch=bad\n"}) {

@@ -8,9 +8,18 @@
 namespace settings
 {
 namespace menu_assets { struct Assets; struct Image; }
-// Visible list slots: rows start at y=150 with height 43 and clip at y=640,
-// so (640 - 150) / 43 == 11 rows fit without scrolling.
+// Rows start at y=150 and clip at y=640. System fits its host preferences and
+// actions in 12 rows at 39 pixels; other tabs and list pages use 11 at 43.
 inline constexpr int kMenuVisibleRows = 11;
+inline constexpr int kMenuSystemVisibleRows = 12;
+inline constexpr int VisibleRowCount(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? kMenuSystemVisibleRows : kMenuVisibleRows;
+}
+inline constexpr int MenuRowHeight(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? 39 : 43;
+}
 struct MenuRow
 {
     std::wstring name, value;
@@ -54,7 +63,7 @@ struct MenuSnapshot
 {
     int tab = 0, row = 0;
     // First visible slot when rows overflow the list area. Publish keeps the
-    // focused row inside [scroll, scroll + kMenuVisibleRows).
+    // focused row inside [scroll, scroll + VisibleRowCount(tab, listPage)).
     int scroll = 0;
     uint32_t language = 0;
     bool playStationPrompts = false;
@@ -174,7 +183,7 @@ struct MenuCascade
     size_t split = 0;
     std::vector<std::pair<size_t, size_t>> bands;
 };
-MenuCascade MenuOpenCascade(uint32_t width, uint32_t height);
+MenuCascade MenuOpenCascade(uint32_t width, uint32_t height, int tab = 0, bool listPage = false);
 
 class MenuTransition
 {

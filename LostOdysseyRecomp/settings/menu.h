@@ -90,7 +90,7 @@ void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
-//   frame rate, HDR), 3 System (interface and game language, updates, debug log,
+//   frame rate, HDR), 3 System (interface and game language, updates, Discord status, debug log,
 //   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
 //   Prepare shaders again, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
@@ -101,8 +101,8 @@ void PointerDrag(float x, float y, bool held);
 // - Actions come last on their tab: Controls / Restore / Quit to Main Menu on
 //   Gameplay, Brightness / Save on Graphics, Mods / Import / Shader bundle /
 //   Prepare shaders again / Save on System.
-// - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
-//   scroll; only Graphics scrolls. The pages opened from a row (Mods,
+// - Gameplay, Audio and System fit the visible rows and never scroll. System
+//   uses 12 compact rows; other tabs use 11. Only Graphics scrolls. Pages (Mods,
 //   Controls, Achievements) may scroll.
 // - Graphics order: display -> graphics preset -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
@@ -143,15 +143,16 @@ inline constexpr int AudioRowCount = 6;
 inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
-inline constexpr int SystemDebugLogRow = 3;
-inline constexpr int SystemAchievementsRow = 4; // opens the Achievements page
-inline constexpr int SystemCollectionRow = 5;
-inline constexpr int SystemModsRow = 6; // opens the Mods page
-inline constexpr int SystemImportRow = 7;
-inline constexpr int SystemShaderBundleRow = 8; // downloads the shader bundle again on the next start
-inline constexpr int SystemShaderPreparationRow = 9; // requests startup pipeline preparation
-inline constexpr int SystemSaveRow = 10;
-inline constexpr int SystemRowCount = 11;
+inline constexpr int SystemDiscordStatusRow = 3; // hidden on platforms without Discord IPC
+inline constexpr int SystemDebugLogRow = 4;
+inline constexpr int SystemAchievementsRow = 5; // opens the Achievements page
+inline constexpr int SystemCollectionRow = 6;
+inline constexpr int SystemModsRow = 7; // opens the Mods page
+inline constexpr int SystemImportRow = 8;
+inline constexpr int SystemShaderBundleRow = 9; // downloads the shader bundle again on the next start
+inline constexpr int SystemShaderPreparationRow = 10; // requests startup pipeline preparation
+inline constexpr int SystemSaveRow = 11;
+inline constexpr int SystemRowCount = 12;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.

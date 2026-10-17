@@ -1,3 +1,4 @@
+#include <discord/presence.h>
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include <version.h>
 #include <stdafx.h>
@@ -1234,7 +1235,7 @@ namespace gpu::video
                 // ExitProcess would run DLL detach in the driver and SDKs first.
                 TerminateProcess(GetCurrentProcess(), EXIT_FAILURE);
 #endif
-                std::_Exit(EXIT_FAILURE);
+                (discord_rpc::Shutdown(), std::_Exit(EXIT_FAILURE));
             }).detach();
         }
 #endif
@@ -1885,7 +1886,7 @@ namespace gpu::video
         // Pipeline recipes and the driver cache are still written (no GPU wait).
         if (const auto flush = os::shaderlog::ExitFlush().exchange(nullptr)) flush();
         std::fflush(nullptr);
-        std::_Exit(EXIT_FAILURE);
+        (discord_rpc::Shutdown(), std::_Exit(EXIT_FAILURE));
     }
 #endif
 
@@ -2274,7 +2275,7 @@ namespace gpu::video
             g_temporalUpscaler->ShutdownAfterGpuDrain();
             if (!g_temporalUpscaler->ShutdownComplete()) {
                 LOG_ERROR("video: SR shutdown incomplete; retaining unresolved resources and device");
-                std::fflush(nullptr); std::_Exit(EXIT_FAILURE);
+                std::fflush(nullptr); (discord_rpc::Shutdown(), std::_Exit(EXIT_FAILURE));
             }
         }
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
@@ -2293,7 +2294,7 @@ namespace gpu::video
         // Streamline owns Vulkan children; its shutdown requires a live device.
         if (g_fgRuntime && !g_fgRuntime->Shutdown()) {
             LOG_ERROR("DLSS FG: Streamline shutdown failed; ending process before device replacement");
-            std::fflush(nullptr); std::_Exit(EXIT_FAILURE);
+            std::fflush(nullptr); (discord_rpc::Shutdown(), std::_Exit(EXIT_FAILURE));
         }
         if (g_fgDispatch) {
             g_fgDispatch->RestoreDeviceHooks();
@@ -3094,7 +3095,7 @@ namespace gpu::video
     [[noreturn]] void FinishRequestedExit() {
         if (!ExitRequested()) {
             LOG_ERROR("video: exit without an owner-thread shutdown request");
-            std::fflush(nullptr); std::_Exit(EXIT_FAILURE);
+            std::fflush(nullptr); (discord_rpc::Shutdown(), std::_Exit(EXIT_FAILURE));
         }
         // All presentation stack/recording guards have unwound at this point.
         LOG_INFO("video: shutdown stage=capture-archive begin");
@@ -3104,7 +3105,7 @@ namespace gpu::video
         LOG_NOTICE("video: owner shutdown complete native_ngx_cleanup=complete streamline_cleanup=complete exit_code=0");
         os::shaderlog::CloseForExit();
         std::fflush(nullptr);
-        std::_Exit(EXIT_SUCCESS);
+        (discord_rpc::Shutdown(), std::_Exit(EXIT_SUCCESS));
     }
 
     void PumpEvents()

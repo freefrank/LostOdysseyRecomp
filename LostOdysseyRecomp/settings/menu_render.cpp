@@ -495,7 +495,7 @@ double settings::menu_motion::RowFade(double t)
     return value >= 0.99 ? 1 : value;
 }
 
-settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height)
+settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height, int tab, bool listPage)
 {
     MenuCascade cascade;
     if (!width || !height)
@@ -504,8 +504,9 @@ settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height)
     const auto row = [&](int y) { return size_t(std::clamp(std::lround(c.offsetY + y * c.scale), 0l, long(height))); };
     cascade.split = size_t(std::clamp(std::lround(c.offsetX + ListColumnRight * c.scale), 0l, long(width)));
     // The "Menu" heading above the first row comes in with it.
-    for (int slot = 0; slot < kMenuVisibleRows; ++slot)
-        cascade.bands.emplace_back(row(slot ? ListTop + slot * ListRowHeight : 104), row(ListTop + (slot + 1) * ListRowHeight));
+    const int rowHeight = MenuRowHeight(tab, listPage);
+    for (int slot = 0; slot < VisibleRowCount(tab, listPage); ++slot)
+        cascade.bands.emplace_back(row(slot ? ListTop + slot * rowHeight : 104), row(ListTop + (slot + 1) * rowHeight));
     return cascade;
 }
 
@@ -1153,7 +1154,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     }
 
     constexpr int rowTop = ListTop;
-    constexpr int rowHeight = ListRowHeight;
+    const int rowHeight = MenuRowHeight(current.tab, !current.pageTitle.empty());
+    const int visibleRows = VisibleRowCount(current.tab, !current.pageTitle.empty());
     constexpr int labelLeft = 65;
     constexpr int labelWidth = 299;
     constexpr int choiceLeft = 386;
@@ -1168,7 +1170,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         if (slot < 0)
             continue;
         const int y = rowTop + slot * rowHeight;
-        if (y + rowHeight > 640) break;
+        if (slot >= visibleRows || y + rowHeight > 640) break;
         const bool focused = int(index) == current.row;
         if (row.header)
         {
@@ -1203,7 +1205,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         if (pictured)
         {
             // Achievement entry: the picture, then the name.
-            constexpr int iconSize = rowHeight - 6, iconLeft = labelLeft + 6;
+            const int iconSize = rowHeight - 6, iconLeft = labelLeft + 6;
             if (row.icon && !row.icon->pixels.empty())
                 sprite(*row.icon, 0, 0, int(row.icon->width), int(row.icon->height), iconLeft, y + 2, iconSize, iconSize);
             else
@@ -1389,7 +1391,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     // Understated overflow indicators when rows exceed the visible viewport.
     if (current.scroll > 0)
         text( choiceLeft + choiceWidth - 40, rowTop - 24, 40, 20, L"▲", 13, muted, false, 1);
-    if (visible - current.scroll > kMenuVisibleRows)
+    if (visible - current.scroll > visibleRows)
         text( choiceLeft + choiceWidth - 40, 622, 40, 20, L"▼", 13, muted, false, 1);
 
     text(65, 652, 52, 43, L"Help", 20, ink, false);

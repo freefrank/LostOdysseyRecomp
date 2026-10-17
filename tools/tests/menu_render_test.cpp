@@ -325,6 +325,7 @@ int main(int argc, char **argv)
         {L"設定界面語言", L"한국어", true, {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"}, 3},
         {L"遊戲語言", L"한국어", true, {L"English", L"日本語", L"한국어", L"繁體中文", L"简体中文"}, 2},
         {L"自動更新", L"開", true, {L"開", L"關"}, 0},
+        {L"Discord 狀態", L"開", true, {L"開", L"關"}, 0},
         {L"儲存設定", L"儲存", true, {L"儲存"}, 0}};
     snapshot.help = L"設定界面語言立即生效。";
     Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "language tab rasterization failed");
@@ -632,6 +633,34 @@ int main(int argc, char **argv)
         std::puts("DLSS 5 neural rendering page: transparent preview, no-scene panel, opaque controls in en/zh-Hant/zh-Hans");
     }
 
+    // System alone uses compact rows: its last action and opening cascade fit,
+    // while Graphics and list pages retain their established viewport.
+    {
+        Require(settings::VisibleRowCount(3) == 12 && settings::MenuRowHeight(3) == 39 &&
+                settings::VisibleRowCount(2) == 11 && settings::MenuRowHeight(2) == 43 &&
+                settings::VisibleRowCount(3, true) == 11 && settings::MenuRowHeight(3, true) == 43,
+                "only the System tab uses compact rows");
+        settings::MenuSnapshot system;
+        system.tab = 3;
+        system.row = settings::SystemSaveRow;
+        for (int i = 0; i < settings::SystemRowCount; ++i)
+            system.rows.push_back({L"Option " + std::to_wstring(i), L"On", true, {L"On", L"Off"}, 0});
+        settings::MenuArrow lastArrow;
+        Require(settings::RasterizeMenu(system, 1280, 720, pixels, &lastArrow) && lastArrow.visible &&
+                lastArrow.y == 150 + settings::SystemSaveRow * 39 + 10,
+                "System renders the twelfth row without scrolling");
+        const auto systemCascade = settings::MenuOpenCascade(1280, 720, 3);
+        Require(systemCascade.bands.size() == 12 && systemCascade.bands.back().second == 618 &&
+                settings::MenuOpenCascade(1280, 720, 2).bands.size() == 11 &&
+                settings::MenuOpenCascade(1280, 720, 3, true).bands.size() == 11,
+                "System opening cascade follows the compact row positions");
+        if (argc > 1) {
+            std::ofstream f(std::filesystem::path(argv[1]) / "system-compact.ppm", std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+        }
+        std::puts("System compact rows: twelfth action, list-page isolation and opening cascade passed");
+    }
     // Synthetic overflowing menu (>11 visible rows) to verify scroll clipping, hidden rows and overflow indicators.
     {
         // Reference snapshot: exactly 11 rows (the visible window), representing Option 3 through Option 13.

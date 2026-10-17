@@ -26,6 +26,11 @@ inline bool Enabled() { return false; }
 inline int Consent() { return 0; }
 inline bool SetConsent(bool) { return true; }
 }
+namespace discord_rpc {
+unsigned menuFlowChanges = 0;
+bool menuFlowEnabled = true;
+void SetEnabled(bool enabled) { ++menuFlowChanges; menuFlowEnabled = enabled; }
+}
 namespace settings {
 Config MenuFlowGetConfig();
 bool MenuFlowSaveConfig(const Config&);
@@ -2152,20 +2157,26 @@ int main(int argc, char** argv)
             settings::row = 0;
             settings::pending = 0x10; Tick(base);
             Require(settings::row == settings::SystemSaveRow && settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
-                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings",
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" && settings::snapshot.scroll == 0,
                     "Start on System tab jumps to Save settings, the last row");
 
             // PointerClick boundary tests:
             // Valid slot 0 (y = 150) hits row 0
             settings::PointerClick(100.0f, 150.0f, false);
             Require(settings::mouseRow.load() == 0, "click at y=150 selects visible slot 0 (row 0)");
+            settings::PointerClick(100.0f, 617.0f, false);
+            Require(settings::mouseRow.load() == settings::SystemSaveRow,
+                    "System's compact twelfth row is visible and clickable without scrolling");
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 618.0f, false);
+            Require(settings::mouseRow.load() == -1, "System ignores the gap below its compact rows");
 
             // Click at y < 150 (above rows) is ignored
             settings::mouseRow = -1;
             settings::PointerClick(100.0f, 140.0f, false);
             Require(settings::mouseRow.load() == -1, "click above y=150 ignored");
 
-            // Click below visible viewport (y >= 640 or slot >= 11) is ignored
+            // Click below the visible viewport is ignored.
             settings::mouseRow = -1;
             settings::PointerClick(100.0f, 640.0f, false);
             Require(settings::mouseRow.load() == -1, "click at y=640 (below viewport) ignored");
@@ -2588,6 +2599,43 @@ int main(int argc, char** argv)
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
+            // Discord is a live host setting: save just that field and leave
+            // pending Graphics/System edits alone. A failed save keeps it active.
+            settings::tab = 3; settings::row = settings::SystemDiscordStatusRow;
+            currentConfig.discordStatus = diskConfig.discordStatus = settings::edit.discordStatus = true;
+            settings::edit.width = 1234;
+            settings::edit.automaticUpdates = !currentConfig.automaticUpdates;
+            const auto discordSaves = saves;
+            const auto discordChanges = discord_rpc::menuFlowChanges;
+            Tick(base);
+            Require(settings::snapshot.rows[settings::SystemDiscordStatusRow].name == L"Discord status" &&
+                    !settings::snapshot.rows[settings::SystemDiscordStatusRow].hidden &&
+                    settings::SystemDiscordStatusRow == settings::SystemUpdatesRow + 1 &&
+                    settings::SystemDebugLogRow == settings::SystemDiscordStatusRow + 1 &&
+                    settings::snapshot.help == L"Shows your location and activity on Discord. Applies and saves immediately.",
+                    "Discord status is grouped with host preferences and explains its live save");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.discordStatus && saves == discordSaves &&
+                    discord_rpc::menuFlowChanges == discordChanges, "confirm does not toggle Discord status");
+            settings::pending = 8; Tick(base);
+            Require(!settings::edit.discordStatus && !currentConfig.discordStatus && !diskConfig.discordStatus &&
+                    !discord_rpc::menuFlowEnabled && saves == discordSaves + 1 &&
+                    discord_rpc::menuFlowChanges == discordChanges + 1 &&
+                    diskConfig.width != settings::edit.width &&
+                    diskConfig.automaticUpdates != settings::edit.automaticUpdates,
+                    "Discord disables live and persists without saving pending settings");
+            saveFails = true;
+            settings::pending = 4; Tick(base);
+            Require(!settings::edit.discordStatus && !discord_rpc::menuFlowEnabled &&
+                    discord_rpc::menuFlowChanges == discordChanges + 1 &&
+                    settings::snapshot.help == L"Could not save settings.",
+                    "failed Discord save retains the active preference");
+            saveFails = false;
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.discordStatus && diskConfig.discordStatus && discord_rpc::menuFlowEnabled &&
+                    discord_rpc::menuFlowChanges == discordChanges + 2, "Discord enables live and persists");
+            settings::edit = currentConfig;
+            std::puts("PASS Discord setting: row placement, immediate save/live apply, failed save and pending settings");
             // System > Achievements opens the page; Notifications cycles On -> Silent -> Off and saves alone.
             settings::tab = 3; settings::row = settings::SystemAchievementsRow;
             settings::edit.achievementNotifications = true; settings::edit.achievementSound = true;
@@ -3021,7 +3069,8 @@ int main(int argc, char** argv)
                     "gamepad reaches the importer action on System, before Shader bundle and Save settings");
             settings::pending = 8; Tick(base);
             Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
-            settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) * 43 + 20), false);
+            settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) *
+                                               settings::MenuRowHeight(3) + 20), false);
             Tick(base);
             Require(settings::importPrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Open importer", L"Cancel"} &&
@@ -3770,6 +3819,22 @@ int main(int argc, char** argv)
                 output << contents;
                 Require(bool(output), "write isolated settings.ini");
             };
+            writeIni("");
+            Require(settings::Read().discordStatus, "Discord status defaults On for existing profiles");
+            for (const auto* contents : {"discord_status=2\n", "discord_status=-1\n", "discord_status=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().discordStatus, "invalid Discord preference keeps On default");
+            }
+            for (const bool enabled : {false, true})
+            {
+                writeIni(enabled ? "discord_status=1\n" : "discord_status=0\n");
+                auto discord = settings::Read();
+                Require(discord.discordStatus == enabled && settings::SaveConfig(discord) &&
+                        settings::GetConfig().discordStatus == enabled && settings::Read().discordStatus == enabled,
+                        "Discord preference reads, saves and reloads both modes");
+            }
+            std::puts("PASS Discord preference default, INI validation and On/Off roundtrip");
             writeIni("");
             Require(settings::Read().askCompactGameData, "missing compaction preference offers to free disk space");
             writeIni("ask_compact_game_data=0\n");
