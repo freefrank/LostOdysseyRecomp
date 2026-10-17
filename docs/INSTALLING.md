@@ -187,7 +187,7 @@ For folder sync, choose a shared-storage or SD-card folder with **CTRL → Game 
 Turning the option on or off takes effect at the next app start, after fully closing the game. The app copies saves to the selected location and verifies every copied file before switching; turning it off copies them back into the app. It asks before replacing a different destination save that is as new or newer, and keeps the source copy as a backup. If the game folder is missing or unwritable at startup, it uses private storage for that run and tells you.
 
 <a id="android-logs"></a>
-**Logs** for a bug report: turn on **Settings → System → Debug log**, play until the problem happens, then choose **CTRL → Saves and logs → Export logs…** and save the ZIP, for example in Download. It holds the logs of the last three runs, `native-stderr.log` and, if the app itself failed, `java-crash-*.txt`. If the game crashed or stayed black, open the app once more and export from the CTRL menu. The same files are in `Android/data/io.github.freefrank.lostodyssey/files/logs/` for a PC over USB. With adb, `adb logcat -s LostOdyssey` shows the same lines live.
+**Logs** for a bug report: **Settings → System → Debug log** is on by default. Play until the problem happens, then choose **CTRL → Saves and logs → Export logs…** and save the ZIP, for example in Download. It holds the logs of the last three runs, `native-stderr.log` and, if the app itself failed, `java-crash-*.txt`. If the game crashed or stayed black, open the app once more and export from the CTRL menu. The same files are in `Android/data/io.github.freefrank.lostodyssey/files/logs/` for a PC over USB. With adb, `adb logcat -s LostOdyssey` shows the same lines live.
 
 ## First launch and settings
 

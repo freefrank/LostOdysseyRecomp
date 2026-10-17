@@ -187,7 +187,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 开关都在完全关闭游戏、下次启动应用时生效。应用会把存档复制到所选位置，逐个校验文件后才切换；关闭选项时会复制回应用内部。如果目标存档内容不同，且时间相同或更新，会先询问是否替换。源文件会保留作为备份。启动时游戏文件夹缺失或不可写，本次运行会改用内部存储，并显示提示。
 
 <a id="android-logs"></a>
-**日志**用于反馈问题：先在**设置 → 系统**打开“调试日志”，玩到问题出现，然后选择 **CTRL → Saves and logs → Export logs…**，把 ZIP 保存到例如 Download。ZIP 里有最近三次运行的日志、`native-stderr.log`，应用本身出错时还有 `java-crash-*.txt`。游戏闪退或一直黑屏时，再打开一次应用，从 CTRL 菜单导出。这些文件也在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`，可以用 USB 复制到电脑。使用 adb 时，`adb logcat -s LostOdyssey` 可以实时看到同样的内容。
+**日志**用于反馈问题：**设置 → 系统 → 调试日志**默认开启。玩到问题出现，然后选择 **CTRL → Saves and logs → Export logs…**，把 ZIP 保存到例如 Download。ZIP 里有最近三次运行的日志、`native-stderr.log`，应用本身出错时还有 `java-crash-*.txt`。游戏闪退或一直黑屏时，再打开一次应用，从 CTRL 菜单导出。这些文件也在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`，可以用 USB 复制到电脑。使用 adb 时，`adb logcat -s LostOdyssey` 可以实时看到同样的内容。
 
 ## 首次设置和普通设置
 

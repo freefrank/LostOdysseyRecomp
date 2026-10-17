@@ -222,11 +222,11 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## Reporting a problem
 
-[Open an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) with the version, operating system, graphics backend, GPU and driver, game edition and disc, and the steps or scene that show the problem. Attach the newest `logs/runtime-<timestamp>.log`. For a full log, turn on **Settings → System → Debug log**, save, and show the problem again before you attach it.
+[Open an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) with the version, operating system, graphics backend, GPU and driver, game edition and disc, and the steps or scene that show the problem. Attach the newest `logs/runtime-<timestamp>.log`. **Settings → System → Debug log** is on by default. If you turned it off, turn it back on, save and restart before showing the problem again.
 
 For a visual problem, make a [render capture](#overview-captures-and-game-actions) while it is on screen. Do not attach game files, saves or personal data.
 
-Optional diagnostics are off by default; see [Privacy](PRIVACY.md).
+Optional log collection is off by default; see [Privacy](PRIVACY.md).
 
 ## Screenshots
 
