@@ -2,7 +2,33 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.3 published — 2026-10-17
+
+[v1.0.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.3) was published at 2026-10-17T23:46:15Z by the workflow's own publish step. A GitHub API read on 2026-10-17 shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.3` at squash commit `a72ae706`, the release PR [#621](https://github.com/freefrank/LostOdysseyRecomp/pull/621). The previous release is v1.0.2, published 2026-10-17T23:20:12Z at `45f404e0`.
+
+The release run is GitHub Actions run [39079189505](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39079189505), `Release` on tag `v1.0.3`. Every job succeeded, and the release has the same five packages as v1.0.2. The macOS image was built by the GitHub-hosted macOS Release job.
+
+Change since v1.0.2: PR [#621](https://github.com/freefrank/LostOdysseyRecomp/pull/621) reverts PR [#618](https://github.com/freefrank/LostOdysseyRecomp/pull/618), the save-worker lock shipped in v1.0.2. That lock wrapped whole save request routines in the worker's critical section. A natural 200-overwrite stress run on psvita (a build with the #618 lock) hung at overwrite 79: the worker waited on that section while the menu thread sat inside a wrapped request. Stock save behavior from v1.0.1 passed 100 natural overwrites. v1.0.3 restores the v1.0.1 save behavior and keeps everything else from v1.0.2, including PR [#616](https://github.com/freefrank/LostOdysseyRecomp/pull/616), PR [#617](https://github.com/freefrank/LostOdysseyRecomp/pull/617) and PR [#591](https://github.com/freefrank/LostOdysseyRecomp/pull/591).
+
+Assets, as listed by the GitHub release API on 2026-10-17 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.3.zip` | 153,299,723 | `4518442b6e947713924b32b5eff1527f015f6a349289688bf4e26f4de5249a51` |
+| `LostOdysseyRecomp-linux-x64-v1.0.3.AppImage` | 79,088,120 | `a5937e13f296dac5e6371d08ac537ba0f60ef17561fbe2edd3e2e33a5f585a12` |
+| `LostOdysseyRecomp-linux-x64-v1.0.3.flatpak` | 55,532,816 | `e22eba22af8dd2a2a58c81dfc5cf852fbfd085d9f333fb3f4bcb84964c02882c` |
+| `LostOdysseyRecomp-android-arm64-v1.0.3.apk` | 47,243,291 | `3b7366aa0c90de8831bb527d14b5550e88ef43171bfb4b5c97d60ec84455ddad` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.3.dmg` | 63,919,199 | `99f935f55d6b040586be9217ee96a99a8ab60a496b317832c1cc4d35fcae2cf0` |
+
+Save issue: [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) was open at its 2026-10-17 read (updated 23:47:11Z). The maintainer will wait for player feedback before shipping another save fix. A publication-only candidate lock is on branch `fix/615-save-publication-lock`; it is not merged and is not in this release.
+
+Validation: the psvita stress result above is the evidence for the revert. This record does not include a stress run of the v1.0.3 build itself.
+
+Acceptance: none. The maintainer has not accepted v1.0.3. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.2 published — 2026-10-17
+
+Update, 2026-10-17: v1.0.2 is no longer the latest release; [v1.0.3](#v103-published--2026-10-17) was published at 2026-10-17T23:46:15Z. Its PR [#618](https://github.com/freefrank/LostOdysseyRecomp/pull/618) save-worker change was reverted in v1.0.3, so the #618 bullet and the psvita results below describe v1.0.2 only. The rest of this record is unchanged.
 
 [v1.0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.2) was published at 2026-10-17T23:20:12Z by the workflow's own publish step. A GitHub API read on 2026-10-17 shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.2` at commit `45f404e0`, the release PR [#619](https://github.com/freefrank/LostOdysseyRecomp/pull/619). The previous release is v1.0.1, published 2026-10-17T20:16:12Z at `ff2a6749`. The Discord announcement step succeeded at 2026-10-17T23:20:14Z. The release body matches the [Changelog, v1.0.2](../CHANGELOG.md#v102--2026-10-17) section.
 
