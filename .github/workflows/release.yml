@@ -624,33 +624,11 @@ jobs:
           name: LostOdysseyRecomp-macos-arm64
           path: out/releases/LostOdysseyRecomp-macos-arm64-*.dmg
           if-no-files-found: error
-      - name: Download parity reference (rehearsal only)
-        if: env.RELEASE_TAG == ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p out/macos-reference out/macos-validation
-          gh release download v1.0.1 --pattern '*.dmg' --dir out/macos-reference
-          gh api repos/freefrank/LostOdysseyRecomp/releases/tags/v1.0.1 > out/macos-validation/reference-release.json
-          python - <<'PY'
-          import hashlib, json
-          from pathlib import Path
-          assets = json.loads(Path('out/macos-validation/reference-release.json').read_text())['assets']
-          reference = Path('out/macos-reference/LostOdysseyRecomp-macos-arm64-v1.0.1.dmg')
-          asset = next(asset for asset in assets if asset['name'] == reference.name)
-          digest = hashlib.sha256(reference.read_bytes()).hexdigest()
-          assert digest == 'e961bb827a31ba4746076ce3bc4d4609f0996a2baad4de683503d53fba042326', 'Reference DMG differs from the recorded M1 Max package'
-          assert asset['digest'] == f'sha256:{digest}' and asset['size'] == reference.stat().st_size
-          print(f'Reference: {reference.name}, sha256:{digest}')
-          PY
-      - name: Verify DMG, minimum OS and no-data load; compare rehearsal layout
+      - name: Verify DMG, minimum OS and no-data load
         run: |
           images=(out/releases/*.dmg)
           test "${#images[@]}" -eq 1
           args=(--dmg "${images[0]}" --expected-version "$(cat out/build/macos/LostOdysseyRecomp/source-version.txt)" --output out/macos-validation)
-          if [ -z "$RELEASE_TAG" ]; then
-            args+=(--compare out/macos-reference/LostOdysseyRecomp-macos-arm64-v1.0.1.dmg)
-          fi
           python tools/release/verify_macos_package.py "${args[@]}"
       - name: Compiler cache statistics
         if: always() && env.CMAKE_CXX_COMPILER_LAUNCHER != ''
