@@ -74,7 +74,10 @@ def mounted_image(evidence, label, dmg, scratch):
                               "-noautoopen", "-mountpoint", mount, "-plist", dmg])
         attached = True
         entities = plistlib.loads(result.stdout).get("system-entities", [])
-        if not any(Path(entity.get("mount-point", "")) == mount for entity in entities):
+        # macOS reports /private/var even when TMPDIR uses the /var symlink.
+        if not any(entity.get("mount-point") and
+                   Path(entity["mount-point"]).resolve() == mount.resolve()
+                   for entity in entities):
             raise VerificationError(f"{label}: hdiutil did not mount at {mount}")
         yield mount
     finally:

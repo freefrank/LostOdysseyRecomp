@@ -531,7 +531,8 @@ jobs:
           test "$sdl" = 829a65d769d935c4852f8159e964312c0957260a
           echo "sdl=$sdl" >> "$GITHUB_OUTPUT"
       - name: Cache SDL build
-        uses: actions/cache@v4
+        id: macos-sdl-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             out/build/macos/thirdparty/SDL
@@ -539,7 +540,8 @@ jobs:
             out/build/macos/.ninja_deps
           key: macOS-sdl3-arm64-min15-v1-${{ steps.macos-inputs.outputs.sdl }}-${{ steps.macos-inputs.outputs.toolchain }}-${{ hashFiles('CMakeLists.txt', 'thirdparty/CMakeLists.txt', 'tools/patches/plume-*.patch') }}
       - name: Cache macOS compiler objects
-        uses: actions/cache@v4
+        id: macos-ccache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.CCACHE_DIR }}
           key: macOS-ccache-arm64-min15-v1-${{ steps.macos-inputs.outputs.toolchain }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', '.gitmodules', 'tools/patches/**') }}-${{ github.sha }}-${{ github.run_id }}
@@ -592,6 +594,22 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
           cmake --build out/build/macos --target LostOdysseyRecomp LoShaderPackTool
+      # Retain successful build outputs even if a later package check fails.
+      - name: Save SDL build cache
+        if: steps.macos-sdl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            out/build/macos/thirdparty/SDL
+            out/build/macos/.ninja_log
+            out/build/macos/.ninja_deps
+          key: ${{ steps.macos-sdl-cache.outputs.cache-primary-key }}
+      - name: Save macOS compiler cache
+        if: steps.macos-ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.macos-ccache.outputs.cache-primary-key }}
       - name: Check shader pack coverage for this runtime
         run: |
           tool=$(find out/build/macos -name LoShaderPackTool -type f | head -n 1)
@@ -601,6 +619,11 @@ jobs:
           args=(--build out/build/macos --output out/releases --dmg)
           if [ -n "$RELEASE_TAG" ]; then args+=(--version "$RELEASE_TAG"); fi
           python tools/package_macos.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-macos-arm64
+          path: out/releases/LostOdysseyRecomp-macos-arm64-*.dmg
+          if-no-files-found: error
       - name: Download parity reference (rehearsal only)
         if: env.RELEASE_TAG == ''
         env:
@@ -632,11 +655,6 @@ jobs:
       - name: Compiler cache statistics
         if: always() && env.CMAKE_CXX_COMPILER_LAUNCHER != ''
         run: ccache --show-stats || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: LostOdysseyRecomp-macos-arm64
-          path: out/releases/LostOdysseyRecomp-macos-arm64-*.dmg
-          if-no-files-found: error
       - name: Upload macOS validation evidence
         if: always()
         uses: actions/upload-artifact@v4
