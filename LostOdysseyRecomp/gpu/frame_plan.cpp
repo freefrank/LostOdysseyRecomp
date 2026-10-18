@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/cinematic_bars.h"
 #include "gpu/guest_writes.h"
 #include "gpu/dlss_status_log.h"
 #include "gpu/video.h"
@@ -61,6 +62,7 @@ namespace gpu::frame_plan
         uint32_t readyDevice = 0;
         uint64_t streamGeneration = 0;
         uint64_t emittedSerial = 0, emittedEpoch = 0, emittedSignature = 0, emittedSizingRevision = 0, emittedGeneration = 0;
+        bool emittedCinematicBars = false;
         uint32_t LoadWord(uint32_t address)
         {
             return g_memory.base && address >= 0x10000
@@ -160,7 +162,11 @@ namespace gpu::frame_plan
     std::optional<FramePlan> CurrentProducerPlan()
     {
         if (renderPlan && renderPlan->cpuSerial) return renderPlan;
-        if (cpuPlan.cpuSerial) return cpuPlan;
+        if (cpuPlan.cpuSerial) {
+            auto plan = cpuPlan;
+            plan.cinematicBars = cinematic_bars::Active();
+            return plan;
+        }
         return std::nullopt;
     }
     void ReportFailedEpoch(uint64_t geometryEpoch, uint32_t fallbackHeight)
@@ -271,7 +277,8 @@ namespace gpu::frame_plan
         { std::lock_guard lock(deviceMutex);
             if (device != readyDevice || !LoadWord(device + 0x30) || !LoadWord(device + 0x34) ||
                 (emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch &&
-                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision && emittedGeneration == streamGeneration)) return false; }
+                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision &&
+                 emittedGeneration == streamGeneration && emittedCinematicBars == plan.cinematicBars)) return false; }
         const auto words = wire::EncodePlan(plan);
         if (!gpu::frame_plan::EmitPrivatePacket(device, wire::PlanBase, words)) return false;
         // The display target exists before the world target table is populated;
@@ -279,7 +286,8 @@ namespace gpu::frame_plan
         // allocate a stale native mapping.
         QueueMainDisplayCatalog(context, device);
         { std::lock_guard lock(deviceMutex); emittedSerial = plan.cpuSerial; emittedEpoch = plan.geometryEpoch;
-            emittedSignature = plan.requestSignature; emittedSizingRevision = plan.sizingRevision; emittedGeneration = streamGeneration; }
+            emittedSignature = plan.requestSignature; emittedSizingRevision = plan.sizingRevision; emittedGeneration = streamGeneration;
+            emittedCinematicBars = plan.cinematicBars; }
         return true;
     }
     bool QueueCatalogOnDevice(PPCContext& context, uint32_t device, SurfaceRole role, uint32_t surfaceInfo, uint32_t colorInfo)

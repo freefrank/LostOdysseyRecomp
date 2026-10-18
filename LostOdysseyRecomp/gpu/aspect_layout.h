@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -63,6 +64,27 @@ inline std::array<uint32_t, 4> FitScissor(std::array<uint32_t, 4> edges, Scale s
 }
 
 struct Rect { float x, y, width, height; };
+
+struct PixelRect { uint32_t left, top, right, bottom; };
+
+// The 16:9 safe area inside the source, after the same centred fit used by
+// Presentation::Draw. A fixed aspect may itself be letterboxed in the window.
+inline PixelRect PresentedSafeRect(uint32_t sw, uint32_t sh, uint32_t ow, uint32_t oh)
+{
+    if (!sw || !sh || !ow || !oh) return {0, 0, ow, oh};
+    const auto safe = ForAspect(float(sw) / sh);
+    const float scale = std::min(float(ow) / sw, float(oh) / sh);
+    const float w = sw * scale, h = sh * scale;
+    const float x = scale == 1.0f ? std::floor((ow - w) * 0.5f) : (ow - w) * 0.5f;
+    const float y = scale == 1.0f ? std::floor((oh - h) * 0.5f) : (oh - h) * 0.5f;
+    const auto edge = [](float value, uint32_t extent) {
+        return uint32_t(std::clamp(std::ceil(value - 0.5f), 0.0f, float(extent)));
+    };
+    return {edge(x + w * (1 - safe.x) * 0.5f, ow),
+            edge(y + h * (1 - safe.y) * 0.5f, oh),
+            edge(x + w * (1 + safe.x) * 0.5f, ow),
+            edge(y + h * (1 + safe.y) * 0.5f, oh)};
+}
 
 // Native Canvas quads outside the 16:9 content area. The ordinary centred fit
 // maps their outer edges to the physical output edges, on either aspect axis.

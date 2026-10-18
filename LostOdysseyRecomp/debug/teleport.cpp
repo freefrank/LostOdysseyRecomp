@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/cinematic_bars.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
@@ -529,6 +530,7 @@ PPC_FUNC(sub_82290B60)
     if (engine)
     {
         debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::PollSceneLoads(base); debug_menu::battle_tour::Poll(base);
+        gpu::cinematic_bars::UpdatePause(base);
         discord_rpc::Tick(base);
         bool playerInField;
         {

@@ -88,11 +88,11 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | :--- | :--- |
 | Import | Folder, XEX, ISO and GOD sources, DLC and disc replacement. Your original files are not changed. |
 | Languages | Menus in English, Japanese, Korean, Traditional Chinese and Simplified Chinese. Game languages depend on your edition. |
-| Display | Windowed or fullscreen, monitor and GPU choice, 16:9 and 21:9 resolutions (taller screens such as 16:10 are filled), [HDR](#hdr) and **Brightness / Gamma**. |
+| Display | Windowed or fullscreen, monitor and GPU choice, 16:9 and 21:9 resolutions (taller screens such as 16:10 are filled), [HDR](#hdr) and **Brightness / Gamma**. Cutscenes and the pause overlay use a centred 16:9 area. |
 | Anti-aliasing and upscaling | FXAA, SMAA, TAA, DLSS, FSR 3.1, XeSS (Windows Direct3D 12) and MetalFX (macOS). |
 | Graphics options | Shadow resolution 1×/2×/4×, SSAO/GTAO, anisotropic filtering, depth of field and bloom. |
 | Frame rate | 30/60/90/120 FPS; VSync Off, On or FreeSync / G-SYNC Compatible VRR. **Performance overlay** shows the frame rate, or a bar with the upscaler, frame generation, CPU and GPU load. |
-| Frame generation | DLSS, FSR or XeSS on Windows Direct3D 12; DLSS on Windows Vulkan. |
+| Frame generation | DLSS, FSR or XeSS on Windows Direct3D 12; DLSS on Windows Vulkan. It pauses while cinematic black bars are shown and resumes in gameplay. |
 | DLSS 5 neural rendering | Windows with DLSS on an RTX GPU. It needs `nvngx_dlssnr.dll`, which the game does not include: put your own copy (tested with 310.8.0.0) next to `LostOdysseyRecomp.exe` and restart. |
 | Shaders | Precompiled shaders downloaded on the first start, or compiled once and cached. |
 | Audio | Stereo, 5.1 surround, or matrix surround for an AV receiver. Cutscene dialogue has its own volume. |

@@ -18,6 +18,7 @@
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "renderer.h"
 #include "presentation.h"
+#include "aspect_layout.h"
 #include "device_loss_hint.h"
 #if defined(LO_GPU_PLUME)
 #include "frame_generation_present_bridge.h"
@@ -3189,7 +3190,8 @@ namespace gpu::video
 #endif
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
-                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult);
+                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult,
+                                       bool cinematicBars = false);
     static bool RenderPreparationScreen(PreparationStage stage, PreparationUnit unit, uint32_t done, uint32_t total)
     {
 #if defined(__ANDROID__)
@@ -4798,7 +4800,8 @@ namespace gpu::video
 
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
                                        bool isMenu, uint64_t displayTicket, const PresentationOptions& presentationOptions,
-                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult)
+                                       const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult,
+                                       bool cinematicBars)
     {
 #if defined(__ANDROID__)
         if (!EnsureAndroidSurfaceSwapChain()) return false;
@@ -4940,6 +4943,9 @@ namespace gpu::video
 #endif
             g_presentation->Draw(g_commandList.get(),g_cpuFrame.get(),backBuffer,width,height,
                 g_swapChain->getWidth(),g_swapChain->getHeight(),options);
+            if (!isMenu && cinematicBars)
+                g_presentation->DrawContentBars(g_commandList.get(), backBuffer, width, height,
+                    g_swapChain->getWidth(), g_swapChain->getHeight());
         }
         RecordPresentedSnapshot(backBuffer);
         QueuePresentCapture(backBuffer, captureTicket);
@@ -5037,7 +5043,7 @@ namespace gpu::video
 #endif
 
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo,
-        const gpu::present_capture::Ticket *capture, gpu::present_capture::Result *captureResult)
+        const gpu::present_capture::Ticket *capture, gpu::present_capture::Result *captureResult, bool cinematicBars)
     {
         struct CaptureExit {
             const gpu::present_capture::Ticket *ticket;
@@ -5145,6 +5151,11 @@ namespace gpu::video
                 uint32_t sourceWidth=width, sourceHeight=height;
                 renderer::ScaleResolvedSize(physicalAddress & 0x1FFFFFFF, sourceWidth, sourceHeight);
                 sourceWidth=std::min(sourceWidth,rw); sourceHeight=std::min(sourceHeight,rh);
+                // The producer froze this with its guest commands. A live game
+                // state can already describe a later frame than this resolve.
+                const bool drawCinematicBars = sourcePlan.cpuSerial ? sourcePlan.cinematicBars : cinematicBars;
+                const bool cinematicMask = drawCinematicBars && sourceWidth && sourceHeight &&
+                    !aspect_layout::ForAspect(float(sourceWidth) / sourceHeight).IsIdentity();
                 bool hdrScene = false;
                 plume::RenderTexture* hdrGainSource = nullptr;
                 uint32_t hdrGainValidWidth = 0, hdrGainValidHeight = 0, hdrGainWidth = 0, hdrGainHeight = 0;
@@ -5214,7 +5225,11 @@ namespace gpu::video
                     // The Aspect ratio setting's black bars: the SDKs would generate the
                     // whole swapchain from motion that covers only the picture.
                     const bool barred = sourcePlan.cpuSerial && upscaling::Letterboxed(sourcePlan.output);
-                    const bool matched = renderer::AcquireFgCompositeInputs(physicalAddress & 0x1FFFFFFF, composite) &&
+                    // SDK-generated images have no shared post-interpolation mask.
+                    // Use the existing normal-present fallback while output bars
+                    // are needed, then let each provider re-prime its history.
+                    const bool matched = !cinematicMask &&
+                        renderer::AcquireFgCompositeInputs(physicalAddress & 0x1FFFFFFF, composite) &&
                         composite.ReadyForOrderedSubmission() && composite.outputWidth == sourceWidth && composite.outputHeight == sourceHeight &&
                         ((!g_vulkan && !barred) || dlss_fg::FullFramePresentation(sourceWidth, sourceHeight,
                             g_swapChain->getWidth(), g_swapChain->getHeight()));
@@ -5337,6 +5352,9 @@ namespace gpu::video
                     // With scene AA already applied this is DrawComposited's pass.
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);
+                    if (drawCinematicBars)
+                        g_presentation->DrawContentBars(g_commandList.get(), backBuffer, sourceWidth, sourceHeight,
+                            g_swapChain->getWidth(), g_swapChain->getHeight());
                     DrawTitleHint(backBuffer);
                     DrawPreparationBar(backBuffer);
                     DrawAchievementToast(backBuffer);
@@ -5445,7 +5463,7 @@ namespace gpu::video
         if (menu)
         {
             CacheCpuFrame(menuPresentBuffer, menuWidth, menuHeight);
-            UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions, capture, captureResult);
+            UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions, capture, captureResult, false);
             return;
         }
 #endif
@@ -5470,7 +5488,7 @@ namespace gpu::video
         }
 
 #ifdef LO_GPU_PLUME
-        UploadAndPresentPixels(g_pixels, width, height, false, displayTicket, presentationOptions, capture, captureResult);
+        UploadAndPresentPixels(g_pixels, width, height, false, displayTicket, presentationOptions, capture, captureResult, cinematicBars);
 #endif
     }
 
@@ -5527,7 +5545,7 @@ namespace gpu::video
             return;
 
         CacheCpuFrame(menuPresentBuffer, menuWidth, menuHeight);
-        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, PresentationOptions{}, nullptr, nullptr);
+        UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, PresentationOptions{}, nullptr, nullptr, false);
 #endif
     }
 

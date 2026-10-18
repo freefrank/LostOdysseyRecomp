@@ -88,11 +88,11 @@
 | :--- | :--- |
 | 导入 | 支持文件夹、XEX、ISO、GOD、DLC 和替换光盘。原始文件保持不变。 |
 | 语言 | 菜单提供英语、日语、韩语、繁体中文和简体中文。游戏语言取决于你的版本。 |
-| 显示 | 窗口或全屏，可选显示器和 GPU，16:9 和 21:9 分辨率（16:10 等更高的屏幕会被画面铺满），[HDR](#hdr) 和**亮度 / Gamma**。 |
+| 显示 | 窗口或全屏，可选显示器和 GPU，16:9 和 21:9 分辨率（16:10 等更高的屏幕会被画面铺满），[HDR](#hdr) 和**亮度 / Gamma**。过场动画和暂停画面使用居中的 16:9 区域。 |
 | 抗锯齿与超分 | FXAA、SMAA、TAA、DLSS、FSR 3.1、XeSS（Windows Direct3D 12）和 MetalFX（macOS）。 |
 | 图像选项 | 阴影分辨率 1×／2×／4×、SSAO／GTAO、各向异性过滤、景深和泛光。 |
 | 帧率 | 30／60／90／120 FPS；垂直同步可选关、开或 FreeSync／G-SYNC Compatible VRR。**性能信息**可显示帧率，或显示包含超分、插帧、CPU 和 GPU 负载的信息栏。 |
-| 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。 |
+| 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。显示过场黑边时暂停插帧，回到游戏后恢复。 |
 | DLSS 5 神经渲染 | Windows 上开启 DLSS 的 RTX 显卡可用。需要 `nvngx_dlssnr.dll`，游戏不附带该文件：请把自备的副本（测试版本 310.8.0.0）放在 `LostOdysseyRecomp.exe` 旁并重启。 |
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。过场对白有单独的音量。 |

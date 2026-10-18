@@ -157,3 +157,6 @@ foreach(name package_appimage package_flatpak)
     add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}" -B "${LO_TESTS}/${name}_test.py")
     set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endforeach()
+
+# Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
+add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")

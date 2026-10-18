@@ -425,8 +425,10 @@ namespace gpu
         }
         if (index >= frame_plan::wire::PlanBase && index < frame_plan::wire::PlanBase + frame_plan::wire::PlanWordCount)
         {
-            if (const auto plan = m_framePlan.Write(index, value))
+            if (const auto plan = m_framePlan.Write(index, value)) {
+                m_cinematicBars = plan->cinematicBars;
                 renderer::SelectFramePlan(*plan);
+            }
             return;
         }
         if (index >= movie_clear::RegisterBase && index <= movie_clear::Commit)
@@ -1120,7 +1122,8 @@ namespace gpu
             g_workerStage.store("frontbuffer present", std::memory_order_relaxed);
             const auto presentsBefore = video::CompletedPresentCount();
             video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B),
-                captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr);
+                captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr,
+                m_cinematicBars);
             renderer::CompleteDebugCaptureFrame(captureResult);
             renderer::PollDebugCapture();
             pacing.presentAccepted = video::CompletedPresentCount() > presentsBefore;
