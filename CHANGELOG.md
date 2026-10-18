@@ -8,14 +8,14 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Added Original and Fast loading pace choices in Settings → Graphics; Fast remains the default (#633).
+- Settings → Graphics → Loading speed: Original keeps the Xbox 360 loading pace, Fast (the default) is the current faster loading (#633).
 - The Music volume now also lowers the music in real-time cutscenes (#631).
 - Right-to-left language packs: tutorial text ends at the right of its box, a long location name on the battle results no longer covers the play time, and text that types in letter by letter appears whole instead of from the left.
 - Language packs can translate the achievements: an `achievements.ini` in the pack gives the notification's heading and each achievement's name and texts, shown in the notification and in Settings → System → Achievements. Arabic there is joined and drawn right to left. In right-to-left packs, pop-ups and narration appear whole too and are no longer cut mid-word every 26 letters, the speaker's name sits at the right of the message window, and the Thousand Years of Dreams pages keep their right-to-left lines while the game animates them.
 
 ### 简体中文
 
-- 在“设置 → 图形”中新增原版和快速加载节奏选项，默认保持快速（#633）。
+- “设置 → 图形 → 加载速度”：原版保持 Xbox 360 的加载节奏，快速（默认）即现在更快的加载方式（#633）。
 - 音乐音量现也能调低即时演算过场中的配乐（#631）。
 - 从右到左的语言包：教程文字靠框的右侧对齐；战斗结算画面中较长的地点名称不再盖住游戏时间；逐字出现的文字改为整段显示，不再从左侧开始出现。
 - 语言包可以翻译成就：包中的 `achievements.ini` 提供成就通知的标题以及每个成就的名称和说明，显示在通知和“设置 → 系统 → 成就”中；其中的阿拉伯文会正确连写并从右到左显示。从右到左的语言包中，弹出提示和旁白也会整段显示，不再每 26 个字母就从词中间断行；说话人的名字显示在对话框右侧；“千年之梦”页面在游戏播放动画时也保持从右到左的排列。

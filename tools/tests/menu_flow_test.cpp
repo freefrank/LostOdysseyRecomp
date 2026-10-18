@@ -2135,7 +2135,7 @@ int main(int argc, char** argv)
                     int(GraphicsRow::VariableRefreshRate) == int(GraphicsRow::LoadingTransitions) + 1,
                     "loading pace follows Frame rate before VSync");
             const auto& pace = settings::snapshot.rows[int(GraphicsRow::LoadingTransitions)];
-            Require(pace.name == L"Loading transitions" && pace.choices == std::vector<std::wstring>{L"Original", L"Fast"} &&
+            Require(pace.name == L"Loading speed" && pace.choices == std::vector<std::wstring>{L"Original", L"Fast"} &&
                     pace.selectedChoice == 1 && !pace.hidden && pace.enabled,
                     "loading pace offers Original and Fast, with Fast selected");
             Require(settings::snapshot.help == L"Loading pace. Transition effects keep their normal speed.",
@@ -2187,7 +2187,7 @@ int main(int argc, char** argv)
             Require(settings::edit.loadingTransitions == 0 && diskConfig.loadingTransitions == 2,
                     "System Save leaves a pending loading pace edit unsaved");
 
-            const wchar_t* labels[] = {L"Loading transitions", L"載入過場", L"ロード時の演出", L"로딩 전환 효과", L"加载过场"};
+            const wchar_t* labels[] = {L"Loading speed", L"載入速度", L"ロード速度", L"로딩 속도", L"加载速度"};
             const wchar_t* original[] = {L"Original", L"原版", L"オリジナル", L"원본", L"原版"};
             const wchar_t* fast[] = {L"Fast", L"快速", L"速い", L"빠르게", L"快"};
             const wchar_t* help[] = {

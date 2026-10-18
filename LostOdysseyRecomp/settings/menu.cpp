@@ -1540,7 +1540,7 @@ void Publish(uint8_t *base, uint32_t config)
             frameRates.push_back(std::to_wstring(fps) + L" FPS");
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
-        placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading transitions", L"載入過場",
+        placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading speed", L"載入速度",
                    {Tr(L"Original", L"原版"), Tr(L"Fast", L"快速")}, edit.loadingTransitions == 0 ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
@@ -1865,8 +1865,8 @@ void Publish(uint8_t *base, uint32_t config)
                      L"原生遊戲影格率，獨立於影格生成。儲存後套用。");
             break;
         case GraphicsRow::LoadingTransitions:
-            next.help = Tr(L"Loading pace. Transition effects keep their normal speed.",
-                           L"載入節奏；過場效果維持正常速度。");
+            next.help = Tr(L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                           L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。");
             break;
         case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
