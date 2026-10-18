@@ -78,6 +78,10 @@
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
 
+### Nintendo Switch
+
+Ad0ky 维护一个实验性的 Switch 自制版本，需要运行自定义固件的主机。它不在本项目的发布里，请到 [Ad0ky 的发布页](https://github.com/Ad0ky/LostOdysseyRecomp/releases)下载，安装步骤也在那里。
+
 ### HDR
 
 在图像设置中开启 **HDR** 并保存。**HDR 最高亮度**会打开校准页，按 **LB / RB** 在游戏画面和测试图案之间切换。支持 Windows、Linux 和 macOS。

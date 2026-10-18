@@ -78,6 +78,10 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 
 [Step-by-step guide](docs/INSTALLING.md#android).
 
+### Nintendo Switch
+
+Ad0ky maintains an experimental homebrew build for Switch consoles running custom firmware. It is not part of the releases here: download it from [Ad0ky's releases](https://github.com/Ad0ky/LostOdysseyRecomp/releases), which also have the install steps.
+
 ### HDR
 
 Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibration page; **LB / RB** switch between the game scene and a test pattern. HDR is available on Windows, Linux and macOS.
