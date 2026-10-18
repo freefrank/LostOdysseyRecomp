@@ -120,7 +120,7 @@ int main() {
     for(bool keep : {false,true}) {
         Write(keep ? "fast_forward_keep_pitch=1\n" : "fast_forward_keep_pitch=0\n");
         Check(settings::Read().fastForwardKeepAudioPitch==keep,"fast-forward audio key parses both modes");
-        Check(settings::SaveFastForward(true,1,8,keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+        Check(settings::SaveFastForward(true,1,8,keep,0) && settings::Read().fastForwardKeepAudioPitch==keep &&
             settings::GetConfig().fastForwardKeepAudioPitch==keep,"fast-forward audio roundtrip retains selected mode");
         auto graphics=settings::GetConfig(); graphics.fastForwardKeepAudioPitch=!keep;
         Check(settings::SaveConfig(graphics) && settings::Read().fastForwardKeepAudioPitch==keep,
@@ -128,7 +128,7 @@ int main() {
         settings::PreviewConfig(graphics);
         Check(settings::GetConfig().fastForwardKeepAudioPitch==keep,"graphics preview preserves debug audio mode");
         Check(fs::create_directory("settings.ini.tmp"),"block atomic settings temporary file");
-        Check(!settings::SaveFastForward(true,1,8,!keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+        Check(!settings::SaveFastForward(true,1,8,!keep,0) && settings::Read().fastForwardKeepAudioPitch==keep &&
             settings::GetConfig().fastForwardKeepAudioPitch==keep,"failed audio-mode save preserves disk and runtime choice");
         Check(fs::remove("settings.ini.tmp"),"remove atomic settings blocker");
     }

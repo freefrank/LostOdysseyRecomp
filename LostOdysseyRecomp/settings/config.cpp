@@ -101,6 +101,7 @@ Config Validate(Config value)
     if (value.debugLanguage > 1) value.debugLanguage = 0;
     if (value.fastForwardMode > 1) value.fastForwardMode = 0;
     namespace ff = debug_menu::fast_forward;
+    if (value.fastForwardButton > uint32_t(ff::Button::R3)) value.fastForwardButton = 0;
     if (std::find(std::begin(ff::Rates), std::end(ff::Rates), value.fastForwardRate) == std::end(ff::Rates))
         value.fastForwardRate = 2;
     if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
@@ -158,6 +159,7 @@ Config Read()
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         if (name == "encounter_rate") { hasEncounterRate = true; value.encounterRate = EncounterRate::Normal; }
         if (name == "internal_resolution") value.internalResolution = 0;
+        if (name == "fast_forward_button") value.fastForwardButton = 0;
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         if (name == "aspect_ratio") hasAspectRatio = true;
         uint32_t number = 0;
@@ -321,6 +323,8 @@ Config Read()
             value.fastForward = number == 1;
         else if (key == "fast_forward_mode")
             value.fastForwardMode = number;
+        else if (key == "fast_forward_button")
+            value.fastForwardButton = number;
         else if (key == "fast_forward_rate")
             value.fastForwardRate = number;
         else if (key == "fast_forward_keep_pitch" && number <= 1)
@@ -373,6 +377,7 @@ void CopyFastForward(Config &to, const Config &from)
 {
     to.fastForward = from.fastForward;
     to.fastForwardMode = from.fastForwardMode;
+    to.fastForwardButton = from.fastForwardButton;
     to.fastForwardRate = from.fastForwardRate;
     to.fastForwardKeepAudioPitch = from.fastForwardKeepAudioPitch;
 }
@@ -513,6 +518,7 @@ static bool WriteConfig(const Config &value)
            << "\nbattle_exp_double=" << (value.battleExpDouble ? 1 : 0)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)
            << "\nfast_forward_mode=" << value.fastForwardMode
+           << "\nfast_forward_button=" << value.fastForwardButton
            << "\nfast_forward_rate=" << value.fastForwardRate
            << "\nfast_forward_keep_pitch=" << (value.fastForwardKeepAudioPitch ? 1 : 0)
            << "\nmenu_animation_rate=" << value.menuAnimationRate << '\n';
@@ -623,12 +629,13 @@ bool SaveBattleExpDouble(bool enabled)
     Current().battleExpDouble = enabled;
     return true;
 }
-bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch)
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button)
 {
     std::lock_guard lock(mutex);
     auto persisted = Read();
     persisted.fastForward = enabled;
     persisted.fastForwardMode = mode;
+    persisted.fastForwardButton = button;
     persisted.fastForwardRate = rate;
     persisted.fastForwardKeepAudioPitch = keepAudioPitch;
     persisted = Validate(persisted);

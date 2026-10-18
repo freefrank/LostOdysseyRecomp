@@ -104,7 +104,8 @@ void PollHostControls() {
         !backgroundRun && !host_ui::IsStopping() &&
         !host_ui::IsGamePaused() && !IsOverlayVisible() && !settings::IsOpen() &&
         !edit.editorRequested && !edit.editorApplied;
-    uint8_t lt = 0, rt = 0;
+    const auto binding = fast_forward::GetStatus().button;
+    fast_forward::Buttons buttons;
     bool connected = false;
     uint64_t devices = 14695981039346656037ull;
     static uint64_t previousDevices = 0;
@@ -120,22 +121,35 @@ void PollHostControls() {
             auto trigger = [&](SDL_GamepadAxis axis) {
                 return uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, axis))) >> 7);
             };
-            lt = std::max(lt, trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-            rt = std::max(rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+            auto button = [&](SDL_GamepadButton input) {
+                return uint8_t(SDL_GetGamepadButton(controller, input) ? 255 : 0);
+            };
+            buttons.lt = std::max(buttons.lt, trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+            buttons.rt = std::max(buttons.rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+            buttons.lb = std::max(buttons.lb, button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
+            buttons.rb = std::max(buttons.rb, button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
+            buttons.l3 = std::max(buttons.l3, button(SDL_GAMEPAD_BUTTON_LEFT_STICK));
+            buttons.r3 = std::max(buttons.r3, button(SDL_GAMEPAD_BUTTON_RIGHT_STICK));
         }
         SDL_free(ids);
     }
 #if LO_PLATFORM_ANDROID
-    // The on-screen LT/RT count as a controller, as they do for the game (#194).
+    // On-screen inputs count as a controller, as they do for the game (#194).
     if (allowed) {
         const auto touch = hid::android_touch::Snapshot();
-        lt = std::max(lt, touch.leftTrigger);
-        rt = std::max(rt, touch.rightTrigger);
+        auto button = [&](uint16_t mask) { return uint8_t((touch.buttons & mask) ? 255 : 0); };
+        buttons.lt = std::max(buttons.lt, touch.leftTrigger);
+        buttons.rt = std::max(buttons.rt, touch.rightTrigger);
+        buttons.lb = std::max(buttons.lb, button(XAMINPUT_GAMEPAD_LEFT_SHOULDER));
+        buttons.rb = std::max(buttons.rb, button(XAMINPUT_GAMEPAD_RIGHT_SHOULDER));
+        buttons.l3 = std::max(buttons.l3, button(XAMINPUT_GAMEPAD_LEFT_THUMB));
+        buttons.r3 = std::max(buttons.r3, button(XAMINPUT_GAMEPAD_RIGHT_THUMB));
         connected = true;
     }
 #endif
-    // A newly connected controller must not inherit a prior device's armed LT.
+    // A newly connected controller must not inherit a prior device's armed press.
     if (devices != previousDevices) { fast_forward::Release(); previousDevices = devices; }
-    fast_forward::Sample(lt, rt, allowed && connected);
+    const auto input = fast_forward::SelectButton(binding, buttons);
+    fast_forward::Sample(input.button, input.pair, allowed && connected);
 }
 } // namespace debug_menu::cheats

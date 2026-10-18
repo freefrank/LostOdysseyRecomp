@@ -96,14 +96,26 @@ int wmain(int argc, wchar_t** argv)
     Write("no_random_encounters=1\nencounter_rate=garbage\n");
     Check(settings::Read().encounterRate == settings::EncounterRate::Normal, "malformed new rate overrides legacy safely");
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2 &&
-          settings::Read().fastForwardKeepAudioPitch,
-        "missing fast-forward keys default to off, Hold, 2x, Keep pitch");
-    Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=6\n");
-    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 6,
+          settings::Read().fastForwardKeepAudioPitch && settings::Read().fastForwardButton == 0 &&
+          settings::Config{}.fastForwardButton == 0,
+        "missing fast-forward keys default to off, Hold, LT, 2x, Keep pitch");
+    Write("fast_forward=1\nfast_forward_mode=1\nfast_forward_button=2\nfast_forward_rate=6\n");
+    Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 6 &&
+          settings::Read().fastForwardButton == 2,
         "fast-forward keys read from INI");
     Write("fast_forward=2\nfast_forward_mode=7\nfast_forward_rate=5\n");
     Check(!settings::Read().fastForward && settings::Read().fastForwardMode == 0 && settings::Read().fastForwardRate == 2,
         "invalid fast-forward values default to off, Hold, 2x");
+    for (const auto button : {0u, 1u, 2u, 3u, 4u, 5u})
+    {
+        Write(("fast_forward_button=" + std::to_string(button) + "\n").c_str());
+        Check(settings::Read().fastForwardButton == button, "all six fast-forward buttons read from INI");
+    }
+    for (const auto* value : {"6", "99", "-1", "4294967295", "4294967296", "bad"})
+    {
+        Write((std::string("fast_forward_button=") + value + "\n").c_str());
+        Check(settings::Read().fastForwardButton == 0, "invalid fast-forward button falls back to LT");
+    }
     Check(settings::Read().menuAnimationRate == 1, "missing menu animation key defaults to Normal");
     for (const auto rate : settings::MenuAnimationRates)
     {
@@ -223,15 +235,28 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::SaveBattleExpDouble(true) && settings::GetConfig().battleExpDouble &&
           Contents().find("battle_exp_double=1\n") != std::string::npos,
         "battle EXP preference persists");
-    Check(settings::SaveFastForward(true, 1, 8, false) && settings::GetConfig().fastForward &&
+    for (const auto button : {0u, 1u, 2u, 3u, 4u, 5u})
+    {
+        Check(settings::SaveFastForward(true, 1, 8, false, button) &&
+              settings::GetConfig().fastForwardButton == button && settings::Read().fastForwardButton == button &&
+              Contents().find("fast_forward_button=" + std::to_string(button) + "\n") != std::string::npos,
+            "all six fast-forward bindings roundtrip through runtime and disk");
+    }
+    Check(settings::SaveFastForward(true, 1, 8, false, 99) && settings::GetConfig().fastForwardButton == 0 &&
+          settings::Read().fastForwardButton == 0, "invalid saved fast-forward button falls back to LT");
+    Check(settings::SaveFastForward(true, 1, 8, false, 2) && settings::GetConfig().fastForward &&
           settings::GetConfig().fastForwardRate == 8 && !settings::GetConfig().fastForwardKeepAudioPitch &&
-          Contents().find("fast_forward=1\nfast_forward_mode=1\nfast_forward_rate=8\nfast_forward_keep_pitch=0\n") != std::string::npos,
+          settings::GetConfig().fastForwardButton == 2 &&
+          Contents().find("fast_forward=1\nfast_forward_mode=1\n") != std::string::npos &&
+          Contents().find("fast_forward_rate=8\nfast_forward_keep_pitch=0\n") != std::string::npos,
         "fast-forward choices persist");
     auto menuPreview = settings::GetConfig();
     menuPreview.width = 2200;
     menuPreview.encounterRate = settings::EncounterRate::Normal;
     menuPreview.battleExpDouble = false;
+    menuPreview.fastForwardButton = 5;
     settings::PreviewConfig(menuPreview);
+    Check(settings::GetConfig().fastForwardButton == 2, "graphics preview preserves the fast-forward button");
     for (const auto rate : settings::MenuAnimationRates)
     {
         Check(settings::SaveMenuAnimationRate(rate) && settings::GetConfig().menuAnimationRate == rate &&
@@ -268,6 +293,7 @@ int wmain(int argc, wchar_t** argv)
     graphics.ambientOcclusion = 2;
     graphics.vibrationPercent = 30;
     graphics.menuAnimationRate = 1;
+    graphics.fastForwardButton = 0;
     Check(settings::SaveConfig(graphics), "save ordinary settings");
     Check(settings::Read().shadowResolution == 4 && settings::Read().ambientOcclusion == 2 &&
           Contents().find("shadow_resolution=4\nambient_occlusion=2\n") != std::string::npos,
@@ -278,7 +304,7 @@ int wmain(int argc, wchar_t** argv)
     Check(settings::Read().encounterRate == settings::EncounterRate::Half && settings::Read().battleExpDouble,
         "ordinary save retains encounter rate and battle EXP");
     Check(settings::Read().fastForward && settings::Read().fastForwardMode == 1 && settings::Read().fastForwardRate == 8 &&
-          !settings::Read().fastForwardKeepAudioPitch,
+          !settings::Read().fastForwardKeepAudioPitch && settings::Read().fastForwardButton == 2,
         "ordinary save retains fast-forward choices");
     Check(settings::GetConfig().menuAnimationRate == 4 && settings::MenuAnimationRate() == 4 &&
           settings::Read().menuAnimationRate == 4, "ordinary save retains menu animation speed");

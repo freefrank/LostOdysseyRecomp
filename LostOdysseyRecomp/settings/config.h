@@ -189,6 +189,7 @@ struct Config
     // multiplier (one of debug_menu::fast_forward::Rates).
     bool fastForward = false;
     uint32_t fastForwardMode = 0;
+    uint32_t fastForwardButton = 0; // 0 LT, 1 RT, 2 LB, 3 RB, 4 L3, 5 R3.
     uint32_t fastForwardRate = 2;
     bool fastForwardKeepAudioPitch = true;
     uint32_t menuAnimationRate = 1; // Debug-only camp-menu transitions: 1 Normal, 2 Fast, 4 Faster.
@@ -202,7 +203,7 @@ bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
 bool SaveEncounterRate(EncounterRate rate);
 bool SaveBattleExpDouble(bool enabled);
-bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch);
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button);
 bool SaveMenuAnimationRate(uint32_t rate);
 // Cheap, thread-safe read for the camp-menu tween hook.
 uint32_t MenuAnimationRate();

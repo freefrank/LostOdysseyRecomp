@@ -31,6 +31,7 @@ struct MockServices
     uint32_t selectedLanguage = 1;
     bool saveLanguageSuccess = true;
     bool keepAudioPitch = true;
+    uint32_t fastForwardButton = 0;
     bool saveFastForwardSuccess = true;
     int fastForwardSaveCalls = 0;
     uint32_t menuAnimationRate = 1;
@@ -74,6 +75,7 @@ Config GetConfig()
     Config c;
     c.debugLanguage = g_mock.selectedLanguage;
     c.fastForwardKeepAudioPitch = g_mock.keepAudioPitch;
+    c.fastForwardButton = g_mock.fastForwardButton;
     c.menuAnimationRate = g_mock.menuAnimationRate;
     return c;
 }
@@ -83,11 +85,12 @@ bool SaveDebugLanguage(uint32_t language)
     g_mock.selectedLanguage = language;
     return true;
 }
-bool SaveFastForward(bool, uint32_t, uint32_t, bool keepAudioPitch)
+bool SaveFastForward(bool, uint32_t, uint32_t, bool keepAudioPitch, uint32_t button)
 {
     ++g_mock.fastForwardSaveCalls;
     if (!g_mock.saveFastForwardSuccess) return false;
     g_mock.keepAudioPitch = keepAudioPitch;
+    g_mock.fastForwardButton = button;
     return true;
 }
 bool SaveMenuAnimationRate(uint32_t rate)
@@ -438,6 +441,10 @@ int main()
         Require(rasterizer.MeasureWString(debug_menu::translations::Text(
             L"Return to title after confirmation; unavailable in battle.", zh)) <= 700,
             "Return to title help exceeds the Overview text width");
+        Require(rasterizer.MeasureWString(debug_menu::cheat_overlay::FastForwardButtonLabel[zh]) <= 182,
+            "Fast-forward button label exceeds its Cheats label column");
+        for (const auto* value : debug_menu::cheat_overlay::FastForwardButtonValues)
+            Require(rasterizer.MeasureWString(value) <= 350, "Fast-forward button value exceeds its Cheats value column");
         for (const auto* label : {debug_menu::cheat_overlay::FastForwardAudioLabel[zh],
                                  debug_menu::cheat_overlay::EncounterRateLabel[zh],
                                  debug_menu::cheat_overlay::BattleExpLabel[zh],
@@ -461,7 +468,7 @@ int main()
                 "Menu animations value exceeds the Cheats value column");
     }
     const debug_menu::cheat_overlay::Model quickTools;
-    Require(quickTools.Rows() == 12 &&
+    Require(quickTools.Rows() == 13 &&
             (int(quickTools.Rows()) - 1) * debug_menu::cheat_overlay::QuickToolRowHeight + 23 <= 296,
         "Quick-tool rows overlap the help area");
 
@@ -469,7 +476,35 @@ int main()
     // confirmation and remain usable before a playable field has loaded.
     Require(!debug_menu::cheats::session.Get().enabled, "Memory edits unexpectedly enabled");
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
-    for(int i=0;i<4;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    for(int i=0;i<3;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    using debug_menu::fast_forward::Button;
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0,
+        "Fast-forward binding should initially be LT");
+    for (uint32_t button = 1; button <= 5; ++button)
+    {
+        debug_menu::HandleInput(button == 1 ? debug_menu::InputAction::Confirm : debug_menu::InputAction::Right);
+        Require(uint32_t(debug_menu::fast_forward::GetStatus().button) == button && g_mock.fastForwardButton == button,
+            "Confirm and Right cycle and persist every fast-forward binding in order");
+    }
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0,
+        "Right wraps the fast-forward binding from R3 to LT");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(debug_menu::fast_forward::GetStatus().button == Button::R3 && g_mock.fastForwardButton == 5,
+        "Left wraps the fast-forward binding from LT to R3");
+    g_mock.saveFastForwardSuccess = false;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(debug_menu::fast_forward::GetStatus().button == Button::R3 && g_mock.fastForwardButton == 5,
+        "Failed binding save preserves the live and persisted choice");
+    g_mock.saveFastForwardSuccess = true;
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0 &&
+            g_mock.fastForwardSaveCalls == 9,
+        "Successful binding changes and failed saves make exactly one persistence attempt each");
+    Require(!debug_menu::fast_forward::GetStatus().enabled, "Changing the button must not enable fast-forward");
+    const auto buttonSaveCalls = g_mock.fastForwardSaveCalls;
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Rate
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Audio
     Require(debug_menu::fast_forward::KeepAudioPitch(), "Fast-forward audio should initially keep pitch");
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(!debug_menu::fast_forward::KeepAudioPitch() && !g_mock.keepAudioPitch,
@@ -480,7 +515,7 @@ int main()
         "Failed audio-mode save must preserve the live and persisted choice");
     g_mock.saveFastForwardSuccess = true;
     debug_menu::HandleInput(debug_menu::InputAction::Left);
-    Require(debug_menu::fast_forward::KeepAudioPitch() && g_mock.keepAudioPitch && g_mock.fastForwardSaveCalls == 3,
+    Require(debug_menu::fast_forward::KeepAudioPitch() && g_mock.keepAudioPitch && g_mock.fastForwardSaveCalls == buttonSaveCalls + 3,
         "Left should select Keep pitch and persist once per change");
     Require(!debug_menu::fast_forward::GetStatus().enabled,
         "Changing audio mode must not enable fast-forward");
@@ -512,7 +547,7 @@ int main()
     debug_menu::RenderOverlay(rasterizer);
 
     // Cheats / Quick tools / Menu animations: forward/backward cycling persists each choice.
-    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 7: Menu animations
+    debug_menu::HandleInput(debug_menu::InputAction::Down); // Row 8: Menu animations
     Require(g_mock.menuAnimationRate == 1, "Menu animation speed should initially be Normal");
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(g_mock.menuAnimationRate == 2, "Confirm should select and save Fast");
@@ -540,7 +575,7 @@ int main()
 
     // Both debug-menu languages must show the complete two-line help at the
     // production 700px content width, without an ellipsis or discarded text.
-    for(bool zh : {false,true}) for(unsigned row : {4u,5u,6u,7u}) {
+    for(bool zh : {false,true}) for(unsigned row : {3u,5u,6u,7u,8u}) {
         std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
         Require(!remaining.empty(), "Quick-tool help is missing a language");
         for(int line=0;!remaining.empty() && line<2;++line) {
