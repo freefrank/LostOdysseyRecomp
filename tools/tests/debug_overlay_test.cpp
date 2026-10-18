@@ -89,7 +89,7 @@ Config GetConfig()
     return config;
 }
 bool SaveDebugLanguage(uint32_t language) { g_debugLanguage = language; return true; }
-bool SaveFastForward(bool, uint32_t, uint32_t, bool) { return true; }
+bool SaveFastForward(bool, uint32_t, uint32_t, bool, uint32_t) { return true; }
 bool SaveMenuAnimationRate(uint32_t) { return true; }
 }
 
@@ -286,7 +286,15 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     renderFrame();
     capture("cheats-zh-playstation.ppm");
-    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("fast-forward-button-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // LB
+    renderFrame();
+    capture("fast-forward-button-zh-playstation-lb.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Left); // Restore LT
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("fast-forward-audio-zh-playstation.ppm");
     debug_menu::HandleInput(debug_menu::InputAction::Down);
@@ -304,7 +312,7 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("menu-animations-zh-playstation.ppm");
-    for (int i = 0; i < 7; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
+    for (int i = 0; i < 8; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
@@ -312,7 +320,15 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
-    for (int i = 0; i < 4; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    renderFrame();
+    capture("fast-forward-button-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // LB
+    renderFrame();
+    capture("fast-forward-button-en-lb.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Left); // Restore LT
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("fast-forward-audio-en.ppm");
     debug_menu::HandleInput(debug_menu::InputAction::Down);
@@ -344,8 +360,8 @@ int main(int argc, char** argv)
 
     debug_menu::HandleInput(debug_menu::InputAction::Cancel); // Dismiss picker
     debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
-    for(int i=0;i<8;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 8: memory edits confirmation
+    for(int i=0;i<9;++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Row 9: memory edits confirmation
     g_playStation = false;
     const auto confirmReference = renderFrame();
     g_playStation = true;

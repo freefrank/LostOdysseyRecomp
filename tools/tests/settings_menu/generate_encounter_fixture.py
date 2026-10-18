@@ -112,6 +112,31 @@ int main() {
             settings::GetConfig().discordStatus==enabled && settings::Read().discordStatus==enabled,
             "Discord status parses and roundtrips both values");
     }
+    Check(settings::GetConfig().fastForwardButton==0,"missing fast-forward button defaults to LT");
+    for(auto text : {"", "fast_forward_button=2\n", "fast_forward_button=3\n",
+                    "fast_forward_button=4\n", "fast_forward_button=5\n", "fast_forward_button=6\n",
+                    "fast_forward_button=-1\n", "fast_forward_button=4294967295\n",
+                    "fast_forward_button=4294967296\n", "fast_forward_button=bad\n"}) {
+        Write(text); Check(settings::Read().fastForwardButton==0,
+            "missing and unsupported bindings use LT without migrating old numeric values");
+    }
+    for(uint32_t button : {0u,1u}) {
+        Write("fast_forward_button="+std::to_string(button)+"\n");
+        Check(settings::Read().fastForwardButton==button,"LT and LB parse in persisted order");
+        Check(settings::SaveFastForward(true,1,8,true,button) &&
+            settings::Read().fastForwardButton==button && settings::GetConfig().fastForwardButton==button,
+            "both fast-forward bindings roundtrip through disk and runtime");
+        auto graphics=settings::GetConfig(); graphics.fastForwardButton=1-button;
+        Check(settings::SaveConfig(graphics) && settings::Read().fastForwardButton==button,
+            "graphics save preserves the selected fast-forward button");
+        settings::PreviewConfig(graphics);
+        Check(settings::GetConfig().fastForwardButton==button,"graphics preview preserves the selected button");
+        Check(fs::create_directory("settings.ini.tmp"),"block atomic settings temporary file");
+        Check(!settings::SaveFastForward(true,1,8,true,1-button) &&
+            settings::Read().fastForwardButton==button && settings::GetConfig().fastForwardButton==button,
+            "failed button save preserves disk and runtime choice");
+        Check(fs::remove("settings.ini.tmp"),"remove atomic settings blocker");
+    }
     Check(settings::GetConfig().fastForwardKeepAudioPitch,"missing fast-forward audio key keeps pitch");
     for(auto text : {"", "fast_forward_keep_pitch=2\n", "fast_forward_keep_pitch=-1\n",
                     "fast_forward_keep_pitch=4294967295\n", "fast_forward_keep_pitch=bad\n"}) {
@@ -120,7 +145,7 @@ int main() {
     for(bool keep : {false,true}) {
         Write(keep ? "fast_forward_keep_pitch=1\n" : "fast_forward_keep_pitch=0\n");
         Check(settings::Read().fastForwardKeepAudioPitch==keep,"fast-forward audio key parses both modes");
-        Check(settings::SaveFastForward(true,1,8,keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+        Check(settings::SaveFastForward(true,1,8,keep,0) && settings::Read().fastForwardKeepAudioPitch==keep &&
             settings::GetConfig().fastForwardKeepAudioPitch==keep,"fast-forward audio roundtrip retains selected mode");
         auto graphics=settings::GetConfig(); graphics.fastForwardKeepAudioPitch=!keep;
         Check(settings::SaveConfig(graphics) && settings::Read().fastForwardKeepAudioPitch==keep,
@@ -128,7 +153,7 @@ int main() {
         settings::PreviewConfig(graphics);
         Check(settings::GetConfig().fastForwardKeepAudioPitch==keep,"graphics preview preserves debug audio mode");
         Check(fs::create_directory("settings.ini.tmp"),"block atomic settings temporary file");
-        Check(!settings::SaveFastForward(true,1,8,!keep) && settings::Read().fastForwardKeepAudioPitch==keep &&
+        Check(!settings::SaveFastForward(true,1,8,!keep,0) && settings::Read().fastForwardKeepAudioPitch==keep &&
             settings::GetConfig().fastForwardKeepAudioPitch==keep,"failed audio-mode save preserves disk and runtime choice");
         Check(fs::remove("settings.ini.tmp"),"remove atomic settings blocker");
     }

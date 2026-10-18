@@ -56,11 +56,12 @@ namespace debug_menu
 
     void Update()
     {
-        // The F1 fast-forward choices from settings.ini, once, before the first trigger poll.
+        // The F1 fast-forward choices from settings.ini, once, before the first input poll.
         static const bool restored = [] {
             const auto config = settings::GetConfig();
             fast_forward::SetRate(config.fastForwardRate);
             fast_forward::SetMode(config.fastForwardMode == 1 ? fast_forward::Mode::Toggle : fast_forward::Mode::Hold);
+            fast_forward::SetButton(fast_forward::Button(config.fastForwardButton));
             fast_forward::SetKeepAudioPitch(config.fastForwardKeepAudioPitch);
             fast_forward::Enable(config.fastForward);
             return true;

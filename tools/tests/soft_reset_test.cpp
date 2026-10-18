@@ -9,10 +9,125 @@ void Check(bool condition, const char* message)
 {
     if (!condition) throw std::runtime_error(message);
 }
+
+void CheckFastForwardButtons()
+{
+    using namespace debug_menu::fast_forward;
+    Check(Control{}.button == Button::LT && Status{}.button == Button::LT,
+        "existing profiles default to the physical LT button");
+    const Buttons distinct{91, 132, 255, 0};
+    struct Mapping { Button button; uint8_t value, pair; };
+    for (const auto mapping : {Mapping{Button::LT, 91, 132}, Mapping{Button::LB, 255, 0}})
+    {
+        const auto input = SelectButton(mapping.button, distinct);
+        Check(input.button == mapping.value && input.pair == mapping.pair,
+            "binding selects the physical input and its corresponding pair without changing analog values");
+    }
+    for (const auto invalid : {2, 3, 4, 5, 99})
+    {
+        const auto fallback = SelectButton(static_cast<Button>(invalid), distinct);
+        Control control;
+        control.SetButton(static_cast<Button>(invalid), 1);
+        Check(fallback.button == distinct.lt && fallback.pair == distinct.rt && control.button == Button::LT,
+            "unsupported runtime buttons fall back to LT and its RT pair without migration");
+    }
+
+    struct Binding { Button button; uint8_t Buttons::*source; uint8_t Buttons::*pair; };
+    for (const auto binding : {Binding{Button::LT, &Buttons::lt, &Buttons::rt},
+            Binding{Button::LB, &Buttons::lb, &Buttons::rb}})
+        for (const auto mode : {Mode::Hold, Mode::Toggle})
+        {
+            Control control;
+            uint64_t now = 1;
+            control.Enable(true, now++);
+            control.SetButton(binding.button, now++);
+            control.SetMode(mode, now++);
+            Buttons buttons{255, 255, 255, 255};
+            buttons.*binding.source = 0;
+            buttons.*binding.pair = 0;
+            const auto sample = [&] {
+                const auto input = SelectButton(control.button, buttons);
+                control.Sample(input.button, input.pair, true, now++);
+                return control.Get(now).active;
+            };
+            Check(!sample(), "released selected button does not start fast-forward");
+            buttons.*binding.source = 255;
+            Check(sample(), "each selected button activates in Hold and Toggle despite unrelated held buttons");
+            buttons.*binding.pair = 255;
+            Check(!sample(), "LT+RT and LB+RB suppress an active Hold or Toggle boost");
+            buttons.*binding.pair = 0;
+            Check(sample(), "releasing the pair restores an existing boost");
+            control.Stop(now++);
+            Check(!sample(), "reconnecting a controller cannot inherit the previous held press");
+            buttons.*binding.source = 0;
+            Check(!sample(), "stopped boost arms on release");
+            buttons.*binding.source = buttons.*binding.pair = 255;
+            Check(!sample(), "a fresh paired press cannot activate fast-forward");
+            if (mode == Mode::Toggle)
+            {
+                buttons.*binding.pair = 0;
+                Check(!sample(), "a paired Toggle press does not latch a boost after releasing the pair");
+            }
+        }
+}
+
+void CheckFastForwardTriggerHysteresis()
+{
+    using namespace debug_menu::fast_forward;
+    Control control;
+    uint64_t now = 1;
+    control.Enable(true, now++);
+    control.SetButton(Button::LT, now++);
+    const auto sample = [&](uint8_t value, uint8_t pair = 0) {
+        Buttons buttons;
+        buttons.lt = value;
+        buttons.rt = pair;
+        const auto input = SelectButton(Button::LT, buttons);
+        control.Sample(input.button, input.pair, true, now++);
+        return control.Get(now).active;
+    };
+    Check(!sample(255), "held trigger cannot arm after enabling or rebinding");
+    Check(!sample(32) && !sample(63), "release threshold arms without pressing below 64");
+    Check(sample(64), "analog trigger activates at the 64 press threshold");
+    Check(sample(33), "analog trigger remains held above the 32 release threshold");
+    Check(!sample(32), "analog trigger releases at 32");
+    Check(sample(64, 32) && !sample(64, 33), "paired trigger blocks above the 32 release threshold");
+}
+
+void CheckFastForwardBindingChange()
+{
+    using namespace debug_menu::fast_forward;
+    for (const auto mode : {Mode::Hold, Mode::Toggle})
+    {
+        Control control;
+        uint64_t now = 1;
+        control.Enable(true, now++);
+        control.SetMode(mode, now++);
+        control.Sample(0, 0, true, now++);
+        control.Sample(255, 0, true, now++);
+        Check(control.Get(now).active, "boost starts before the binding changes");
+        control.SetButton(Button::LB, now++);
+        Check(!control.Get(now).active && control.Get(now).button == Button::LB,
+            "changing the binding stops boost and publishes the selected button");
+        control.Sample(255, 0, true, now++);
+        Check(!control.Get(now).active, "new binding cannot inherit the previous binding's press");
+        control.Sample(0, 0, true, now++);
+        control.Sample(255, 0, true, now++);
+        Check(control.Get(now).active, "new binding works after release and a fresh press");
+        control.Stop(now++);
+        control.Sample(0, 0, true, now++);
+        control.SetButton(Button::LT, now++);
+        control.Sample(255, 0, true, now++);
+        Check(!control.Get(now).active, "new binding cannot inherit an armed release from the previous binding");
+    }
+}
 }
 
 int main()
 {
+    CheckFastForwardButtons();
+    CheckFastForwardTriggerHysteresis();
+    CheckFastForwardBindingChange();
     using namespace debug_menu::soft_reset;
     Snapshot ready;
     ready.engine = 0x100000;
@@ -76,6 +191,7 @@ int main()
     using namespace debug_menu::fast_forward;
     Enable(true);
     SetMode(Mode::Toggle);
+    SetButton(Button::LB);
     SetRate(8);
     SetKeepAudioPitch(false);
     Sample(0, 0, true);
@@ -84,9 +200,9 @@ int main()
     Release();
     const auto stopped = GetStatus();
     Check(!stopped.active && AudioRate() == 1, "reset releases clock and audio boost");
-    Check(stopped.enabled && stopped.mode == Mode::Toggle && stopped.multiplier == 8 && !stopped.keepAudioPitch,
+    Check(stopped.enabled && stopped.mode == Mode::Toggle && stopped.button == Button::LB && stopped.multiplier == 8 && !stopped.keepAudioPitch,
         "reset preserves fast-forward preferences");
     Sample(255, 0, true);
     Check(!GetStatus().active, "held trigger cannot immediately rearm after reset");
-    std::puts("soft reset refusal, scene ownership and fast-forward preservation passed");
+    std::puts("soft reset refusal, scene ownership, fast-forward button mapping, hysteresis and preservation passed");
 }
