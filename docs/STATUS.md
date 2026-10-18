@@ -2,7 +2,43 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.5 published — 2026-10-18
+
+[v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) was published at 2026-10-18T17:56:24Z by the workflow's own publish step. A GitHub API read on 2026-10-18 at about 18:10 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.5` at squash commit `ca5cb373`, the release PR [#644](https://github.com/freefrank/LostOdysseyRecomp/pull/644). The previous release is v1.0.4, published 2026-10-18T00:26:10Z at `e8c103a4`.
+
+The release run is GitHub Actions run [39150707485](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39150707485), `Release` on tag `v1.0.5`. Every job succeeded: the FSR Vulkan inputs, draft release, Android, macOS, Linux, Windows and publish jobs. The release has the same five packages as v1.0.4. The macOS image was built by the GitHub-hosted macOS Release job.
+
+Changes since v1.0.4 (the [Changelog, v1.0.5](../CHANGELOG.md#v105--2026-10-18) section is the release body):
+
+- PR [#630](https://github.com/freefrank/LostOdysseyRecomp/pull/630) (external contributor): right-to-left tutorial box, long captions and typed text.
+- PR [#632](https://github.com/freefrank/LostOdysseyRecomp/pull/632): Music volume also covers real-time cutscene music ([#631](https://github.com/freefrank/LostOdysseyRecomp/issues/631)).
+- PR [#636](https://github.com/freefrank/LostOdysseyRecomp/pull/636) (external contributor): achievements in language packs; right-to-left pop-ups, names and dreams.
+- PR [#637](https://github.com/freefrank/LostOdysseyRecomp/pull/637): Settings → Graphics → Loading speed, Original or Fast (default) ([#633](https://github.com/freefrank/LostOdysseyRecomp/issues/633)).
+- PR [#638](https://github.com/freefrank/LostOdysseyRecomp/pull/638): black bars outside 16:9 for cutscenes and the pause overlay ([#602](https://github.com/freefrank/LostOdysseyRecomp/issues/602)).
+- PR [#641](https://github.com/freefrank/LostOdysseyRecomp/pull/641): the fast-forward button can be LT or LB ([#640](https://github.com/freefrank/LostOdysseyRecomp/issues/640)).
+- PR [#642](https://github.com/freefrank/LostOdysseyRecomp/pull/642): the AppImage starts without FUSE (Steam Runtime and Steam Beta client) through an automatic extract-and-run fallback ([#639](https://github.com/freefrank/LostOdysseyRecomp/issues/639)). The release workflow now tests the AppImage with FUSE unavailable.
+
+Docs-only PRs in the same range: [#625](https://github.com/freefrank/LostOdysseyRecomp/pull/625), [#626](https://github.com/freefrank/LostOdysseyRecomp/pull/626) (AI workflow doc), [#627](https://github.com/freefrank/LostOdysseyRecomp/pull/627) (v1.0.4 record), [#628](https://github.com/freefrank/LostOdysseyRecomp/pull/628) (notes English by default) and [#629](https://github.com/freefrank/LostOdysseyRecomp/pull/629) (English engineering principles).
+
+Assets, as listed by the GitHub release API on 2026-10-18 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.5.zip` | 153,318,434 | `6770af6df6324a809818b9392f46c3eba015d56c5165c1bf57c000a848202101` |
+| `LostOdysseyRecomp-linux-x64-v1.0.5.AppImage` | 88,250,872 | `5c979943f2610d54fc7dabcb53f309dca80905c6ecf1e3f32577212b6f83f829` |
+| `LostOdysseyRecomp-linux-x64-v1.0.5.flatpak` | 55,586,368 | `dff34192ad02fccbbd666473cb93a3c1596efd6120df6065ae5c8df1707a2baa` |
+| `LostOdysseyRecomp-android-arm64-v1.0.5.apk` | 47,256,639 | `28c73074eb9aa4e7168c240947b3584e50a72d7fcbc7aea634739946fd3aa137` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.5.dmg` | 63,920,723 | `46dc90e59572ec6235fcf03c89c7760be974adcc0ebc0ceda99179ee1ab9777e` |
+
+Save issue: [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) was closed as completed by the maintainer account at 2026-10-18T01:13:34Z, before this release. The changes listed above contain no save change. The closure is a tracker state; it does not record reporter acceptance.
+
+Validation: the release run succeeded in every job, including the AppImage test with FUSE unavailable added by PR #642. No game run with these packages is recorded, and this record has no in-game result for v1.0.5 or for the changes above.
+
+Acceptance: none. The maintainer has not accepted v1.0.5. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.4 published — 2026-10-18
+
+Update, 2026-10-18: v1.0.4 is no longer the latest release; [v1.0.5](#v105-published--2026-10-18) was published at 2026-10-18T17:56:24Z. The "awaiting player feedback" statement below is the 2026-10-18 read, updated by the save-issue note in this section.
 
 [v1.0.4](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.4) was published at 2026-10-18T00:26:10Z by the workflow's own publish step. A GitHub API read on 2026-10-18 at about 00:27 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.4` at squash commit `e8c103a4`, the release PR [#624](https://github.com/freefrank/LostOdysseyRecomp/pull/624). The previous release is v1.0.3, published 2026-10-17T23:46:15Z at `a72ae706`.
 
@@ -21,6 +57,8 @@ Assets, as listed by the GitHub release API on 2026-10-18 (size and the SHA-256 
 | `LostOdysseyRecomp-macos-arm64-v1.0.4.dmg` | 63,917,299 | `291abe3552f6684c14398cef194e8579ec51d8f87cfb54e36bca096aaba7db0e` |
 
 Save issue: [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) was open at its 2026-10-18 read (updated 00:26:58Z) and stays open, awaiting player feedback.
+
+Update, 2026-10-18: [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) was closed as completed by the maintainer account at 2026-10-18T01:13:34Z, after the read above and before v1.0.5. The closure is a tracker state; it does not record reporter acceptance, and v1.0.4 is still not accepted.
 
 Validation: the maintainer accepted a logic review of the lock boundaries; that is not user acceptance. The same lock boundaries, in an earlier variant that called the Rtl library functions, passed 169 natural overwrites on psvita with no hang. The final head uses the kernel lock primitive directly; it passed the request-race CPU fixture and a full local Release link. The final head was not run in-game, so this record has no in-game stress result for v1.0.4.
 
