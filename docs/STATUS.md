@@ -2,7 +2,33 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.4 published — 2026-10-18
+
+[v1.0.4](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.4) was published at 2026-10-18T00:26:10Z by the workflow's own publish step. A GitHub API read on 2026-10-18 at about 00:27 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.4` at squash commit `e8c103a4`, the release PR [#624](https://github.com/freefrank/LostOdysseyRecomp/pull/624). The previous release is v1.0.3, published 2026-10-17T23:46:15Z at `a72ae706`.
+
+The release run is GitHub Actions run [39081738091](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39081738091), `Release` on tag `v1.0.4`. Every job succeeded, and the release has the same five packages as v1.0.3. The macOS image was built by the GitHub-hosted macOS Release job.
+
+Change since v1.0.3: PR [#623](https://github.com/freefrank/LostOdysseyRecomp/pull/623) (`ae6bdac3`) is the second fix for [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615). The four save request routines published a request flag and then set the worker busy flag. A fast worker completion could land between those two stores and be overwritten by busy. The fix holds the worker's own critical section only around those two stores, with no calls inside, so the worker never waits while holding it. This differs from the reverted PR [#618](https://github.com/freefrank/LostOdysseyRecomp/pull/618), which wrapped whole request routines.
+
+Assets, as listed by the GitHub release API on 2026-10-18 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.4.zip` | 153,299,126 | `b0d77f6c5c1b72e44ed813a511d6232d08b224f01eca9651af976b5237f9a987` |
+| `LostOdysseyRecomp-linux-x64-v1.0.4.AppImage` | 79,096,312 | `f0ac7dc85adeaa74a24bc1f1789eae54a71752b017efc73efb7064579c277e2e` |
+| `LostOdysseyRecomp-linux-x64-v1.0.4.flatpak` | 55,558,432 | `1fee31109f7709fa1c87a1089b78ccaf65a7342daa258126fc09478ac6232849` |
+| `LostOdysseyRecomp-android-arm64-v1.0.4.apk` | 47,243,159 | `ad4557d89bdb38b508e9bf34437089203ca4e981cf69bfe4ad122eae2982e7e8` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.4.dmg` | 63,917,299 | `291abe3552f6684c14398cef194e8579ec51d8f87cfb54e36bca096aaba7db0e` |
+
+Save issue: [#615](https://github.com/freefrank/LostOdysseyRecomp/issues/615) was open at its 2026-10-18 read (updated 00:26:58Z) and stays open, awaiting player feedback.
+
+Validation: the maintainer accepted a logic review of the lock boundaries; that is not user acceptance. The same lock boundaries, in an earlier variant that called the Rtl library functions, passed 169 natural overwrites on psvita with no hang. The final head uses the kernel lock primitive directly; it passed the request-race CPU fixture and a full local Release link. The final head was not run in-game, so this record has no in-game stress result for v1.0.4.
+
+Acceptance: none. The maintainer has not accepted v1.0.4. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.3 published — 2026-10-17
+
+Update, 2026-10-18: v1.0.3 is no longer the latest release; [v1.0.4](#v104-published--2026-10-18) was published at 2026-10-18T00:26:10Z with PR [#623](https://github.com/freefrank/LostOdysseyRecomp/pull/623) as its save change. The "wait for player feedback" statement below is the 2026-10-17 read.
 
 [v1.0.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.3) was published at 2026-10-17T23:46:15Z by the workflow's own publish step. A GitHub API read on 2026-10-17 shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.3` at squash commit `a72ae706`, the release PR [#621](https://github.com/freefrank/LostOdysseyRecomp/pull/621). The previous release is v1.0.2, published 2026-10-17T23:20:12Z at `45f404e0`.
 
