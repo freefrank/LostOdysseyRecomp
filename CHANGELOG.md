@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Right-to-left language packs: tutorial text ends at the right of its box, a long location name on the battle results no longer covers the play time, and text that types in letter by letter appears whole instead of from the left.
+
+### 简体中文
+
+- 从右到左的语言包：教程文字靠框的右侧对齐；战斗结算画面中较长的地点名称不再盖住游戏时间；逐字出现的文字改为整段显示，不再从左侧开始出现。
+
 ## [v1.0.4](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.4) — 2026-10-18
 
 ### English

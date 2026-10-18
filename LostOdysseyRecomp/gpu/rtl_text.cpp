@@ -19,7 +19,9 @@
 //   - every line of a block ends where its widest line ends;
 //   - three or more texts that share a left edge and scale in nearby rows (a list) end where
 //     the widest of them ends;
-//   - styled texts on a screen whose box edge is known (kEdges) end at that edge.
+//   - styled texts on a screen whose box edge is known (kEdges) end at that edge, and so do text
+//     blocks in such a box (kBlockEdges); a text wider than that room keeps its start;
+//   - a text the game types in letter by letter appears whole (the reveal runs left to right).
 // The previous frame tells which texts share a column. The game's own per-line x positions
 // (text object +280/+296/+300, used for centring; each replaces x) carry the shift.
 // Every hook here passes straight to the game's code unless the selected language pack is
@@ -138,6 +140,17 @@ float ColumnRight(float x, float y, float width, const std::vector<Row> &rows)
     return members >= 3 ? right : x + width;
 }
 
+// Text blocks in a box the game does not keep the edge of: a block starting at x (canvas 1280x720)
+// with its top between top and bottom ends at right.
+struct BlockEdge
+{
+    float x, top, bottom, right;
+};
+constexpr BlockEdge kBlockEdges[] = {
+    {227, 536, 546, 1050}, // tutorial pages (camp menu, Help): the box under the picture, clear of its A button
+};
+
+
 // Line widths the way the draw code advances a left-anchored text (sub_82314CD8).
 Layout Measure(PPCContext &ctx, uint8_t *base, uint32_t object, float scale)
 {
@@ -176,6 +189,15 @@ Layout Measure(PPCContext &ctx, uint8_t *base, uint32_t object, float scale)
     }
     return layout;
 }
+
+// Typing reveal and fade (+216 above zero and +272 = 1): record i at or past +312 is drawn at the opacity
+// +248 - step x i (step +228 per record index when +276 is set and +220 = 1, else a fixed step per record),
+// and drawing stops at the first record at zero. A line stored in display order would appear from its
+// left, so every record of an Arabic text takes the first one's opacity (indexed order, step 0): the text
+// appears whole and still fades out with +248.
+constexpr uint32_t kZero = 0x82000E50; // the 0 the draw code compares +216 with
+
+bool Typing(uint32_t object) { return LoadFloat(object + 216) > LoadFloat(kZero) && LoadWord(object + 272) == 1; }
 } // namespace
 
 // Draws one LO text object: r3 = the object, f1/f2 = the canvas scale.
@@ -210,6 +232,9 @@ PPC_FUNC(sub_82314CD8)
             if (other.object != object && std::abs(other.anchor - x) <= 2 && std::abs(other.scale - scale) < 0.01f)
                 rows.push_back({other.top, other.anchor + other.width});
         right = ColumnRight(x, y, natural, rows);
+        for (const BlockEdge &edge : kBlockEdges)
+            if (std::abs(edge.x - x) <= 1 && y >= edge.top && y <= edge.bottom)
+                right = std::max(right, edge.right);
     }
 
     gCurrent.push_back({object, x, y, natural, scale});
@@ -230,7 +255,21 @@ PPC_FUNC(sub_82314CD8)
     StoreWord(object + 296, gOffsets);
     StoreWord(object + 300, uint32_t(layout.lines.size()));
     lock.unlock();
+    const bool typing = Typing(object);
+    const uint32_t savedIndexed = LoadWord(object + 276), savedOrder = LoadWord(object + 220), savedStep = LoadWord(object + 228);
+    if (typing)
+    {
+        StoreWord(object + 276, 1);
+        StoreWord(object + 220, 1);
+        StoreFloat(object + 228, 0);
+    }
     __imp__sub_82314CD8(ctx, base);
+    if (typing)
+    {
+        StoreWord(object + 276, savedIndexed);
+        StoreWord(object + 220, savedOrder);
+        StoreWord(object + 228, savedStep);
+    }
     StoreWord(object + 280, savedCentre);
     StoreWord(object + 296, savedOffsets);
     StoreWord(object + 300, savedCount);
@@ -402,10 +441,12 @@ PPC_FUNC(sub_8230C118)
         if (std::abs(other.x - x) <= 1 && std::abs(other.scale - scale) < 0.01f && other.y != y)
             rows.push_back({other.y, other.x + other.width});
     float right = ColumnRight(x, y, width, rows);
-    // A screen whose box edge is known: the text (and its list) ends there instead.
+    // A screen whose box edge is known: the text (and its list) ends there instead, unless it is
+    // wider than the room before that edge (the same caption on another screen with a longer
+    // text): then it keeps its start and runs past the edge rather than over what is on its left.
     for (const Edge &edge : kEdges)
         if (std::abs(edge.x - x) <= 1 && std::abs(edge.scale - scale) < 0.01f && y >= edge.top && y <= edge.bottom)
-            right = edge.right;
+            right = std::max(edge.right, right);
     lock.unlock();
     if (width > 0) // 0 until the renderer has its font (C118 sets it on first use)
         ctx.f3.f64 = right - width;
