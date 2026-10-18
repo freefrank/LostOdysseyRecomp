@@ -73,6 +73,12 @@ if(LO_BUILD_AUDIO_TESTS AND NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(tools/tests/fast_forward_audio)
 endif()
 
+option(LO_BUILD_VOICE_VOLUME_TESTS "Build the game-free production voice-volume fixture" OFF)
+if(LO_BUILD_VOICE_VOLUME_TESTS)
+    enable_testing()
+    add_subdirectory(tools/tests/voice_volume)
+endif()
+
 if(ANDROID)
     if(NOT LO_TARGET_ISA STREQUAL "aarch64")
         message(FATAL_ERROR "Android currently requires the NDK arm64-v8a toolchain")
