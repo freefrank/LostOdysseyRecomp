@@ -4172,7 +4172,7 @@ int main(int argc, char** argv)
             const auto openQuit = [&] {
                 Require(!titleTick(true), "title menu is idle before shortcut");
                 Poll(0, false); Poll(0x20, false);
-                Require(titleTick(true) && settings::IsOpen() && !settings::active,
+                Require(titleTick(true) && settings::IsOpen() && settings::IsTitleQuitOpen() && !settings::active,
                         "fresh Back opens host confirmation without opening retail Settings");
                 Require(settings::snapshot.dialogOnly && settings::snapshot.dialogMessage == L"Quit the game?" &&
                         settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Yes", L"No"} &&
@@ -4182,9 +4182,48 @@ int main(int argc, char** argv)
             const auto release = [&] { Poll(0, true); Poll(0, false); };
             currentConfig.uiLanguage = 0;
             openQuit();
+            settings::menuClockOffset = {};
+            settings::menuClockFixed = std::chrono::steady_clock::time_point{};
+            std::vector<uint32_t> dialogPixels, replacementPixels;
+            uint64_t dialogRevision = 0, replacementRevision = 0;
+            Require(!settings::DrawMenu(replacementPixels, replacementRevision, 320, 180) && replacementPixels.empty(),
+                    "title confirmation never replaces the live title through DrawMenu");
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 0,
+                    "title confirmation starts with transparent dim");
+            const auto colored = std::find_if(dialogPixels.begin(), dialogPixels.end(), [](uint32_t pixel) {
+                return (pixel & 0x00ffffffu) != 0;
+            });
+            Require(colored != dialogPixels.end(), "transparent opening retains dialog RGB for straight alpha");
+            const size_t coloredIndex = size_t(colored - dialogPixels.begin());
+            const uint32_t coloredRgb = *colored & 0x00ffffffu;
+            const uint64_t snapshotRevision = settings::snapshot.revision, openingRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(50);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 30 &&
+                    (dialogPixels[coloredIndex] & 0x00ffffffu) == coloredRgb && dialogRevision > openingRevision &&
+                    settings::snapshot.revision == snapshotRevision,
+                    "unchanged title snapshot advances its 100 ms dim without fading straight RGB");
+            const uint64_t halfOpenRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(100);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 61 &&
+                    dialogRevision > halfOpenRevision, "title dim reaches translucent alpha 61 after 100 ms");
+            const uint64_t settledRevision = dialogRevision;
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && dialogRevision == settledRevision,
+                    "settled title confirmation reuses its raster revision");
             Poll(0x1000, true);
-            Require(titleTick(true) && !settings::IsOpen() && quitEventAttempts == beforeQuit,
+            Require(titleTick(true) && !settings::IsOpen() && !settings::IsTitleQuitOpen() && quitEventAttempts == beforeQuit,
                     "confirming default No holds guest input for its last tick and never quits");
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180),
+                    "dismissed No retains overlay for its closing fade");
+            settings::menuClockOffset = std::chrono::milliseconds(150);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 30 &&
+                    (dialogPixels[coloredIndex] & 0x00ffffffu) == coloredRgb && dialogRevision > settledRevision,
+                    "No fades dim and dialog out over the live title without fading straight RGB");
+            const uint64_t halfClosedRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(200);
+            Require(!settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 0 &&
+                    dialogRevision > halfClosedRevision, "closing completes after 100 ms and publishes its last frame");
+            settings::menuClockOffset = {};
+            settings::menuClockFixed.reset();
             Poll(0x1000, true); release();
             openQuit();
             Poll(1, true); titleTick(true); Poll(0, true); Poll(0x2000, true);
@@ -4223,7 +4262,7 @@ int main(int argc, char** argv)
             Poll(0, false); Poll(0x8000, false);
             Require(settings::ConsumeTitleShortcut(true), "existing Y Settings shortcut remains available");
             settings::ConsumeTitleShortcut(false);
-            std::puts("PASS title Quit: idle edge gate, held input, default No, B/Back/Escape, release consumption, Yes and failed queue retry");
+            std::puts("PASS title Quit: overlay-only 100 ms straight-alpha fades, idle edge gate, held input, default No, B/Back/Escape, release consumption, Yes and failed queue retry");
         }
         VirtualFree(base, 0, MEM_RELEASE);
         return 0;

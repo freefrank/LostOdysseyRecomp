@@ -111,11 +111,12 @@ uint64_t displayMovesBefore = 0;
 std::chrono::steady_clock::time_point displayConfirmDeadline;
 std::atomic<bool> displayConfirmOpen{false}, displayConfirmEscape{false};
 std::chrono::steady_clock::duration menuClockOffset{}; // Tests advance the menu clock.
+std::optional<std::chrono::steady_clock::time_point> menuClockFixed; // Tests hold exact animation frames.
 // Saved display choice the menu last saw; the window thread changes it when the
 // player moves the window (Win+Shift+arrow).
 std::string syncedDisplayName;
 uint32_t syncedDisplayIndex = 0;
-std::chrono::steady_clock::time_point MenuNow() { return std::chrono::steady_clock::now() + menuClockOffset; }
+std::chrono::steady_clock::time_point MenuNow() { return menuClockFixed.value_or(std::chrono::steady_clock::now()) + menuClockOffset; }
 bool collectionPrompt = false;
 int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
@@ -4036,6 +4037,11 @@ bool settings::IsOpen()
     return active.load() || titleQuitOpen.load();
 }
 
+bool settings::IsTitleQuitOpen()
+{
+    return titleQuitOpen.load();
+}
+
 bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
 {
     const auto close = [] {
@@ -4139,6 +4145,100 @@ void settings::MarkTitleEntry()
     titleEntry = true;
 }
 
+bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
+{
+    // This overlay has its own cache and motion. DrawMenu is a full-screen
+    // replacement for the retail Settings task; the title must stay underneath.
+    static uint64_t cachedRevision = ~uint64_t{}, outputRevision = 0;
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    static bool cachedPlayStation = false, shown = false, closing = false;
+    static std::shared_ptr<const menu_assets::Assets> cachedAssets;
+    static MenuTransition motion;
+    static std::vector<uint32_t> raster;
+    static MenuTransition::Clock::time_point lastFrame{};
+    const auto advance = [&](MenuTransition::Clock::time_point now) {
+        if (motion.Running() && now != lastFrame)
+        {
+            motion.Advance(pixels, now);
+            ++outputRevision; // Includes the final frame, when Advance returns false.
+        }
+        lastFrame = now;
+        revision = outputRevision;
+    };
+    const auto reset = [&] {
+        shown = closing = false;
+        cachedAssets.reset();
+        motion.Reset();
+        std::vector<uint32_t>().swap(raster);
+    };
+    const bool compatible = cachedWidth == width && cachedHeight == height &&
+                            pixels.size() == size_t(width) * height && !pixels.empty();
+    if (!titleQuitOpen.load())
+    {
+        if (!shown)
+            return false;
+        if (!compatible)
+        {
+            reset();
+            return false;
+        }
+        const auto now = MenuNow();
+        if (!closing)
+        {
+            advance(now);
+            raster = pixels;
+            // Preserve straight RGB: fading RGB as well as alpha would darken
+            // the dialog twice when the overlay is composited over the title.
+            for (auto &pixel : raster)
+                pixel &= 0x00ffffffu;
+            closing = motion.Start(pixels, raster, width, now, menu_motion::DialogFade);
+        }
+        advance(now);
+        if (closing && motion.Running())
+            return true;
+        reset();
+        return false;
+    }
+    MenuSnapshot current;
+    {
+        std::lock_guard lock(snapshotMutex);
+        current = snapshot;
+    }
+    current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
+    const bool opened = !shown;
+    if (opened || closing || !compatible || cachedRevision != current.revision ||
+        cachedPlayStation != current.playStationPrompts || cachedAssets != current.assets)
+    {
+        if (!RasterizeMenu(current, width, height, raster))
+            return false;
+        const auto now = MenuNow();
+        if (opened || !compatible)
+        {
+            pixels = raster;
+            for (auto &pixel : pixels)
+                pixel &= 0x00ffffffu;
+        }
+        else
+            advance(now);
+        if (!motion.Start(pixels, raster, width, now, menu_motion::DialogFade))
+            return false;
+        lastFrame = now;
+        shown = true;
+        closing = false;
+        cachedRevision = current.revision;
+        cachedWidth = width;
+        cachedHeight = height;
+        cachedPlayStation = current.playStationPrompts;
+        cachedAssets = current.assets;
+        revision = ++outputRevision;
+        return true;
+    }
+    // A stable snapshot still needs a new fade frame on the presentation thread.
+    advance(MenuNow());
+    return true;
+}
+
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
     // This cache belongs to the sole presentation thread. Dimensions must be
@@ -4189,32 +4289,12 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     };
     if (titleQuitOpen.load())
     {
-        MenuSnapshot current;
-        {
-            std::lock_guard lock(snapshotMutex);
-            current = snapshot;
-        }
-        current.playStationPrompts = hid::UsesPlayStationPrompts();
-        current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
-        static uint64_t dialogRevision = ~uint64_t{};
-        static uint32_t dialogWidth = 0, dialogHeight = 0;
-        static bool dialogPlayStation = false;
-        static std::shared_ptr<const menu_assets::Assets> dialogAssets;
-        if (dialogRevision != current.revision || dialogWidth != width || dialogHeight != height ||
-            dialogPlayStation != current.playStationPrompts || dialogAssets != current.assets || pixels.empty())
-        {
-            if (!RasterizeMenu(current, width, height, pixels))
-                return false;
-            dialogRevision = current.revision;
-            dialogWidth = width;
-            dialogHeight = height;
-            dialogPlayStation = current.playStationPrompts;
-            dialogAssets = current.assets;
-        }
-        revision = current.revision;
-        shown = closing = false;
+        // A title confirmation is a translucent overlay, never a replacement
+        // menu frame. DrawTitleQuit owns its raster and fade independently.
+        shown = closing = arrowPlaced = false;
+        arrowDrawn = markerDrawn = {};
         motion.Reset();
-        return true;
+        return false;
     }
     if (!active.load())
     {

@@ -4946,6 +4946,8 @@ namespace gpu::video
             if (!isMenu && cinematicBars)
                 g_presentation->DrawContentBars(g_commandList.get(), backBuffer, width, height,
                     g_swapChain->getWidth(), g_swapChain->getHeight());
+            if (!isMenu)
+                DrawTitleHint(backBuffer);
         }
         RecordPresentedSnapshot(backBuffer);
         QueuePresentCapture(backBuffer, captureTicket);
@@ -5494,7 +5496,9 @@ namespace gpu::video
 
     bool IsHostOverlayActive()
     {
-        return debug_menu::IsOverlayVisible() || settings::IsOpen();
+        // The title modal is composited over live guest frames by DrawTitleHint,
+        // never submitted alone by the idle host-menu presentation path.
+        return debug_menu::IsOverlayVisible() || (settings::IsOpen() && !settings::IsTitleQuitOpen());
     }
 
     void PresentHostOverlay()

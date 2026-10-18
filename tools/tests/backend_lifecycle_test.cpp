@@ -67,6 +67,7 @@ void TestQuitSubSystem(Uint32 flags) {
 #undef SDL_CreateWindowWithProperties
 #undef SDL_QuitSubSystem
 
+namespace discord_rpc { void Shutdown() {} }
 namespace settings {
 Config GetConfig() { std::lock_guard lock(fixture::mutex); return fixture::config; }
 bool DrawMenu(std::vector<uint32_t>& pixels,uint64_t&,uint32_t width,uint32_t height) {
@@ -77,6 +78,7 @@ bool DrawMenu(std::vector<uint32_t>& pixels,uint64_t&,uint32_t width,uint32_t he
 void PointerClick(float,float,bool) { throw std::runtime_error("unexpected pointer input"); }
 void PointerDrag(float,float,bool) { throw std::runtime_error("unexpected pointer input"); }
 bool IsOpen() { return fixture::settingsOpen; }
+bool IsTitleQuitOpen() { return false; }
 bool CalibrationKey(uint32_t) { return false; }
 bool CaptureKey(uint32_t,bool) { return false; }
 HdrCalibration GetHdrCalibration() {

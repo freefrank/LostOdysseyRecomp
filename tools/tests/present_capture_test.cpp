@@ -54,10 +54,12 @@ public:
 #include "../../LostOdysseyRecomp/gpu/video.cpp"
 #undef PresentGate
 
+namespace discord_rpc { void Shutdown() {} }
 namespace settings {
 Config GetConfig() { std::lock_guard lock(fixture::mutex); return fixture::config; }
 bool DrawMenu(std::vector<uint32_t>&, uint64_t&, uint32_t, uint32_t) { return false; }
 bool IsOpen() { return false; }
+bool IsTitleQuitOpen() { return false; }
 void PointerClick(float, float, bool) {}
 void PointerDrag(float, float, bool) {}
 bool CalibrationKey(uint32_t) { return false; }

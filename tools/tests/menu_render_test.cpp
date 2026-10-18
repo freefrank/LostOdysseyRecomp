@@ -441,6 +441,15 @@ int main(int argc, char **argv)
                     "standalone confirmation exposed a menu arrow layer");
             Require(standalone.size() == size_t(w) * h && standalone.front() == 0x3d000000u && standalone.back() == 0x3d000000u,
                     "standalone confirmation does not dim the full output with straight alpha");
+            // The raster is an overlay, never the replacement frame. Different
+            // live title pixels must remain different after the same dim.
+            const uint32_t brightTitle = host_ui::PackRgba(240, 180, 120, 255);
+            const uint32_t darkTitle = host_ui::PackRgba(80, 40, 20, 255);
+            const uint32_t brightDim = host_ui::ColorBlend(brightTitle, standalone.front());
+            const uint32_t darkDim = host_ui::ColorBlend(darkTitle, standalone.front());
+            Require(brightDim != darkDim && (brightDim & 255) > 170 && (brightDim & 255) < 190 &&
+                    (darkDim & 255) > 50 && (brightDim >> 24) == 255,
+                    "title dim replaced or obscured the live straight-alpha background");
             const double scale = std::min(w / 1280.0, h / 720.0);
             const double ox = (w - 1280 * scale) / 2, oy = (h - 720 * scale) / 2;
             // The native panel atlas has translucent texels: over Settings

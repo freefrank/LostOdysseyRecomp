@@ -5,15 +5,15 @@
 
 namespace settings::title_entry
 {
-// The title menu's free-port credit and Settings / Quit legends, drawn
+// The title menu's free-port credit and Settings / Quit legends, or its modal, drawn
 // by presentation over the game frame. Shown while the title menu is idle and shortcuts are available,
 // not otherwise (Settings open, transitions, Press START); its opacity starts
 // after a short delay, in which presentation can prepare it, and fades in.
 bool HintShown();
 float HintOpacity();
-// The legend for an output size as straight-alpha RGBA in its own rectangle at
+// The legend (or full-output title confirmation) as straight-alpha RGBA at
 // x, y. Rasterized again, with a new revision, only when the size, language,
-// button style or menu assets change; null while a new size settles (window
+// button style or menu assets change, and during modal fades; null while a new size settles (window
 // drag-resize). Presentation thread.
 struct Hint
 {
