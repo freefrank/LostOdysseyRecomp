@@ -9,12 +9,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 ### English
 
 - The title menu now lets you quit the game with Back / View (Backspace on the keyboard), after a Yes/No confirmation.
-- Fixed the Music slider muting dialogue in real-time cutscenes. Mixed cutscene audio keeps following Sound effects (#631).
+- Real-time cutscenes: Voice volume now sets the dialogue, and the Music volume no longer mutes it. Cutscene music is mixed with the sound effects, so it follows Sound effects (#631).
 
 ### 简体中文
 
 - 标题菜单现在可按 Back／View（键盘 Backspace），确认后退出游戏。
-- 修复音乐音量会静音即时演算过场对白的问题；混合音轨继续跟随音效音量（#631）。
+- 即时演算过场：语音音量现在控制对白，音乐音量不再把对白静音。过场配乐和音效混在一起，跟随音效音量（#631）。
 
 ## [v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) — 2026-10-18
 
