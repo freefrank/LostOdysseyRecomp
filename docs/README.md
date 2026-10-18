@@ -34,6 +34,7 @@ Reusable investigation methods and constraints may also be summarized in Basic M
 | Document | Scope |
 |---|---|
 | [Engineering principles](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md) | Correctness, performance, supported data and proportionate validation |
+| [AI collaboration workflow](AI_WORKFLOW.md) / [简体中文](AI_WORKFLOW.zh-CN.md) | How the maintainer works with AI coding agents: roles, subagent rules, issue-to-release flow, and pitfalls for porting other Xbox 360 games |
 | [Portable shader packs](PORTABLE_SHADER_PACK.md) | Vulkan/DX12 distribution, tools and historical pack measurements |
 | [macOS releases](MACOS_RELEASE.md) | macOS app packaging and release checks |
 | [Linux AArch64 build](LINUX_ARM64.md) | Experimental source-build path for Linux arm64; not a published artifact |
