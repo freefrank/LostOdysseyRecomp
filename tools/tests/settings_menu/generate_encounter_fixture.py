@@ -21,6 +21,7 @@ prefix = r'''
 #include <debug/no_encounters.h>
 #include <debug/battle_tour.h>
 #include <gpu/frame_rate.h>
+#include <gpu/loading_pacing.h>
 #include <algorithm>
 #include <array>
 #include <atomic>

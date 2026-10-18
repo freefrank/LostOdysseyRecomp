@@ -17,6 +17,7 @@ add_custom_command(OUTPUT "${FIXTURE}"
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/config_fixture.py"
     --root "${REPO_ROOT}" --output "${FIXTURE}"
   DEPENDS config_fixture.py "${REPO_ROOT}/LostOdysseyRecomp/settings/config.cpp"
+    "${REPO_ROOT}/LostOdysseyRecomp/gpu/loading_pacing.h"
   VERBATIM)
 add_executable(LoVrrConfigTest "${FIXTURE}")
 target_include_directories(LoVrrConfigTest PRIVATE "${REPO_ROOT}/LostOdysseyRecomp")
