@@ -4,7 +4,7 @@
 
 Date: 2026-10-18
 
-This guide summarizes how the Lost Odyssey recompilation port (LORecomp) was developed from September to October 2026. During that time, one maintainer developed the project with AI coding assistants. Claude Code ran the main session. Codex CLI and several subagents did the specific work. This guide covers the process, the subagent rules, and the pitfalls to avoid when porting other Xbox 360 games. For engineering trade-offs, see the [engineering principles](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md).
+This guide summarizes how the Lost Odyssey recompilation port (LORecomp) was developed from September to October 2026. During that time, one maintainer developed the project with AI coding assistants. Claude Code ran the main session. Codex CLI and several subagents did the specific work. This guide covers the process, the subagent rules, and the pitfalls to avoid when porting other Xbox 360 games. For engineering trade-offs, see the [engineering principles](LORecomp_ENGINEERING_PRINCIPLES.md).
 
 ## 1. Roles
 

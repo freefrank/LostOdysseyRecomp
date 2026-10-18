@@ -1,5 +1,7 @@
 # LORecomp工程原则
 
+[English](LORecomp_ENGINEERING_PRINCIPLES.md)
+
 日期：2026-09-17  
 适用范围：整个项目，包括重编译运行时、图形、音频、输入、文件系统、游戏导入、存档、更新、缓存、构建、测试，以及人工和AI辅助开发。
 
