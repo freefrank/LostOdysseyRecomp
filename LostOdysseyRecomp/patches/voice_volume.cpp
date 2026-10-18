@@ -25,6 +25,12 @@
 // matches the retail gain with Sound effects at 100. Voices inside the effect
 // banks (.xse: battle shouts, short event lines) share their bank and its
 // waves' volume with the effects and keep following Sound effects.
+//
+// Cutscene music (#631) is the main voice (handle at channel + 100) of a
+// stream with a language track. Multiply its retail category gain by the
+// raw Music category at sound system + 619, divided by 128. This retains
+// the retail master and Sound effects gain; Music at 100 multiplies by 1,
+// so default balance and the language track's Voice volume stay unchanged.
 
 extern "C" PPC_FUNC(__imp__sub_82B6C650);
 extern "C" PPC_FUNC(__imp__sub_82B71E68);
@@ -37,6 +43,7 @@ constexpr uint32_t ChannelPath = 127;
 constexpr size_t PathCapacity = 320 - ChannelPath; // the channel object is 320 bytes
 
 thread_local bool languageTrack = false;
+thread_local bool musicTrack = false;
 
 // The voice for a stream handle, as sub_82B6B840 looks it up.
 uint32_t StreamVoice(uint8_t* base, uint32_t handle)
@@ -47,6 +54,7 @@ uint32_t StreamVoice(uint8_t* base, uint32_t handle)
 }
 
 // Logs each stream once per gain, so run logs show what was replaced.
+template<bool Music>
 void Log(std::string_view path, float gain, double retail)
 {
     static std::mutex mutex;
@@ -56,28 +64,44 @@ void Log(std::string_view path, float gain, double retail)
     for (const auto& [p, g] : recent)
         if (g == gain && p == path) return;
     recent[next++ % recent.size()] = {std::string(path), gain};
-    LOG_INFO("voice volume: {:.2f} instead of {:.2f} for the language track of {}", gain, retail, path);
+    LOG_INFO("{} volume: {:.2f} instead of {:.2f} for the {} track of {}",
+        Music ? "music" : "voice", gain, retail, Music ? "main" : "language", path);
 }
 }
 
 PPC_FUNC(sub_82B6C650)
 {
     const uint32_t voice = ctx.r4.u32;
-    languageTrack = voice && voice == StreamVoice(base, PPC_LOAD_U16(ctx.r3.u32 + 124));
+    const uint32_t channel = ctx.r3.u32;
+    const uint32_t language = PPC_LOAD_U16(channel + 124);
+    languageTrack = voice && voice == StreamVoice(base, language);
+    musicTrack = voice && language && voice == StreamVoice(base, PPC_LOAD_U16(channel + 100));
     __imp__sub_82B6C650(ctx, base);
     languageTrack = false;
+    musicTrack = false;
 }
 
 PPC_FUNC(sub_82B71E68)
 {
     const uint32_t channel = ctx.r3.u32;
     __imp__sub_82B71E68(ctx, base);
-    if (!languageTrack)
+    if (!languageTrack && !musicTrack)
         return;
     const uint32_t system = PPC_LOAD_U32(SoundSystem);
-    const float master = system ? float(PPC_LOAD_U8(system + 616)) / 128.0f : 1.0f;
-    const float gain = master * float(apu::VoiceVolume()) / 100.0f;
     const char* path = reinterpret_cast<const char*>(base + channel + ChannelPath);
-    Log(std::string_view(path, strnlen(path, PathCapacity)), gain, ctx.f1.f64);
-    ctx.f1.f64 = double(gain);
+    const std::string_view name(path, strnlen(path, PathCapacity));
+    if (languageTrack)
+    {
+        const float master = system ? float(PPC_LOAD_U8(system + 616)) / 128.0f : 1.0f;
+        const float gain = master * float(apu::VoiceVolume()) / 100.0f;
+        Log<false>(name, gain, ctx.f1.f64);
+        ctx.f1.f64 = double(gain);
+    }
+    else
+    {
+        const float music = system ? float(PPC_LOAD_U8(system + 616 + 3)) / 128.0f : 1.0f;
+        const float gain = float(ctx.f1.f64) * music;
+        Log<true>(name, gain, ctx.f1.f64);
+        ctx.f1.f64 = double(gain);
+    }
 }

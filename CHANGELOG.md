@@ -8,10 +8,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- The Music volume now also lowers the music in real-time cutscenes (#631).
 - Right-to-left language packs: tutorial text ends at the right of its box, a long location name on the battle results no longer covers the play time, and text that types in letter by letter appears whole instead of from the left.
 
 ### 简体中文
 
+- 音乐音量现也能调低即时演算过场中的配乐（#631）。
 - 从右到左的语言包：教程文字靠框的右侧对齐；战斗结算画面中较长的地点名称不再盖住游戏时间；逐字出现的文字改为整段显示，不再从左侧开始出现。
 
 ## [v1.0.4](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.4) — 2026-10-18
