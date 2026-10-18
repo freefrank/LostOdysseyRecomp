@@ -2118,6 +2118,101 @@ int main(int argc, char** argv)
         }
         std::puts("PASS Aspect ratio workflow: Auto lists by shape, 16:9/21:9/4:3 snap the resolution, 4:3 choices, Auto keeps the size, cancel discard, Save state machine");
 
+        // Loading pace belongs to Graphics and follows its edit / discard / Save workflow.
+        {
+            const auto priorCurrent = currentConfig;
+            const auto priorDisk = diskConfig;
+            auto saved = currentConfig;
+            saved.uiLanguage = 0;
+            saved.loadingTransitions = 2;
+            currentConfig = diskConfig = saved;
+            settings::edit = saved;
+            settings::status.clear();
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 0; Tick(base);
+            Require(int(GraphicsRow::LoadingTransitions) == int(GraphicsRow::FrameRate) + 1 &&
+                    int(GraphicsRow::VariableRefreshRate) == int(GraphicsRow::LoadingTransitions) + 1,
+                    "loading pace follows Frame rate before VSync");
+            const auto& pace = settings::snapshot.rows[int(GraphicsRow::LoadingTransitions)];
+            Require(pace.name == L"Loading transitions" && pace.choices == std::vector<std::wstring>{L"Original", L"Fast"} &&
+                    pace.selectedChoice == 1 && !pace.hidden && pace.enabled,
+                    "loading pace offers Original and Fast, with Fast selected");
+            Require(settings::snapshot.help == L"Loading pace. Transition effects keep their normal speed.",
+                    "loading pace help describes loading and normal-speed effects");
+            const auto beforeEdit = saves;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.loadingTransitions == 2 && saves == beforeEdit,
+                    "Confirm on the loading option does not change or save it");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.loadingTransitions == 0 && currentConfig.loadingTransitions == 2 &&
+                    diskConfig.loadingTransitions == 2 && saves == beforeEdit,
+                    "Right selects Original without applying or saving the edit");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.loadingTransitions == 2, "Left returns to Fast");
+            settings::pending = 8; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::active && settings::closing && saves == beforeEdit && diskConfig.loadingTransitions == 2,
+                    "Back discards the loading edit without saving");
+            Tick(base);
+            settings::releaseToParent = false;
+            settings::waitForRelease = false;
+            PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
+            Require(settings::active && settings::edit.loadingTransitions == 2,
+                    "reopening restores the saved Fast loading choice");
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 0 && diskConfig.loadingTransitions == 0 && !settings::restartPrompt,
+                    "Graphics Save applies Original loading without a restart");
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            saveFails = true;
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 0 && diskConfig.loadingTransitions == 0 &&
+                    settings::edit.loadingTransitions == 2 && settings::status == L"Could not save settings.",
+                    "failed Graphics Save retains the applied loading pace and pending edit");
+            saveFails = false;
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 2 && diskConfig.loadingTransitions == 2,
+                    "Graphics Save applies Fast loading");
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            settings::tab = 3;
+            settings::row = settings::SystemSaveRow;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.loadingTransitions == 0 && diskConfig.loadingTransitions == 2,
+                    "System Save leaves a pending loading pace edit unsaved");
+
+            const wchar_t* labels[] = {L"Loading transitions", L"載入過場", L"ロード時の演出", L"로딩 전환 효과", L"加载过场"};
+            const wchar_t* original[] = {L"Original", L"原版", L"オリジナル", L"원본", L"原版"};
+            const wchar_t* fast[] = {L"Fast", L"快速", L"速い", L"빠르게", L"快"};
+            const wchar_t* help[] = {
+                L"Loading pace. Transition effects keep their normal speed.", L"載入節奏；過場效果維持正常速度。",
+                L"ロードの速度を選択します。演出は通常の速度を保ちます。",
+                L"로딩 속도입니다. 전환 효과는 원래 속도로 재생됩니다.", L"加载节奏；过场效果保持正常速度。"};
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            for (uint32_t language = 0; language < 5; ++language)
+            {
+                settings::edit.uiLanguage = language;
+                settings::status.clear();
+                settings::pending = 0; Tick(base);
+                const auto& translated = settings::snapshot.rows[int(GraphicsRow::LoadingTransitions)];
+                Require(translated.name == labels[language] && translated.choices ==
+                        std::vector<std::wstring>{original[language], fast[language]} && settings::snapshot.help == help[language],
+                        "loading option label, choices and help are localized in every menu language");
+            }
+            currentConfig = priorCurrent;
+            diskConfig = priorDisk;
+            settings::edit = currentConfig;
+            settings::pending = 0; Tick(base);
+            std::puts("PASS loading pace Graphics placement, two choices, edit/discard/Save, failed save and five languages");
+        }
+
         // Start / Enter focus-jump, simultaneous confirm suppression, PointerClick viewport clipping and DLSS quality visibility:
         {
             const auto savesBefore = saves;

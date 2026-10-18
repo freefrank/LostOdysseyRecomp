@@ -92,6 +92,7 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | Anti-aliasing and upscaling | FXAA, SMAA, TAA, DLSS, FSR 3.1, XeSS (Windows Direct3D 12) and MetalFX (macOS). |
 | Graphics options | Shadow resolution 1×/2×/4×, SSAO/GTAO, anisotropic filtering, depth of field and bloom. |
 | Frame rate | 30/60/90/120 FPS; VSync Off, On or FreeSync / G-SYNC Compatible VRR. **Performance overlay** shows the frame rate, or a bar with the upscaler, frame generation, CPU and GPU load. |
+| Loading transitions | Graphics → **Loading transitions** selects Original loading pace or Fast (default). Transition effects keep their normal speed in both modes. |
 | Frame generation | DLSS, FSR or XeSS on Windows Direct3D 12; DLSS on Windows Vulkan. |
 | DLSS 5 neural rendering | Windows with DLSS on an RTX GPU. It needs `nvngx_dlssnr.dll`, which the game does not include: put your own copy (tested with 310.8.0.0) next to `LostOdysseyRecomp.exe` and restart. |
 | Shaders | Precompiled shaders downloaded on the first start, or compiled once and cached. |
@@ -213,7 +214,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | `d3d12` or `vulkan` on Windows. |
 | `LO_FPS` | Frame-rate cap; `0` means uncapped. |
-| `LO_FAST_LOADING=0` | Disable the higher frame-rate limit during loading. On Android and devices with a detected battery, loading is capped at 4× the selected limit, up to 240 FPS (240 FPS if uncapped). |
+| `LO_FAST_LOADING=0/1` | Override Loading transitions: `0` selects Original pacing; `1` selects Fast. Without the override, `loading_transitions=0/2` in `settings.ini` stores Original/Fast. Fast loading on Android and devices with a detected battery is capped at 4× the selected limit, up to 240 FPS (240 FPS if uncapped). |
 | `LO_NO_UPDATE=1` | Skip the update check. |
 | `LO_MODS=0` | Disable mods. |
 | `LO_AUDIO_MUTE=1` | Mute audio. |

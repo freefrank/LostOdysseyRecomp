@@ -87,6 +87,15 @@ int main()
     using gpu::MapPresentInterval;
     {
         using gpu::loading::Target;
+        using gpu::loading::EnabledFor;
+        using gpu::loading::EnvironmentMode;
+        Require(!EnabledFor(0, EnvironmentMode(nullptr)) && EnabledFor(2, EnvironmentMode(nullptr)),
+            "persisted loading mode controls pacing without an environment override");
+        for (const auto mode : {0u, 2u}) {
+            Require(!EnabledFor(mode, EnvironmentMode("0")), "LO_FAST_LOADING=0 overrides either saved mode");
+            for (const auto* value : {"1", "", "2", "false"})
+                Require(EnabledFor(mode, EnvironmentMode(value)), "nonzero override retains the existing fast-loading semantics");
+        }
         gpu::loading::PresentGate gate;
         for (const auto fps : {0u, 30u, 60u, 90u, 120u}) {
             Require(Target(fps, false, false) == fps && Target(fps, false, true) == fps,

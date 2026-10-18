@@ -32,10 +32,10 @@ void Write(const char* text)
     Check(bool(output), "write isolated settings.ini");
 }
 
-void CheckFreshProcess(const wchar_t* executable, const char* expected, uint32_t menuRate = 1)
+void CheckFreshProcess(const wchar_t* executable, const char* expected, uint32_t menuRate = 1, uint32_t loadingMode = 2)
 {
     std::wstring command = L"\"" + std::wstring(executable) + L"\" --restore " +
-        (expected[0] == '1' ? L"1" : L"0") + L" " + std::to_wstring(menuRate);
+        (expected[0] == '1' ? L"1" : L"0") + L" " + std::to_wstring(menuRate) + L" " + std::to_wstring(loadingMode);
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
@@ -51,14 +51,18 @@ void CheckFreshProcess(const wchar_t* executable, const char* expected, uint32_t
 
 int wmain(int argc, wchar_t** argv)
 {
-    if (argc == 4 && std::wstring_view(argv[1]) == L"--restore")
+    Check(_putenv_s("LO_FAST_LOADING", "") == 0, "clear loading override for persisted settings checks");
+    if (argc == 5 && std::wstring_view(argv[1]) == L"--restore")
     {
         const auto menuRate = uint32_t(std::wcstoul(argv[3], nullptr, 10));
+        const auto loadingMode = uint32_t(std::wcstoul(argv[4], nullptr, 10));
         Check(settings::MenuAnimationRate() == menuRate, "cold hook read restores camp-menu transition speed");
         const bool expected = std::wstring_view(argv[2]) == L"1";
         Check(settings::GetConfig().saveAnywhere == expected, "startup config flag");
         Check(debug_menu::SaveAnywhereEnabled() == expected, "startup debug switch");
         Check(settings::GetConfig().menuAnimationRate == menuRate, "startup camp-menu config field");
+        Check(settings::GetConfig().loadingTransitions == loadingMode && gpu::loading::Enabled() == (loadingMode != 0),
+            "startup restores and publishes the saved loading pace");
         return 0;
     }
     Check(argc == 1, "unexpected arguments");
@@ -68,6 +72,8 @@ int wmain(int argc, wchar_t** argv)
     Check(!settings::GetConfig().saveAnywhere && !debug_menu::SaveAnywhereEnabled(), "missing file defaults off");
     Check(settings::GetConfig().menuAnimationRate == 1 && settings::MenuAnimationRate() == 1,
         "missing menu animation preference keeps the original speed");
+    Check(settings::Config{}.loadingTransitions == 2 && settings::GetConfig().loadingTransitions == 2 && gpu::loading::Enabled(),
+        "missing loading preference keeps the current Fast behavior");
     Check(settings::GetConfig().shadowResolution == 1 && settings::GetConfig().ambientOcclusion == 0,
         "missing shadow and AO keys retain original rendering");
     CheckFreshProcess(executable, "0");
@@ -111,6 +117,45 @@ int wmain(int argc, wchar_t** argv)
         Write(text);
         Check(settings::Read().menuAnimationRate == 1, "invalid menu animation multiplier defaults to Normal");
     }
+
+    Check(settings::Read().loadingTransitions == 2, "missing loading pace key defaults to Fast");
+    for (const auto mode : {0u, 2u})
+    {
+        Write(("loading_transitions=" + std::to_string(mode) + "\n").c_str());
+        Check(settings::Read().loadingTransitions == mode, "supported loading pace reads from INI");
+    }
+    for (const auto* text : {"loading_transitions=1\n", "loading_transitions=3\n",
+                            "loading_transitions=4294967295\n", "loading_transitions=-1\n",
+                            "loading_transitions=bad\n"})
+    {
+        Write(text);
+        Check(settings::Read().loadingTransitions == 2, "unsupported loading pace defaults to Fast");
+    }
+    const auto beforeLoadingPreview = settings::GetConfig();
+    auto loading = beforeLoadingPreview;
+    loading.loadingTransitions = 0;
+    settings::PreviewConfig(loading);
+    Check(settings::GetConfig().loadingTransitions == 0 && !gpu::loading::Enabled() && settings::Read().loadingTransitions == 2,
+        "Original loading preview publishes without committing to disk");
+    settings::PreviewConfig(beforeLoadingPreview);
+    Check(settings::GetConfig().loadingTransitions == 2 && gpu::loading::Enabled(),
+        "cancelling loading preview restores the saved pace");
+    for (const auto mode : {0u, 2u})
+    {
+        loading = settings::GetConfig();
+        loading.loadingTransitions = mode;
+        Check(settings::SaveConfig(loading) && settings::GetConfig().loadingTransitions == mode &&
+              settings::Read().loadingTransitions == mode && gpu::loading::Enabled() == (mode != 0) &&
+              Contents().find("loading_transitions=" + std::to_string(mode) + "\n") != std::string::npos,
+            "loading pace saves, publishes and survives disk readback");
+        CheckFreshProcess(executable, "0", 1, mode);
+    }
+    Check(std::filesystem::create_directory("settings.ini.tmp"), "block loading settings temporary file");
+    loading.loadingTransitions = 0;
+    Check(!settings::SaveConfig(loading) && settings::GetConfig().loadingTransitions == 2 &&
+          settings::Read().loadingTransitions == 2 && gpu::loading::Enabled(),
+        "failed loading save preserves runtime and disk pace");
+    Check(std::filesystem::remove("settings.ini.tmp"), "remove loading settings temporary-file blocker");
 
     Write("internal_resolution=540\n");
     Check(settings::Read().internalResolution == 720, "the removed 540 render resolution loads as 720");

@@ -92,6 +92,7 @@
 | 抗锯齿与超分 | FXAA、SMAA、TAA、DLSS、FSR 3.1、XeSS（Windows Direct3D 12）和 MetalFX（macOS）。 |
 | 图像选项 | 阴影分辨率 1×／2×／4×、SSAO／GTAO、各向异性过滤、景深和泛光。 |
 | 帧率 | 30／60／90／120 FPS；垂直同步可选关、开或 FreeSync／G-SYNC Compatible VRR。**性能信息**可显示帧率，或显示包含超分、插帧、CPU 和 GPU 负载的信息栏。 |
+| 加载过场 | 在“图形 → 加载过场”中选择原版加载节奏或快速（默认）；两档的过场效果均保持正常速度。 |
 | 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。 |
 | DLSS 5 神经渲染 | Windows 上开启 DLSS 的 RTX 显卡可用。需要 `nvngx_dlssnr.dll`，游戏不附带该文件：请把自备的副本（测试版本 310.8.0.0）放在 `LostOdysseyRecomp.exe` 旁并重启。 |
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
@@ -213,7 +214,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | Windows 上为 `d3d12` 或 `vulkan`。 |
 | `LO_FPS` | 帧率上限；`0` 表示不限制。 |
-| `LO_FAST_LOADING=0` | 关闭加载时临时提高帧率上限。Android 和检测到电池的设备在加载时最多使用所选上限的 4 倍，最高 240 FPS；所选帧率不限制时也使用 240 FPS。 |
+| `LO_FAST_LOADING=0/1` | 覆盖“加载过场”设置：`0` 使用原版节奏，`1` 使用快速加载。未设置时，由 `settings.ini` 的 `loading_transitions=0/2` 保存原版/快速选择。快速加载时，Android 和检测到电池的设备最多使用所选上限的 4 倍，最高 240 FPS；所选帧率不限制时也使用 240 FPS。 |
 | `LO_NO_UPDATE=1` | 跳过更新检查。 |
 | `LO_MODS=0` | 关闭 Mod。 |
 | `LO_AUDIO_MUTE=1` | 静音。 |
