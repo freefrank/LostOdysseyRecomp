@@ -128,6 +128,11 @@ chmod +x LostOdysseyRecomp-linux-x64-v1.0.4.AppImage
 
 AppImage 把存档和设置放在当前用户的目录，见[文件位置](#file-locations)。
 
+v1.0.4 之后的构建会优先使用 FUSE；挂载受限时会自动解包到临时目录，退出后删除，
+从 Steam 启动时也适用。游戏仍能找到原 AppImage 旁的 `game` 文件夹，存档和设置
+保留在用户目录。v1.0.4 及更早版本遇到 FUSE 限制时，可以在 Steam 启动选项中
+填写 `APPIMAGE_EXTRACT_AND_RUN=1 %command%`，或安装 Flatpak。
+
 ### Flatpak
 
 先从 Flathub 安装一次 Freedesktop 26.08 运行时：

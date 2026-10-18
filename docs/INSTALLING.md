@@ -128,6 +128,13 @@ Import the game in the importer, or start it with a game folder directly:
 
 The AppImage keeps saves and settings in your user folders; see [file locations](#file-locations).
 
+Builds after v1.0.4 use FUSE when available and automatically extract to a
+temporary folder when mounting is blocked, then remove it on exit. This also
+applies when launching from Steam. The `game` folder beside the original
+AppImage remains discoverable; saves and settings stay in your user folders.
+For v1.0.4 and older, use `APPIMAGE_EXTRACT_AND_RUN=1 %command%` in Steam's
+launch options if FUSE is blocked, or install the Flatpak.
+
 ### Flatpak
 
 Install the Freedesktop 26.08 runtime from Flathub once:

@@ -30,7 +30,12 @@ namespace os::user_paths
         g_usePortableLayout = directory.find(".app/Contents/") == std::string::npos &&
             IsExecutableDirWritable(executableDirectory);
 #else
-        g_usePortableLayout = IsExecutableDirWritable(executableDirectory);
+        // Extract-and-run AppImages have a writable temporary executable
+        // directory. Keep their persistent files in XDG storage, just as when
+        // the same AppImage is mounted read-only through FUSE.
+        const char* appImage = std::getenv("APPIMAGE");
+        g_usePortableLayout = (appImage == nullptr || *appImage == '\0') &&
+            IsExecutableDirWritable(executableDirectory);
 #endif
     }
     namespace detail

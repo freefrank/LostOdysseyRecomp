@@ -8,6 +8,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Linux AppImage now starts when FUSE is unavailable, including Steam Beta's restricted runtime (#639).
 - Settings → Graphics → Loading speed: Original keeps the Xbox 360 loading pace, Fast (the default) is the current faster loading (#633).
 - Cutscenes and the pause overlay now show black bars outside 16:9 on taller and ultrawide screens (#602).
 - The Music volume now also lowers the music in real-time cutscenes (#631).
@@ -16,6 +17,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
+- Linux AppImage 现可在 FUSE 不可用时启动，包括 Steam Beta 受限运行环境（#639）。
 - “设置 → 图形 → 加载速度”：原版保持 Xbox 360 的加载节奏，快速（默认）即现在更快的加载方式（#633）。
 - 过场动画和暂停画面现在会在较高及超宽屏幕的 16:9 范围外显示黑边（#602）。
 - 音乐音量现也能调低即时演算过场中的配乐（#631）。

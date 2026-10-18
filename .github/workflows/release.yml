@@ -423,6 +423,16 @@ jobs:
           wget -q -O out/tools/linuxdeploy/linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x out/tools/linuxdeploy/linuxdeploy
           echo "$GITHUB_WORKSPACE/out/tools/linuxdeploy" >> "$GITHUB_PATH"
+      - name: Build pinned AppImage runtime with automatic FUSE fallback
+        run: bash tools/release/build_appimage_runtime.sh
+      - name: Test AppImage runtime without FUSE
+        run: |
+          sudo apt-get install -y --no-install-recommends squashfs-tools
+          # A private mount namespace hides the device only for this fixture.
+          sudo unshare --mount --propagation private bash -c '
+            if [ -e /dev/fuse ]; then mount --bind /dev/null /dev/fuse; fi
+            python3 tools/tests/appimage_runtime_test.py --runtime out/tools/appimage-runtime/runtime-x86_64 --mode no-fuse
+          '
       - name: Package AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'

@@ -55,11 +55,31 @@ int main()
     setenv("XDG_STATE_HOME", (root / "xdg/state").c_str(), 1);
     unsetenv("FLATPAK_ID");
     unsetenv("LO_PROFILE_DIR");
+    unsetenv("APPIMAGE");
+    unsetenv("LO_SAVE_DIR");
     Check(os::user_paths::ConfigDir() == root / "xdg/config/lost-odyssey-recomp", "XDG config path mismatch");
     Check(os::user_paths::DataDir() == root / "xdg/data/lost-odyssey-recomp", "XDG data path mismatch");
     Check(os::user_paths::StateDir() == root / "xdg/state/lost-odyssey-recomp", "XDG state path mismatch");
     os::user_paths::Initialize(root);
     Check(os::user_paths::ProfileDir() == "profile", "portable profile path changed");
+    const auto extractedExecutable = root / "extracted/usr/bin";
+    fs::create_directories(extractedExecutable);
+    const auto appImage = root / fs::path(std::u8string(u8"游戏 folder/Lost Odyssey.AppImage"));
+    setenv("APPIMAGE", appImage.c_str(), 1);
+    os::user_paths::Initialize(extractedExecutable);
+    Check(!os::user_paths::UsePortableLayout(), "writable extracted AppImage selected portable layout");
+    Check(os::user_paths::ExecutableDir() == extractedExecutable,
+          "AppImage changed the executable directory needed for runtime libraries");
+    Check(os::user_paths::SettingsPath() == root / "xdg/config/lost-odyssey-recomp/settings.ini",
+          "extracted AppImage settings are not in XDG config");
+    Check(os::user_paths::ProfileDir() == root / "xdg/data/lost-odyssey-recomp/profile",
+          "extracted AppImage profile is not in XDG data");
+    Check(os::user_paths::SaveDir() == root / "xdg/data/lost-odyssey-recomp/save",
+          "extracted AppImage saves are not in XDG data");
+    setenv("APPIMAGE", "", 1);
+    os::user_paths::Initialize(extractedExecutable);
+    Check(os::user_paths::UsePortableLayout(), "empty APPIMAGE changed writable portable layout");
+    unsetenv("APPIMAGE");
     // A missing executable directory selects the same non-portable branch as
     // an AppImage's read-only mount, without relying on root permission checks.
     os::user_paths::Initialize(root / "missing");

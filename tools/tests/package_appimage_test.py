@@ -33,10 +33,18 @@ def offline_checks(module):
 
     test_appimage_compat.py covers their parsing and version policy.
     """
-    with patch.object(module, 'compiler_libraries', return_value=COMPILER_RUNTIMES), \
+    with tempfile.TemporaryDirectory() as runtime_directory:
+        runtime = Path(runtime_directory) / 'runtime-x86_64'
+        runtime.write_bytes(b'package')
+        (runtime.parent / 'licenses').mkdir()
+        for filename in ('runtime-relink.tar.gz', 'build-packages.txt', 'runtime.sha256', 'patch.sha256'):
+            (runtime.parent / filename).write_bytes(b'fixture')
+        with patch.object(module, 'APPIMAGE_RUNTIME', runtime), \
+            patch.object(module, 'compiler_libraries', return_value=COMPILER_RUNTIMES), \
             patch.object(module, 'validate_abi') as abi, \
+            patch.object(module, 'validate_image_runtime'), \
             patch.object(module, 'validate_loader') as loader:
-        yield abi, loader
+            yield abi, loader
 
 
 def with_image(linuxdeploy):
@@ -65,6 +73,20 @@ def load_packager():
 
 
 class PackageAppImageTests(unittest.TestCase):
+    def test_runtime_mismatch_is_rejected(self):
+        module = load_packager()
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary) / 'runtime'
+            image = Path(temporary) / 'image'
+            runtime.write_bytes(bytes(16) + b'pinned runtime')
+            image.write_bytes(b'1234567890123456pinned runtime' + b'squashfs payload')
+            with patch.object(module.subprocess, 'check_output', return_value=
+                              '.digest_md5 PROGBITS 00000000 000000 000010'):
+                module.validate_image_runtime(image, runtime)
+                image.write_bytes(bytes(16) + b'other runtime' + b'squashfs payload')
+                with self.assertRaisesRegex(SystemExit, 'selected runtime'):
+                    module.validate_image_runtime(image, runtime)
+
     def test_explicit_appdir_persists_final_linuxdeploy_tree(self):
         module = load_packager()
         with tempfile.TemporaryDirectory(prefix='lo-persist-appdir-') as tmp:
@@ -207,6 +229,7 @@ class PackageAppImageTests(unittest.TestCase):
                 if '--output' not in cmd:
                     create_mock_apprun(cmd)
                 else:
+                    self.assertTrue(Path(kwargs['env']['LDAI_RUNTIME_FILE']).is_absolute())
                     Path(kwargs['cwd'], 'LostOdysseyRecomp-x86_64.AppImage').write_bytes(b'ok')
 
             argv = [
