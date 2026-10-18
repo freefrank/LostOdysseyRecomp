@@ -13,6 +13,7 @@ prefix = r'''
 #include <settings/config.h>
 #include <debug/fast_forward.h>
 #include <gpu/frame_rate.h>
+#include <gpu/loading_pacing.h>
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -49,6 +50,18 @@ int main() {
     Check(fs::create_directory(scratch), "unique isolated scratch directory");
     fs::current_path(scratch);
     Check(!settings::GetConfig().variableRefreshRate, "legacy/missing preference defaults off");
+    Check(settings::GetConfig().loadingTransitions == 2 && gpu::loading::mode.load() == 2,
+        "missing loading preference publishes Fast");
+    for (auto mode : {0u,2u}) {
+        auto config = settings::GetConfig(); config.loadingTransitions = mode;
+        Check(settings::SaveConfig(config) && settings::Read().loadingTransitions == mode && gpu::loading::mode.load() == mode,
+            "loading pace saves and publishes its atomic runtime choice");
+        auto preview = config; preview.loadingTransitions = mode == 0 ? 2 : 0;
+        settings::PreviewConfig(preview);
+        Check(gpu::loading::mode.load() == preview.loadingTransitions && settings::Read().loadingTransitions == mode,
+            "loading preview publishes without changing the saved pace");
+        settings::PreviewConfig(config);
+    }
     for (auto text : {"", "variable_refresh_rate=0\n", "variable_refresh_rate=2\n",
                       "variable_refresh_rate=-1\n", "variable_refresh_rate=bad\n"}) {
         Write(text); Check(!settings::Read().variableRefreshRate, "invalid VRR input cannot enable it");

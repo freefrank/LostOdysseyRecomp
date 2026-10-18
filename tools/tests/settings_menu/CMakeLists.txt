@@ -41,6 +41,7 @@ add_custom_command(OUTPUT "${encounter_fixture}"
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/generate_encounter_fixture.py"
         --root "${REPO_ROOT}" --output "${encounter_fixture}"
     DEPENDS generate_encounter_fixture.py "${RUNTIME}/settings/config.cpp" "${RUNTIME}/debug/no_encounters.cpp"
+        "${RUNTIME}/gpu/loading_pacing.h"
     VERBATIM)
 add_executable(LoEncounterConfigTest "${encounter_fixture}")
 set(battle_exp_fixture "${CMAKE_CURRENT_BINARY_DIR}/battle_exp_fixture.cpp")

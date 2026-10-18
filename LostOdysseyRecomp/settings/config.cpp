@@ -2,6 +2,7 @@
 #include <debug/fast_forward.h>
 #include <atomic>
 #include <gpu/frame_rate.h>
+#include <gpu/loading_pacing.h>
 #include <filesystem>
 #include <fstream>
 #include <os/logger.h>
@@ -96,6 +97,7 @@ Config Validate(Config value)
     if (value.ambientOcclusion > 2) value.ambientOcclusion = 0;
     value.fxaa = value.antialiasing == 1;
     value.frameRate = gpu::frame_rate::Normalize(value.frameRate);
+    if (value.loadingTransitions != 0) value.loadingTransitions = 2;
     if (value.debugLanguage > 1) value.debugLanguage = 0;
     if (value.fastForwardMode > 1) value.fastForwardMode = 0;
     namespace ff = debug_menu::fast_forward;
@@ -281,6 +283,8 @@ Config Read()
         }
         else if (key == "frame_rate")
             value.frameRate = number;
+        else if (key == "loading_transitions")
+            value.loadingTransitions = number;
         else if (key == "hdr" && number <= 1)
             value.hdr = number == 1;
         else if (key == "hdr_paper_white_nits")
@@ -359,6 +363,7 @@ Config &Current()
     static Config config = [] {
         auto value = Read();
         menuAnimationRate.store(value.menuAnimationRate, std::memory_order_relaxed);
+        gpu::loading::SetMode(value.loadingTransitions);
         return value;
     }();
     return config;
@@ -422,6 +427,7 @@ void PreviewConfig(const Config &value)
     merged.menuAnimationRate = Current().menuAnimationRate;
     merged.audioOutput = Current().audioOutput;
     Current() = merged;
+    gpu::loading::SetMode(merged.loadingTransitions);
 }
 uint32_t GameLanguage()
 {
@@ -454,6 +460,7 @@ static bool WriteConfig(const Config &value)
            << "\ngpu_device=" << value.gpuDevice
            << "\ndebug_language=" << value.debugLanguage
            << "\nantialiasing=" << value.antialiasing << "\nframe_rate=" << value.frameRate
+           << "\nloading_transitions=" << value.loadingTransitions
            << "\nshadow_resolution=" << value.shadowResolution
            << "\nambient_occlusion=" << value.ambientOcclusion
            << "\nscaling_quality=" << value.scalingQuality
@@ -540,6 +547,7 @@ bool SaveConfig(const Config &requested)
     value.audioOutput = Current().audioOutput;
     if (!WriteConfig(value)) return false;
     Current() = value;
+    gpu::loading::SetMode(value.loadingTransitions);
     os::logger::SetDebugLog(value.debugLog);
     return true;
 }

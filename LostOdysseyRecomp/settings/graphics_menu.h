@@ -148,7 +148,8 @@ static_assert(int(GraphicsRow::NeuralRenderingTuning) + 1 == int(GraphicsRow::Fr
 static_assert(int(GraphicsRow::FrameGeneration) + 1 == int(GraphicsRow::FrameGenerationMultiplier));
 static_assert(int(GraphicsRow::FrameGenerationMultiplier) + 1 == int(GraphicsRow::AmbientOcclusion));
 static_assert(int(GraphicsRow::AmbientOcclusion) + 1 == int(GraphicsRow::AnisotropicFiltering));
-static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::VariableRefreshRate));
+static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::LoadingTransitions));
+static_assert(int(GraphicsRow::LoadingTransitions) + 1 == int(GraphicsRow::VariableRefreshRate));
 static_assert(int(GraphicsRow::VariableRefreshRate) + 1 == int(GraphicsRow::PerformanceOverlay));
 // Each sub-page entry sits right under its setting.
 static_assert(int(GraphicsRow::HdrPeak) + 1 == int(GraphicsRow::HdrCalibration));

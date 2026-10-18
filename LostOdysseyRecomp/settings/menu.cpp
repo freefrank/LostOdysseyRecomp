@@ -1540,6 +1540,8 @@ void Publish(uint8_t *base, uint32_t config)
             frameRates.push_back(std::to_wstring(fps) + L" FPS");
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
+        placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading speed", L"載入速度",
+                   {Tr(L"Original", L"原版"), Tr(L"Fast", L"快速")}, edit.loadingTransitions == 0 ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
             L"自適應同步（ProMotion）", onOff(), edit.variableRefreshRate ? 0 : 1));
@@ -1861,6 +1863,10 @@ void Publish(uint8_t *base, uint32_t config)
                      L"90/120 FPS 渲染真實遊戲影格，無需額外開關。請確認遊戲速度、音訊與戰鬥時序。")
                 : Tr(L"Native game-frame target, independent of frame generation. Applies after saving.",
                      L"原生遊戲影格率，獨立於影格生成。儲存後套用。");
+            break;
+        case GraphicsRow::LoadingTransitions:
+            next.help = Tr(L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                           L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。");
             break;
         case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
@@ -3743,6 +3749,9 @@ PPC_FUNC(sub_822F19B0)
                 edit.frameRate = gpu::frame_rate::FromMenuIndex(cycle(index, gpu::frame_rate::kCount));
                 break;
             }
+            case GraphicsRow::LoadingTransitions:
+                edit.loadingTransitions = edit.loadingTransitions == 0 ? 2 : 0;
+                break;
             case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
                 edit.variableRefreshRate = !edit.variableRefreshRate;
