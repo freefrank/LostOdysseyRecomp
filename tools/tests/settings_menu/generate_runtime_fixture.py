@@ -26,6 +26,7 @@ PREAMBLE = r'''
 #include <settings/menu_assets.h>
 #include <settings/translations.h>
 #include <settings/restart.h>
+#include <settings/quit_action_hook.h>
 #include <settings/language_selection.h>
 #include <settings/mods_page.h>
 #include <patches/mod_hot_reload.h>
@@ -45,6 +46,7 @@ PREAMBLE = r'''
 #endif
 #define LO_GPU_PLUME 1
 #define LOG_INFO(...) ((void)0)
+#define LOG_WARNING(...) ((void)0)
 struct Reg { union { uint64_t u64=0; uint32_t u32; }; };
 struct PPCContext { Reg r3,r4; uint64_t lr=0, cookie=1234; };
 #define PPC_FUNC(name) void name(PPCContext& ctx, uint8_t* base)
@@ -77,6 +79,7 @@ namespace updater::shader_pack { bool RequestRedownload(){return true;} }
 // System -> Shader preparation records nothing here.
 namespace gpu::shader_preparation { bool RequestNextStart(){return true;} }
 namespace settings {
+namespace quit_action { bool PushQuit(){return false;} }
 Config savedConfig;
 Config GetConfig(){return savedConfig;}
 bool SaveConfig(const Config& c){++saves;savedConfig=c;return true;}

@@ -10,6 +10,7 @@
 #include "translations.h"
 #include "achievements_page.h"
 #include "mods_page.h"
+#include "quit_action_hook.h"
 #include <patches/mod_hot_reload.h>
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
@@ -49,6 +50,8 @@ std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
 // a fresh Y there, and the opened task hides what a game would replace.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
+std::atomic<bool> titleQuitShortcut{false}, titleQuitOpen{false}, titleQuitEscape{false};
+int titleQuitChoice = 1; // No until the player explicitly chooses Yes.
 // With no game loaded, the retail options (Gameplay, and Voice language, Music and
 // Sound effects on Audio) and their Restore would be replaced by the next save or by
 // New Game's defaults (828710A0), and there is no game to quit.
@@ -2174,6 +2177,11 @@ HdrCalibration GetHdrCalibration()
 }
 bool CalibrationKey(uint32_t key)
 {
+    if (key == 27 && titleQuitOpen.load())
+    {
+        titleQuitEscape = true;
+        return true;
+    }
     // Escape has no controller mapping; it answers Revert on the display prompt.
     if (key == 27 && displayConfirmOpen.load())
     {
@@ -2254,19 +2262,21 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
         return false;
     }
     {
-        // Y pressed on the idle title menu. A button already held when the
+        // Shortcuts pressed on the idle title menu. A button already held when the
         // menu became idle is not a press.
         static uint16_t titlePrevious = 0xFFFF;
         if (titleMenuIdle.load())
         {
             if ((buttons & TitleSettingsButton) && !(titlePrevious & TitleSettingsButton))
                 titleShortcut = true;
+            if ((buttons & TitleQuitButton) && !(titlePrevious & TitleQuitButton))
+                titleQuitShortcut = true;
             titlePrevious = buttons;
         }
         else
             titlePrevious = 0xFFFF;
     }
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return false;
     // The Controls page runs on the default layouts. Switching between the
     // two waits for a release, so a held button is not a fresh press.
@@ -2314,7 +2324,7 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
 }
 void PointerClick(float x, float y, bool reverse)
 {
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return;
     std::lock_guard lock(snapshotMutex);
     if (snapshot.neuralRendering.open)
@@ -4023,7 +4033,94 @@ PPC_FUNC(sub_822F19B0)
 
 bool settings::IsOpen()
 {
-    return active.load();
+    return active.load() || titleQuitOpen.load();
+}
+
+bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
+{
+    const auto close = [] {
+        titleQuitOpen = false;
+        titleQuitShortcut = titleShortcut = false;
+        titleQuitEscape = false;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        // The release poll is consumed too: B must never cancel the title
+        // menu after dismissing this dialog, nor Back immediately reopen it.
+        releaseToParent = true;
+    };
+    if (!idle || active.load())
+    {
+        titleQuitShortcut = false;
+        if (titleQuitOpen.load())
+        {
+            close();
+            LOG_INFO("settings: title Quit confirmation closed outside the idle menu");
+        }
+        return false;
+    }
+    const bool opening = !titleQuitOpen.load();
+    if (opening)
+    {
+        if (!titleQuitShortcut.exchange(false))
+            return false;
+        titleQuitChoice = 1;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        titleQuitEscape = false;
+        waitForRelease = true;
+        const auto config = ConfigAddress(base);
+        swapConfirm = config && (PPC_LOAD_U32(config + 4) & 0x02000000) != 0;
+    }
+    else
+    {
+        uint16_t input = pending.exchange(0) | mouseAction.exchange(0);
+        if (const int selected = mouseDialog.exchange(-1); selected >= 0)
+            titleQuitChoice = std::min(selected, 1);
+        if (input & 3)
+            titleQuitChoice = 1 - titleQuitChoice;
+        const bool cancel = titleQuitEscape.exchange(false) || (input & (0x2000 | TitleQuitButton));
+        if (cancel || (input & 0x1010)) // A or keyboard Enter / Start answers.
+        {
+            if (cancel || titleQuitChoice == 1)
+                LOG_INFO("settings: title Quit confirmation No; returning to title menu");
+            else
+            {
+                LOG_INFO("settings: title Quit confirmation Yes");
+                // Exactly the native System Quit path. A rejected SDL event
+                // leaves the title running and another fresh press can retry.
+                if (!quit_action::PushQuit())
+                    LOG_WARNING("settings: title Quit failed; staying on title menu");
+            }
+            close();
+            return true;
+        }
+    }
+    MenuSnapshot next;
+    next.dialogOnly = true;
+    next.language = GetConfig().uiLanguage;
+    next.confirmB = swapConfirm.load();
+    next.dialogTitle = Translate(next.language, L"Quit game", L"退出遊戲");
+    next.dialogMessage = Translate(next.language, L"Quit the game?", L"退出遊戲嗎？");
+    next.dialogChoices = {Translate(next.language, L"Yes", L"是"), Translate(next.language, L"No", L"否")};
+    next.dialogSelection = titleQuitChoice;
+    {
+        std::lock_guard lock(snapshotMutex);
+        if (!snapshot.dialogOnly || next.language != snapshot.language || next.dialogSelection != snapshot.dialogSelection ||
+            next.confirmB != snapshot.confirmB)
+        {
+            next.revision = snapshot.revision + 1;
+            snapshot = std::move(next);
+        }
+    }
+    // Presentation and input see an open dialog only after its full snapshot.
+    if (opening)
+    {
+        titleQuitOpen = true;
+        LOG_INFO("settings: title Quit confirmation opened (No selected)");
+    }
+    return true;
 }
 
 bool settings::ConsumeTitleShortcut(bool idle)
@@ -4090,6 +4187,35 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         DrawMenuArrow(pixels, width, height, x, y);
         arrowDrawn = MenuArrowBounds(width, height, x, y);
     };
+    if (titleQuitOpen.load())
+    {
+        MenuSnapshot current;
+        {
+            std::lock_guard lock(snapshotMutex);
+            current = snapshot;
+        }
+        current.playStationPrompts = hid::UsesPlayStationPrompts();
+        current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
+        static uint64_t dialogRevision = ~uint64_t{};
+        static uint32_t dialogWidth = 0, dialogHeight = 0;
+        static bool dialogPlayStation = false;
+        static std::shared_ptr<const menu_assets::Assets> dialogAssets;
+        if (dialogRevision != current.revision || dialogWidth != width || dialogHeight != height ||
+            dialogPlayStation != current.playStationPrompts || dialogAssets != current.assets || pixels.empty())
+        {
+            if (!RasterizeMenu(current, width, height, pixels))
+                return false;
+            dialogRevision = current.revision;
+            dialogWidth = width;
+            dialogHeight = height;
+            dialogPlayStation = current.playStationPrompts;
+            dialogAssets = current.assets;
+        }
+        revision = current.revision;
+        shown = closing = false;
+        motion.Reset();
+        return true;
+    }
     if (!active.load())
     {
         // Closing: the content fades off the panels before the game's own exit

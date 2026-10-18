@@ -118,9 +118,13 @@ Controllers and the keyboard work together for player 1. If your controller is n
 | D-pad / left stick | Arrow keys / I, J, K, L |
 | Left / right shoulder | Q / W |
 | Left / right trigger | E / R |
+| Title menu: Settings (Y) | S |
+| Title menu: Quit game (Back / View) | Backspace |
 | Debug Menu | F1 |
 
 These are the default keys. **Settings → Gameplay → Controls** changes the keys and the controller buttons, and sets the button prompts and the vibration strength.
+
+Quitting from the title menu asks for confirmation, with **No** selected by default.
 
 Press **Back** to zoom the minimap; hold it for about half a second to hide the minimap. For Ring actions, use the controller's **right trigger** or **R**.
 

@@ -8,6 +8,19 @@ extern "C" PPC_FUNC(__imp__sub_8287A188);
 extern "C" PPC_FUNC(__imp__sub_82878EF0);
 extern "C" PPC_FUNC(__imp__sub_82878CB8);
 
+bool settings::quit_action::PushQuit()
+{
+    SDL_Event event{};
+    event.type = SDL_EVENT_QUIT;
+    const bool result = SDL_PushEvent(&event);
+    if (!result)
+        LOG_WARNING("settings: Quit could not queue SDL_EVENT_QUIT (result {}, SDL: {}); returning to menu for retry",
+            result, SDL_GetError());
+    else
+        LOG_INFO("settings: Quit queued SDL_EVENT_QUIT (result {})", result);
+    return result;
+}
+
 namespace settings
 {
 // 822DBD90 ticks Settings at 832AD2B8 and the native System menu at
@@ -44,17 +57,7 @@ PPC_FUNC(sub_8287A188)
         }
     }
     settings::quit_action::Dispatch(ctx,
-        [] {
-            SDL_Event event{};
-            event.type = SDL_EVENT_QUIT;
-            const bool result = SDL_PushEvent(&event);
-            if (!result)
-                LOG_WARNING("settings: System Quit to Desktop could not queue SDL_EVENT_QUIT (result {}, SDL: {}); returning to game for retry",
-                    result, SDL_GetError());
-            else
-                LOG_INFO("settings: System Quit to Desktop queued SDL_EVENT_QUIT (result {})", result);
-            return result;
-        },
+        settings::quit_action::PushQuit,
         [base](PPCContext& call) {
             // Only 822E26B8 reaches here: mirror modal-16's non-Yes branch.
             // 822E256C uses its own retail close/state reset on return.

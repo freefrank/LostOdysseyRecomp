@@ -240,7 +240,11 @@ bool IsOpen();
 // before a game is loaded. The title tick reports whether its menu is idle and
 // takes a fresh press made there, if any.
 inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
+inline constexpr uint16_t TitleQuitButton = 0x0020; // XINPUT_GAMEPAD_BACK (keyboard Backspace)
 bool ConsumeTitleShortcut(bool titleMenuIdle);
+// Tick the host Yes/No dialog before the title's input handler. True while it
+// owns input, including its dismissal tick. The retail Settings task stays idle.
+bool UpdateTitleQuit(uint8_t* base, bool titleMenuIdle);
 // The retail Settings task was just opened from the title menu. Until that task
 // is idle again, the per-save options are hidden (Gameplay's retail rows,
 // Restore game defaults and Quit to Main Menu; Audio's Voice language, Music and

@@ -174,6 +174,8 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         snapshot.help = Translate(language, L"Y: Settings", L"Y：設定");
         if (keyboard)
             snapshot.help[0] = L'S';
+        snapshot.titleQuitKey = keyboard ? L"Backspace" : L"Back";
+        snapshot.titleQuitLabel = Translate(language, L"Quit game", L"退出遊戲");
         // Only the credit and legend's footer rectangle is rasterized.
         const auto bounds = TitleHintBounds(outputWidth, outputHeight);
         std::vector<uint32_t> pixels;
@@ -200,8 +202,12 @@ PPC_FUNC(sub_8234B9B8)
         entered = false;
         LOG_INFO("settings: title entry closed, title state {}", state);
     }
-    if (settings::ConsumeTitleShortcut(MenuIdle(base, title)))
+    const bool idle = MenuIdle(base, title);
+    const bool quitOwnsInput = settings::UpdateTitleQuit(base, idle);
+    if (settings::ConsumeTitleShortcut(idle && !quitOwnsInput))
         OpenSettings(ctx, base, title);
-    ReportHint(MenuIdle(base, title));
+    ReportHint(MenuIdle(base, title) && !quitOwnsInput);
+    if (quitOwnsInput)
+        return; // Including No's tick: no dialog input reaches the guest menu.
     save_menu_holds::TitleTick(ctx, base);
 }

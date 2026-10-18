@@ -49,16 +49,23 @@ namespace
     // The title menu's Settings legend: key, then label, in this layout box
     // with a margin for the outline.
     constexpr int kHintX = 1036, kHintY = 646, kHintKey = 22, kHintWidth = 180, kHintHeight = 28;
+    // A second row grows down, away from the toast. Its wider key box fits
+    // Backspace without narrowing the translated label or changing the credit.
+    constexpr int kQuitHintX = 934, kQuitHintY = 676, kQuitHintKey = 104, kQuitHintGap = 8;
     constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
-                  kHintBottom = kHintY + kHintHeight + 4;
+                  kHintBottom = kQuitHintY + kHintHeight + 4;
     // Share the legend's centred canvas and safe margin, leaving a gap before
     // its key. Both lines also clear the achievement toast's shadow above.
     constexpr int kCreditX = 64, kCreditY = 654, kCreditWidth = 948, kCreditLineHeight = 20;
+    int FooterOffset(const Canvas &output)
+    {
+        return output.scale > 0 ? int(std::floor(output.offsetY / output.scale)) : 0;
+    }
     int CreditTop(const Canvas &output)
     {
         // On a tall output the centred 16:9 canvas ends above the window's
         // bottom. Keep the credit below the output-anchored toast there too.
-        return kCreditY + (output.scale > 0 ? int(std::floor(output.offsetY / output.scale)) : 0);
+        return kCreditY + FooterOffset(output);
     }
 
     // The help box under the list: one line at 20 pt, or the help over the
@@ -444,13 +451,14 @@ settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
     // Rounded like RasterizeMenu's own rectangles.
     const Canvas c(nullptr, width, height);
     const int creditY = CreditTop(c);
+    const int footerOffset = FooterOffset(c);
     const auto edge = [](double value, uint32_t limit) {
         return size_t(std::clamp(int(std::lround(value)), 0, int(limit)));
     };
     return {edge(c.offsetX + (kCreditX - 8) * c.scale, width),
-            edge(c.offsetY + std::min(kHintTop, creditY - 4) * c.scale, height),
+            edge(c.offsetY + std::min(kHintTop + footerOffset, creditY - 4) * c.scale, height),
             edge(c.offsetX + kHintRight * c.scale, width),
-            edge(c.offsetY + std::max(kHintBottom, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
+            edge(c.offsetY + std::max(kHintBottom + footerOffset, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
 }
 
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
@@ -561,7 +569,7 @@ namespace
 settings::HelpFit settings::MeasureHelp(const MenuSnapshot &s)
 {
     HelpFit fit;
-    if (s.titleHint) return fit;
+    if (s.titleHint || s.dialogOnly) return fit;
     if (s.neuralRendering.open)
     {
         fit.help = Fit(s, NrHelp(s.language, s.neuralRendering.focus), kNrHelpWidth, kNrHelpHeight, kNrHelpSize);
@@ -939,6 +947,50 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
+    // Shared by Settings prompts and the title-menu confirmation.
+    const auto dialog = [&] {
+        brushedCell(280, 208, 720, 306, MakeColor(255, 73, 76, 76));
+        line(280, 208, 1000, 208, MakeColor(255, 231, 232, 228), 2);
+        line(280, 208, 280, 514, MakeColor(255, 194, 196, 193), 2);
+        line(280, 513, 1000, 513, MakeColor(255, 35, 36, 36), 3);
+        line(999, 208, 999, 514, MakeColor(255, 39, 40, 40), 3);
+        text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, 1);
+
+        std::vector<std::wstring> messageLines;
+        std::wstring remaining = current.dialogMessage;
+        while (!remaining.empty()) {
+            size_t cut = 0, space = std::wstring::npos; unsigned units = 0;
+            while (cut < remaining.size() && units + (remaining[cut] >= 0x2e80 ? 2 : 1) <= 70) {
+                if (remaining[cut] == L' ') space = cut;
+                units += remaining[cut] >= 0x2e80 ? 2 : 1; ++cut;
+            }
+            if (cut < remaining.size() && space != std::wstring::npos && space > cut / 2) cut = space;
+            messageLines.push_back(remaining.substr(0, cut)); remaining.erase(0, cut);
+            while (!remaining.empty() && remaining.front() == L' ') remaining.erase(0, 1);
+        }
+        const int lineHeight = std::min(22, 85 / int(std::max<size_t>(1, messageLines.size())));
+        for (size_t i = 0; i < messageLines.size(); ++i)
+            text(330, 267 + int(i) * lineHeight, 620, lineHeight, messageLines[i], 16, ink, false, 1, outline, 13);
+        for (size_t i = 0; i < current.dialogChoices.size(); ++i)
+        {
+            const int y = 360 + int(i) * 43;
+            const bool focused = int(i) == current.dialogSelection;
+            cell(390, y, 500, 37, focused);
+            if (focused) arrow(354, y + 8);
+            text(405, y, 470, 37, current.dialogChoices[i], 20,
+                 focused ? selectedInk : ink, false, 1,
+                 focused ? MakeColor(255, 222, 223, 219) : outline, 13);
+        }
+    };
+
+    if (current.dialogOnly)
+    {
+        // Match the Settings page dim while leaving the game visible behind it.
+        std::fill(pixels.begin(), pixels.end(), MakeColor(61, 0, 0, 0));
+        if (!current.dialogChoices.empty()) dialog();
+        return true;
+    }
+
     if (current.titleHint)
     {
         // The key on its own, so a PlayStation face does not move the label off
@@ -946,38 +998,72 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         // the coverage, so the legend keeps the font's outline in straight alpha.
         const uint32_t face = MakeColor(255, 196, 197, 194);
         const int creditY = CreditTop(output);
+        const int hintY = kHintY + FooterOffset(output), quitY = kQuitHintY + FooterOffset(output);
         const std::wstring refund = Translate(current.language, L"If you paid for this, ask for a refund.",
                                               L"本移植免費開源。如果你是花錢買到的，請申請退款。");
-        const auto legend = [&] {
-            text(kCreditX, creditY, kCreditWidth, kCreditLineHeight,
-                 L"Lost Odyssey Recomp · Free & open source · github.com/freefrank/LostOdysseyRecomp",
-                 14, face, false, 0, outline, 12, false, true);
-            text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
-                 14, face, false, 0, outline, 12, false);
-            text(kHintX, kHintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
-            text(kHintX + kHintKey, kHintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
+        const auto legend = [&](bool credit) {
+            if (credit)
+            {
+                text(kCreditX, creditY, kCreditWidth, kCreditLineHeight,
+                     L"Lost Odyssey Recomp · Free & open source · github.com/freefrank/LostOdysseyRecomp",
+                     14, face, false, 0, outline, 12, false, true);
+                text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
+                     14, face, false, 0, outline, 12, false);
+                return;
+            }
+            text(kHintX, hintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
+            text(kHintX + kHintKey, hintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
                  false, 0, outline, 12);
+            if (!current.titleQuitKey.empty() && !current.titleQuitLabel.empty())
+            {
+                if (current.playStationPrompts && current.titleQuitKey == L"Back")
+                {
+                    // The same three-node Share/Create mark as the guest
+                    // controller atlas: Back is not the PlayStation touchpad.
+                    const int x = kQuitHintX + kQuitHintKey - 25, y = quitY + 4;
+                    const auto share = [&](uint32_t color, int thickness, double radius) {
+                        line(x + 6, y + 9, x + 15, y + 3, color, thickness);
+                        line(x + 6, y + 11, x + 15, y + 17, color, thickness);
+                        for (const auto &node : std::array<std::array<int, 2>, 3>{{{3, 10}, {18, 0}, {18, 20}}})
+                            Ellipse(canvas, x + node[0], y + node[1], radius, radius, 0, color);
+                    };
+                    share(outline, 4, 3.5);
+                    share(face, 2, 2.5);
+                }
+                else
+                    text(kQuitHintX, quitY, kQuitHintKey, kHintHeight, current.titleQuitKey,
+                         current.titleQuitKey == L"Backspace" ? 16 : 18, face, false, 2, outline, 12, false);
+                constexpr int labelX = kQuitHintX + kQuitHintKey + kQuitHintGap;
+                text(labelX, quitY, kHintRight - 8 - labelX, kHintHeight,
+                     L": " + current.titleQuitLabel, 18, face, false, 0, outline, 12, false);
+            }
         };
-        legend();
-        const std::vector<uint32_t> overBlack = pixels;
-        std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
-        legend();
-        const int creditRight = rect(kCreditX, creditY, kCreditWidth, 2 * kCreditLineHeight)[2];
+        // Keep the credit's lower opacity independent of the two shortcuts:
+        // the wider Backspace key can extend left of the credit box's edge.
+        const auto alphaLayer = [&](bool credit, int opacity) {
+            std::fill(pixels.begin(), pixels.end(), 0xFF000000u);
+            legend(credit);
+            const std::vector<uint32_t> overBlack = pixels;
+            std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
+            legend(credit);
+            for (size_t i = 0; i < pixels.size(); ++i)
+            {
+                auto &p = pixels[i];
+                const uint32_t b = overBlack[i];
+                int spread = 0;
+                for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
+                const int alpha = std::clamp(255 - spread / 3, 0, 255);
+                const auto channel = [&](int c) {
+                    return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
+                };
+                p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
+            }
+        };
+        alphaLayer(true, 184);
+        const std::vector<uint32_t> credit = pixels;
+        alphaLayer(false, 255);
         for (size_t i = 0; i < pixels.size(); ++i)
-        {
-            auto &p = pixels[i];
-            const uint32_t b = overBlack[i];
-            int spread = 0;
-            for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
-            const int alpha = std::clamp(255 - spread / 3, 0, 255);
-            const auto channel = [&](int c) {
-                return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
-            };
-            // Dim the credit and its outline together without changing the
-            // Settings legend. This is cached with the raster, not per frame.
-            const int opacity = i % width < size_t(creditRight) ? 184 : 255;
-            p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
-        }
+            pixels[i] = ColorBlend(credit[i], pixels[i]);
         return true;
     }
 
@@ -1559,38 +1645,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             const uint32_t g = ((pixel & 0x0000ff00u) * menu_motion::DialogDim >> 8) & 0x0000ff00u;
             pixel = (pixel & 0xff000000u) | rb | g;
         }
-        brushedCell(280, 208, 720, 306, MakeColor(255, 73, 76, 76));
-        line(280, 208, 1000, 208, MakeColor(255, 231, 232, 228), 2);
-        line(280, 208, 280, 514, MakeColor(255, 194, 196, 193), 2);
-        line(280, 513, 1000, 513, MakeColor(255, 35, 36, 36), 3);
-        line(999, 208, 999, 514, MakeColor(255, 39, 40, 40), 3);
-        text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, 1);
-
-        std::vector<std::wstring> messageLines;
-        std::wstring remaining = current.dialogMessage;
-        while (!remaining.empty()) {
-            size_t cut = 0, space = std::wstring::npos; unsigned units = 0;
-            while (cut < remaining.size() && units + (remaining[cut] >= 0x2e80 ? 2 : 1) <= 70) {
-                if (remaining[cut] == L' ') space = cut;
-                units += remaining[cut] >= 0x2e80 ? 2 : 1; ++cut;
-            }
-            if (cut < remaining.size() && space != std::wstring::npos && space > cut / 2) cut = space;
-            messageLines.push_back(remaining.substr(0, cut)); remaining.erase(0, cut);
-            while (!remaining.empty() && remaining.front() == L' ') remaining.erase(0, 1);
-        }
-        const int lineHeight = std::min(22, 85 / int(std::max<size_t>(1, messageLines.size())));
-        for (size_t i = 0; i < messageLines.size(); ++i)
-            text(330, 267 + int(i) * lineHeight, 620, lineHeight, messageLines[i], 16, ink, false, 1, outline, 13);
-        for (size_t i = 0; i < current.dialogChoices.size(); ++i)
-        {
-            const int y = 360 + int(i) * 43;
-            const bool focused = int(i) == current.dialogSelection;
-            cell(390, y, 500, 37, focused);
-            if (focused) arrow(354, y + 8);
-            text(405, y, 470, 37, current.dialogChoices[i], 20,
-                 focused ? selectedInk : ink, false, 1,
-                 focused ? MakeColor(255, 222, 223, 219) : outline, 13);
-        }
+        dialog();
     }
 
     return true;

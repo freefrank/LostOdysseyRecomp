@@ -76,6 +76,9 @@ struct MenuSnapshot
     std::wstring dialogTitle, dialogMessage;
     std::vector<std::wstring> dialogChoices;
     int dialogSelection = 0;
+    // The shared confirmation over the game, without the Settings page.
+    // Output is straight alpha: a dim backdrop and the opaque dialog.
+    bool dialogOnly = false;
     uint64_t revision = 0;
     HdrCalibration calibration;
     BrightnessCalibration brightness;
@@ -95,9 +98,11 @@ struct MenuSnapshot
     // fades in over when the menu opens.
     bool backdropOnly = false;
     // Title footer as straight alpha: the free-port credit at lower left and
-    // help (a key then its label) at lower right (title_entry.cpp). The raster
+    // help (a key then its label) and the optional quit shortcut at lower right
+    // (title_entry.cpp). The raster
     // is just TitleHintBounds of the output.
     bool titleHint = false;
+    std::wstring titleQuitKey, titleQuitLabel;
 };
 // How a single line of explanatory text fits its box: scale 1 when it is drawn
 // at its normal size, below 1 when the renderer shrinks it to fit the width.
@@ -142,7 +147,7 @@ struct MenuRect
 };
 // The list arrow at a layout position, and the output pixels it can cover.
 void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
-// The output pixels of the title menu's credit and Settings legend: with titleHint,
+// The output pixels of the title menu's credit and shortcut legends: with titleHint,
 // RasterizeMenu returns only this rectangle, row by row.
 MenuRect TitleHintBounds(uint32_t width, uint32_t height);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);

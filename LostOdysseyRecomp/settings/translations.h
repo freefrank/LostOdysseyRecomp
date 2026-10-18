@@ -939,6 +939,8 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"No", L"いいえ", L"아니요", L"否"},
         {L"Settings", L"設定", L"설정", L"设置"},
         {L"Y: Settings", L"Y：設定", L"Y: 설정", L"Y：设置"},
+        {L"Quit game", L"ゲームを終了", L"게임 종료", L"退出游戏"},
+        {L"Quit the game?", L"ゲームを終了しますか？", L"게임을 종료할까요?", L"退出游戏吗？"},
         {L"If you paid for this, ask for a refund.",
          L"有料で入手した場合は、返金を求めてください。",
          L"돈을 내고 구매하셨다면 환불을 요청하세요.",

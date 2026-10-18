@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- The title menu now lets you quit the game with Back / View (Backspace on the keyboard), after a Yes/No confirmation.
+
+### 简体中文
+
+- 标题菜单现在可按 Back／View（键盘 Backspace），确认后退出游戏。
+
 ## [v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) — 2026-10-18
 
 ### English
