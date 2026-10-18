@@ -25,4 +25,6 @@
     <string name="save_import_close_message">导入前需要关闭游戏，上次保存后的进度会丢失。随后会重新打开存档页面，让你选择 ZIP 文件。</string>
     <string name="save_import_close_action">关闭游戏并导入</string>
     <string name="save_location_cancel_pending">取消待应用的切换</string>
+    <string name="touch_hide_all">隐藏所有触控控件</string>
+    <string name="touch_hide_all_help">呼出系统栏或使用 Android 返回，可显示 CTRL 4 秒。</string>
 </resources>

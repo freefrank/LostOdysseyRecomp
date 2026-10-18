@@ -25,4 +25,6 @@
     <string name="save_import_close_message">가져오기 전에 게임을 닫아야 합니다. 마지막 저장 이후의 진행 상황은 잃게 됩니다. 저장 화면을 다시 열어 ZIP을 선택할 수 있습니다.</string>
     <string name="save_import_close_action">닫고 가져오기</string>
     <string name="save_location_cancel_pending">예약된 변경 취소</string>
+    <string name="touch_hide_all">모든 터치 컨트롤 숨기기</string>
+    <string name="touch_hide_all_help">시스템 표시줄을 열거나 Android 뒤로 가기를 사용하면 CTRL이 4초 동안 표시됩니다.</string>
 </resources>

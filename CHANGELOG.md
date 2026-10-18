@@ -8,11 +8,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Android: CTRL can now hide all touch controls for screenshots; reveal the system bars or use Android Back to show CTRL again (#646).
 - The title menu now lets you quit the game with Back / View (Backspace on the keyboard), after a Yes/No confirmation.
 - Real-time cutscenes: Voice volume now sets the dialogue, and the Music volume no longer mutes it. Cutscene music is mixed with the sound effects, so it follows Sound effects (#631).
 
 ### 简体中文
 
+- Android：CTRL 现在可隐藏所有触控控件，方便截图；呼出系统栏或使用 Android 返回即可再次显示 CTRL（#646）。
 - 标题菜单现在可按 Back／View（键盘 Backspace），确认后退出游戏。
 - 即时演算过场：语音音量现在控制对白，音乐音量不再把对白静音。过场配乐和音效混在一起，跟随音效音量（#631）。
 

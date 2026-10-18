@@ -25,4 +25,6 @@
     <string name="save_import_close_message">インポート前にゲームを閉じる必要があります。最後のセーブ以降の進行状況は失われます。その後セーブ画面を開き直し、ZIP を選択できます。</string>
     <string name="save_import_close_action">閉じてインポート</string>
     <string name="save_location_cancel_pending">切り替え予約を取り消す</string>
+    <string name="touch_hide_all">すべてのタッチ操作を非表示</string>
+    <string name="touch_hide_all_help">システムバーを表示するか Android の「戻る」を使うと、CTRL が4秒間表示されます。</string>
 </resources>

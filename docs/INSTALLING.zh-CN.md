@@ -180,7 +180,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 3. 打开应用。高通设备会先显示 **GPU driver** 页面，因为手机自带的驱动会让部分菜单文字不可见：在这里下载 Turnip 驱动（页面会显示推荐给你机型的版本），然后按 **Start game**。之后可从 **CTRL → GPU driver** 再进入。如果某个驱动无法运行游戏，游戏会回到这个页面并说明原因。Mali 设备同样会先显示这个页面，因为手机自带的驱动无法运行游戏。Mali 支持仍是实验性的。在这里下载推荐的 PanVK-kbase 驱动。它需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU（Valhall 及之后，包括 Immortalis）；Midgard（Mali-T）和 Bifrost（Mali-G31、G51、G52、G71、G72、G76）GPU 不受支持。驱动作者支持 Android 15 及以上；Android 13 和 14 不作保证。推荐的驱动默认以直接模式加载。如果用它启动不了游戏，按驱动旁的 **Mode** 按钮在“Mode: direct”和“Mode: libadrenotools”之间切换，或者换一个版本。
 4. 用屏幕上的 **A** 键接受着色器下载。**B** 跳过并在设备上编译，需要几分钟。
 
-游戏画面上有触摸按键。**CTRL** 可以调整触摸按键的大小、透明度和布局，也能进入 Saves、Game folder 和 GPU driver 页面。连接 USB 或蓝牙手柄后触摸按键自动隐藏。设置在游戏内的设置页面修改。
+游戏画面上有触摸按键。**CTRL** 可以调整触摸按键的大小、透明度和布局，也能进入 Saves、Game folder 和 GPU driver 页面。“隐藏所有触控控件”会隐藏所有触控控件，包括 CTRL；呼出系统栏或使用 Android 返回可显示 CTRL 4 秒，点开后即可修改该选项。连接 USB 或蓝牙手柄后触摸按键自动隐藏。设置在游戏内的设置页面修改。
 
 开启 **Automatic updates（自动更新）** 时，应用启动会检查新版本并提供 APK 下载。新 APK 直接覆盖安装，存档和设置保留。如果装过自己构建的 APK，需要先卸载。卸载应用会删除其内部存档和自身 `Android/data` 文件夹里的全部数据。
 

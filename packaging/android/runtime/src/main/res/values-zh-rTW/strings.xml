@@ -25,4 +25,6 @@
     <string name="save_import_close_message">匯入前需要關閉遊戲，上次儲存後的進度將會遺失。隨後會重新開啟存檔頁面，讓你選擇 ZIP 檔案。</string>
     <string name="save_import_close_action">關閉遊戲並匯入</string>
     <string name="save_location_cancel_pending">取消待套用的切換</string>
+    <string name="touch_hide_all">隱藏所有觸控控制項</string>
+    <string name="touch_hide_all_help">叫出系統列或使用 Android 返回，可顯示 CTRL 4 秒。</string>
 </resources>

@@ -71,7 +71,7 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 - **Game data:** opening the app creates `Android/data/io.github.freefrank.lostodyssey/files/game/`. Copy your extracted `disc1`–`disc4` into it over USB, or import disc images with **Game folder → Import disc images…**. **CTRL → Game folder** can point the game at another folder or an SD card.
 - **Qualcomm devices:** the **GPU driver** page opens before the first start. Download a Turnip driver there.
 - **Mali devices:** the **GPU driver** page also opens first. Download the recommended PanVK driver there; it needs a Mali-G57, G68, G77, G78 or Mali-G610 and newer GPU.
-- **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout.
+- **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout. **Hide all touch controls** hides them completely; reveal the system bars or use Android Back to show CTRL for 4 seconds.
 - **Updates:** a new APK installs over the old one and keeps your saves.
 - **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter. Its **Keep saves in the game folder** option uses `<game folder>/save/` for syncing with a PC; it is off by default and applies at the next app start.
 - **Logs:** **CTRL → Saves and logs → Export logs** saves them to a ZIP for a bug report ([details](docs/INSTALLING.md#android-logs)).

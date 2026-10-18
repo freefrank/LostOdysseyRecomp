@@ -25,4 +25,6 @@
     <string name="save_import_close_message">The game must close before importing saves. Progress since the last save will be lost. The Saves page will reopen so you can choose a ZIP.</string>
     <string name="save_import_close_action">Close game and import</string>
     <string name="save_location_cancel_pending">Cancel pending change</string>
+    <string name="touch_hide_all">Hide all touch controls</string>
+    <string name="touch_hide_all_help">Reveal the system bars or use Android Back to show CTRL for 4 seconds.</string>
 </resources>

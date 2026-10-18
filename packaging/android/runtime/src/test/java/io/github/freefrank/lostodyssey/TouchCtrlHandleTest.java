@@ -17,6 +17,63 @@ public class TouchCtrlHandleTest {
     }
 
     @Test
+    public void hideAllHasNoButtonOrTabUntilRevealed() {
+        TouchCtrlHandle handle = fresh();
+        handle.setHideAll(true, T0);
+        assertTrue(handle.hideAll());
+        assertFalse(handle.visible(T0));
+        assertEquals(0f, handle.progress(T0 + 60_000), 0f);
+        assertFalse(handle.retracted());
+        assertEquals(-1, handle.nextWakeMs(T0 + 60_000));
+    }
+
+    @Test
+    public void hiddenRevealExpiresEvenWhenAutoHideIsDisabled() {
+        TouchCtrlHandle handle = fresh();
+        handle.setEnabled(false, T0);
+        handle.setHideAll(true, T0);
+        long reveal = T0 + 1000;
+        handle.activity(reveal);
+        assertTrue(handle.visible(reveal));
+        assertEquals(TouchCtrlHandle.HIDE_DELAY_MS, handle.nextWakeMs(reveal));
+        assertTrue(handle.visible(reveal + TouchCtrlHandle.HIDE_DELAY_MS - 1));
+        assertFalse(handle.visible(reveal + TouchCtrlHandle.HIDE_DELAY_MS));
+        assertEquals(-1, handle.nextWakeMs(reveal + TouchCtrlHandle.HIDE_DELAY_MS));
+        assertEquals(0f, handle.progress(reveal + TouchCtrlHandle.HIDE_DELAY_MS), 0f);
+        assertFalse(handle.retracted());
+    }
+
+    @Test
+    public void repeatedRevealAndDialogPinRestartHiddenTimer() {
+        TouchCtrlHandle handle = fresh();
+        handle.setHideAll(true, T0);
+        handle.activity(T0 + 1000);
+        handle.activity(T0 + 4000);
+        assertTrue(handle.visible(T0 + 7000));
+        handle.setPinned(true, T0 + 7000);
+        assertTrue(handle.visible(T0 + 60_000));
+        assertEquals(-1, handle.nextWakeMs(T0 + 60_000));
+        handle.setPinned(false, T0 + 60_000);
+        assertTrue(handle.visible(T0 + 63_999));
+        assertFalse(handle.visible(T0 + 64_000));
+    }
+
+    @Test
+    public void resetKeepsHiddenPreferenceAndTurningItOffRestoresAutoHide() {
+        TouchCtrlHandle handle = fresh();
+        handle.setHideAll(true, T0);
+        handle.activity(T0);
+        handle.reset(T0 + 1000);
+        assertTrue(handle.hideAll());
+        assertFalse(handle.visible(T0 + 1000));
+        handle.setHideAll(false, T0 + 2000);
+        assertTrue(handle.visible(T0 + 2000));
+        handle.progress(T0 + 6000);
+        assertTrue(handle.retracted());
+        assertTrue(handle.visible(T0 + 60_000));
+    }
+
+    @Test
     public void retractsAfterIdleDelayAndSlides() {
         TouchCtrlHandle handle = fresh();
         assertEquals(0f, handle.progress(T0 + 3999), 0f);

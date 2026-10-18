@@ -71,7 +71,7 @@
 - **游戏数据：** 打开应用会建好 `Android/data/io.github.freefrank.lostodyssey/files/game/`。用 USB 把解出的 `disc1`–`disc4` 复制进去，或者用 **Game folder → Import disc images…** 导入光盘镜像。**CTRL → Game folder** 可以改用其他文件夹或 SD 卡。
 - **高通设备：** 首次启动前会打开 **GPU driver** 页面，在那里下载 Turnip 驱动。
 - **Mali 设备：** 同样会先打开 **GPU driver** 页面，在那里下载推荐的 PanVK 驱动；需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU。
-- **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。
+- **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。开启“隐藏所有触控控件”后，呼出系统栏或使用 Android 返回可显示 CTRL 4 秒。
 - **更新：** 新 APK 直接覆盖安装，存档保留。
 - **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。其中 **Keep saves in the game folder（将存档保存在游戏文件夹中）** 选项可把存档放到 `<游戏文件夹>/save/`，方便与电脑同步；默认关闭，下次启动应用时生效。
 - **日志：** **CTRL → Saves and logs → Export logs** 可以把日志导出成 ZIP，用于反馈问题（[详见](docs/INSTALLING.zh-CN.md#android-logs)）。

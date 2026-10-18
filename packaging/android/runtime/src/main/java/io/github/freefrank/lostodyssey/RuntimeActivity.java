@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -56,7 +57,11 @@ public final class RuntimeActivity extends SDLActivity {
         // whenever the bars come back later (SDL window-style changes, a swipe).
         bootHandler.post(this::hideSystemBars);
         ViewCompat.setOnApplyWindowInsetsListener(getWindow().getDecorView(), (view, insets) -> {
-            if (insets.isVisible(WindowInsetsCompat.Type.systemBars())) scheduleHideSystemBars();
+            if (insets.isVisible(WindowInsetsCompat.Type.statusBars())
+                    || insets.isVisible(WindowInsetsCompat.Type.navigationBars())) {
+                if (touchControls != null) touchControls.revealCtrl();
+                scheduleHideSystemBars();
+            }
             return insets;
         });
         GameStorage.prepare(this);
@@ -77,6 +82,21 @@ public final class RuntimeActivity extends SDLActivity {
     @SuppressWarnings("unused")
     void reportGraphicsFailure(String reason) {
         graphicsFailure = reason;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP
+                && !event.isCanceled() && touchControls != null) touchControls.revealCtrl();
+        // Keep SDL's existing Back mapping/consumption, including gesture-generated keys.
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (touchControls != null) touchControls.revealCtrl();
+        // Preserve SDL's fallback behavior on Android versions that call this directly.
+        super.onBackPressed();
     }
 
     /** Opens the GPU driver page over the game (CTRL dialog). */
@@ -139,8 +159,18 @@ public final class RuntimeActivity extends SDLActivity {
         }
         WindowInsetsControllerCompat controller =
             WindowCompat.getInsetsController(window, window.getDecorView());
-        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        updateSystemBarsBehavior();
         controller.hide(WindowInsetsCompat.Type.systemBars());
+    }
+
+    void updateSystemBarsBehavior() {
+        // Transient bars can stay "hidden" in app insets even while drawn. Use
+        // normal swipe-revealed bars in hide-all mode so their visibility can
+        // restore CTRL; the existing timer hides the bars again after 2.5 s.
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+            .setSystemBarsBehavior(touchControls != null && touchControls.hidesAllControls()
+                ? WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                : WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
     }
 
     /** Bars shown by a swipe stay for a moment, like Android's own transient bars. */
