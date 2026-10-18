@@ -4,11 +4,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
-## Unreleased
+## [v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) — 2026-10-18
 
 ### English
 
-- Cheats now lets you choose the fast-forward button (#640).
+- Cheats: the fast-forward button can be LT or LB (#640).
 - Linux: the AppImage now starts from the Steam Beta client and other places where it cannot mount itself (#639).
 - Settings → Graphics → Loading speed: Original keeps the Xbox 360 loading pace, Fast (the default) is the current faster loading (#633).
 - Cutscenes and the pause overlay now show black bars outside 16:9 on taller and ultrawide screens (#602).
@@ -18,7 +18,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### 简体中文
 
-- “辅助”菜单现在可以选择快进按键（#640）。
+- “辅助”菜单：快进按键可选 LT 或 LB（#640）。
 - Linux：AppImage 现在可以从 Steam 测试版客户端等无法挂载的环境中启动（#639）。
 - “设置 → 图形 → 加载速度”：原版保持 Xbox 360 的加载节奏，快速（默认）即现在更快的加载方式（#633）。
 - 过场动画和暂停画面现在会在较高及超宽屏幕的 16:9 范围外显示黑边（#602）。
