@@ -1,13 +1,15 @@
-# 渲染验证（2026-09-04）
+# Rendering validation (2026-09-04)
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+[简体中文](rendering-validation.zh-CN.md)
 
-> 2026-09-05状态同步：本页的开场截图基线是历史固定场景。当前未解决项目见[状态页](../STATUS.md)；后续Gorge营地已后台到达，但不能据此认定用户窗口卡死已修复。
+> **Historical checkpoint.** Versions, Issues, processes and to-dos below are the records as of that date. For current delivery and acceptance status, see [project status](../STATUS.md) and [roadmap](../ROADMAP.md).
 
-## 构建与回归测试
+> 2026-09-05 status sync: the opening screenshot baseline on this page is a historical fixed scene. For current open items, see the [status page](../STATUS.md). The later Gorge camp was reached in the background, but that does not prove the user's window freeze is fixed.
 
-先按 [依赖补丁说明](../../tools/patches/README.md) 准备子模块，并准备 README 中所列本地游戏数据、重编译产物和 Windows 工具链。
-从仓库根目录运行：
+## Build and regression tests
+
+First prepare the submodules by following the [dependency patch notes](../../tools/patches/README.md), and prepare the local game data, recompiled output and Windows toolchain listed in the README.
+Run from the repository root:
 
 ```powershell
 .\tools\build_runtime.bat
@@ -21,23 +23,23 @@
 .\out\build\windows-clang\LostOdysseyRecomp\LoTextureLayoutTest.exe
 ```
 
-四个测试本身不读取游戏资产；当前整体 CMake 配置仍依赖本地项目构建环境。
+The four tests do not read game assets themselves. The current overall CMake configuration still depends on the local project build environment.
 
-| 测试 | 覆盖 | 平台验证 |
+| Test | Coverage | Platform verification |
 |---|---|---|
-| LoTextureLayoutTest | 14 个 packed mip 块偏移用例，包括微小 BC 贴图和长条纹理 | Windows |
-| LoMemoryAliasTest | A/C/E 共享写入、E 的一页偏移及释放 | Windows、WSL Manjaro |
-| LoShaderAluTest | 真实 GPU ALU 旧值读取、后续结果、gamma、swizzle 和 resolve R/B 往返 | Windows D3D12 |
-| LoStencilTest | 左半写 stencil=3，EQUAL/NOT_EQUAL 的 GPU 像素读回；D24 端点静态断言 | Windows D3D12，LO_BUILD_GPU=ON |
+| LoTextureLayoutTest | 14 packed mip block offset cases, including tiny BC textures and long strip textures | Windows |
+| LoMemoryAliasTest | Shared writes from A/C/E, a one-page offset for E, and release | Windows, WSL Manjaro |
+| LoShaderAluTest | Real GPU ALU old-value reads, later results, gamma, swizzle and resolve R/B round trip | Windows D3D12 |
+| LoStencilTest | Left half writes stencil=3; GPU pixel readback for EQUAL/NOT_EQUAL; static assertions for D24 endpoints | Windows D3D12, LO_BUILD_GPU=ON |
 
-> 2026-10 测试精简：`LoStencilTest` 已从仓库移除，上文中它的命令和结果仅为历史记录。
+> 2026-10 test cleanup: `LoStencilTest` has been removed from the repository. Its command and result above are kept only as history.
 
-另以 LoShaderTool 编译开场现场捕获的 162 个 shader，结果 0 失败；捕获数据只在本地，不作为仓库测试资产。
+Separately, LoShaderTool compiled the 162 shaders captured at the opening scene, with 0 failures. The captured data is local only and is not a repository test asset.
 
-## 实机复现
+## Live reproduction
 
-使用 Disc 1，默认 30 fps、默认 EDRAM transfer（draw + resolve）和 shader cache v19。
-从仓库根目录设置自动输入后启动：
+Use Disc 1, with the default 30 fps, the default EDRAM transfer (draw + resolve) and shader cache v19.
+Set the automatic input from the repository root, then start:
 
 ```powershell
 New-Item -ItemType Directory -Force out/render-check | Out-Null
@@ -50,31 +52,31 @@ $env:LO_SCREENSHOT_PATH = 'out/render-check/shot.ppm'
 .\out\build\windows-clang\LostOdysseyRecomp\LostOdysseyRecomp.exe --game .\LostOdysseyRecompLib\private\disc1 --quiet-kernel 2> out/render-check/stderr.log
 ```
 
-自动输入按 swap 计数；本轮第 2400 帧为攻击目标列表，第 3000 帧为正面角色近景。
-如果状态偏离，先确认菜单与输入时序，不把不同镜头当作渲染回归。
-logger输出在stderr，并默认将每次运行写入工作目录`logs/runtime-<时间戳>.log`；可设`LO_LOG_FILE`。本例stderr和截图在ignored的`out/`目录。完整工作目录约定见[构建指南](../BUILDING.md)。
+Automatic input counts by swap. In this run, frame 2400 is the attack target list, and frame 3000 is a close-up of the front-facing character.
+If the state drifts, first check the menu and input timing. Do not treat a different camera shot as a rendering regression.
+The logger writes to stderr. By default, each run is also written to `logs/runtime-<timestamp>.log` in the working directory; `LO_LOG_FILE` can change this. In this example, stderr and the screenshots are in the ignored `out/` directory. For the full working directory conventions, see the [build guide](../BUILDING.md).
 
-本轮基线：`out/render-final/`（几何与纹理修复后）。
-光影最终结果：`out/render-light-depthpack/`；中间实验 `render-light-stencil-ref/` 的红色偏光不是最终结果。
-Xenia 对照条件见 [对照记录](../archive/notes/xenia-render-comparison.md)。
+Baseline for this run: `out/render-final/` (after the geometry and texture fixes).
+Final lighting result: `out/render-light-depthpack/`. The red colour cast in the intermediate experiment `render-light-stencil-ref/` is not the final result.
+For the Xenia comparison conditions, see the [comparison record](../archive/notes/xenia-render-comparison.md).
 
-## 已知范围
+## Known scope
 
-已验证开场材质、模型完整性、后期轮廓和金属高光改善；未验证重型坦克战斗结束、通关或全部阴影细节。
-后续已追加首场战斗后演出及重型坦克战斗验证，见 [白屏修复记录](../archive/notes/post-battle-whiteout.md)。
-未调整曝光，也未关闭正常深度、客体遮挡开关或景深。遮挡计数仍为近似实现。
-模板正反面不同参考值/掩码尚有限制，本场景没有触发对应警告。
+Verified: the opening material, model integrity, post-processing outlines and metallic highlight improvements. Not verified: the end of the heavy tank battle, clearing the game, or all shadow detail.
+Later, the post-first-battle sequence and the heavy tank battle were verified. See the [white screen fix record](../archive/notes/post-battle-whiteout.md).
+Exposure was not adjusted. The normal depth test, the object occlusion switch and depth of field were not turned off. The occlusion count is still an approximation.
+Front and back stencil faces with different reference values/masks still have limits. This scene did not trigger the corresponding warnings.
 
-## 隐藏窗口的后台测试
+## Background testing with a hidden window
 
-设置 `LO_BACKGROUND=1` 后，SDL 从创建时使用隐藏窗口，D3D12 渲染和游戏截图仍然执行，不显示窗口或占用焦点。它不同于停用视频初始化的 `LO_HEADLESS`。通过 `LO_TEST_INPUT_FILE` 提交进程内输入，不注入系统键鼠；运行记录见 [攻略测试](../archive/notes/walkthrough-testing.md)。后台运行仍消耗 CPU/GPU，测试结束应停止独立进程。
+Setting `LO_BACKGROUND=1` makes SDL create a hidden window from the start. D3D12 rendering and game screenshots still run, but no window is shown and focus is not taken. This is different from `LO_HEADLESS`, which disables video initialisation. Input is submitted in-process through `LO_TEST_INPUT_FILE`; system keyboard and mouse input is not injected. For run records, see [walkthrough testing](../archive/notes/walkthrough-testing.md). Background runs still use CPU and GPU, so stop any separate processes when the test ends.
 
-资源解析致命错误会记录原始资源名与调用者，随后保留游戏原本的报错和退出行为；日志不再只显示笼统的 dirty disc 提示。
+For fatal resource-resolution errors, the log now records the raw resource name and the caller, then keeps the game's original error and exit behaviour. The log no longer shows only a generic dirty disc message.
 
-### 到达场景后请求连续帧
+### Request consecutive frames after reaching a scene
 
-设置 LO_SCREENSHOT_REQUEST 为独立测试目录中的请求文件路径；写入两个整数：非零序号和帧数，例如 1 120。在下一次 Present 后开始采集，最多600帧，沿用 LO_SCREENSHOT_PATH 并附加 swap 编号。相同序号不重复采集，新序号可再次触发；帧数0取消尚未完成的请求。默认未启用时不读文件。不要与会造成 GPU 同步的逐 draw/resolve 捕获同时用于性能比较。
+Set LO_SCREENSHOT_REQUEST to a request file path in a separate test directory. Write two integers: a non-zero serial and a frame count, for example `1 120`. Capture starts after the next Present and runs for at most 600 frames. It uses LO_SCREENSHOT_PATH and appends the swap number. The same serial is not captured again; a new serial can trigger again. A frame count of 0 cancels a request that has not finished. When not enabled, which is the default, the file is not read. Do not use this together with per-draw/resolve capture that forces GPU synchronisation when comparing performance.
 
-运行时构建与独立后台验证通过：5帧、同序号改为50仍保持5帧、新序号3帧得到总计8帧、零帧请求不新增文件，8张PPM均可解码。本地证据 out/screenshot-request-test。
+Runtime build and independent background validation passed: 5 frames; keeping the same serial but changing it to 50 still gave 5 frames; a new serial with 3 frames gave 8 frames in total; a zero-frame request created no new files; all 8 PPM images could be decoded. Local evidence: out/screenshot-request-test.
 
 Frame alignment: renderer draw/resolve frame F is displayed in screenshot swap F+1. Verified by final 0x714000 resolves against consecutive screenshots. Use the final resolve for exact trace matching; same-numbered swap images are the previous rendered frame.

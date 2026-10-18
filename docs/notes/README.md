@@ -1,144 +1,142 @@
-# 逆向与验证笔记
+# Reverse Engineering and Validation Notes
 
-[文档总入口](../README.md) · [当前状态](../STATUS.md) · [路线图](../ROADMAP.zh-CN.md) · [历史归档](../archive/README.md)
+[Documentation home](../README.md) · [Current status](../STATUS.md) · [Roadmap](../ROADMAP.md) · [Archive](../archive/README.md)
 
-2026-10-14 整理：已修复、已被现行文档取代或只对应原日期的 6 篇笔记移入[历史归档](../archive/README.md)，索引中不再列出。
+2026-10-14 cleanup: 6 notes that were fixed, replaced by current documents, or tied only to their original date were moved to the [archive](../archive/README.md) and are no longer listed in this index.
 
-2026-10-11 整理：已过期的交接、阶段记录、修复时间线和单次测量已移入[历史归档](../archive/README.md)的 `archive/notes/`，本目录现收录 **60 篇**专项笔记，按主题列出，每篇只出现一次。文件名和原始证据继续保留，目录不重复维护版本发布或任务进度。
+2026-10-11 cleanup: expired handoffs, phase records, fix timelines and one-time measurements were moved to `archive/notes/` in the [archive](../archive/README.md). This directory now holds **60** topic notes, listed by subject, each appearing only once. File names and original evidence are kept. This directory does not duplicate version release or task progress.
 
-## 如何使用
+## How to use
 
-| 标记 | 阅读方式 |
+| Marker | How to read |
 |---|---|
-| 参考 | 维护中的专题机制或操作说明；其中旧测试仍只覆盖原版本与条件。 |
-| 历史 | 日期、版本或阶段绑定的测量、修复、交接与进度；其中“当前”“未发布”、PID 和后续步骤只属于当时。 |
-| 调查 | 问题分析及其证据边界；此标记不等于对应 Issue 仍开放，现状以 STATUS / 路线图为准。 |
-| 草案 | 设计、研究、需求或发布文案；不代表已实施，也不因年代久远自动取消。 |
+| Reference | Maintained topic mechanisms or operating instructions. Old tests in them still cover only the original version and conditions. |
+| Historical | Measurements, fixes, handoffs and progress tied to a date, version or phase. "Current", "unreleased", PIDs and next steps in them applied only at that time. |
+| Investigation | Problem analysis and its evidence limits. This marker does not mean the related Issue is still open. Current status is in STATUS and the roadmap. |
+| Draft | Design, research, requirements or release copy. Not evidence of implementation, and not automatically withdrawn because it is old. |
 
-分类合计：参考 33、历史 15、调查 10、草案 2。
+Category totals: Reference 33, Historical 15, Investigation 10, Draft 2.
 
-先用当前状态确认实施、验证、验收和发布，再从下方进入证据。旧命令执行前核对源码、工具及输入；`out/`、本机绝对路径和截图编号是原调查的定位信息，不随仓库分发。已缺失的本地产物标为历史路径，不能视作本次复验。
+Check current status first for implementation, validation, acceptance and release, then go to the evidence below. Before running an old command, check the source, tools and inputs. `out/`, absolute local paths and screenshot numbers are locator information from the original investigations. They are not distributed with the repository. Local artifacts that are now missing are marked as historical paths and cannot be treated as re-validated in this round.
 
-## 常用专题入口
+## Common topic entry points
 
-[FG 接入参考](reusable-fg-game-integration.md) · [设置菜单](settings-menu.md) · [渲染捕获](render-state-capture.md) · [Shader 准备](shader-preparation.md) · [首次使用管线卡顿方案](pipeline-first-use-stalls.md) · [CPU 优化指南](cpu-performance-optimization-guide.md) · [发布打包](release-packaging.md) · [随时存档限制](issue-74-save-anywhere-party-split.md)
+[FG integration reference](reusable-fg-game-integration.md) · [Settings menu](settings-menu.md) · [Render capture](render-state-capture.md) · [Shader preparation](shader-preparation.md) · [First-use pipeline stall plan](pipeline-first-use-stalls.md) · [CPU optimization guide](cpu-performance-optimization-guide.md) · [Release packaging](release-packaging.md) · [Save Anywhere limits](issue-74-save-anywhere-party-split.md)
 
-## 帧生成与 SDK 接入
+## FG and SDK integration
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Vulkan DLSS/FSR FG、MetalFX 实现与 FSR 4 调查](vulkan-fg-fsr4-metalfx.md) | 调查 |
-| [Reusable FG game integration](reusable-fg-game-integration.md) | 参考 |
+| [Vulkan frame generation, FSR 4 and MetalFX](vulkan-fg-fsr4-metalfx.md) | Investigation |
+| [Reusable FG game integration](reusable-fg-game-integration.md) | Reference |
 
-## 超分与运动向量
+## Super resolution and motion vectors
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Geometric motion replay: implementation and validation boundary](motion-vector-implementation.md) | 参考 |
-| [Native DLSS Validation (P0 Foundation, P1 Temporal Inputs & P2 Checkpoint)](native-dlss-validation.md) | 历史 |
-| [DLSS 5 NR 接入研究](dlss5-nr-research.zh-CN.md) | 调查 |
+| [Geometric motion replay: implementation and validation boundary](motion-vector-implementation.md) | Reference |
+| [Native DLSS Validation (P0 Foundation, P1 Temporal Inputs & P2 Checkpoint)](native-dlss-validation.md) | Historical |
+| [DLSS 5 NR Integration Research](dlss5-nr-research.md) · [简体中文](dlss5-nr-research.zh-CN.md) | Investigation |
 
-## TAA 与 jitter
+## TAA and jitter
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Cutscene tour and 45 reviewed jitter pairs — 2026-10-04](jitter-cutscene-tour-2026-10-04.md) | 历史 |
-| [Mansion battle lights and a two-view cutscene (#212) — 2026-10-04](jitter-212-2026-10-04.md) | 历史 |
-| [Temporal jitter coverage review — 2026-09-25](jitter-coverage-2026-09-25.md) | 历史 |
-| [TAA Bell-Stand Flicker Investigation (Issue #46 adjacent)](TAA_BELL_FLICKER_INVESTIGATION.md) | 调查 |
-| [TAA 铃铛架闪烁排查（Issue #46 相关）](TAA_BELL_FLICKER_INVESTIGATION.zh-CN.md) | 调查 |
+| [Cutscene tour and 45 reviewed jitter pairs — 2026-10-04](jitter-cutscene-tour-2026-10-04.md) | Historical |
+| [Mansion battle lights and a two-view cutscene (#212) — 2026-10-04](jitter-212-2026-10-04.md) | Historical |
+| [Temporal jitter coverage review — 2026-09-25](jitter-coverage-2026-09-25.md) | Historical |
+| [TAA Bell-Stand Flicker Investigation (Issue #46 adjacent)](TAA_BELL_FLICKER_INVESTIGATION.md) · [简体中文](TAA_BELL_FLICKER_INVESTIGATION.zh-CN.md) | Investigation |
 
-## GPU 渲染与画面问题
+## GPU rendering and picture issues
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Display gamma ramp (#78, #179) — 2026-10-04](display-gamma-179-2026-10-04.md) | 历史 |
-| [Brightness / Gamma page — 2026-10-04](brightness-gamma-2026-10-04.md) | 参考 |
-| [Live anisotropic filtering](anisotropic-filtering.md) | 参考 |
-| [Fire-hit lighting investigation (2026-09-05)](fire-hit-rendering.md) | 调查 |
-| [Experimental HDR output](hdr-output.md) | 参考 |
-| [Linux/Vulkan HDR research — 2026-10-02](linux-vulkan-hdr.md) | 调查 |
-| [Host GPU occlusion queries (#118)](occlusion-queries.md) | 参考 |
-| [角色黑色剪影：物理地址别名与遮挡查询（2026-09-04）](../archive/notes/physical-alias-rendering.md) | 历史 |
-| [战后演出白屏与 EDRAM 格式切换（2026-09-04）](../archive/notes/post-battle-whiteout.md) | 历史 |
-| [Debug Menu render-state capture](render-state-capture.md) | 参考 |
-| [渲染验证（2026-09-04）](rendering-validation.md) | 历史 |
-| [Tall and non-standard aspect layout — 2026-10-01](tall-aspect-layout.md) | 参考 |
-| [标题动态背景恢复（2026-09-04）](../archive/notes/title-packed-mips.md) | 历史 |
-| [Shadow resolution and screen-space ambient occlusion](shadow-ambient-occlusion.md) | 参考 |
+| [Display gamma ramp (#78, #179) — 2026-10-04](display-gamma-179-2026-10-04.md) | Historical |
+| [Brightness / Gamma page — 2026-10-04](brightness-gamma-2026-10-04.md) | Reference |
+| [Live anisotropic filtering](anisotropic-filtering.md) | Reference |
+| [Fire-hit lighting investigation (2026-09-05)](fire-hit-rendering.md) | Investigation |
+| [Experimental HDR output](hdr-output.md) | Reference |
+| [Linux/Vulkan HDR research — 2026-10-02](linux-vulkan-hdr.md) | Investigation |
+| [Host GPU occlusion queries (#118)](occlusion-queries.md) | Reference |
+| [Character black silhouettes: physical address aliasing and occlusion queries (2026-09-04)](../archive/notes/physical-alias-rendering.md) | Historical |
+| [Post-battle white screen and EDRAM format switch (2026-09-04)](../archive/notes/post-battle-whiteout.md) | Historical |
+| [Debug Menu render-state capture](render-state-capture.md) | Reference |
+| [Rendering validation (2026-09-04)](rendering-validation.md) · [简体中文](rendering-validation.zh-CN.md) | Historical |
+| [Tall and non-standard aspect layout — 2026-10-01](tall-aspect-layout.md) | Reference |
+| [Title dynamic background restore (2026-09-04)](../archive/notes/title-packed-mips.md) | Historical |
+| [Shadow resolution and screen-space ambient occlusion](shadow-ambient-occlusion.md) | Reference |
 
-## 性能与帧率
+## Performance and frame rate
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [CPU 性能优化指南：3C6T 预算、可行并行与反模式](cpu-performance-optimization-guide.md) | 参考 |
-| [原生90/120 FPS：实现与本地验收](native-90-120fps.md) | 参考 |
-| [FreeSync / G-SYNC Compatible：应用侧VRR接入](vrr-freesync-gsync-compatible.md) | 参考 |
-| [画质增强选项的开销：v0.9.22，RTX 5080，2026-10-10](graphics-options-cost-2026-10-10.zh-CN.md) | 参考 |
-| [画质选项的开销（1080p 输出）：main f7799aec，RTX 5080 与 psvita，2026-10-15](graphics-options-cost-1080p-2026-10-15.zh-CN.md) | 参考 |
-| [合并 render pass：v1.0.0 设计调研](render-pass-merging-design-2026-10-10.zh-CN.md) | 草案 |
-| [合并 render pass 阶段 0：平板实测](render-pass-merging-phase0-2026-10-10.zh-CN.md) | 调查 |
+| [CPU performance optimization guide: 3C6T budget, feasible parallelism and anti-patterns](cpu-performance-optimization-guide.md) · [简体中文](cpu-performance-optimization-guide.zh-CN.md) | Reference |
+| [Native 90/120 FPS: Implementation and Local Validation](native-90-120fps.md) · [简体中文](native-90-120fps.zh-CN.md) | Reference |
+| [FreeSync / G-SYNC Compatible: Application-Side VRR Integration](vrr-freesync-gsync-compatible.md) · [简体中文](vrr-freesync-gsync-compatible.zh-CN.md) | Reference |
+| [Cost of Graphics Enhancement Options: v0.9.22, RTX 5080, 2026-10-10](graphics-options-cost-2026-10-10.md) · [简体中文](graphics-options-cost-2026-10-10.zh-CN.md) | Reference |
+| [Cost of graphics options (1080p output): main f7799aec, RTX 5080 and psvita, 2026-10-15](graphics-options-cost-1080p-2026-10-15.md) · [简体中文](graphics-options-cost-1080p-2026-10-15.zh-CN.md) | Reference |
+| [Merging Render Passes: v1.0.0 Design Research](render-pass-merging-design-2026-10-10.md) · [简体中文](render-pass-merging-design-2026-10-10.zh-CN.md) | Draft |
+| [Render pass merging phase 0: tablet measurements](render-pass-merging-phase0-2026-10-10.md) · [简体中文](render-pass-merging-phase0-2026-10-10.zh-CN.md) | Investigation |
 
-## 着色器准备与覆盖
+## Shader preparation and overrides
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [启动着色器准备（2026-09-05）](shader-preparation.md) | 参考 |
-| [One-file shader store and the 2026-10-02 packs](shader-store-2026-10-02.md) | 参考 |
-| [Built-in shader resource index](shader-resource-index.md) | 参考 |
-| [首次使用管线的卡顿：方案（2026-10-05）](pipeline-first-use-stalls.md) | 参考 |
+| [Startup Shader Preparation (2026-09-05)](shader-preparation.md) · [简体中文](shader-preparation.zh-CN.md) | Reference |
+| [One-file shader store and the 2026-10-02 packs](shader-store-2026-10-02.md) | Reference |
+| [Built-in shader resource index](shader-resource-index.md) | Reference |
+| [First-Use Pipeline Stalls: Plan (2026-10-05)](pipeline-first-use-stalls.md) · [简体中文](pipeline-first-use-stalls.zh-CN.md) | Reference |
 
-## 界面、输入与调试
+## UI, input and debugging
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Built-in cheats and LT speed control](cheats.md) | 参考 |
-| [Multiple controllers and keyboard input](controller-input.md) | 参考 |
-| [Debug 地图 ID 和本地化名称（2026-09-05）](debug-map-info.md) | 参考 |
-| [Debug 人物传送：逆向依据与验证边界（2026-09-04）](debug-teleport.md) | 历史 |
-| [Issue #40 UI Resource Map and Asset Archive](issue-40-ui-resource-map.md) | 历史 |
-| [Issue #40 UI 资源定位与资产映射归档](issue-40-ui-resource-map.zh-CN.md) | 历史 |
-| [Original Settings menu assets](menu-original-assets.md) | 参考 |
-| [设置菜单与显示选项](settings-menu.md) | 参考 |
+| [Built-in cheats and LT speed control](cheats.md) | Reference |
+| [Multiple controllers and keyboard input](controller-input.md) | Reference |
+| [Debug Map ID and Localized Names (2026-09-05)](debug-map-info.md) · [简体中文](debug-map-info.zh-CN.md) | Reference |
+| [Debug character teleport: reverse-engineering basis and validation boundaries (2026-09-04)](debug-teleport.md) · [简体中文](debug-teleport.zh-CN.md) | Historical |
+| [Issue #40 UI Resource Map and Asset Archive](issue-40-ui-resource-map.md) · [简体中文](issue-40-ui-resource-map.zh-CN.md) | Historical |
+| [Original Settings menu assets](menu-original-assets.md) | Reference |
+| [Settings menu and display options](settings-menu.md) · [简体中文](settings-menu.zh-CN.md) | Reference |
 
-## 运行时、存档与游戏流程
+## Runtime, saves and game flow
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [音频输出与对白修复（2026-09-05）](audio-output.md) | 历史 |
-| [Guest critical-section byte order](critical-section-endian.md) | 参考 |
-| [Automatic selection of imported discs](disc-selection.md) | 参考 |
-| [USA/Europe edition support](europe-support.md) | 参考 |
-| [Issue #74：分队期间随时存档后无法换人（2026-09-29 调查）](issue-74-save-anywhere-party-split.md) | 调查 |
-| [Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy](../archive/notes/issue12-root-cause.md) | 历史 |
-| [Issue #114: field interaction during a pending battle request](ISSUE_114_FIELD_INTERACTION_20261001.md) | 调查 |
-| [重编译配置笔记](recomp.md) | 参考 |
-| [Recompiler width and control-flow audit](recompiler-width-audit.md) | 参考 |
-| [随时存档：菜单权限与验证](save-anywhere.md) | 参考 |
-| [手动存档失败（2026-09-04）](../archive/notes/save-storage.md) | 历史 |
-| [游戏数据来源与 XEX](xex.md) | 参考 |
+| [Audio Output and Dialogue Fix (2026-09-05)](audio-output.md) · [简体中文](audio-output.zh-CN.md) | Historical |
+| [Guest critical-section byte order](critical-section-endian.md) | Reference |
+| [Automatic selection of imported discs](disc-selection.md) | Reference |
+| [USA/Europe edition support](europe-support.md) | Reference |
+| [Issue #74: After Saving Anywhere During a Party Split, Character Switching Is Lost (Investigation of 2026-09-29)](issue-74-save-anywhere-party-split.md) · [简体中文](issue-74-save-anywhere-party-split.zh-CN.md) | Investigation |
+| [Issue #12 root cause: garbage-collected materials drawn by a stale scene proxy](../archive/notes/issue12-root-cause.md) | Historical |
+| [Issue #114: field interaction during a pending battle request](ISSUE_114_FIELD_INTERACTION_20261001.md) | Investigation |
+| [Recompilation Configuration Notes](recomp.md) · [简体中文](recomp.zh-CN.md) | Reference |
+| [Recompiler width and control-flow audit](recompiler-width-audit.md) | Reference |
+| [Save anywhere: menu permissions and validation](save-anywhere.md) · [简体中文](save-anywhere.zh-CN.md) | Reference |
+| [Manual save failure (2026-09-04)](../archive/notes/save-storage.md) | Historical |
+| [Game Data Sources and XEX](xex.md) · [简体中文](xex.zh-CN.md) | Reference |
 
-## Mod、语言包与资源替换
+## Mods, language packs and asset replacement
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [高分辨率 / 高帧率 CG 替换：可行性研究](hd-cutscene-replacement.zh-CN.md) | 调查 |
-| [语言包（#369）：导出、导入、新增语言的设计与可行性](language-pack-research.zh-CN.md) | 草案 |
+| [High-Resolution / High-Frame-Rate CG Replacement: Feasibility Study](hd-cutscene-replacement.md) · [简体中文](hd-cutscene-replacement.zh-CN.md) | Investigation |
+| [Language Packs (#369): Design and Feasibility for Export, Import and New Languages](language-pack-research.md) · [简体中文](language-pack-research.zh-CN.md) | Draft |
 
-## 平台与开发工具
+## Platforms and developer tools
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [GitHub Actions checks and releases](ci.md) | 参考 |
-| [Android ARM64 DXC 构建（2026-10-02）](android-dxc-build-2026-10-02.md) | 参考 |
+| [GitHub Actions checks and releases](ci.md) | Reference |
+| [Android ARM64 DXC Build (2026-10-02)](android-dxc-build-2026-10-02.md) · [简体中文](android-dxc-build-2026-10-02.zh-CN.md) | Reference |
 
-## 分诊与发布
+## Triage and release
 
-| 文档 | 类型 |
+| Document | Type |
 |---|---|
-| [Automated issue triage](issue-triage.md) | 参考 |
-| [Installer and Windows release pipeline](release-packaging.md) | 参考 |
+| [Automated issue triage](issue-triage.md) | Reference |
+| [Installer and Windows release pipeline](release-packaging.md) | Reference |
 
-## 相关记录
+## Related records
 
-[文档整理记录](../archive/audits/documentation-2026-09-30.md)说明本次来源、状态修正和 Basic Memory 知识整理；[归档目录](../archive/README.md)保存已被替代的全局账本和已过期的笔记。过期笔记用 `git mv` 移到 `archive/notes/`，同时修复指向它的链接，不留跳转页。新增笔记应补入本索引，并给出适用版本、证据范围和现行入口。
+[Documentation cleanup record](../archive/audits/documentation-2026-09-30.md) explains this round's sources, status corrections and Basic Memory knowledge organization. The [archive directory](../archive/README.md) keeps replaced global ledgers and expired notes. Expired notes were moved to `archive/notes/` with `git mv`, and the links that pointed to them were fixed. No redirect pages were left behind. New notes should be added to this index, with the applicable version, evidence scope and current entry points.

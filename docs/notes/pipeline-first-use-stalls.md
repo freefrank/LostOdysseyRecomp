@@ -1,363 +1,365 @@
-# 首次使用管线的卡顿：方案（2026-10-05）
+# First-Use Pipeline Stalls: Plan (2026-10-05)
 
-> 状态：P0、P1 已实现（2026-10-06，见文末“P0/P1 实现与测量”）；P2、P3、P4 已实现（2026-10-06，见文末“P2 实现与测量”“P3 实现与测量”“P4 实现与测量”）；Android 平板实测见文末“Android 实测”（2026-10-06，维护者认可效果，不再调优）。影响所有平台：Windows（D3D12 / Vulkan）、Linux、macOS、Android。
+[简体中文](pipeline-first-use-stalls.zh-CN.md)
 
-## 现象
+> Status: P0 and P1 implemented (2026-10-06, see "P0/P1 implementation and measurements" at the end). P2, P3 and P4 implemented (2026-10-06, see "P2 implementation and measurements", "P3 implementation and measurements" and "P4 implementation and measurements" at the end). Android tablet measurements are at the end under "Android measurements" (2026-10-06; the maintainer accepted the effect and decided not to tune further). Affects all platforms: Windows (D3D12 / Vulkan), Linux, macOS, Android.
 
-第一次进入一张没去过的地图、第一次和新敌人战斗、第一次看某段过场时，会卡一帧到一秒多。按[Shader 准备](shader-preparation.md)里的配方机制收集管线，再多也收不全。
+## Symptom
 
-## 证据
+The first time you enter a map you have not visited, the first time you fight a new enemy, or the first time you watch a certain cutscene, the game stalls for one frame to more than a second. Collecting pipelines with the recipe mechanism described in [Shader preparation](shader-preparation.md) cannot capture all of them, no matter how much is collected.
 
-**管线键。** `gpu::pipeline_cache::Key` 由以下字段组成：
+## Evidence
 
-- 着色器对：VS、PS；
-- 渲染状态：混合、深度控制（含 stencil 操作）、剔除与 polygon offset 模式、颜色写掩码、图元类型；
-- 格式：RT 格式、深度格式；
-- stencil 参考值与掩码（正面、背面）；
-- depth bias、slope bias。
+**Pipeline key.** `gpu::pipeline_cache::Key` consists of these fields:
 
-注释里写明“不做任何规范化”。
+- Shader pair: VS, PS.
+- Render state: blend, depth control (including stencil operations), cull and polygon offset modes, color write mask, primitive type.
+- Formats: RT format, depth format.
+- Stencil reference value and masks (front and back).
+- Depth bias and slope bias.
 
-**配方统计（Windows 上的 `pipelines.bin`，统计方法见文末）：**
+The comment in the code says "no normalization is done at all."
 
-| 来源 | 配方 | 无关位规范化后 | 去掉所有可动态化状态后 | VS/PS 对 | VS | PS |
+**Recipe statistics (`pipelines.bin` on Windows; the statistics method is at the end):**
+
+| Source | Recipes | After normalizing irrelevant bits | After removing all dynamically settable state | VS/PS pairs | VS | PS |
 |---|---|---|---|---|---|---|
-| i212-run（316 张地图巡游） | 1950 | 1903 | 1246 | 1241 | 183 | 1088 |
-| 本机游玩安装（Vulkan） | 920 | 888 | 548 | 545 | 114 | 497 |
+| i212-run (316-map tour) | 1950 | 1903 | 1246 | 1241 | 183 | 1088 |
+| Local play install (Vulkan) | 920 | 888 | 548 | 545 | 114 | 497 |
 
-结论：
-- 状态排列只占约三分之一。把所有能做成动态状态的字段都拿掉，配方也只少 36%。
-- 漏掉的管线主要来自新的 VS/PS 组合。组合数随地图、敌人、特效增长，录制收不全。
-- 不同的着色器本身少得多（183 个 VS、1088 个 PS），shader pack 里总共 28687 条记录，是有限且已知的集合。
+Conclusions:
+- State permutations account for only about one third. Removing every field that can be made dynamic reduces recipes by only 36%.
+- The missing pipelines mostly come from new VS/PS combinations. The number of combinations grows with maps, enemies and effects, so recording cannot capture them all.
+- The number of distinct shaders is much smaller (183 VS, 1088 PS). The shader pack has 28,687 records in total, which is a finite and known set.
 
-**Android（TB321FU，Turnip Mesa 26，Vulkan，已装匹配的 shader pack）：**
+**Android (TB321FU, Turnip Mesa 26, Vulkan, with the matching shader pack installed):**
 
-| 情况 | 进场景首帧间隔 | 当帧新建管线 | `pipeline_ms` |
+| Case | Interval to the first frame of the scene | Pipelines created in that frame | `pipeline_ms` |
 |---|---|---|---|
-| 第一次进 Highlands of Wohl | 1.34 s | 37 | 1056 |
-| 第二次启动、同一场景 | 0.40 s | 5 | — |
+| First entry to Highlands of Wohl | 1.34 s | 37 | 1056 |
+| Second launch, same scene | 0.40 s | 5 | — |
 
-- 第二次启动时，启动阶段预建 213 个配方用了 2.5 s（7 个 worker），平均每个约 80 ms。说明驱动没有任何磁盘缓存命中，每次启动都在重编。
-- 剩下的 0.4 s 主要是 `bind_ms` 200 ms 和 `taa_ms` 161 ms，不属于管线问题，单独处理。
+- On the second launch, the startup stage pre-built 213 recipes in 2.5 s (7 workers), about 80 ms each on average. This shows the driver had no disk cache hits, so it recompiled on every launch.
+- The remaining 0.4 s is mainly `bind_ms` at 200 ms and `taa_ms` at 161 ms. These are not pipeline problems and are handled separately.
 
-**各后端现在都没有持久化驱动缓存：**
+**No backend currently has a persistent driver cache:**
 
-| 后端 | 现状 |
+| Backend | Current state |
 |---|---|
-| plume Vulkan | `vkCreateGraphicsPipelines` 传 `VK_NULL_HANDLE`，没有 `VkPipelineCache`；Android 也没设置 `MESA_SHADER_CACHE_DIR` |
-| plume D3D12 | 没有 `ID3D12PipelineLibrary`。NVIDIA/AMD 驱动自带隐式磁盘缓存，所以桌面上重复进入还好，第一次仍然卡 |
-| plume Metal | 着色器用 `newLibraryWithSource` 编译 MSL，PSO 用 `newRenderPipelineState`，没有 `MTLBinaryArchive` |
+| plume Vulkan | `vkCreateGraphicsPipelines` is passed `VK_NULL_HANDLE`, so there is no `VkPipelineCache`. Android also does not set `MESA_SHADER_CACHE_DIR`. |
+| plume D3D12 | There is no `ID3D12PipelineLibrary`. NVIDIA and AMD drivers have built-in implicit disk caches, so re-entry on desktop is fine, but the first time still stalls. |
+| plume Metal | Shaders are compiled from MSL with `newLibraryWithSource`. PSOs use `newRenderPipelineState`. There is no `MTLBinaryArchive`. |
 
-**其他已知限制：**
-- `SDL_QUIT` 路径用 `_Exit` 绕过 Shutdown，最后一次 60 帧 checkpoint 之后学到的配方会丢失（见[Shader 准备](shader-preparation.md)）。这会让“收集过的管线”实际上没存下来。
-- 配方上限 16384 条。
+**Other known limits:**
+- The `SDL_QUIT` path uses `_Exit`, which bypasses Shutdown. Recipes learned after the last 60-frame checkpoint are lost (see [Shader preparation](shader-preparation.md)). This means the "collected pipelines" are in fact not saved.
+- The recipe limit is 16384 entries.
 
-**驱动能力：** 平板上的 Turnip 驱动二进制里有 `VK_EXT_graphics_pipeline_library`、`VK_EXT_extended_dynamic_state` 1/2/3、`VK_KHR_pipeline_binary` 和 `MESA_SHADER_CACHE_DIR`。实现时要用设备扩展查询确认。
+**Driver capability:** The Turnip driver binary on the tablet contains `VK_EXT_graphics_pipeline_library`, `VK_EXT_extended_dynamic_state` 1/2/3, `VK_KHR_pipeline_binary` and `MESA_SHADER_CACHE_DIR`. The implementation must confirm them with device extension queries.
 
-## 目标与验收
+## Goals and acceptance
 
-- 平板和 PC：第一次进入没去过的地图时，管线造成的单帧耗时 `pipeline_ms` 小于 30 ms。
-- 第一次和新敌人战斗：任何一帧的 `pipeline_ms` 都小于 16 ms。
-- 启动准备时间不比现在长；持久化缓存的磁盘占用有上限，并且会被清理。
-- 测量方法：`LO_RENDER_TIMING=1`，按帧间隔和 `pipelines=` / `pipeline_ms=` 统计。
+- Tablet and PC: on the first entry to a map that has not been visited, the per-frame pipeline cost `pipeline_ms` must be below 30 ms.
+- First fight with a new enemy: `pipeline_ms` must be below 16 ms for every frame.
+- Startup preparation time must not be longer than now. The disk footprint of the persistent cache has a limit and is cleaned up.
+- Measurement method: `LO_RENDER_TIMING=1`, with statistics by frame interval and `pipelines=` / `pipeline_ms=`.
 
-## 方案
+## Plan
 
-### P0　运行时未命中日志（半天，先做）
+### P0 Runtime miss log (half a day, do first)
 
-每次在绘制时新建管线都打一行日志，包含：
+Log one line each time a pipeline is created during drawing. The line includes:
 
-- 帧号、当前地图 ID 或战斗编号；
-- VS/PS 哈希，耗时；
-- 这个键在配方里有没有、两个着色器有没有见过。
+- Frame number, current map ID or battle number.
+- VS/PS hashes and the time taken.
+- Whether this key is in the recipes, and whether each of the two shaders has been seen before.
 
-再写一个汇总脚本，按场景列出未命中。后面每个阶段都用它验收。
+Also write a summary script that lists misses per scene. Every later stage is accepted using it.
 
-### P1　持久化驱动缓存（全平台，1~2 天）
+### P1 Persistent driver cache (all platforms, 1–2 days)
 
-- **Vulkan**：plume 为每个设备建一个 `VkPipelineCache`，所有 `vkCreate*Pipelines` 都传进去。
-  - 缓存放在着色器缓存目录，比如 `pipeline_cache_vk.bin`。
-  - 读入前校验 Vulkan 缓存头：`vendorID`、`deviceID`、`pipelineCacheUUID`。
-  - 写盘随 `SavePipelineRecipes` 异步进行，并在正常退出时再写一次。
-  - 以后可以换成 `VK_KHR_pipeline_binary`。
-- **Android**：在加载 Turnip 之前，把 `MESA_SHADER_CACHE_DIR` 设到应用缓存目录。改动很小，能直接用上 Mesa 的磁盘缓存。
-- **D3D12**：用 `ID3D12PipelineLibrary`，按键名 `StorePipeline` / `LoadGraphicsPipeline`。驱动已有隐式缓存，优先级较低。
-- **Metal**：用 `MTLBinaryArchive` 存 PSO。
-- **顺带修掉**：`_Exit` 退出路径前把配方和管线缓存 flush 到磁盘。
+- **Vulkan:** plume creates one `VkPipelineCache` per device. All `vkCreate*Pipelines` calls pass it in.
+  - The cache is stored in the shader cache directory, for example `pipeline_cache_vk.bin`.
+  - Before loading, validate the Vulkan cache header: `vendorID`, `deviceID`, `pipelineCacheUUID`.
+  - Writing to disk happens asynchronously with `SavePipelineRecipes`, and again on normal exit.
+  - Can later be replaced with `VK_KHR_pipeline_binary`.
+- **Android:** before loading Turnip, set `MESA_SHADER_CACHE_DIR` to the app cache directory. The change is small and uses Mesa's disk cache directly.
+- **D3D12:** use `ID3D12PipelineLibrary`, with key names `StorePipeline` / `LoadGraphicsPipeline`. Drivers already have implicit caches, so this has lower priority.
+- **Metal:** use `MTLBinaryArchive` to store PSOs.
+- **Fix along the way:** before the `_Exit` exit path, flush the recipes and the pipeline cache to disk.
 
-**效果**：第二次及以后几乎不卡，启动阶段的预建从秒级降到百毫秒级。第一次见到的组合仍然会卡，这一阶段不解决。
+**Effect:** From the second time on, there is almost no stall. Pre-building at startup drops from seconds to hundreds of milliseconds. Combinations seen for the first time will still stall. This stage does not solve that.
 
-### P2　Vulkan graphics pipeline library（Vulkan 的主修复：Windows、Linux、Android）
+### P2 Vulkan graphics pipeline library (main Vulkan fix: Windows, Linux, Android)
 
-思路：把编译成本从“每个组合一次”变成“每个着色器一次”。着色器集合有限而且已知（就是 pack 里的记录）。
+Idea: change the compile cost from "once per combination" to "once per shader." The set of shaders is finite and known (they are the records in the pack).
 
-管线拆成四部分：
+Split the pipeline into four parts:
 
-| 部分 | 内容 | 粒度 |
+| Part | Contents | Granularity |
 |---|---|---|
-| vertex input | 顶点输入（Xenos 的 vfetch 在着色器里做，这部分很小） | 几乎只有一个 |
-| pre-raster | VS + 光栅状态 | 每个 VS 一个；剔除、正反面、depth bias 改成动态状态（EDS1 + Vulkan 1.0 核心） |
-| fragment shader | PS + 深度/stencil 状态 | 每个 PS 一个；深度测试/写入/比较、stencil 操作用 EDS1，stencil 参考值/掩码用核心动态状态 |
-| fragment output | RT/深度格式 + 混合 + 写掩码 | 不含着色器，创建很便宜，按需建并缓存 |
+| vertex input | Vertex input (Xenos vfetch is done inside the shader, so this part is very small) | Almost one only |
+| pre-raster | VS + raster state | One per VS. Cull, front face and depth bias become dynamic state (EDS1 + Vulkan 1.0 core) |
+| fragment shader | PS + depth/stencil state | One per PS. Depth test/write/compare and stencil operations use EDS1. Stencil reference value and mask use core dynamic state |
+| fragment output | RT/depth formats + blend + write mask | Contains no shaders. Very cheap to create. Created on demand and cached |
 
-- **绘制时未命中**：fast-link 四个库（不开 LTO），预期亚毫秒级。同时把开了 `LINK_TIME_OPTIMIZATION` 的完整管线放到后台编译，编好后替换。
-- **库的预编译**：
-  - 启动时先为配方里出现过的着色器编库；
-  - 之后在后台逐步为 pack 里的其余着色器编库；有 P1 的缓存，每个驱动版本只编一次；
-  - 遇到新着色器（`GetShader` 第一次看到它）时立即编它的库。
-- **plume 改动**：新增“创建库管线”和“链接管线”接口。改动量中等偏大。
-- **回退**：设备不支持 GPL 或 EDS 时，走现在的完整管线路径。
-- **风险**：某些驱动上 fast-link 出来的管线运行时偏慢，后台的优化编译可以弥补。28k 个库在 Android 上占多少内存需要实测，必要时只给配方和 pack 里的高频着色器常驻。
+- **Miss during drawing:** fast-link the four libraries (no LTO). Expected to take sub-millisecond time. At the same time, compile the full pipeline with `LINK_TIME_OPTIMIZATION` in the background and swap it in when ready.
+- **Pre-compiling libraries:**
+  - At startup, first build libraries for the shaders that appear in the recipes.
+  - Afterwards, build libraries for the remaining shaders in the pack gradually in the background. With the P1 cache, each driver version is compiled only once.
+  - When a new shader is seen for the first time (`GetShader` sees it), build its library immediately.
+- **plume changes:** add interfaces for "create library pipeline" and "link pipeline". The change is medium to large.
+- **Fallback:** if the device does not support GPL or EDS, use the current full pipeline path.
+- **Risk:** on some drivers, fast-linked pipelines run slower. Background optimized compilation can make up for it. How much memory 28k libraries take on Android must be measured. If needed, keep only the recipes and the high-frequency shaders from the pack resident.
 
-### P3　配方语料 + 按场景预取（全平台；D3D12 和 Metal 主要靠它）
+### P3 Recipe corpus and per-scene prefetch (all platforms; D3D12 and Metal rely mainly on this)
 
-- **无关位规范化**：stencil 关闭时清掉 stencil 字段；深度关闭时清掉比较函数；polygon offset 关闭时清掉 bias；写掩码为 0 时清掉混合。收益小（1950 → 1903），但没有成本，还能减少重复编译。要同时升级 `kPipelineRecipeVersion`。
-- **分发语料**：用自动巡游收集配方，随 shader pack 一起发布。配方键里的格式是 `RenderFormat`，和后端无关。
-  - 已有的地图巡游（316 张）和过场巡游（178 段）；
-  - **新增战斗巡游**：通过调试入口逐个触发敌人编组。新敌人正是现在漏得最多的地方；
-  - 玩家本地学到的配方继续合并进来。
-- **按场景打标签和预取**：每条配方记录它出现在哪个地图 ID、战斗编组或过场里。游戏开始读某张地图、某场战斗时，在读盘画面期间用 worker 线程预建这个场景的配方。启动时只预建全局常用的那部分。
+- **Normalizing irrelevant bits:** clear the stencil fields when stencil is off. Clear the compare function when depth is off. Clear the bias when polygon offset is off. Clear blend when the write mask is 0. The gain is small (1950 → 1903), but it has no cost, and it reduces duplicate compilation. `kPipelineRecipeVersion` must be upgraded at the same time.
+- **Distributing the corpus:** collect recipes with automatic tours and publish them with the shader pack. The format in the recipe key is `RenderFormat`, which is independent of the backend.
+  - The existing map tour (316 maps) and cutscene tour (178 segments).
+  - **New battle tour:** trigger each enemy group through the debug entry. New enemies are exactly where the most is currently missed.
+  - Recipes that players learn locally continue to be merged in.
+- **Per-scene tagging and prefetch:** each recipe records the map ID, battle group or cutscene where it appears. When the game starts loading a map or a battle, worker threads pre-build that scene's recipes during the loading screen. At startup, only the globally common part is pre-built.
 
-### P4　剩余未命中：并行化与上限
+### P4 Remaining misses: parallelization and limits
 
-- 现在同一帧里的多个未命中是在渲染线程上串行创建的（37 × 约 28 ms）。遇到一个未命中时，可以在语料里找出共享同一个 VS 或 PS 的兄弟配方，并行预建。
-- 可选开关：管线还没编好时跳过这次绘制（类似 DXVK async）。会导致短暂缺物体，默认关闭。
+- Currently, multiple misses in the same frame are created serially on the render thread (37 × about 28 ms). When a miss is hit, the corpus can be searched for sibling recipes that share the same VS or PS, and these can be pre-built in parallel.
+- Optional switch: skip this draw when its pipeline is not yet compiled (similar to DXVK async). This causes short-term missing objects, so it is off by default.
 
-## 平台矩阵
+## Platform matrix
 
-| 平台 / 后端 | P1 | P2 | P3 | 预期 |
+| Platform / backend | P1 | P2 | P3 | Expected |
 |---|---|---|---|---|
-| Android / Vulkan（Turnip） | VkPipelineCache + Mesa 缓存 | GPL | 语料预取 | P1 后重复访问基本不卡；P2 后首次也基本不卡 |
-| Windows / Vulkan、Linux / Vulkan | VkPipelineCache | GPL | 语料预取 | 同上 |
-| Windows / D3D12 | ID3D12PipelineLibrary（驱动已有缓存） | 不适用 | 主要手段 | 首次卡顿取决于语料覆盖 |
-| macOS / Metal | MTLBinaryArchive | MSL 已经按着色器编译，PSO 仍按组合 | 主要手段 | 同 D3D12 |
+| Android / Vulkan (Turnip) | VkPipelineCache + Mesa cache | GPL | Corpus prefetch | After P1, repeated visits almost never stall. After P2, first visits mostly do not stall either |
+| Windows / Vulkan, Linux / Vulkan | VkPipelineCache | GPL | Corpus prefetch | Same as above |
+| Windows / D3D12 | ID3D12PipelineLibrary (driver cache already exists) | Not applicable | Main method | First-time stalls depend on corpus coverage |
+| macOS / Metal | MTLBinaryArchive | MSL is already compiled per shader. PSOs are still per combination | Main method | Same as D3D12 |
 
-## 推荐顺序
+## Recommended order
 
-P0 → P1 → P2 → P3 → P4。
+P0 → P1 → P2 → P3 → P4.
 
-- P1 改动小，立刻改善 Android 和所有平台的重复访问。
-- P2 解决 Vulkan 平台的首次卡顿。
-- P3 是 D3D12 和 Metal 的主要手段，同时提高所有后端的启动预建命中率。
+- P1 is a small change. It immediately improves repeated visits on Android and all platforms.
+- P2 solves the first-time stall on Vulkan platforms.
+- P3 is the main method for D3D12 and Metal. It also raises the startup pre-build hit rate on all backends.
 
-## 统计方法
+## Statistics method
 
-记录格式：48 字节文件头，之后每条 72 字节，前 64 字节是键（`Encode` 的顺序：vs、ps，再是 12 个 32 位字段）。
+Record format: a 48-byte file header. After that, each record is 72 bytes. The first 64 bytes are the key (in `Encode` order: vs, ps, then 12 32-bit fields).
 
-- 只用 Vulkan 核心动态状态和 EDS1 时，保留 (vs, ps, 有写掩码时的 blend, 写掩码, RT 格式, 深度格式, 是否 rect list)：i212-run 剩 1371 条。
-- 再用 EDS3 把混合和写掩码也做成动态：剩 1246 条，即表中“去掉所有可动态化状态后”。
+- Using only Vulkan core dynamic state and EDS1, keep (vs, ps, blend when write mask is present, write mask, RT format, depth format, whether it is a rect list): i212-run keeps 1371 records.
+- Also use EDS3 to make blend and write mask dynamic: 1246 records remain. This is the "after removing all dynamically settable state" value in the table.
 
-## P0/P1 实现与测量（2026-10-06）
+## P0/P1 implementation and measurements (2026-10-06)
 
-**P0 未命中日志。** 绘制时新建的管线（`GetPipeline` 未命中）计入当帧；有未命中的帧在帧末打一行 `renderer: pipeline misses frame=… count=… ms=… map=… battle=… first_vs=… first_ps=… first_ms=… recipe=… vs_seen=… ps_seen=…`。`LO_PIPELINE_MISS_LOG=1` 再给每次创建打一行 `renderer: pipeline miss …`。
+**P0 miss log.** Pipelines created during drawing (`GetPipeline` misses) are counted for the current frame. A frame with misses prints one line at the end of the frame: `renderer: pipeline misses frame=… count=… ms=… map=… battle=… first_vs=… first_ps=… first_ms=… recipe=… vs_seen=… ps_seen=…`. `LO_PIPELINE_MISS_LOG=1` also prints one line `renderer: pipeline miss …` for each creation.
 
-- `map`：`debug/map_info` 的地图定义 ID，切换中为 `-`；`battle`：本次运行第几场战斗（战斗核心最近 1 秒内有 tick），不在战斗中为 0。
-- `recipe=1`：这个键已在配方集合里（读入的或本次学到的）但还没有建好，例如启动预建被跳过。
-- `vs_seen` / `ps_seen`：此前有配方或已建管线用过这个着色器。两个都为 1 表示“已知着色器的新组合”，是 P2 要解决的那类。
-- `tools/pipeline_misses.py <runtime log>` 按场景列出帧数、未命中数、总耗时、最差帧，有逐条日志时再列新 VS/PS 的数量。`LO_RENDER_TIMING=1` 的 `pipelines=` / `pipeline_ms=` 不变，两者数字一致。
+- `map`: the map definition ID from `debug/map_info`. It is `-` during a transition. `battle`: which battle of this run (the battle core has ticked within the last second). It is 0 when not in battle.
+- `recipe=1`: the key is already in the recipe set (loaded or learned in this run), but has not been built yet. For example, startup pre-building was skipped.
+- `vs_seen` / `ps_seen`: earlier a recipe or built pipeline used this shader. If both are 1, this is a "new combination of known shaders," which is the type P2 is meant to solve.
+- `tools/pipeline_misses.py <runtime log>` lists frame counts, miss counts, total time and worst frame per scene. If there are per-miss logs, it also lists the number of new VS/PS. The `pipelines=` / `pipeline_ms=` from `LO_RENDER_TIMING=1` are unchanged, and the two sets of numbers agree.
 
-**P1 驱动缓存。** 文件放在着色器缓存目录：`pipeline_cache_vk.bin`、`pipeline_cache_dx12.bin`、`pipeline_cache_metal.bin`。启动预建之前读入；预建结束后写一次，之后在写配方时（每 60 帧检查一次、有新配方才写）异步写回，正常退出时再写一次；只在数据变大时写，上限 256 MB（vkd3d-proton 下每条管线约 18 KB），超过上限时保留旧文件，经临时文件原子替换。
+**P1 driver cache.** The files are placed in the shader cache directory: `pipeline_cache_vk.bin`, `pipeline_cache_dx12.bin`, `pipeline_cache_metal.bin`. They are read before startup pre-building. They are written once after pre-building finishes. Afterwards, while recipes are being written (checked every 60 frames, written only when there are new recipes), they are written back asynchronously. They are written once more on normal exit. The file is written only when its data has grown. The limit is 256 MB (under vkd3d-proton, each pipeline is about 18 KB). When the limit is exceeded, the old file is kept. Replacement is atomic, through a temporary file.
 
-- Vulkan：plume 每个设备一个 `VkPipelineCache`，图形和计算管线都用它。读入前校验头部的 `headerSize`、`headerVersion`、`vendorID`、`deviceID`、`pipelineCacheUUID`，不匹配就从空缓存开始并覆盖。
-- D3D12：`ID3D12PipelineLibrary`。只有 `CreatePipeline` 建的游戏管线带名字（键的哈希与 VS/PS/GS 字节码哈希），各种变体不入库。驱动拒绝旧数据时从空库开始。
-- Metal：`MTLBinaryArchive` 已实现，但默认关闭，`LO_METAL_BINARY_ARCHIVE=1` 打开。理由见下表：命中并不比 Metal 自己的编译缓存快，载入 62 MB 文件却要 1.8 秒。PSO 的耗时主要不在后端编译，归档省不掉。
-- Android：Java 侧设置 `MESA_SHADER_CACHE_DIR`（应用缓存目录下 `mesa_shader_cache`）和 `MESA_SHADER_CACHE_MAX_SIZE=256M`。
-- `_Exit` 退出：渲染器初始化后在 `os::shaderlog` 登记一个退出回调，所有先调 `CloseForExit()` 的 `_Exit` 路径（窗口 `SDL_QUIT`、内核终止、只准备着色器）以及 `video.cpp` 关闭时 GPU 排空失败的路径，都会先写配方和驱动缓存，不等 GPU。
-- `LO_NO_DRIVER_PIPELINE_CACHE=1` 关闭驱动缓存，用于对照。
+- Vulkan: plume creates one `VkPipelineCache` per device. It is used for both graphics and compute pipelines. Before loading, the header fields `headerSize`, `headerVersion`, `vendorID`, `deviceID` and `pipelineCacheUUID` are checked. If they do not match, it starts from an empty cache and overwrites it.
+- D3D12: `ID3D12PipelineLibrary`. Only game pipelines created by `CreatePipeline` are named (the key hash is the hash of the VS/PS/GS bytecode). Variants are not stored. If the driver rejects old data, the library starts empty.
+- Metal: `MTLBinaryArchive` is implemented but off by default. `LO_METAL_BINARY_ARCHIVE=1` turns it on. The reason is in the table below: a hit is not faster than Metal's own compile cache, and loading a 62 MB file takes 1.8 seconds. Most of the PSO cost is not backend compilation, so the archive cannot save it.
+- Android: the Java side sets `MESA_SHADER_CACHE_DIR` (the `mesa_shader_cache` directory under the app cache directory) and `MESA_SHADER_CACHE_MAX_SIZE=256M`.
+- `_Exit` exit: after renderer initialization, an exit callback is registered with `os::shaderlog`. Every `_Exit` path that first calls `CloseForExit()` (window `SDL_QUIT`, kernel termination, shader-only preparation), and the path in `video.cpp` on shutdown where GPU drain fails, writes the recipes and the driver cache first, without waiting for the GPU.
+- `LO_NO_DRIVER_PIPELINE_CACHE=1` turns off the driver cache, for comparison.
 
-**测量。** 启动预建用同一份 1950 条配方（i212-run 地图巡游，1933 条着色器齐全），`--prepare-shaders-only`，每台机器同一缓存目录连续运行。“冷”是没有缓存文件，“对照”是 `LO_NO_DRIVER_PIPELINE_CACHE=1`，“暖”是读入上一次写下的文件。
+**Measurements.** Startup pre-building used the same 1950 recipes (i212-run map tour, 1933 with all shaders present), with `--prepare-shaders-only`, on each machine, with the same cache directory run back to back. "Cold" means there is no cache file. "Control" means `LO_NO_DRIVER_PIPELINE_CACHE=1`. "Warm" means reading the file written by the previous run.
 
-| 主机 / 后端 | 驱动自身磁盘缓存 | 冷 | 对照 | 暖 | 缓存文件 |
+| Host / backend | Driver's own disk cache | Cold | Control | Warm | Cache file |
 |---|---|---|---|---|---|
-| psvita，Proton GE10-34 / vkd3d-proton D3D12，RADV | 关（`VKD3D_SHADER_CACHE_PATH=0`、`MESA_SHADER_CACHE_DISABLE=1`） | 2648 ms | 2631 ms | 888 / 894 ms（读入 18 ms） | 35.4 MB |
-| psvita，原生 Linux Vulkan，RADV（Radeon 8060S） | 关（`MESA_SHADER_CACHE_DISABLE=1`） | 2124 ms | 2112 ms | 1022 / 955 ms（读入 4 ms） | 8.8 MB |
-| M1 Max，Metal（macOS 26.6.2） | 系统缓存已热 | 13499 ms | 5245 ms | 5437 / 5265 ms（读入 1901 / 1764 ms） | 62.4 MB |
-| M1 Max，Metal | 系统缓存清空 | — | 44847 ms | 44848 ms（1933 条全部命中） | 62.4 MB |
+| psvita, Proton GE10-34 / vkd3d-proton D3D12, RADV | Off (`VKD3D_SHADER_CACHE_PATH=0`, `MESA_SHADER_CACHE_DISABLE=1`) | 2648 ms | 2631 ms | 888 / 894 ms (read 18 ms) | 35.4 MB |
+| psvita, native Linux Vulkan, RADV (Radeon 8060S) | Off (`MESA_SHADER_CACHE_DISABLE=1`) | 2124 ms | 2112 ms | 1022 / 955 ms (read 4 ms) | 8.8 MB |
+| M1 Max, Metal (macOS 26.6.2) | System cache already warm | 13499 ms | 5245 ms | 5437 / 5265 ms (read 1901 / 1764 ms) | 62.4 MB |
+| M1 Max, Metal | System cache cleared | — | 44847 ms | 44848 ms (all 1933 hit) | 62.4 MB |
 
-游玩：psvita D3D12，Uhra 存档开机进图（`skip_shader_prebuild=1`，所以全部管线在绘制时创建），两次运行之间只保留缓存目录：
+Play: psvita D3D12, entering the map from the Uhra save at boot (`skip_shader_prebuild=1`, so all pipelines are created during drawing). Only the cache directory was kept between the two runs:
 
-| 运行 | 绘制时建管线 | `pipeline_ms` 合计 | 最差一帧 |
+| Run | Pipelines created during drawing | Total `pipeline_ms` | Worst frame |
 |---|---|---|---|
-| 冷 | 243 | 3221 ms | 1893 ms（171 条） |
-| 暖 | 244 | 50 ms | 26 ms（171 条） |
+| Cold | 243 | 3221 ms | 1893 ms (171 items) |
+| Warm | 244 | 50 ms | 26 ms (171 items) |
 
-未测：Android 平板（TB321FU，Turnip）。0.8.38-dev-pipecache 调试包已装上，但平板锁屏，游戏停在启动阶段，没有得到预建数字；Mac 和原生 Linux 只测了启动预建，没有游玩。
+Not measured: Android tablet (TB321FU, Turnip). The 0.8.38-dev-pipecache debug package was installed, but the tablet locked its screen and the game stayed in the startup stage, so no pre-build numbers were obtained. The Mac and native Linux were measured only for startup pre-building, not for play.
 
-## P2 实现与测量（2026-10-06）
+## P2 implementation and measurements (2026-10-06)
 
-**实现。** plume Vulkan 在设备支持 `VK_EXT_graphics_pipeline_library`（`graphicsPipelineLibraryFastLinking` 为真）和 `VK_EXT_extended_dynamic_state` 时报告 `fastLinkPipelines`。绘制时未命中（`GetPipeline`）的管线由四个库部件快速链接，不做链接期优化：
+**Implementation.** plume Vulkan reports `fastLinkPipelines` when the device supports `VK_EXT_graphics_pipeline_library` (with `graphicsPipelineLibraryFastLinking` true) and `VK_EXT_extended_dynamic_state`. Pipelines that miss during drawing (`GetPipeline`) are fast-linked from four library parts, with no link-time optimization:
 
-- 顶点输入：只有图元拓扑和 primitive restart；
-- 光栅化前：VS（rect list 时加 GS），按 depth clamp、depth bias 是否开启区分；
-- 片元着色：PS；
-- 片元输出：混合、写掩码、格式。
+- Vertex input: only the primitive topology and primitive restart.
+- Pre-rasterization: VS (with GS for rect lists), distinguished by whether depth clamp and depth bias are enabled.
+- Fragment shader: PS.
+- Fragment output: blend, write mask, formats.
 
-部件按着色器模块和 render pass 兼容类（RT 格式、深度格式、采样数）缓存在设备上。剔除、正反面、depth bias、深度测试/写入/比较、模板测试/操作/掩码/参考值都是动态状态，每次绑定链接出的管线时重新设置。启动预建仍建完整管线。
+Parts are cached on the device by shader module and render pass compatibility class (RT format, depth format, sample count). Cull, front face, depth bias, depth test/write/compare, and stencil test/operation/mask/reference value are dynamic state, and they are set again each time a linked pipeline is bound. Startup pre-building still builds full pipelines.
 
-预建结束后，一个后台线程按已知配方为它们的着色器建部件（`prepareGraphicsPipelineLibraries`），之后已知着色器的新组合只需链接。`LO_NO_PIPELINE_LIBRARY=1` 关闭，用于对照。D3D12 和 Metal 不受影响。
+After pre-building finishes, a background thread builds parts for the shaders of the known recipes (`prepareGraphicsPipelineLibraries`). Afterwards, new combinations of known shaders need only linking. `LO_NO_PIPELINE_LIBRARY=1` turns it off, for comparison. D3D12 and Metal are not affected.
 
-**测量。** psvita，Proton GE10-34 下的 Windows 版 Vulkan 后端（winevulkan → RADV，Radeon 8060S），Uhra 存档开机进图（Uhra 住宅区，map 20），`MESA_SHADER_CACHE_DISABLE=1`，空的驱动缓存。
+**Measurements.** psvita, the Windows build's Vulkan backend under Proton GE10-34 (winevulkan → RADV, Radeon 8060S). Entering the map from the Uhra save at boot (Uhra residential area, map 20), with `MESA_SHADER_CACHE_DISABLE=1` and an empty driver cache.
 
-| 情形 | 关（`LO_NO_PIPELINE_LIBRARY=1`） | 开 |
+| Case | Off (`LO_NO_PIPELINE_LIBRARY=1`) | On |
 |---|---|---|
-| 没有配方，`skip_shader_prebuild=1`：绘制时建管线合计 / 最差一帧 | 1807 ms / 1198 ms（171 条） | 1004 ms / 710 ms |
-| 预建 1707 条配方（316 张地图巡游减去 Uhra 的 243 条），再进 Uhra：合计 / 最差一帧 | 1259 ms / 880 ms | 439 ms / 285 ms |
+| No recipes, `skip_shader_prebuild=1`: total pipeline creation during drawing / worst frame | 1807 ms / 1198 ms (171 items) | 1004 ms / 710 ms |
+| Pre-build 1707 recipes (316-map tour minus the 243 from Uhra), then enter Uhra: total / worst frame | 1259 ms / 880 ms | 439 ms / 285 ms |
 
-第二种情形里部件后台预建用了 6.0 s（1700 条配方），在进图之前完成。逐条看（`LO_PIPELINE_MISS_LOG=1`）：VS 和 PS 都见过的 172 条平均 0.24 ms；PS 是新的 62 条平均 5.2 ms，合计 324 ms，是剩下的主要部分。新着色器要靠 P3 的配方语料提前覆盖。
+In the second case, the background pre-build of parts took 6.0 s (1700 recipes), and it finished before entering the map. Looking at each item (`LO_PIPELINE_MISS_LOG=1`): 172 items where both VS and PS had been seen averaged 0.24 ms. 62 items where the PS was new averaged 5.2 ms, totaling 324 ms. That is the main remaining part. New shaders must be covered in advance by the P3 recipe corpus.
 
-**验证。** psvita 原生 Linux 构建（RADV，Mesa 26.2.2），Vulkan validation layer 1.4.341，Uhra 开机进图，同样的设置下开/关各跑：
+**Verification.** Native Linux psvita build (RADV, Mesa 26.2.2), Vulkan validation layer 1.4.341, entering Uhra at boot. Each mode was run with the same settings, on and off:
 
-- 没有只在链接路径出现的消息。`VUID-vkCmdDraw-renderPass-02684`（render pass 的 dependency 数 2 与 0 不兼容）在 main 上就有：framebuffer 的 render pass 带两个外部依赖，管线的不带。用 `LO_VK_NO_PASS_DEPS=1` 去掉依赖后两种模式都是 0，说明部件用的 render pass 没有别的不兼容。
-- 后台线程建完 1700 条配方的部件（0 失败），同时绘制时在链接，没有线程安全类消息；没有动态状态类消息。
-- 截图与整体编译的版本对比，静态场景一致。
+- No messages appeared only on the link path. `VUID-vkCmdDraw-renderPass-02684` (render pass dependency count 2 is incompatible with 0) was already present on main. The framebuffer's render pass has two external dependencies, while the pipeline's has none. With `LO_VK_NO_PASS_DEPS=1` removing the dependencies, both modes report 0. This shows that the render pass used by the parts has no other incompatibility.
+- The background thread built parts for 1700 recipes (0 failures), while drawing was linking at the same time. There were no thread-safety messages and no dynamic-state messages.
+- Compared with full pipeline builds, screenshots matched for static scenes.
 
-**稳态开销。** 最坏情况：`skip_shader_prebuild=1`、空缓存，所有游戏管线都是链接出来的，与全部整体编译对比（原生 Linux，ABBA 各两次，进图 10 s 后取 25 s）：
+**Steady-state cost.** Worst case: `skip_shader_prebuild=1`, empty cache, all game pipelines linked, compared with all full pipeline builds (native Linux, ABBA twice each, sampled 25 s after 10 s in the map):
 
-| 分辨率 | GPU 时间 | 录制 | 帧时间 |
+| Resolution | GPU time | Recording | Frame time |
 |---|---|---|---|
-| 1600x900 | 4.63 vs 4.31 ms（+0.32） | +0.21 ms | 9.91 vs 9.68 ms |
-| 内部 3840x2160 | 16.04 vs 15.70 ms（+0.34） | +0.55 ms | 22.62 vs 22.20 ms |
+| 1600x900 | 4.63 vs 4.31 ms (+0.32) | +0.21 ms | 9.91 vs 9.68 ms |
+| Internal 3840x2160 | 16.04 vs 15.70 ms (+0.34) | +0.55 ms | 22.62 vs 22.20 ms |
 
-GPU 多出的时间不随分辨率变，是每次绘制的固定开销（没有链接期优化的 VS→PS 接口），不是像素着色变慢。实际游玩中只有本次运行第一次见到的管线是链接出来的，下次启动由配方预建成整体管线，所以不做后台优化编译。正反面模板状态相同时只设一次（`VK_STENCIL_FACE_FRONT_AND_BACK`），减少绑定时的调用。
+The extra GPU time does not change with resolution. It is a fixed cost per draw (VS→PS interface without link-time optimization), not slower pixel shading. In actual play, only pipelines seen for the first time in a run are linked. On the next launch, recipes pre-build them into full pipelines, so there is no background optimized compile. When front and back stencil state are the same, it is set only once (`VK_STENCIL_FACE_FRONT_AND_BACK`), which reduces calls during binding.
 
-## P3 实现与测量（2026-10-06，分支 feat/pipeline-prefetch）
+## P3 implementation and measurements (2026-10-06, branch feat/pipeline-prefetch)
 
-**规范化。** `gpu::pipeline_cache::Normalize` 在查找、记录和创建之前清掉 `DescribePipeline` 不读的位：Z 关闭或没有深度目标时的 Z 比较函数；stencil 关闭时的全部 stencil 字段和参考值/掩码；没开背面 stencil 时的背面字段；early-Z 位；polygon offset 开关（偏移量已经算进 bias）；深度测试关闭时的 bias；`-0.0` 斜率；写掩码为 0 时的混合（`DescribePipeline` 现在把这种绘制当作不混合）；点、线、线带、三角带、rect list 以外的图元都按三角形列表。绘制本身的启发式判断仍用原始键。
+**Normalization.** `gpu::pipeline_cache::Normalize` clears the bits that `DescribePipeline` does not read, before lookup, recording and creation. These are: the Z compare function when Z is off or there is no depth target. All stencil fields and the reference value/mask when stencil is off. The back-face stencil fields when back-face stencil is not enabled. The early-Z bit. The polygon offset switch (the offset is already included in the bias). The bias when depth test is off. `-0.0` slope. The blend when the write mask is 0 (`DescribePipeline` now treats such a draw as not blending). Primitives other than points, lines, line strips, triangle strips and rect lists are treated as triangle lists. The draw's own heuristics still use the original key.
 
-- 配方版本 2。版本 1 的文件读入时规范化，并在下次保存时改写；地图巡游的 1950 条变成 1902 条。
-- 校验：用补丁版对 1950 条原始键逐条比较 `DescribePipeline(原键)` 和 `DescribePipeline(规范化键)`，只有 346 条斜率为 `-0.0` 的键按位不同，数值相等。
+- Recipe version 2. Version 1 files are normalized when read, and rewritten on the next save. The 1950 recipes from the map tour became 1902.
+- Verification: using the patched version, the 1950 original keys were compared one by one: `DescribePipeline(original key)` and `DescribePipeline(normalized key)`. Only 346 keys with `-0.0` slope differed in bits. Their numeric values were equal.
 
-**文件版本 2。** 每条 104 字节：64 字节键、8 个场景标签、校验和。标签是 `类型 << 28 | ID`：地图为地图定义 ID，战斗为 loader 战斗槽里的战斗 ID；`0xF0000000` 表示在任何场景之外画的（标题、开机菜单）；超过 8 个场景记为“多场景”。`tools/pipeline_recipes.py` 读写两种版本（`info`、`merge`、`subtract`、`strip`），`merge OUT IN@battle:ID` 给不带标签的旧文件补标签。
+**File version 2.** Each record is 104 bytes: a 64-byte key, 8 scene tags, and a checksum. A tag is `type << 28 | ID`. For a map it is the map definition ID. For a battle it is the battle ID in the loader's battle slot. `0xF0000000` means drawn outside any scene (title, boot menu). More than 8 scenes are recorded as "multiple scenes." `tools/pipeline_recipes.py` reads and writes both versions (`info`, `merge`, `subtract`, `strip`). `merge OUT IN@battle:ID` adds tags to old untagged files.
 
-**场景识别。** 引擎 tick 读 loader 的请求槽（`0x832631F0 + 3168`，槽 0 地图跳转、槽 1 战斗；相位在 +0，名字 FString 在 +4，ID 在 +16），也记下 world 里新出现的地图。当前场景：战斗中用战斗 ID；否则用当前地图；切换期间用正在加载的场景。
+**Scene identification.** The engine tick reads the loader's request slot (`0x832631F0 + 3168`, slot 0 for map jumps and slot 1 for battles. The phase is at +0, the name FString at +4, the ID at +16). It also records maps that newly appear in the world. Current scene: during battle, the battle ID. Otherwise, the current map. During a transition, the scene being loaded.
 
-**预取。** 地图或战斗开始加载时，渲染线程在帧末把这个场景所有还没建的已知配方交给 worker 线程（线程数为逻辑核数一半）。建好的管线在渲染线程收进管线表；绘制碰到排队中的任务就自己建，碰到正在编译的任务就等它（Vulkan 有 pipeline library 时直接 fast-link）。`LO_NO_PIPELINE_PREFETCH=1` 关闭预取。
+**Prefetch.** When a map or battle starts loading, the render thread hands all not-yet-built known recipes for that scene to the worker threads at the end of the frame. The number of worker threads is half the logical core count. Built pipelines are collected into the pipeline table on the render thread. If drawing hits a queued task, it builds the pipeline itself. If it hits a task that is being compiled, it waits for it (with a pipeline library, it fast-links directly). `LO_NO_PIPELINE_PREFETCH=1` turns prefetch off.
 
-**语料。** 可选的 `shaders/pipelines_corpus.bin`（打开的 shader pack 旁边或 pack 的安装位置，`LO_PIPELINE_CORPUS` 可指定）并入已知配方，不写进玩家的文件，也不检查翻译器版本。语料作为 `shader-packs` 预发布里的单独文件发布，`index.json` 里以 `pipeline-corpus` 条目列出；运行时在 shader pack 检查之后用后台线程把它下载到安装目录的 `shaders/pipelines_corpus.bin`，缺失时下载，已有时开着自动更新每天最多检查一次，哈希不同就替换，下次启动生效（见 [PORTABLE_SHADER_PACK.md](../PORTABLE_SHADER_PACK.md#pipeline-recipe-corpus)）。第一版语料 3934 条：地图、过场和战斗巡游合并，去掉了 4 条启动预建时永远建不出来的 rect list 配方（rect list 的 VS 变体要到第一次这种绘制时才生成）。过场的 646 条没有场景标签，会在启动时全部预建；以后可以用带场景标签的构建重录过场，让它们改走场景预取。
+**Corpus.** The optional `shaders/pipelines_corpus.bin` (next to the opened shader pack, or in the pack's install location. `LO_PIPELINE_CORPUS` can specify it) is merged into the known recipes. It is not written into the player's file, and the translator version is not checked. The corpus is published as a separate file in the `shader-packs` prerelease, listed in `index.json` as a `pipeline-corpus` entry. After the shader pack check, the runtime downloads it with a background thread into the install directory's `shaders/pipelines_corpus.bin`. It downloads when missing. When it exists, auto-update is on, and it checks at most once per day. If the hash differs, it is replaced, and it takes effect on the next launch (see [PORTABLE_SHADER_PACK.md](../PORTABLE_SHADER_PACK.md#pipeline-recipe-corpus)). The first corpus has 3934 records. It merges the map, cutscene and battle tours. It removed 4 rect list recipes that startup pre-building could never build (the VS variant of a rect list is generated only on the first draw of that kind). The 646 cutscene records have no scene tags, and they are all pre-built at startup. In the future, a build with scene tags can re-record the cutscenes so they use scene prefetch instead.
 
-**启动预建。** 默认预建玩家学到的全部配方，加上语料里没有标签、在场景外画过、或出现在至少 4 个场景（`LO_PIPELINE_PREBUILD_SCENES`）的配方；其余交给场景预取。`LO_PIPELINE_PREBUILD=all` 全部预建，`=common` 对学到的配方也用同一规则。Vulkan 的 pipeline library 预编译覆盖全部已知配方。
+**Startup pre-building.** By default, pre-build all recipes the player has learned, plus recipes in the corpus that have no tag, were drawn outside a scene, or appear in at least 4 scenes (`LO_PIPELINE_PREBUILD_SCENES`). The rest are left to scene prefetch. `LO_PIPELINE_PREBUILD=all` pre-builds everything. `=common` applies the same rule to learned recipes too. Vulkan's pipeline library pre-compilation covers all known recipes.
 
-**测量。** 场景：Uhra 存档开机进 u3b（地图 20），15 秒后调试跳到第一次去的 u36（地图 16），各停 20 秒。语料就是同一场景上一次运行学到的配方（411–416 条），所以这是“语料完整”时的上限。每次运行都从空的着色器缓存目录开始；psvita 关掉了 vkd3d 和 Mesa 的磁盘缓存。下表“最长帧”取 `LO_RENDER_TIMING` 的 `draw_ms`，它包括绘制时创建着色器模块的时间（Metal 上这部分比管线本身贵）。
+**Measurements.** Scenes: entering u3b (map 20) from the Uhra save at boot. After 15 seconds, a debug jump to u36 (map 16), which was visited for the first time. Each stays for 20 seconds. The corpus is the recipes learned in the same scene by the previous run (411–416 recipes), so this is the upper limit when "the corpus is complete." Each run starts from an empty shader cache directory. On psvita, the vkd3d and Mesa disk caches are off. The "longest frame" column in the table is `draw_ms` from `LO_RENDER_TIMING`, which includes the time to create shader modules during drawing (on Metal, this part costs more than the pipeline itself).
 
-psvita，Proton GE10-34 / vkd3d-proton D3D12，RADV：
+psvita, Proton GE10-34 / vkd3d-proton D3D12, RADV:
 
-| 运行 | 启动预建 | 开机地图最长帧 | 跳图后最长帧 | 绘制时建管线 |
+| Run | Startup pre-build | Longest frame at boot map | Longest frame after jump | Pipelines created during drawing |
 |---|---|---|---|---|
-| P2 基线（cea0413a，无配方） | — | 2046 ms | （基线没有跳图命令） | 243 条，3189 ms |
-| 有语料，不预建不预取 | — | 2072 ms | 1662 ms | 415 条，5387 ms |
-| 全部预建（`LO_PIPELINE_PREBUILD=all`） | 412 条，1036 ms | 53 ms | 56 ms | 2 条，10 ms |
-| 默认（学到的 + 场景外 + 常用） | 13 条，56 ms | 66 ms | 176 ms | 15 条，188 ms（另有 16 条等预取任务，共 38 ms） |
-| 只预取（不预建） | — | 66 ms（标题 121 ms） | 122 ms | 25 条，293 ms |
+| P2 baseline (cea0413a, no recipes) | — | 2046 ms | (baseline has no jump command) | 243, 3189 ms |
+| Corpus, no pre-build, no prefetch | — | 2072 ms | 1662 ms | 415, 5387 ms |
+| All pre-built (`LO_PIPELINE_PREBUILD=all`) | 412 recipes, 1036 ms | 53 ms | 56 ms | 2, 10 ms |
+| Default (learned + out-of-scene + common) | 13 recipes, 56 ms | 66 ms | 176 ms | 15, 188 ms (another 16 waited for prefetch tasks, total 38 ms) |
+| Prefetch only (no pre-build) | — | 66 ms (title 121 ms) | 122 ms | 25, 293 ms |
 
-- 开机：读档请求到地图出现约 3 秒；默认模式下 218 条配方（含 178 个着色器模块）在 0.9 秒内建完。
-- 跳图：请求到地图出现只有 0.3–0.5 秒；172 条在 0.3 秒内建完，最后几帧仍有少量未命中或等待。这是提前量的上限，P4 可以继续处理。
+- At boot: from the load request to the map appearing took about 3 seconds. In default mode, 218 recipes (including 178 shader modules) were built within 0.9 seconds.
+- Jump: from the request to the map appearing took only 0.3–0.5 seconds. 172 recipes were built within 0.3 seconds. The last few frames still had some misses or waits. This is the upper limit of lead time. P4 can handle it further.
 
-psvita，Proton 下的 Vulkan（RADV，pipeline library 开）：不预取时 220 次绘制时创建全部 fast-link，合计 17 ms；默认模式 9 次、14 ms。两者地图里最长帧都在 56 ms 以内，差别是预取给出的是完整优化的管线。pipeline library 预编译覆盖语料，407 条在后台 1.5 秒。
+psvita, Vulkan under Proton (RADV, pipeline library on): without prefetch, 220 draw-time creations of all fast-links totaled 17 ms. In default mode, 9 creations totaled 14 ms. In both, the longest frame in the map was within 56 ms. The difference is that prefetch provides fully optimized pipelines. Pipeline library pre-compilation covers the corpus, and 407 items were done in the background in 1.5 seconds.
 
-M1 Max，Metal（同一二进制第二次以后运行，系统着色器缓存已热）：
+M1 Max, Metal (second and later runs of the same binary, system shader cache already warm):
 
-| 运行 | 启动预建 | 开机地图最长帧 | 跳图后最长帧 |
+| Run | Startup pre-build | Longest frame at boot map | Longest frame after jump |
 |---|---|---|---|
-| 无语料（新二进制第一次运行，冷） | — | 5148 ms | 1849 ms + 1229 ms |
-| 有语料，不预建不预取 | — | 734 ms | 300 ms |
-| 全部预建 | 412 条，382 ms | 61 ms | 46 ms |
-| 默认 | 13 条，50 ms | 59 ms | 49 ms |
-| 只预取 | — | 60 ms | 48 ms |
+| No corpus (first run of new binary, cold) | — | 5148 ms | 1849 ms + 1229 ms |
+| Corpus, no pre-build, no prefetch | — | 734 ms | 300 ms |
+| All pre-built | 412 recipes, 382 ms | 61 ms | 46 ms |
+| Default | 13 recipes, 50 ms | 59 ms | 49 ms |
+| Prefetch only | — | 60 ms | 48 ms |
 
-- Metal 上贵的是着色器模块（SPIR-V 转 MSL 再编译），原来在渲染线程上逐个创建：一次场景预取的准备花了 7.8 秒，全部预建 10.3 秒。现在模块也在 worker 线程上建：预取 390 条配方和 267 个模块 0.4 秒，全部预建 0.38 秒。
+- On Metal, the expensive part is shader modules (SPIR-V converted to MSL and then compiled). Previously they were created one by one on the render thread. Preparing one scene prefetch took 7.8 seconds, and pre-building everything took 10.3 seconds. Now modules are also built on worker threads: prefetching 390 recipes and 267 modules took 0.4 seconds, and pre-building everything took 0.38 seconds.
 
-**启动预建的取舍。** 默认只预建玩家学到的配方和语料里的场景外/常用配方，其余靠场景预取：在测过的场景里首次进入的结果和全部预建相同，启动时间不随语料大小增长（D3D12 冷启动全部预建约 2.5 ms/条，Android 约 80 ms/条）。玩家自己学到的配方仍然全部预建，和 P3 之前一样。
+**Trade-off in startup pre-building.** By default, pre-build only the recipes the player learned and the out-of-scene/common recipes from the corpus. The rest relies on scene prefetch. In the tested scenes, the result of first entry is the same as full pre-building. Startup time does not grow with corpus size (D3D12 cold start with full pre-building is about 2.5 ms per recipe, and on Android about 80 ms per recipe). Recipes the player has learned are still all pre-built, as before P3.
 
-**未测：** Android；战斗（战斗 ID 的请求槽读法来自 `patches/encounter_defer.cpp`，`scene load: battle` 日志还没有在真实战斗里核对过）；冷 Metal 系统缓存下的预取。
+**Not measured:** Android. Battles (the request slot reading for battle IDs comes from `patches/encounter_defer.cpp`, and the `scene load: battle` log has not yet been checked in a real battle). Prefetch under a cold Metal system cache.
 
-## P4 实现与测量（2026-10-06，分支 feat/pipeline-miss-parallel）
+## P4 implementation and measurements (2026-10-06, branch feat/pipeline-miss-parallel)
 
-**一个 worker 池。** 场景预取（P3）、兄弟配方和跳过的绘制共用 P3 的 worker 线程（逻辑核数一半）。三个队列按优先级取任务：跳过的绘制要的管线 > 正在加载的场景 > 兄弟配方（最新一次未命中的在前，超过 128 个时丢最旧的）。场景任务可以占满所有线程；绘制时的任务（兄弟配方、跳过的绘制）同时最多 `clamp(逻辑核数 / 4, 2, 6)` 个，`LO_PIPELINE_MISS_WORKERS` 可改，0 两者都关。
+**One worker pool.** Scene prefetch (P3), sibling recipes and skipped draws share P3's worker threads (half the logical core count). Three queues pick tasks by priority: pipelines needed by a skipped draw > the scene being loaded > sibling recipes (the newest miss first. When there are more than 128, the oldest is dropped). Scene tasks may occupy all threads. Draw-time tasks (sibling recipes, skipped draws) are limited to `clamp(logical cores / 4, 2, 6)` at the same time. `LO_PIPELINE_MISS_WORKERS` can change this. 0 turns both off.
 
-**兄弟配方。** 绘制时未命中，渲染线程先把共用这个 PS 的已知配方、再把共用这个 VS 的（RT/深度格式和图元相同的在前）交给 worker，每次最多 16 条；每组里当前场景画过的配方在前。然后才自己建这条管线或等它，worker 和渲染线程同时编译。索引在第一次未命中时用还没建的已知配方（规范化键）建一次，之后新学到的配方都已经建好，不需要更新。`LO_NO_PIPELINE_SIBLINGS=1` 关闭。
+**Sibling recipes.** On a draw miss, the render thread first hands the known recipes that share this PS, then those that share this VS (those with the same RT/depth format and primitive first), to the workers. Up to 16 at a time. Within each group, recipes drawn in the current scene come first. Only then does it build this pipeline itself or wait for it, so the worker and the render thread compile at the same time. The index is built once, at the first miss, using the known recipes not yet built (normalized keys). Recipes learned later are already built by then, so no update is needed. `LO_NO_PIPELINE_SIBLINGS=1` turns this off.
 
-- 兄弟配方的另一个着色器还没加载时，worker 用自己的 pack reader 读出、建模块，再建管线；渲染线程收任务时把模块放进着色器表。渲染线程自己要加载一个有任务的着色器时：排队中就自己执行这个任务，正在建就等它，所以一个着色器只有一个模块。同一个哈希出现第二个模块时也不释放，因为可能已经有管线用过它，而 pipeline library 按模块句柄缓存。
-- 先排着色器任务、收进着色器表后再排管线任务的做法测过（33aab39c）：大部分兄弟配方来不及开始，被渲染线程自己建了，最长帧间隔比现在多约 200 ms。
-- **Metal 默认关闭**（`LO_PIPELINE_SIBLINGS=1` 打开）：Metal 上管线很便宜，贵的是着色器模块（MSL 编译）。worker 上建的兄弟模块会挡住渲染线程自己的模块，M1 Max 上两次运行里有一次开机首帧从 0.75 秒变成 4.9 秒，另一次没有收益。
+- When the other shader of a sibling recipe is not yet loaded, the worker reads it using its own pack reader, builds the module, and then builds the pipeline. When the render thread collects the task, it puts the module into the shader table. When the render thread itself needs a shader that has a task: if the task is queued, it runs the task itself. If it is being built, it waits. So a shader has only one module. When the same hash appears with a second module, it is not released, because a pipeline may already use it, and the pipeline library caches by module handle.
+- An approach that queued shader tasks first, then queued pipeline tasks after collecting the shaders into the shader table (33aab39c), was tested. Most sibling recipes did not have time to start, and the render thread built them itself. The longest frame interval was about 200 ms longer than now.
+- **Metal is off by default** (`LO_PIPELINE_SIBLINGS=1` turns it on). On Metal, pipelines are cheap. The expensive part is the shader module (MSL compilation). Sibling modules built on workers blocked the render thread's own modules. On M1 Max, one of two runs had its first boot frame change from 0.75 seconds to 4.9 seconds. The other run gained nothing.
 
-**等待规则。** 绘制碰到排队中的任务就自己建（`src=claim`）。碰到正在建的任务：如果它建的是同一种管线（有 pipeline library 时都是 fast-link，没有时都是完整编译）就等；有 pipeline library 而任务是场景预取的完整编译时，自己 fast-link（`src=inline`），任务结果丢掉。同一种管线不会建两次。
+**Waiting rules.** A draw that hits a queued task builds it itself (`src=claim`). When it hits a task being built: if the task builds the same kind of pipeline (with a pipeline library, all are fast-links. Without one, all are full compiles), it waits. When there is a pipeline library and the task is a full compile from scene prefetch, it fast-links itself (`src=inline`), and the task's result is discarded. The same kind of pipeline is never built twice.
 
-**跳过绘制（`LO_PIPELINE_ASYNC=1`，默认关）。** 主绘制路径上，管线还没建好（包括场景预取正在建的）时，这次绘制直接跳过，管线交给 worker（`src=defer`），物体会短暂缺失；场景拷贝提升路径从不跳过。跳过的绘制不计入 `drops.pipeline`，记在 `pipeline workers ... skipped=` 里。被跳过的也可能是深度、模板或之后要 resolve 的绘制，所以不只是少画一个物体。
+**Skipped draws (`LO_PIPELINE_ASYNC=1`, off by default).** On the main draw path, when the pipeline is not yet built (including one that scene prefetch is building), this draw is skipped. The pipeline is handed to a worker (`src=defer`). Objects will be briefly missing. The scene-copy promotion path never skips. Skipped draws are not counted in `drops.pipeline`. They are recorded in `pipeline workers ... skipped=`. A skipped draw may also be a depth, stencil or later-resolved draw, so it is not just one missing object.
 
-**读包。** worker 线程各开一个 pack reader：`Reader::Get` 在锁内解压整块，共用一个 reader 会挡住渲染线程自己的着色器加载。启动时 `LoadPackShaders` 的线程也各用一个（psvita 上最多 32 个，每个读 2.5 MB 索引），启动反而更快：Vulkan 为 1270 个已知着色器建模块 1026 → 124 ms，B 的启动预建 D3D12 2000 → 1654 ms、Vulkan 2093 → 1099 ms。
+**Pack reading.** Each worker thread opens its own pack reader. `Reader::Get` decompresses the whole block inside a lock. If one reader were shared, it would block the render thread's own shader loading. At startup, `LoadPackShaders` also uses one reader per thread (up to 32 on psvita, each reading a 2.5 MB index). Startup became faster. For Vulkan, building modules for 1270 known shaders went from 1026 ms to 124 ms. B's startup pre-build went from 2000 ms to 1654 ms on D3D12, and from 2093 ms to 1099 ms on Vulkan.
 
-**日志。** 每次未命中多了 `src=create|claim|inline|defer`；每帧多一行 `renderer: pipeline workers frame=… queued= built= hits= skipped= shaders=`（`hits` 需要 `LO_PIPELINE_MISS_LOG=1`）。pack 着色器的加载现在计入 `shader_ms`，和之前的版本比较时要注意。`tools/pipeline_misses.py` 多了兄弟配方的列。
+**Logging.** Each miss now has `src=create|claim|inline|defer`. Each frame has one extra line `renderer: pipeline workers frame=… queued= built= hits= skipped= shaders=` (`hits` needs `LO_PIPELINE_MISS_LOG=1`). Loading of pack shaders is now counted in `shader_ms`, so take care when comparing with earlier versions. `tools/pipeline_misses.py` has a new column for sibling recipes.
 
-**测量。** psvita，Uhra 存档开机，每次运行都从空的着色器缓存开始，vkd3d 和 Mesa 的磁盘缓存关闭；基线是 P3 分支头 0cbc7d6c。“合计/最差一帧”是绘制时建管线和等任务的时间；“最长帧间隔”和“超过 50 ms 的帧合计”取地图出现之后的 `between_ms`。三个场景：
+**Measurements.** psvita, boot from the Uhra save. Each run starts from an empty shader cache, with the vkd3d and Mesa disk caches off. The baseline is the head of the P3 branch, 0cbc7d6c. "Total / worst frame" is the time spent creating pipelines and waiting for tasks during drawing. "Longest frame interval" and "total of frames over 50 ms" are taken from `between_ms` after the map appears. Three scenes:
 
-- A：地图巡游的 1950 条配方（无场景标签）作为玩家文件，不预建。地图的配方都已知但没建，是兄弟配方要处理的情况（跳过启动预建的玩家、预取没赶上）。
-- B：去掉 Uhra 配方的 1707 条，启动预建。地图的管线都是新的，没有兄弟配方可建，用来确认不变慢。
-- C：P3 的语料（同一场景学到的 411 条，带标签），默认预建，15 秒后跳到 u36。
+- A: the 1950 recipes from the map tour (no scene tags) as the player file, with no pre-building. The map's recipes are all known but not built. This is the case sibling recipes must handle (player skipped startup pre-building, prefetch did not keep up).
+- B: 1707 recipes with the Uhra recipes removed, with startup pre-building. The map's pipelines are all new, so there are no sibling recipes to build. This checks that nothing gets slower.
+- C: P3's corpus (411 recipes learned in the same scene, tagged), default pre-building, jump to u36 after 15 seconds.
 
-Proton / vkd3d-proton D3D12：
+Proton / vkd3d-proton D3D12:
 
-| 场景 | 运行 | 合计 | 最差一帧 | 最长帧间隔 | 超过 50 ms 的帧合计 |
+| Scene | Run | Total | Worst frame | Longest frame interval | Total of frames over 50 ms |
 |---|---|---|---|---|---|
-| A | P3 基线（两次） | 3049 / 3148 ms | 1831 / 1962 ms | 1995 / 2140 ms | 3129 / 3239 ms |
+| A | P3 baseline (two runs) | 3049 / 3148 ms | 1831 / 1962 ms | 1995 / 2140 ms | 3129 / 3239 ms |
 | A | P4 | 1672 / 1630 ms | 1285 / 1329 ms | 1443 / 1490 ms | 1823 / 1769 ms |
-| A | P4 + 跳过绘制 | 13 ms | 9 ms | 129 ms | 184 ms（跳过 5691 次绘制） |
-| B | P3 基线 / P4 | 2921 / 2928 ms | 1768 / 1779 ms | 1878 / 1881 ms | 3186 / 3151 ms |
-| C | P3 基线 | 164 ms（15 条） | 100 ms | 162 ms | 503 ms |
-| C | P4 | 61 ms（6 条） | 43 ms | 61 ms | 336 ms |
-| C | P4 + 跳过绘制 | 13 ms | 13 ms | 61 ms | 280 ms |
+| A | P4 + skipped draws | 13 ms | 9 ms | 129 ms | 184 ms (5691 draws skipped) |
+| B | P3 baseline / P4 | 2921 / 2928 ms | 1768 / 1779 ms | 1878 / 1881 ms | 3186 / 3151 ms |
+| C | P3 baseline | 164 ms (15 items) | 100 ms | 162 ms | 503 ms |
+| C | P4 | 61 ms (6 items) | 43 ms | 61 ms | 336 ms |
+| C | P4 + skipped draws | 13 ms | 13 ms | 61 ms | 280 ms |
 
-Proton 下的 Vulkan（RADV，pipeline library 开）：P3 起启动时为全部已知配方建着色器模块和 library，A 里的未命中都是 fast-link，P4 没有可省的。三个场景的差别都在两次基线之间的波动内（A 的合计 20 / 17 ms、最长帧间隔 57–58 / 54–57 ms；B 410 / 417 ms；C 13 / 9 ms）。跳过绘制时 A 的合计 4 ms。
+Vulkan under Proton (RADV, pipeline library on): since P3, startup builds shader modules and libraries for all known recipes. In A, the misses are all fast-links, and P4 has nothing more to save. The differences in all three scenes are within the variation between the two baselines (A total 20 / 17 ms, longest frame interval 57–58 / 54–57 ms; B 410 / 417 ms; C 13 / 9 ms). With skipped draws, A's total was 4 ms.
 
-M1 Max，Metal（系统着色器缓存已热）：没有可测出的差别。A 的最长帧间隔：基线 750 / 742 ms（主要是渲染线程建着色器模块），P4 默认（兄弟配方关）738 / 729 ms，兄弟配方打开时 4881 / 780 ms；B 341 / 343 ms；C 的超过 50 ms 帧合计 298 / 300 / 250 ms（第三个也是兄弟配方关）和打开时的 242 ms 都在同一波动范围里。4.9 秒那一帧里有 282 个兄弟着色器模块，渲染线程的 `shader_ms` 是 4.8 秒；可能是它在等 worker 上的模块，也可能是 MSL 编译之间的争用，日志分不出来。跳过绘制对 Metal 帮助不大（A 713 ms），因为贵的是着色器模块，不是管线。
+M1 Max, Metal (system shader cache warm): no measurable difference. A's longest frame interval: baseline 750 / 742 ms (mostly the render thread building shader modules), P4 default (sibling recipes off) 738 / 729 ms, with sibling recipes on 4881 / 780 ms. B 341 / 343 ms. C's total of frames over 50 ms was 298 / 300 / 250 ms (the third run has sibling recipes off), and the 242 ms with it on is within the same range. The 4.9-second frame had 282 sibling shader modules, and the render thread's `shader_ms` was 4.8 seconds. It may be waiting for modules on workers, or contention between MSL compilations. The logs cannot tell which. Skipping draws helps little on Metal (A 713 ms), because the expensive part is shader modules, not pipelines.
 
-**兄弟配方的浪费。** D3D12 的 A 里开机进图时排了约 1400 条兄弟配方，建了约 800 条，这张地图用到的不到 100 条。多建的都是别的地图的真实配方，以后会用到，但每次这样的爆发会让 P1 的驱动缓存多出约 14 MB，也多占显存。
+**Waste from sibling recipes.** On D3D12 scene A, on boot into the map, about 1400 sibling recipes were queued and about 800 were built. Fewer than 100 of them are used on this map. The extra ones are real recipes from other maps and will be used later. But each such burst adds about 14 MB to the P1 driver cache, and it also uses more VRAM.
 
-**未测：** Android（8 核上绘制时任务只有 2 个线程，和游戏线程的争用没有测）；原生 Linux Vulkan；冷 Metal 系统缓存。
+**Not measured:** Android (on 8 cores, draw-time tasks had only 2 threads, and contention with the game thread was not measured). Native Linux Vulkan. Cold Metal system cache.
 
-## 语料巡游（2026-10-06，分支 feat/battle-tour）
+## Corpus tour (2026-10-06, branch feat/battle-tour)
 
-**战斗入口。** `LO_DEBUG_BATTLE_FILE` 指向一个命令文件，序号变大时执行一次：`序号 battle <编组> [战斗地图]`、`序号 victory`（调试菜单的判胜）、`序号 list`（把编组表写进日志）。不设这个变量时整个功能不工作。编组走游戏自己的随机遇敌路径：行走更新 `sub_829E3048`（角色 vtable +1632）调用的抽签 `sub_829E3268`（+1636）直接返回 1，并把编组写进它的输出槽；行走更新随后照常调用 `sub_82B53AD8`、`RequestBattle 0x828278A0(GEngine, 编组)`、`sub_8285E380`。站着不动也会触发。
+**Battle entry.** `LO_DEBUG_BATTLE_FILE` points to a command file. Each command runs once when its serial number increases: `serial battle <group> [battle map]`, `serial victory` (the debug menu's win), and `serial list` (writes the group table to the log). If this variable is not set, the whole feature does nothing. The group goes through the game's own random encounter path. The walking update `sub_829E3048` (character vtable +1632) calls the draw `sub_829E3268` (+1636), which is patched to return 1 directly and writes the group into its output slot. The walking update then calls `sub_82B53AD8`, `RequestBattle 0x828278A0(GEngine, group)`, and `sub_8285E380` as usual. It triggers even when standing still.
 
-**编组表。** `0x83264978 + 128` 处的 TArray，399 项，每项 160 字节：+0 战斗地图（空串时用区域的战斗地图 `0x832631F0 + 1604`，再空用 `u10_b3_scrw`），+12 音乐，+60 AI 脚本，+72/+84 开场/结束序列，+148/+152 敌人槽数组（每槽 32 字节：槽号、敌人配置即模型、敌人参数）。共 170 种敌人模型、56 个固定战斗地图；另有 33 个区域战斗地图没有编组直接引用。
+**Group table.** A TArray at `0x83264978 + 128`, 399 entries, 160 bytes each: +0 battle map (if empty, use the area's battle map at `0x832631F0 + 1604`, and if that is empty too, `u10_b3_scrw`), +12 music, +60 AI script, +72/+84 opening/ending sequences, +148/+152 enemy slot arrays (each slot 32 bytes: slot number, enemy config (that is, model), enemy parameters). In total there are 170 enemy models and 56 fixed battle maps. Another 33 area battle maps are not directly referenced by any group.
 
-**工具。** `tools/recipe_tour.py`（用法见文件头）：
-- `list` 导出编组表；`battles` 按“先覆盖全部敌人模型和固定地图、再覆盖模型参数组合”的顺序打编组，模型都打过的编组跳过，可用 `--part K/N` 分给多台机器；`stages` 用 3 号编组（两只弱敌）在给定的战斗地图上各打一场；`maps` 逐图跳转并转动镜头，需要带地图跳转、换盘请求和包探测命令文件的诊断构建（不进 main）。
-- 每段最多 15 分钟；共享测试机上另有任务等锁时立即让出。
-- 战斗里每 2 秒按 A，第一次指令后 45 秒请求判胜；失败、强制判胜或卡住时重启游戏，自然胜利或逃跑回到地图后继续下一场。
+**Tools.** `tools/recipe_tour.py` (usage in the file header):
+- `list` exports the group table. `battles` runs groups in the order "first cover all enemy models and fixed maps, then cover combinations of model parameters." Groups whose models have all been fought are skipped. `--part K/N` can split the work across machines. `stages` fights group 3 (two weak enemies) on each given battle map. `maps` jumps map by map and turns the camera. It needs a diagnostic build with map jumps, disc-change requests and package probe command files (not in main).
+- Each segment has a maximum of 15 minutes. On a shared test machine, if another task is waiting for the lock, it yields immediately.
+- In battle, A is pressed every 2 seconds. The win is requested 45 seconds after the first command. On failure, forced win or getting stuck, the game is restarted. On natural victory or escape, it returns to the map and continues to the next battle.
 
-**结果。** psvita（D3D12）和 M1 Max（Metal）并行：94 个编组打完，覆盖 163/170 种敌人模型（未覆盖的 7 种只出现在会卡住或资源不在光盘上的 4 个编组里）；33 个区域战斗地图；250 张地图（另有 2 张报资源缺失、5 张不在任何光盘上）。合并成场景标签版语料：地图 3005 条，过场再加 646 条（没有场景标签），战斗 271 条，战斗地图 16 条，共 3938 条、285 个 VS、2075 个 PS。存档里只有 10 级的凯姆一人，多数战斗在敌人第一轮行动后失败，所以每种敌人只看到一轮技能。
+**Results.** psvita (D3D12) and M1 Max (Metal) in parallel: 94 groups completed, covering 163/170 enemy models. The 7 uncovered models appeared only in 4 groups that got stuck or whose resources are not on the disc. 33 area battle maps. 250 maps (another 2 reported missing resources, and 5 are not on any disc). Merged into the scene-tagged corpus: 3005 map recipes, plus 646 cutscene recipes (no scene tags), 271 battle recipes, and 16 battle map recipes. Total 3938 records, 285 VS, 2075 PS. The save contains only Kaim at level 10. Most battles failed after the enemies' first round of actions, so each enemy type showed only one round of skills.
 
-## Android 实测（2026-10-06）
+## Android measurements (2026-10-06)
 
-Lenovo TB321FU（Adreno 750），Turnip Mesa 26.0.0-devel（libadrenotools），调试包 0.8.45-dev-pipeline（main `2b5044af`），`graphics pipeline libraries on`，shader pack 命中。路线：自动继续存档进 Highlands of Wohl（u13），20 秒后跳到第一次去的 Uhra 住宅区（u3b），再回 u13 打编组 3。“冷”指恢复测试前的 224 条学到的配方，删掉驱动管线缓存和 Mesa 缓存。
+Lenovo TB321FU (Adreno 750), Turnip Mesa 26.0.0-devel (libadrenotools), debug package 0.8.45-dev-pipeline (main `2b5044af`), `graphics pipeline libraries on`, shader pack hit. Route: auto-continue the save into Highlands of Wohl (u13), jump after 20 seconds to the Uhra residential area (u3b) for the first time, then return to u13 and fight group 3. "Cold" means the 224 learned recipes before the test were restored, and the driver pipeline cache and Mesa cache were deleted.
 
-| 运行 | 启动预建 | 进图加载 | 首次进图绘制时建管线（条 / 合计 / 最差一帧） | 战斗 |
+| Run | Startup pre-build | Map load | Pipelines created on first map draw (count / total / worst frame) | Battle |
 |---|---|---|---|---|
-| 旧条件（关 GPL、预取、兄弟配方；无语料），冷 | 203 条，1.8 s | Uhra 18.7 s | 155 / 7349 ms / 2028 ms | 16 条，最差 144 ms |
-| 默认，无语料，冷 | 203 条，2.5 s | Uhra 18.7 s | 155 / 3761 ms / 1225 ms | 16 条，最差 207 ms |
-| 默认 + 语料，冷（两次） | 1948 条，18.3 / 17.8 s | Uhra 36.0 / 36.3 s | 0 | 0 |
-| 默认 + 语料，第二次启动 | 2056 条，0.48 s（驱动缓存 70 MB，读入 131 ms） | Uhra 16.3 s | 0 | 0 |
-| 关 GPL + 语料，冷 | 1948 条，18.5 s | Uhra 21.3 s | 0 | 0 |
-| 旧条件，冷，u32 | 203 条，2.5 s | u32 10.6 s | 68 / 3035 ms / 813 ms | — |
-| 默认 + 语料，冷，u32 | 1948 条，19.1 s | u32 23.4 s | 22 / 1487 ms / 446 ms | — |
+| Old conditions (GPL, prefetch and sibling recipes off; no corpus), cold | 203 recipes, 1.8 s | Uhra 18.7 s | 155 / 7349 ms / 2028 ms | 16, worst 144 ms |
+| Default, no corpus, cold | 203 recipes, 2.5 s | Uhra 18.7 s | 155 / 3761 ms / 1225 ms | 16, worst 207 ms |
+| Default + corpus, cold (two runs) | 1948 recipes, 18.3 / 17.8 s | Uhra 36.0 / 36.3 s | 0 | 0 |
+| Default + corpus, second launch | 2056 recipes, 0.48 s (driver cache 70 MB, read 131 ms) | Uhra 16.3 s | 0 | 0 |
+| GPL off + corpus, cold | 1948 recipes, 18.5 s | Uhra 21.3 s | 0 | 0 |
+| Old conditions, cold, u32 | 203 recipes, 2.5 s | u32 10.6 s | 68 / 3035 ms / 813 ms | — |
+| Default + corpus, cold, u32 | 1948 recipes, 19.1 s | u32 23.4 s | 22 / 1487 ms / 446 ms | — |
 
-- 有语料时，Uhra 第一次进图和第一次战斗都不在绘制时建管线；剩下的几百毫秒长帧是进图时的录制/绑定，旧条件下也有。
-- GPL 在 Turnip 上把新着色器的管线中位数从 68 ms 降到 28 ms；已知 VS/PS 组合在两种条件下都接近 0（驱动自己的缓存吸收了）。
-- 代价：冷启动预建从约 2 s 变成约 18 s（第二次启动 0.48 s）；冷启动后后台建 library 部件要 115–140 s，期间进图加载约慢一倍。u32 冷启动仍有 446 ms 的帧：那些配方在语料里但标在别的场景，部件还没建好。维护者认可效果，决定不调。
-- `MESA_SHADER_CACHE_DIR` 指向的目录始终没有生成，这个 Turnip 版本上持久缓存只靠 `VkPipelineCache`。
-- 语料下载（#264）在设备上成功（409184 字节，SHA-256 与发布的一致）；真实战斗里 `scene load: battle id=3` 出现，战斗场景标签在运行时得到确认。
-- 没有崩溃、设备丢失或管线创建失败；截图正常，GPL 链接出的 155 条管线画面与关 GPL 一致。
+- With the corpus, neither the first map entry nor the first battle in Uhra creates pipelines during drawing. The remaining long frames of several hundred milliseconds are recording and binding during map entry. They also occur under the old conditions.
+- GPL on Turnip reduced the median pipeline time for new shaders from 68 ms to 28 ms. For known VS/PS combinations, the time is close to 0 under both conditions (the driver's own cache absorbs it).
+- Cost: cold-start pre-building went from about 2 s to about 18 s (the second launch takes 0.48 s). After a cold start, background library part building takes 115–140 s, during which map loading is about twice as slow. The u32 cold start still has 446 ms frames: those recipes are in the corpus but tagged with other scenes, and the parts are not yet built. The maintainer accepted the effect and decided not to tune it.
+- The `MESA_SHADER_CACHE_DIR` directory was never generated. With this Turnip version, persistent caching relies only on `VkPipelineCache`.
+- Corpus download (#264) succeeded on the device (409184 bytes, SHA-256 matches the published one). In a real battle, `scene load: battle id=3` appeared, and the battle scene tag was confirmed at runtime.
+- No crash, device loss or pipeline creation failure. Screenshots were normal. The 155 GPL-linked pipelines matched the picture with GPL off.
 
-## 后台启动预建（2026-10-09，分支 feat/background-pipeline-prebuild）
+## Background startup pre-building (2026-10-09, branch feat/background-pipeline-prebuild)
 
-**做法。** 启动预建不再挡住开机：`PrepareKnownPipelines` 读入配方和语料后，把启动集合（规则同上：学到的 + 场景外 / 常用 / 无标签的语料配方）交给 P3/P4 的 worker 池，优先级最低（跳过的绘制 > 加载中的场景 > 兄弟配方 > 启动预建），在场景外画过的（标题、菜单）排在最前。启动任务最多占 `worker 数 - 1` 个线程，给场景和绘制时任务留一个；Metal 上只占绘制时任务的份额（P4 里 worker 建 MSL 模块拖慢过渲染线程自己的模块），`LO_PIPELINE_STARTUP_WORKERS` 可改。
+**Approach.** Startup pre-building no longer blocks boot. After `PrepareKnownPipelines` reads the recipes and corpus, it hands the startup set (same rules as above: learned, plus out-of-scene / common / untagged corpus recipes) to the P3/P4 worker pool at the lowest priority (skipped draws > scene being loaded > sibling recipes > startup pre-build). Recipes drawn outside any scene (title, menus) come first. Startup tasks use at most `worker count - 1` threads, leaving one for scene and draw-time tasks. On Metal, they get only the draw-time share (in P4, workers building MSL modules slowed the render thread's own modules). `LO_PIPELINE_STARTUP_WORKERS` can change this.
 
-- 着色器模块：启动任务需要的 pack 着色器还没有模块时，任务自己在 worker 上建（同兄弟配方的做法），渲染线程收任务时放进着色器表。Vulkan 的 pipeline library 线程也改为通过同一批着色器任务取模块，不再在启动时同步建全部模块。
-- 绘制碰到还在排队或正在建的启动任务，按 P3/P4 的规则处理（排队的自己建，正在建的同种管线就等，有 pipeline library 时 fast-link），同一管线不会建两次。场景开始加载时，它的配方中还在排队的启动任务（和着色器任务）移到场景队列。
-- 渲染线程收结果改为只看刚完成的任务（worker 完成时放进一个列表），不再每帧、每次未命中遍历全部任务表；启动集合有两千多条，原来的遍历会变成每次未命中的固定开销。
-- 进度：渲染线程每帧发布完成数 / 总数，呈现在游戏画面最下方画一条半透明细条（宽度等于输出宽度，高度为输出高度的 1/360，至少 2 像素），完成后停 0.3 秒再用 0.7 秒淡出；设置菜单、调试菜单等主机菜单走 CPU 画面，不画这条。没有要建的配方时不显示。帧生成没有 UI 分离路径（日志里 `ui=unavailable`），进度条和标题菜单提示一样进入插帧。
-- 日志：开始一行 `renderer: pipeline preparation: background, …`（数量、需要建模块的数量、worker 数），结束一行 `renderer: pipeline preparation: background done, …`（worker 建的、绘制时自己建的、失败的、耗时、距启动的秒数）；`tools/pipeline_misses.py` 两行都会列出。结束时异步写一次驱动缓存。
-- `LO_PIPELINE_PREPARE_SYNC=1` 恢复原来的同步预建（准备画面、同步建 library 模块），`--prepare-shaders-only` 也走同步路径。`skip_shader_prebuild` 和 `LO_NO_PIPELINE_PREPARE` 照旧不预建；Vulkan 的 pipeline library 线程本来就在后台，照旧运行。
-- 仍在启动路径上：没有着色器包时的着色器准备（启动 bundle、编译）和驱动缓存文件的读入，这两步都要在第一条管线之前完成。
+- Shader modules: when a startup task needs a pack shader that has no module yet, the task builds it itself on a worker (the same as for sibling recipes). The render thread puts it into the shader table when it collects the task. The Vulkan pipeline library thread now also gets modules through the same shader tasks, and no longer builds all modules synchronously at startup.
+- When drawing hits a startup task that is still queued or being built, it follows the P3/P4 rules (queued ones are built by the draw, a same-kind pipeline being built is waited for, and fast-link is used when there is a pipeline library). The same pipeline is never built twice. When a scene starts loading, its startup tasks still queued (and their shader tasks) move to the scene queue.
+- The render thread now reads results by looking only at newly completed tasks (workers put completed tasks into a list). It no longer walks the whole task table every frame, or on every miss. The startup set has over two thousand entries. The old walk would have become a fixed cost on every miss.
+- Progress: the render thread publishes the completed count and total each frame. A semi-transparent thin bar is drawn at the bottom of the game picture (its width equals the output width, its height is 1/360 of the output height, at least 2 pixels). After completion, it stays for 0.3 seconds, then fades out over 0.7 seconds. Host menus such as the settings menu and debug menu use the CPU picture, and this bar is not drawn on them. It is not shown when there are no recipes to build. There is no UI-separated frame generation path (the log shows `ui=unavailable`). The progress bar, like the title menu prompt, goes through frame interpolation.
+- Logs: at the start, one line `renderer: pipeline preparation: background, …` (counts, number of modules needed, number of workers). At the end, one line `renderer: pipeline preparation: background done, …` (built by workers, built by drawing, failures, time taken, and seconds since startup). `tools/pipeline_misses.py` lists both lines. The driver cache is written once asynchronously at the end.
+- `LO_PIPELINE_PREPARE_SYNC=1` restores the original synchronous pre-building (preparation screen, building library modules synchronously). `--prepare-shaders-only` also uses the synchronous path. `skip_shader_prebuild` and `LO_NO_PIPELINE_PREPARE` still skip pre-building as before. The Vulkan pipeline library thread was already in the background and still runs as before.
+- Still on the startup path: shader preparation when there is no shader pack (startup bundle, compilation), and reading the driver cache file. Both must finish before the first pipeline.
 
-**未测：** 本机不跑游戏；尚无任何平台的运行数据。
+**Not measured:** the game is not run on this machine. There is no run data on any platform yet.
