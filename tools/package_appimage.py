@@ -195,7 +195,9 @@ def main():
         # forwarding option. Override ambient values instead of trusting them.
         image_env = dict(os.environ, LDAI_RUNTIME_FILE=str(runtime_file))
         runtime_licenses = runtime_file.parent / "licenses"
-        license_destination = appdir / "usr/share/licenses/lost-odyssey-recomp/AppImage-runtime"
+        # The runtime itself wraps SquashFS outside usr. Keep its notices and
+        # relink materials outside usr too: Flatpak reuses usr, not this wrapper.
+        license_destination = appdir / "AppImage-runtime"
         shutil.copytree(runtime_licenses, license_destination)
         for filename in ("runtime-relink.tar.gz", "build-packages.txt", "runtime.sha256", "patch.sha256"):
             shutil.copy2(runtime_file.parent / filename, license_destination / filename)

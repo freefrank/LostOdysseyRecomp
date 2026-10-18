@@ -123,6 +123,8 @@ class PackageAppImageTests(unittest.TestCase):
             self.assertEqual(len(calls), 2)
             self.assertEqual((destination / 'usr/bin/LostOdysseyRecomp').read_bytes(), b'mock-runtime')
             self.assertEqual((destination / 'usr/lib/libcurl.so.4').read_bytes(), b'linuxdeploy dependency')
+            self.assertEqual((destination / 'AppImage-runtime/runtime-relink.tar.gz').read_bytes(), b'fixture')
+            self.assertFalse((destination / 'usr/share/licenses/lost-odyssey-recomp/AppImage-runtime').exists())
             self.assertTrue((destination / 'usr/share/metainfo/io.github.freefrank.LostOdysseyRecomp.metainfo.xml').is_file())
             self.assertEqual((destination / 'usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt').read_bytes(),
                              (ROOT / 'thirdparty/licenses/XeGTAO.txt').read_bytes())

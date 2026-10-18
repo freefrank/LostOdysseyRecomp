@@ -34,7 +34,8 @@ process cleanup.
 
 The package includes the runtime and dependency license notices plus
 `runtime-relink.tar.gz` under
-`usr/share/licenses/lost-odyssey-recomp/AppImage-runtime/`. The archive contains
+`AppImage-runtime/` at the AppDir root, outside the `usr` tree reused by
+Flatpak. The archive contains
 the patched runtime source, the original libfuse source archive, upstream
 libfuse patch, relinkable runtime object, static dependency libraries and
 `relink.sh`. This supplies the LGPL libfuse replacement/relink path. Rebuild
