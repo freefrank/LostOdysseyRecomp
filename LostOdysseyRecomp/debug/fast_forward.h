@@ -13,16 +13,12 @@ namespace debug_menu::fast_forward {
 inline constexpr unsigned Rates[] = {2, 3, 4, 6, 8};
 inline constexpr uint64_t InputLeaseNs = 250000000;
 enum class Mode { Hold, Toggle };
-enum class Button { LT, RT, LB, RB, L3, R3 };
-struct Buttons { uint8_t lt = 0, rt = 0, lb = 0, rb = 0, l3 = 0, r3 = 0; };
+enum class Button { LT = 0, LB = 1 };
+struct Buttons { uint8_t lt = 0, rt = 0, lb = 0, rb = 0; };
 struct ButtonInput { uint8_t button, pair; };
 inline ButtonInput SelectButton(Button button, const Buttons& buttons) {
     switch (button) {
-    case Button::RT: return {buttons.rt, buttons.lt};
     case Button::LB: return {buttons.lb, buttons.rb};
-    case Button::RB: return {buttons.rb, buttons.lb};
-    case Button::L3: return {buttons.l3, 0};
-    case Button::R3: return {buttons.r3, 0};
     default: return {buttons.lt, buttons.rt};
     }
 }
@@ -66,7 +62,7 @@ struct Control {
     void Enable(bool value, uint64_t now) { Stop(now); enabled = value; }
     void SetMode(Mode value, uint64_t now) { Stop(now); mode = value; }
     void SetButton(Button value, uint64_t now) {
-        Stop(now); button = value >= Button::LT && value <= Button::R3 ? value : Button::LT;
+        Stop(now); button = value >= Button::LT && value <= Button::LB ? value : Button::LT;
     }
     void SetRate(unsigned value, uint64_t now) {
         if (std::find(std::begin(Rates), std::end(Rates), value) == std::end(Rates)) return;

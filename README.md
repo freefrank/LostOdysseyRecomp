@@ -161,7 +161,7 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 **Menu animations** sets camp menu opening, closing and submenu transitions to **Normal (1×)**, **Fast (2×)** or **Faster (4×)**. The choice is saved; **Normal** is the default. Gameplay and audio keep their usual speed.
 
-**Fast-forward** runs at 2×–8× while you hold the selected button (**Hold**) or after you press it (**Toggle**). Set it in **Cheats** → **Fast-forward button** (next to **Speed mode**); LT is the default, with RT, LB, RB, L3 and R3 also available. Holding the selected button's pair (LT↔RT or LB↔RB) blocks fast-forward; L3 and R3 have no pair. **Fast-forward audio** defaults to **Keep pitch**; choose **Speed up** to raise the pitch with the speed. The choices are saved.
+**Fast-forward** runs at 2×–8× while you hold the selected button (**Hold**) or after you press it (**Toggle**). Set it in **Cheats** → **Fast-forward button** (next to **Speed mode**); choose LT (default) or LB. With LT selected, holding RT at the same time blocks fast-forward; with LB selected, RB does. **Fast-forward audio** defaults to **Keep pitch**; choose **Speed up** to raise the pitch with the speed. The choices are saved.
 
 **Encounter rate** offers **Normal**, **Half**, **None** and **Every step**. Half skips every other random encounter; Every step starts a battle on each step in areas with random encounters. Story battles and bosses are unaffected. Every step is a temporary testing aid: restarting restores your last Normal/Half/None choice. **Battle EXP ×2** is a separate, saved switch for experience earned from won battles.
 

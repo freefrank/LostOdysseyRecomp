@@ -128,8 +128,6 @@ void PollHostControls() {
             buttons.rt = std::max(buttons.rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
             buttons.lb = std::max(buttons.lb, button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
             buttons.rb = std::max(buttons.rb, button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
-            buttons.l3 = std::max(buttons.l3, button(SDL_GAMEPAD_BUTTON_LEFT_STICK));
-            buttons.r3 = std::max(buttons.r3, button(SDL_GAMEPAD_BUTTON_RIGHT_STICK));
         }
         SDL_free(ids);
     }
@@ -142,8 +140,6 @@ void PollHostControls() {
         buttons.rt = std::max(buttons.rt, touch.rightTrigger);
         buttons.lb = std::max(buttons.lb, button(XAMINPUT_GAMEPAD_LEFT_SHOULDER));
         buttons.rb = std::max(buttons.rb, button(XAMINPUT_GAMEPAD_RIGHT_SHOULDER));
-        buttons.l3 = std::max(buttons.l3, button(XAMINPUT_GAMEPAD_LEFT_THUMB));
-        buttons.r3 = std::max(buttons.r3, button(XAMINPUT_GAMEPAD_RIGHT_THUMB));
         connected = true;
     }
 #endif

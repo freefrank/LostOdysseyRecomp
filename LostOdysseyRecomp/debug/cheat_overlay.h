@@ -20,7 +20,7 @@ inline constexpr const wchar_t* Categories[][2] = {
 inline constexpr unsigned Quantities[] = {1,10,50,99};
 inline constexpr int QuickToolRowHeight = 22;
 inline constexpr const wchar_t* FastForwardButtonLabel[] = {L"Fast-forward button",L"变速按键"};
-inline constexpr const wchar_t* FastForwardButtonValues[] = {L"LT",L"RT",L"LB",L"RB",L"L3",L"R3"};
+inline constexpr const wchar_t* FastForwardButtonValues[] = {L"LT",L"LB"};
 inline constexpr const wchar_t* FastForwardAudioLabel[] = {L"Fast-forward audio",L"变速音频"};
 inline constexpr const wchar_t* FastForwardAudioValues[][2] = {
     {L"Keep pitch",L"保持音调"}, {L"Speed up",L"随速度升调"}};
@@ -238,8 +238,8 @@ inline const wchar_t* ResultText(cheats::Result result,bool zh) {
 }
 inline const wchar_t* QuickToolHelp(unsigned row,bool zh) {
     if(row==3) return zh
-        ? L"配对按键：LT/RT、LB/RB；同时按住所选按键及其配对键时不加速。L3、R3 无配对。"
-        : L"Pairs: LT/RT, LB/RB. Holding both blocks boost. L3 and R3 have no pair.";
+        ? L"配对按键：LT/RT、LB/RB；同时按住所选按键及其配对键时不加速。"
+        : L"Pairs: LT/RT, LB/RB. Holding both blocks boost.";
     if(row==5) return FastForwardAudioHelp[zh];
     if(row==6) return zh
         ? L"仅影响步行遇敌；减半交替跳过成功判定，一步一遇敌不保存。剧情与首领战不受影响。"

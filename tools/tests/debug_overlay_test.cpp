@@ -289,6 +289,10 @@ int main(int argc, char** argv)
     for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("fast-forward-button-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // LB
+    renderFrame();
+    capture("fast-forward-button-zh-playstation-lb.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Left); // Restore LT
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
@@ -319,6 +323,10 @@ int main(int argc, char** argv)
     for (int i = 0; i < 3; ++i) debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("fast-forward-button-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // LB
+    renderFrame();
+    capture("fast-forward-button-en-lb.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Left); // Restore LT
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();

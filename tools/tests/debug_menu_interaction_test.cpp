@@ -467,6 +467,10 @@ int main()
             Require(rasterizer.MeasureWString(debug_menu::cheat_overlay::MenuAnimationValue(rate, zh)) <= 350,
                 "Menu animations value exceeds the Cheats value column");
     }
+    Require(std::size(debug_menu::cheat_overlay::FastForwardButtonValues) == 2 &&
+            std::wstring(debug_menu::cheat_overlay::FastForwardButtonValues[0]) == L"LT" &&
+            std::wstring(debug_menu::cheat_overlay::FastForwardButtonValues[1]) == L"LB",
+        "Fast-forward button menu offers only LT and LB in persisted order");
     const debug_menu::cheat_overlay::Model quickTools;
     Require(quickTools.Rows() == 13 &&
             (int(quickTools.Rows()) - 1) * debug_menu::cheat_overlay::QuickToolRowHeight + 23 <= 296,
@@ -480,26 +484,23 @@ int main()
     using debug_menu::fast_forward::Button;
     Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0,
         "Fast-forward binding should initially be LT");
-    for (uint32_t button = 1; button <= 5; ++button)
-    {
-        debug_menu::HandleInput(button == 1 ? debug_menu::InputAction::Confirm : debug_menu::InputAction::Right);
-        Require(uint32_t(debug_menu::fast_forward::GetStatus().button) == button && g_mock.fastForwardButton == button,
-            "Confirm and Right cycle and persist every fast-forward binding in order");
-    }
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LB && g_mock.fastForwardButton == 1,
+        "Confirm selects and persists LB");
     debug_menu::HandleInput(debug_menu::InputAction::Right);
     Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0,
-        "Right wraps the fast-forward binding from R3 to LT");
+        "Right wraps the fast-forward binding from LB to LT");
     debug_menu::HandleInput(debug_menu::InputAction::Left);
-    Require(debug_menu::fast_forward::GetStatus().button == Button::R3 && g_mock.fastForwardButton == 5,
-        "Left wraps the fast-forward binding from LT to R3");
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LB && g_mock.fastForwardButton == 1,
+        "Left wraps the fast-forward binding from LT to LB");
     g_mock.saveFastForwardSuccess = false;
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
-    Require(debug_menu::fast_forward::GetStatus().button == Button::R3 && g_mock.fastForwardButton == 5,
+    Require(debug_menu::fast_forward::GetStatus().button == Button::LB && g_mock.fastForwardButton == 1,
         "Failed binding save preserves the live and persisted choice");
     g_mock.saveFastForwardSuccess = true;
     debug_menu::HandleInput(debug_menu::InputAction::Confirm);
     Require(debug_menu::fast_forward::GetStatus().button == Button::LT && g_mock.fastForwardButton == 0 &&
-            g_mock.fastForwardSaveCalls == 9,
+            g_mock.fastForwardSaveCalls == 5,
         "Successful binding changes and failed saves make exactly one persistence attempt each");
     Require(!debug_menu::fast_forward::GetStatus().enabled, "Changing the button must not enable fast-forward");
     const auto buttonSaveCalls = g_mock.fastForwardSaveCalls;

@@ -101,7 +101,7 @@ Config Validate(Config value)
     if (value.debugLanguage > 1) value.debugLanguage = 0;
     if (value.fastForwardMode > 1) value.fastForwardMode = 0;
     namespace ff = debug_menu::fast_forward;
-    if (value.fastForwardButton > uint32_t(ff::Button::R3)) value.fastForwardButton = 0;
+    if (value.fastForwardButton > uint32_t(ff::Button::LB)) value.fastForwardButton = 0;
     if (std::find(std::begin(ff::Rates), std::end(ff::Rates), value.fastForwardRate) == std::end(ff::Rates))
         value.fastForwardRate = 2;
     if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
