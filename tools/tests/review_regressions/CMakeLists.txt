@@ -160,6 +160,7 @@ endforeach()
 
 # Steam shortcuts and discovery run entirely in temporary fixture trees.
 add_subdirectory("${LO_TESTS}/steam_shortcut" "${CMAKE_CURRENT_BINARY_DIR}/steam_shortcut")
+add_subdirectory("${LO_TESTS}/steam_artwork" "${CMAKE_CURRENT_BINARY_DIR}/steam_artwork")
 
 # Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
 add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")

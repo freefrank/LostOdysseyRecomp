@@ -47,6 +47,7 @@ PREAMBLE = r'''
 #endif
 #define LO_GPU_PLUME 1
 #define LOG_INFO(...) ((void)0)
+#define LOG_NOTICE(...) ((void)0)
 #define LOG_WARNING(...) ((void)0)
 struct Reg { union { uint64_t u64=0; uint32_t u32; }; };
 struct PPCContext { Reg r3,r4; uint64_t lr=0, cookie=1234; };
@@ -77,7 +78,7 @@ void SetEnabled(bool value){++changes;enabled=value;}
 }
 namespace steam_shortcut {
 unsigned calls=0; Status nextStatus=Status::Added;
-Result AddToSteam(){++calls;return {nextStatus,{}};}
+Result AddToSteam(const std::filesystem::path &){++calls;return {nextStatus,{}};}
 }
 // System -> Shader bundle records nothing here.
 namespace updater::shader_pack { bool RequestRedownload(){return true;} }

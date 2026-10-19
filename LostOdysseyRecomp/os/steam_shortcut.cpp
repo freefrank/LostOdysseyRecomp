@@ -1,4 +1,5 @@
 #include "steam_shortcut.h"
+#include "steam_artwork.h"
 #include <os/platform.h>
 #include <os/user_paths.h>
 
@@ -516,37 +517,36 @@ Result AddToSteam(const Options& options)
         // Read every asset and validate the VDF before creating a backup or
         // touching any existing art. The icon lives in Steam's host-visible
         // grid directory, never in an AppImage mount or /app sandbox path.
-        const std::array<std::pair<const char*, std::string>, 5> art{{
-            {"portrait.png", std::to_string(appId) + "p.png"}, {"header.png", std::to_string(appId) + ".png"},
-            {"hero.png", std::to_string(appId) + "_hero.png"}, {"logo.png", std::to_string(appId) + "_logo.png"},
-            {"icon.png", std::to_string(appId) + "_icon.png"}}};
-        std::array<std::vector<uint8_t>, 5> images;
-        for (size_t i = 0; i < art.size(); ++i) images[i] = ReadFile(options.artworkDirectory / art[i].first);
+        const std::array<std::string, 5> art{
+            std::to_string(appId) + "p.png", std::to_string(appId) + ".png", std::to_string(appId) + "_hero.png",
+            std::to_string(appId) + "_logo.png", std::to_string(appId) + "_icon.png"};
+        const auto artwork = steam_artwork::Generate(options.gameRoot, options.artworkDirectory);
         if (running()) return {Status::SteamRunning, {}};
         fs::create_directories(grid);
         // A new Steam profile gets a valid empty-file backup; existing files
         // are copied byte for byte, even when their key casing is unusual.
         const auto backup = existing ? original : SerializeVdf(emptyDocument);
         AtomicWrite(config / "shortcuts.vdf.bak", backup);
-        for (size_t i = 0; i < art.size(); ++i) AtomicWrite(grid / art[i].second, images[i]);
+        for (size_t i = 0; i < art.size(); ++i) AtomicWrite(grid / art[i], artwork.pngs[i]);
         if (running()) return {Status::SteamRunning, {}};
         // Avoid overwriting another writer's changes made while art was copied.
         if (fs::exists(shortcutsPath) != existing || (existing && ReadFile(shortcutsPath) != original))
             throw std::runtime_error("shortcuts.vdf changed while adding the game; try again with Steam closed");
         AtomicWrite(shortcutsPath, updated);
-        return {options.environment.flatpak ? Status::AddedFromFlatpak : Status::Added, {}};
+        return {options.environment.flatpak ? Status::AddedFromFlatpak : Status::Added, artwork.source};
     } catch (const std::exception& exception) {
         return {Status::Error, exception.what()};
     }
 }
 
-Result AddToSteam()
+Result AddToSteam(const fs::path &gameRoot)
 {
 #if LO_PLATFORM_ANDROID
     return {Status::Error, "Add to Steam is unavailable on Android"};
 #else
     try {
         Options options;
+        options.gameRoot = gameRoot;
 #if LO_PLATFORM_WINDOWS
         options.environment.platform = Platform::Windows;
         options.environment.windowsSteamRoot = RegistrySteamPath();

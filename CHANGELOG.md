@@ -8,11 +8,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Settings → System → Add to Steam adds the game to your Steam library with artwork on Windows and Linux, including AppImage and Flatpak.
+- Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 
 ### 简体中文
 
-- Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”，把游戏及库封面加入 Steam。
+- Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 
 ## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19
 

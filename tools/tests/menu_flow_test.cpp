@@ -36,7 +36,7 @@ void SetEnabled(bool enabled) { ++menuFlowChanges; menuFlowEnabled = enabled; }
 namespace steam_shortcut {
 unsigned menuFlowAdds = 0;
 Status menuFlowStatus = Status::Added;
-Result AddToSteam() { ++menuFlowAdds; return {menuFlowStatus, {}}; }
+Result AddToSteam(const std::filesystem::path &) { ++menuFlowAdds; return {menuFlowStatus, {}}; }
 }
 namespace settings {
 Config MenuFlowGetConfig();

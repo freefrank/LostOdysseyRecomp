@@ -3,6 +3,7 @@ project(LoSteamShortcutTests LANGUAGES CXX)
 enable_testing()
 get_filename_component(LO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 add_executable(LoSteamShortcutTest "${LO_ROOT}/tools/tests/steam_shortcut_test.cpp"
+    "${LO_ROOT}/tools/tests/steam_shortcut_artwork_stub.cpp"
     "${LO_ROOT}/LostOdysseyRecomp/os/steam_shortcut.cpp")
 target_include_directories(LoSteamShortcutTest PRIVATE "${LO_ROOT}/LostOdysseyRecomp")
 target_compile_features(LoSteamShortcutTest PRIVATE cxx_std_20)

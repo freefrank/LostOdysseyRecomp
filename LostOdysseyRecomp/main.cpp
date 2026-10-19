@@ -328,11 +328,12 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
-    // This host-only command needs assets, but no game data, SDL window or GPU.
+    // This host-only command reads original artwork from available game data,
+    // then exits without an SDL window or GPU (bundled art remains a fallback).
     for (int i = 1; i < argc; ++i)
         if (strcmp(argv[i], "--add-to-steam") == 0)
         {
-            const auto result = steam_shortcut::AddToSteam();
+            const auto result = steam_shortcut::AddToSteam(FindGameRoot(executableDirectory, explicitGamePath).root);
             const char* message = nullptr;
             switch (result.status)
             {

@@ -3923,9 +3923,13 @@ PPC_FUNC(sub_822F19B0)
     }
     if ((input & 0x1000) && tab == 3 && row == SystemAddToSteamRow && !SystemRowHidden(row))
     {
-        const auto result = steam_shortcut::AddToSteam();
+        const auto result = steam_shortcut::AddToSteam(FileSystem::GetGameRoot());
         status = SteamShortcutMessage(result.status);
-        if (!result.detail.empty()) LOG_WARNING("Add to Steam: {}", result.detail);
+        if (!result.detail.empty())
+        {
+            if (result.ok()) LOG_NOTICE("Add to Steam: {}", result.detail);
+            else LOG_WARNING("Add to Steam: {}", result.detail);
+        }
     }
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
     {

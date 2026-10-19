@@ -42,6 +42,7 @@ struct Options
 {
     Environment environment;
     std::filesystem::path artworkDirectory;
+    std::filesystem::path gameRoot;
     // Optional fixture injection. An empty callback uses the platform's PID
     // liveness check; Flatpak always skips host PID checks.
     std::function<bool(const SteamRoot&)> steamRunning;
@@ -52,7 +53,7 @@ LaunchTarget BuildLaunchTarget(const Environment& environment, bool flatpakSteam
 std::vector<SteamRoot> DiscoverSteamRoots(const Environment& environment);
 std::optional<std::filesystem::path> DiscoverUser(const SteamRoot& root);
 Result AddToSteam(const Options& options);
-Result AddToSteam();
+Result AddToSteam(const std::filesystem::path &gameRoot = {});
 
 // Binary KeyValues retain ordered keys, duplicate keys, and uninterpreted
 // scalar bytes so another game's fields round-trip without coercion.
