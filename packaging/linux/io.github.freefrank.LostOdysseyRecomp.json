@@ -12,6 +12,8 @@
     "--socket=pulseaudio",
     "--device=all",
     "--filesystem=host",
+    "--filesystem=~/.local/share/Steam",
+    "--filesystem=~/.var/app/com.valvesoftware.Steam",
     "--filesystem=/media",
     "--filesystem=/run/media",
     "--filesystem=/mnt",

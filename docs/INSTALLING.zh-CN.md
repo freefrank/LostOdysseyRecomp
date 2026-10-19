@@ -13,6 +13,7 @@
 - [Linux 安装包](#running-on-linux)
   - [AppImage](#appimage)
   - [Flatpak](#flatpak)
+  - [Steam Deck](#steam-deck)
 - [macOS（Apple Silicon）](#macos)
 - [Android](#android)
 - [首次设置和普通设置](#首次设置和普通设置)
@@ -151,6 +152,22 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 导入器可以读取电脑上任意位置的 dump，包括 `/media`、`/run/media` 和 `/mnt`。更新时下载新的 bundle，按同样方法安装。
 
+### Steam Deck
+
+1. 切换到 **桌面模式（Desktop Mode）**，按上文安装 AppImage 或 Flatpak。
+2. 完全关闭 Steam。
+3. 打开 Lost Odyssey Recomp。
+4. 选择 **设置 → 系统 → 添加到 Steam**，等待成功提示。
+5. 退出游戏，返回 **游戏模式（Game Mode）**，在 Steam 库的 **非 Steam 游戏** 中找到 Lost Odyssey Recomp。
+
+快捷方式包含库封面。移动 AppImage 后，请从新位置打开游戏并重新添加。
+
+如果 Steam 和游戏都通过 Flatpak 安装，使用快捷方式前需执行一次以下命令，允许 Steam 启动游戏：
+
+```bash
+flatpak override --user --talk-name=org.freedesktop.Flatpak com.valvesoftware.Steam
+```
+
 <a id="macos"></a>
 
 ## macOS（Apple Silicon）
@@ -270,6 +287,7 @@ Xenia 的存档格式相同，不需要转换。
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏：包含 `default.xex` 或 `disc1/` 的文件夹，或 `default.xex` 文件。跳过导入器；找不到 `default.xex` 时报错退出。 |
 | `--install` | 即使已经设置好游戏也打开导入器，完成后退出。 |
+| `--add-to-steam` | 把游戏及库封面加入 Steam，然后返回状态码并退出。请先关闭 Steam；移动游戏后需重新添加。 |
 | `--setup` | 打开设置页面，然后进入游戏（Windows；其他平台只会保存当前设置）。 |
 | `--setup-only` | 同 `--setup`，完成后退出。 |
 | `--prepare-shaders-only` | 预先准备全部着色器，然后不启动游戏直接退出。 |

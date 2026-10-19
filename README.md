@@ -56,6 +56,8 @@ Download the package for your platform from the [latest release](https://github.
 | macOS arm64 | `LostOdysseyRecomp-macos-arm64-<version>.dmg` | Drag `LostOdysseyRecomp.app` to Applications. Needs an Apple Silicon Mac with macOS 15 or later. |
 | Android arm64 | `LostOdysseyRecomp-android-arm64-<version>.apk` | Install the APK and open it once. Needs a 64-bit Android 8.0+ device with Vulkan. |
 
+On Steam Deck, use **Settings → System → Add to Steam** with either Linux package to add the game and its library artwork ([steps](docs/INSTALLING.md#steam-deck)).
+
 1. **Import your game data.** The importer opens when no game is found. Select an extracted game folder, `default.xex`, an ISO or GOD data.
 2. **Get the shaders.** On the first start the game offers precompiled shaders for your renderer; if you skip, it compiles them once.
 3. **Add the other discs and DLC** in Settings → **System → Import discs & DLC**. With all four discs imported, the game changes discs on its own.
@@ -209,6 +211,7 @@ More detail is in [file locations](docs/INSTALLING.md#file-locations).
 | :--- | :--- |
 | `--game <path>` | Use this game folder (with `default.xex` or `disc1/`) or `default.xex` file, skipping the importer. |
 | `--install` | Open the importer even when a game is already set up. |
+| `--add-to-steam` | Add the game to Steam with library artwork, then exit with a status code. Close Steam first; add it again if you move the game. |
 | `--setup` | Windows: open the setup page, then start the game. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |
 

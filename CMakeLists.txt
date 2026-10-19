@@ -142,6 +142,11 @@ endif()
 
 # No private game data, generated PPC library, GPU or third-party dependency.
 option(LO_BUILD_MOD_TESTS "Build standalone mod API and image contract tests" OFF)
+option(LO_BUILD_STEAM_TESTS "Build standalone Steam shortcut tests" OFF)
+if(LO_BUILD_STEAM_TESTS)
+    enable_testing()
+    add_subdirectory(tools/tests/steam_shortcut)
+endif()
 if(LO_BUILD_MOD_TESTS)
     enable_testing()
     find_package(Threads REQUIRED)
@@ -221,4 +226,7 @@ if(UNIX AND NOT ANDROID AND LO_BUILD_RUNTIME)
     install(FILES
         packaging/linux/io.github.freefrank.LostOdysseyRecomp.metainfo.xml
         DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+    install(DIRECTORY assets/steam
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/lost-odyssey-recomp
+        FILES_MATCHING PATTERN "*.png")
 endif()

@@ -807,7 +807,7 @@ int main(int argc, char **argv)
         std::puts("DLSS 5 neural rendering page: transparent preview, no-scene panel, opaque controls in en/zh-Hant/zh-Hans");
     }
 
-    // System alone uses compact rows: its last action and opening cascade fit,
+    // System alone uses compact rows and scrolls its last action into view,
     // while Graphics and list pages retain their established viewport.
     {
         Require(settings::VisibleRowCount(3) == 12 && settings::MenuRowHeight(3) == 39 &&
@@ -817,12 +817,13 @@ int main(int argc, char **argv)
         settings::MenuSnapshot system;
         system.tab = 3;
         system.row = settings::SystemSaveRow;
+        system.scroll = settings::SystemRowCount - settings::VisibleRowCount(3);
         for (int i = 0; i < settings::SystemRowCount; ++i)
             system.rows.push_back({L"Option " + std::to_wstring(i), L"On", true, {L"On", L"Off"}, 0});
         settings::MenuArrow lastArrow;
         Require(settings::RasterizeMenu(system, 1280, 720, pixels, &lastArrow) && lastArrow.visible &&
-                lastArrow.y == 150 + settings::SystemSaveRow * 39 + 10,
-                "System renders the twelfth row without scrolling");
+                lastArrow.y == 150 + (settings::SystemSaveRow - system.scroll) * 39 + 10,
+                "System renders its last row after scrolling");
         const auto systemCascade = settings::MenuOpenCascade(1280, 720, 3);
         Require(systemCascade.bands.size() == 12 && systemCascade.bands.back().second == 618 &&
                 settings::MenuOpenCascade(1280, 720, 2).bands.size() == 11 &&

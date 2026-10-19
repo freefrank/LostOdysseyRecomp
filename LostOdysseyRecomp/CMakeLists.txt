@@ -165,6 +165,10 @@ if(ANDROID)
 else()
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
     lo_stage_portable_shader_pack(LostOdysseyRecomp)
+    add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets/steam" "$<TARGET_FILE_DIR:LostOdysseyRecomp>/assets/steam"
+        COMMENT "Staging Steam library artwork" VERBATIM)
 endif()
 set(LO_BUILD_REVISION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/lo_build_revision.h")
 add_custom_target(LoBuildRevision
@@ -282,7 +286,7 @@ endif()
 
 if(NOT ANDROID)
 if(WIN32)
-    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore bcrypt winhttp ole32 shell32)
+    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore bcrypt winhttp ole32 shell32 advapi32)
 
     lo_add_header_test(LoUpdaterApplyArgumentsTest ${CMAKE_SOURCE_DIR}/tools/tests/updater_apply_arguments_test.cpp)
     target_link_libraries(LoUpdaterApplyArgumentsTest PRIVATE shell32)

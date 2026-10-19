@@ -113,6 +113,10 @@ def main():
         package.mkdir()
         shutil.copy2(runtime, package / runtime.name)
         shutil.copy2(ROOT / 'docs/INSTALLING.md', package / 'README.md')
+        steam_artwork = package / 'assets/steam'
+        steam_artwork.mkdir(parents=True)
+        for filename in ('portrait.png', 'header.png', 'hero.png', 'logo.png', 'icon.png'):
+            shutil.copy2(ROOT / 'assets/steam' / filename, steam_artwork / filename)
         licenses = package / 'licenses'
         licenses.mkdir()
         fsr_license = runtime.parent / "licenses/LICENSE-FidelityFX.txt"

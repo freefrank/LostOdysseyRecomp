@@ -56,6 +56,8 @@
 | macOS arm64 | `LostOdysseyRecomp-macos-arm64-<版本>.dmg` | 把 `LostOdysseyRecomp.app` 拖到“应用程序”。需要 macOS 15 或更高版本的 Apple Silicon Mac。 |
 | Android arm64 | `LostOdysseyRecomp-android-arm64-<版本>.apk` | 安装 APK 后先打开一次。需要支持 Vulkan 的 64 位 Android 8.0 及以上设备。 |
 
+Steam Deck 上，两个 Linux 安装包都可通过 **设置 → 系统 → 添加到 Steam** 把游戏及库封面加入 Steam（[操作步骤](docs/INSTALLING.zh-CN.md#steam-deck)）。
+
 1. **导入游戏数据。** 找不到游戏时会打开导入器。选择已提取的游戏文件夹、`default.xex`、ISO 或 GOD 数据。
 2. **准备着色器。** 首次启动时游戏会询问是否下载所选渲染器的预编译着色器；选择跳过则在本机编译一次。
 3. **追加其他光盘和 DLC：** 设置中的 **System → Import discs & DLC（系统 → 导入光盘与 DLC）**。四张光盘都导入后，游戏会自动换盘。
@@ -209,6 +211,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏文件夹（含 `default.xex` 或 `disc1/`）或 `default.xex` 文件，跳过导入器。 |
 | `--install` | 即使已经设置好游戏也打开导入器。 |
+| `--add-to-steam` | 把游戏及库封面加入 Steam，然后返回状态码并退出。请先关闭 Steam；移动游戏后需重新添加。 |
 | `--setup` | Windows：打开设置页面，然后进入游戏。 |
 | `--prepare-shaders-only` | 预先准备全部着色器，然后不启动游戏直接退出。 |
 

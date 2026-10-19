@@ -8,8 +8,8 @@
 namespace settings
 {
 namespace menu_assets { struct Assets; struct Image; }
-// Rows start at y=150 and clip at y=640. System fits its host preferences and
-// actions in 12 rows at 39 pixels; other tabs and list pages use 11 at 43.
+// Rows start at y=150 and clip at y=640. System shows 12 rows at 39 pixels;
+// other tabs and list pages use 11 at 43. Longer tabs scroll in this window.
 inline constexpr int kMenuVisibleRows = 11;
 inline constexpr int kMenuSystemVisibleRows = 12;
 inline constexpr int VisibleRowCount(int tab, bool listPage = false)

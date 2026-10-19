@@ -153,10 +153,13 @@ endif()
 
 # AppImage and Flatpak packaging scripts, with linuxdeploy, flatpak and the
 # compiler, readelf and ldd checks replaced by stand-ins.
-foreach(name package_appimage package_flatpak)
+foreach(name package_appimage package_flatpak package_release)
     add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}" -B "${LO_TESTS}/${name}_test.py")
     set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endforeach()
+
+# Steam shortcuts and discovery run entirely in temporary fixture trees.
+add_subdirectory("${LO_TESTS}/steam_shortcut" "${CMAKE_CURRENT_BINARY_DIR}/steam_shortcut")
 
 # Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
 add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")

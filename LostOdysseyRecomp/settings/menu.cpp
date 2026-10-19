@@ -1,4 +1,5 @@
 #include <os/log_collection.h>
+#include <os/steam_shortcut.h>
 #include "menu.h"
 #include "menu_render.h"
 #include "menu_assets.h"
@@ -392,6 +393,26 @@ inline uint32_t FindNearestResolutionIndex(const uint32_t list[][2], size_t coun
 const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
+}
+const wchar_t *SteamShortcutMessage(steam_shortcut::Status result)
+{
+    switch (result)
+    {
+    case steam_shortcut::Status::Added:
+        return Tr(L"Added to Steam. Restart Steam to see it.", L"已加入 Steam。請重新啟動 Steam 以查看。");
+    case steam_shortcut::Status::AddedFromFlatpak:
+        return Tr(L"Restart Steam to see it; if Steam was open, close it and add again.",
+                  L"請重新啟動 Steam 以查看；若 Steam 當時開啟，請關閉後再次加入。");
+    case steam_shortcut::Status::SteamRunning:
+        return Tr(L"Close Steam, then try again.", L"請關閉 Steam 後再試。");
+    case steam_shortcut::Status::SteamNotFound:
+        return Tr(L"Steam was not found. Install and open Steam first.", L"找不到 Steam。請先安裝並開啟 Steam。");
+    case steam_shortcut::Status::UserNotFound:
+        return Tr(L"No Steam user found. Sign in to Steam, close it, then try again.",
+                  L"找不到 Steam 使用者。請登入 Steam，關閉後再試。");
+    default:
+        return Tr(L"Could not add to Steam. Check the log for details.", L"無法加入 Steam。詳情請查看日誌。");
+    }
 }
 // Adapter and display names arrive as UTF-8.
 std::wstring Widen(std::string_view text)
@@ -1125,7 +1146,7 @@ std::wstring DlssNotice()
 bool SystemRowHidden(int r)
 {
 #if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
-    return r == SystemDiscordStatusRow;
+    return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
 #else
     return false;
 #endif
@@ -1210,8 +1231,8 @@ std::wstring FgNotice()
     return text;
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
-// Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
-static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuSystemVisibleRows);
+// Gameplay and Audio fit their visible rows; Graphics and System can scroll.
+static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows);
 // Moves graphics focus off a hidden row to the next visible one.
 void SkipHiddenGraphicsRow()
 {
@@ -1624,6 +1645,8 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
         next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
+        addAction(L"Add to Steam", L"加入 Steam", Tr(L"Add", L"加入"));
+        next.rows.back().hidden = SystemRowHidden(SystemAddToSteamRow);
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
@@ -1677,6 +1700,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 3 && row == SystemAddToSteamRow && status.empty())
+        next.help = Tr(L"Adds the game to your Steam library with artwork. Close Steam first. Add it again if you move the game.",
+                       L"將遊戲與圖片加入 Steam 收藏庫。請先關閉 Steam。移動遊戲後請再次加入。");
     if (tab == 3 && row == SystemShaderBundleRow)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
@@ -3894,6 +3920,12 @@ PPC_FUNC(sub_822F19B0)
         importChoice = 1;
 #endif
         status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemAddToSteamRow && !SystemRowHidden(row))
+    {
+        const auto result = steam_shortcut::AddToSteam();
+        status = SteamShortcutMessage(result.status);
+        if (!result.detail.empty()) LOG_WARNING("Add to Steam: {}", result.detail);
     }
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
     {

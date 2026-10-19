@@ -3,6 +3,7 @@
 #include <stdafx.h>
 #include <gpu/video.h>
 #include <settings/config.h>
+#include <os/steam_shortcut.h>
 #define SDL_MAIN_HANDLED // This host fixture supplies its own main and does not initialize SDL.
 #include <SDL3/SDL.h>
 #include <fstream>
@@ -30,6 +31,12 @@ namespace discord_rpc {
 unsigned menuFlowChanges = 0;
 bool menuFlowEnabled = true;
 void SetEnabled(bool enabled) { ++menuFlowChanges; menuFlowEnabled = enabled; }
+}
+// The Steam action records a result; menu fixtures never access a Steam install.
+namespace steam_shortcut {
+unsigned menuFlowAdds = 0;
+Status menuFlowStatus = Status::Added;
+Result AddToSteam() { ++menuFlowAdds; return {menuFlowStatus, {}}; }
 }
 namespace settings {
 Config MenuFlowGetConfig();
@@ -1460,6 +1467,16 @@ void CheckHelpFit(uint8_t* base, const char* installRoot)
             if (language == 0) english[where] = line;
             else audit.CompareWithEnglish(english[where], line, language, where);
         }
+        for (const auto result : {steam_shortcut::Status::Added, steam_shortcut::Status::AddedFromFlatpak,
+                                  steam_shortcut::Status::SteamRunning, steam_shortcut::Status::SteamNotFound,
+                                  steam_shortcut::Status::UserNotFound, steam_shortcut::Status::Error})
+        {
+            const auto where = "Steam result " + std::to_string(int(result));
+            const std::wstring line = settings::SteamShortcutMessage(result);
+            audit.MeasureBox(language, line, L"", where);
+            if (language == 0) english[where] = line;
+            else audit.CompareWithEnglish(english[where], line, language, where);
+        }
         settings::tab = 2;
         for (const auto& state : graphics)
             for (int row = 0; row < int(GraphicsRow::Count); ++row)
@@ -2261,16 +2278,16 @@ int main(int argc, char** argv)
             settings::row = 0;
             settings::pending = 0x10; Tick(base);
             Require(settings::row == settings::SystemSaveRow && settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
-                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" && settings::snapshot.scroll == 0,
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" && settings::snapshot.scroll == 1,
                     "Start on System tab jumps to Save settings, the last row");
 
             // PointerClick boundary tests:
-            // Valid slot 0 (y = 150) hits row 0
+            // Valid slot 0 (y = 150) hits the first scrolled row.
             settings::PointerClick(100.0f, 150.0f, false);
-            Require(settings::mouseRow.load() == 0, "click at y=150 selects visible slot 0 (row 0)");
+            Require(settings::mouseRow.load() == settings::snapshot.scroll, "click at y=150 selects the first visible row");
             settings::PointerClick(100.0f, 617.0f, false);
             Require(settings::mouseRow.load() == settings::SystemSaveRow,
-                    "System's compact twelfth row is visible and clickable without scrolling");
+                    "System's last row is visible and clickable after scrolling");
             settings::mouseRow = -1;
             settings::PointerClick(100.0f, 618.0f, false);
             Require(settings::mouseRow.load() == -1, "System ignores the gap below its compact rows");
@@ -3164,7 +3181,7 @@ int main(int argc, char** argv)
                     settings::graphics_menu::IsAction(3, settings::SystemModsRow),
                     "the Mods action follows the TAA collection row on System");
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::SystemImportRow && settings::snapshot.scroll == 0 &&
+            Require(settings::row == settings::SystemImportRow &&
                     settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
                     settings::snapshot.rows[settings::SystemImportRow].name == L"Import discs & DLC" &&
                     settings::snapshot.rows[settings::SystemImportRow].value == L"Open" &&
@@ -3229,16 +3246,72 @@ int main(int argc, char** argv)
                     "idle ticks do not create a second import request");
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
         }
-        // System → Shader bundle: cancel-first dialog, then one redownload request.
+        // System → Add to Steam uses the shared service and keeps its result
+        // visible until another action; this fixture never touches Steam files.
         {
             settings::tab = 3;
             settings::row = settings::SystemImportRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            const auto beforeAdds = steam_shortcut::menuFlowAdds;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemAddToSteamRow &&
+                    settings::snapshot.rows[settings::SystemAddToSteamRow].name == L"Add to Steam" &&
+                    settings::snapshot.rows[settings::SystemAddToSteamRow].value == L"Add" &&
+                    !settings::snapshot.rows[settings::SystemAddToSteamRow].hidden &&
+                    settings::graphics_menu::IsAction(3, settings::SystemAddToSteamRow) &&
+                    settings::snapshot.help.find(L"Close Steam first.") != std::wstring::npos,
+                    "Steam action follows Import discs & DLC and explains closing Steam");
+            settings::pending = 8; Tick(base);
+            Require(steam_shortcut::menuFlowAdds == beforeAdds, "right arrow cannot add to Steam");
+            for (const auto& [result, message] : {
+                     std::pair{steam_shortcut::Status::Added, L"Added to Steam. Restart Steam to see it."},
+                     std::pair{steam_shortcut::Status::AddedFromFlatpak, L"Restart Steam to see it; if Steam was open, close it and add again."},
+                     std::pair{steam_shortcut::Status::SteamRunning, L"Close Steam, then try again."},
+                     std::pair{steam_shortcut::Status::SteamNotFound, L"Steam was not found. Install and open Steam first."},
+                     std::pair{steam_shortcut::Status::UserNotFound, L"No Steam user found. Sign in to Steam, close it, then try again."},
+                     std::pair{steam_shortcut::Status::Error, L"Could not add to Steam. Check the log for details."}})
+            {
+                steam_shortcut::menuFlowStatus = result;
+                const auto calls = steam_shortcut::menuFlowAdds;
+                settings::pending = 0x1000; Tick(base);
+                Require(steam_shortcut::menuFlowAdds == calls + 1 && settings::snapshot.help == message,
+                        "confirm runs one Steam action and shows its result");
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.help == message, "Steam result stays visible on an idle tick");
+                for (uint32_t language = 1; language < 5; ++language)
+                {
+                    settings::edit.uiLanguage = language;
+                    Require(std::wstring(settings::SteamShortcutMessage(result)) != message,
+                            "Steam result is translated in every menu language");
+                }
+                settings::edit.uiLanguage = 0;
+            }
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"加入 Steam"}, std::pair{2u, L"Steam に追加"},
+                     std::pair{3u, L"Steam에 추가"}, std::pair{4u, L"添加到 Steam"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::status.clear();
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::SystemAddToSteamRow].name == name &&
+                        settings::snapshot.help != L"Adds the game to your Steam library with artwork. Close Steam first. Add it again if you move the game.",
+                        "Steam action and help are translated");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            std::puts("PASS Add to Steam action: shared service dispatch, messages, idle persistence and all menu languages");
+        }
+        // System → Shader bundle: cancel-first dialog, then one redownload request.
+        {
+            settings::tab = 3;
+            settings::row = settings::SystemAddToSteamRow;
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::SystemShaderBundleRow &&
                     settings::snapshot.rows[settings::SystemShaderBundleRow].name == L"Shader bundle" &&
                     settings::snapshot.rows[settings::SystemShaderBundleRow].value == L"Download again" &&
                     settings::graphics_menu::IsAction(3, settings::SystemShaderBundleRow),
-                    "the Shader bundle action follows Import discs & DLC on System");
+                    "the Shader bundle action follows Add to Steam on System");
             settings::pending = 0x1000; Tick(base);
             Require(settings::shaderBundlePrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Download again", L"Cancel"},
@@ -3280,9 +3353,9 @@ int main(int argc, char** argv)
             Require(settings::row == settings::SystemShaderPreparationRow &&
                     settings::snapshot.rows[settings::SystemShaderPreparationRow].name == L"Prepare shaders again" &&
                     settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" &&
-                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount) && settings::snapshot.scroll == 0 &&
+                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
                     settings::graphics_menu::IsAction(3, settings::SystemShaderPreparationRow),
-                    "Prepare shaders again follows Shader bundle and precedes Save without scrolling");
+                    "Prepare shaders again follows Shader bundle and precedes Save");
             settings::pending = 0x1000; Tick(base);
             Require(settings::shaderPreparationPrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Prepare again", L"Cancel"},

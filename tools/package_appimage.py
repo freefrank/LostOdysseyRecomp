@@ -174,6 +174,10 @@ def main():
         shutil.copy2(desktop, applications / desktop.name)
         shutil.copy2(icon, icons / icon.name)
         shutil.copy2(metainfo, metainfo_dir / metainfo.name)
+        steam_artwork = appdir / "usr/share/lost-odyssey-recomp/steam"
+        steam_artwork.mkdir(parents=True)
+        for filename in ("portrait.png", "header.png", "hero.png", "logo.png", "icon.png"):
+            shutil.copy2(ROOT / "assets/steam" / filename, steam_artwork / filename)
         if args.dry_layout:
             print(f"AppDir: {appdir}")
             for path in sorted(appdir.rglob("*")):

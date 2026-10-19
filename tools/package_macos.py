@@ -155,6 +155,10 @@ def main():
         resources = bundle / "Contents/Resources"
         executables.mkdir(parents=True)
         resources.mkdir(parents=True)
+        steam_art = resources / "assets/steam"
+        steam_art.mkdir(parents=True)
+        for name in ("portrait.png", "header.png", "hero.png", "logo.png", "icon.png"):
+            shutil.copy2(ROOT / "assets/steam" / name, steam_art / name)
         shutil.copy2(runtime, executables / "LostOdysseyRecomp")
         # The runtime loads DXC from @executable_path.
         shutil.copy2(dxc, executables / "libdxcompiler.dylib")

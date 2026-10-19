@@ -31,6 +31,7 @@ PREAMBLE = r'''
 #include <settings/mods_page.h>
 #include <patches/mod_hot_reload.h>
 #include <settings/achievements_page.h>
+#include <os/steam_shortcut.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_rate.h>
 #include <gpu/dlss_nr_state.h>
@@ -73,6 +74,10 @@ std::string KeyName(uint32_t scancode) { return "#" + std::to_string(scancode); 
 namespace discord_rpc {
 unsigned changes=0; bool enabled=true;
 void SetEnabled(bool value){++changes;enabled=value;}
+}
+namespace steam_shortcut {
+unsigned calls=0; Status nextStatus=Status::Added;
+Result AddToSteam(){++calls;return {nextStatus,{}};}
 }
 // System -> Shader bundle records nothing here.
 namespace updater::shader_pack { bool RequestRedownload(){return true;} }
@@ -198,6 +203,34 @@ int main(int argc, char** argv) {
     settings::row=settings::SystemUpdatesRow;tick(2);Check(settings::row==settings::SystemDebugLogRow,"navigation skips Discord without desktop IPC");
 #endif
     settings::edit=settings::savedConfig;
+    // The desktop Steam action dispatches once and preserves localized results.
+    settings::tab=3;settings::row=settings::SystemAddToSteamRow;tick();
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+    Check(!settings::snapshot.rows[settings::SystemAddToSteamRow].hidden &&
+          settings::snapshot.rows[settings::SystemAddToSteamRow].name==L"Add to Steam","Steam action appears on desktop");
+    Check(settings::MeasureHelp(settings::snapshot).help.scale>=0.85,"Steam help remains readable");
+    tick(8);Check(steam_shortcut::calls==0,"arrow cannot add to Steam");
+    for(auto result:{steam_shortcut::Status::Added,steam_shortcut::Status::AddedFromFlatpak,steam_shortcut::Status::SteamRunning,
+                     steam_shortcut::Status::SteamNotFound,steam_shortcut::Status::UserNotFound,steam_shortcut::Status::Error}){
+        steam_shortcut::nextStatus=result;auto before=steam_shortcut::calls;tick(0x1000);
+        const auto english=std::wstring(settings::SteamShortcutMessage(result));
+        Check(steam_shortcut::calls==before+1 && settings::snapshot.help==english,"Steam action shows service result");
+        tick();Check(settings::snapshot.help==english,"Steam result persists on idle");
+        for(uint32_t language=1;language<5;++language){settings::edit.uiLanguage=language;
+            Check(std::wstring(settings::SteamShortcutMessage(result))!=english,"Steam messages translated");
+            auto translated=settings::snapshot;translated.language=language;translated.help=settings::SteamShortcutMessage(result);
+            Check(settings::MeasureHelp(translated).help.scale>=0.85,"Steam result remains readable in every language");}
+        settings::edit.uiLanguage=0;
+    }
+    for(uint32_t language=1;language<5;++language){settings::edit.uiLanguage=language;settings::status.clear();tick();
+        Check(settings::snapshot.rows[settings::SystemAddToSteamRow].name!=L"Add to Steam","Steam action translated");
+        Check(settings::MeasureHelp(settings::snapshot).help.scale>=0.85,"translated Steam help remains readable");}
+    settings::edit.uiLanguage=0;settings::status.clear();
+#else
+    Check(settings::snapshot.rows[settings::SystemAddToSteamRow].hidden,"Steam action is hidden outside desktop");
+    settings::row=settings::SystemImportRow;tick(2);
+    Check(settings::row==settings::SystemShaderBundleRow && steam_shortcut::calls==0,"navigation skips unavailable Steam action");
+#endif
     // System -> Mods opens the Mods page; with no mods it says where they go, and B returns.
     settings::tab=3;settings::row=settings::SystemModsRow;tick(0x1000);
     Check(settings::modsOpen && settings::snapshot.pageTitle==L"Mods" && settings::snapshot.rows.front().name==L"No mods installed" &&

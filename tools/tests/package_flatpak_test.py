@@ -86,6 +86,9 @@ class PackageFlatpakTest(unittest.TestCase):
         self.assertNotIn("sdk-extensions", metadata)
         self.assertIn("--share=ipc", metadata["finish-args"])
         self.assertIn("--filesystem=host", metadata["finish-args"])
+        self.assertIn("--filesystem=~/.local/share/Steam", metadata["finish-args"])
+        self.assertIn("--filesystem=~/.var/app/com.valvesoftware.Steam", metadata["finish-args"])
+        self.assertNotIn("--filesystem=~/.steam", metadata["finish-args"])
 
     def test_appdir_runtime_is_copied_without_compilation_for_both_branches(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -114,6 +117,9 @@ class PackageFlatpakTest(unittest.TestCase):
                                  b"payload")
                 self.assertEqual((output / "builder/files/share/licenses/lost-odyssey-recomp/XeGTAO.txt").read_bytes(),
                                  b"payload")
+                for filename in ("portrait.png", "header.png", "hero.png", "logo.png", "icon.png"):
+                    self.assertEqual((output / "builder/files/share/lost-odyssey-recomp/steam" / filename).read_bytes(),
+                                     b"payload")
                 self.assertEqual(result["size"], (output / result["bundle"]).stat().st_size)
                 self.assertEqual(result["packaging_commit"], "a" * 40)
                 self.assertEqual(result["branch"], branch)

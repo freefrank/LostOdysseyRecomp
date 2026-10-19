@@ -126,6 +126,9 @@ class PackageAppImageTests(unittest.TestCase):
             self.assertEqual((destination / 'AppImage-runtime/runtime-relink.tar.gz').read_bytes(), b'fixture')
             self.assertFalse((destination / 'usr/share/licenses/lost-odyssey-recomp/AppImage-runtime').exists())
             self.assertTrue((destination / 'usr/share/metainfo/io.github.freefrank.LostOdysseyRecomp.metainfo.xml').is_file())
+            for filename in ('portrait.png', 'header.png', 'hero.png', 'logo.png', 'icon.png'):
+                self.assertEqual((destination / 'usr/share/lost-odyssey-recomp/steam' / filename).read_bytes(),
+                                 (ROOT / 'assets/steam' / filename).read_bytes())
             self.assertEqual((destination / 'usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt').read_bytes(),
                              (ROOT / 'thirdparty/licenses/XeGTAO.txt').read_bytes())
             self.assertTrue((destination / 'AppRun').is_file())
@@ -470,6 +473,7 @@ class PackageAppImageTests(unittest.TestCase):
                 audio_license = fake_root / 'thirdparty/signalsmith-stretch' / relative
                 audio_license.parent.mkdir(parents=True, exist_ok=True)
                 audio_license.write_text('mock MIT license', encoding='utf-8')
+            shutil.copytree(ROOT / 'assets/steam', fake_root / 'assets/steam')
 
             listing = io.StringIO()
             with patch.object(module, 'ROOT', fake_root):

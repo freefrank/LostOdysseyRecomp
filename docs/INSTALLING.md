@@ -13,6 +13,7 @@ Download the package for your platform, import the game from your own discs, and
 - [Linux packages](#running-on-linux)
   - [AppImage](#appimage)
   - [Flatpak](#flatpak)
+  - [Steam Deck](#steam-deck)
 - [macOS (Apple Silicon)](#macos)
 - [Android](#android)
 - [First launch and settings](#first-launch-and-settings)
@@ -153,6 +154,22 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 The importer can read dumps anywhere on your computer, including `/media`, `/run/media` and `/mnt`. To update, download the new bundle and install it the same way.
 
+### Steam Deck
+
+1. Switch to **Desktop Mode** and install the AppImage or Flatpak above.
+2. Close Steam completely.
+3. Open Lost Odyssey Recomp.
+4. Choose **Settings → System → Add to Steam** and wait for the confirmation.
+5. Quit the game and return to **Game Mode**. Find Lost Odyssey Recomp in your Steam library under **Non-Steam**.
+
+The shortcut includes library artwork. If you move the AppImage, add it again from its new location.
+
+If both Steam and the game are installed as Flatpaks, run this command once to allow Steam to launch the game through the shortcut:
+
+```bash
+flatpak override --user --talk-name=org.freedesktop.Flatpak com.valvesoftware.Steam
+```
+
 <a id="macos"></a>
 
 ## macOS (Apple Silicon)
@@ -268,6 +285,7 @@ Saves cannot be moved back to a console.
 | :--- | :--- |
 | `--game <path>` | Use this game: a folder with `default.xex` or `disc1/`, or the `default.xex` file. Skips the importer; exits with an error if no `default.xex` is found. |
 | `--install` | Open the importer even when a game is set up, then exit. |
+| `--add-to-steam` | Add the game to Steam with library artwork, then exit with a status code. Close Steam first; add it again if you move the game. |
 | `--setup` | Open the setup page, then start the game (Windows; elsewhere it only saves the current settings). |
 | `--setup-only` | Like `--setup`, then exit. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |

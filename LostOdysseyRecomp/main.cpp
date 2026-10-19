@@ -1,4 +1,5 @@
 #include <os/log_collection.h>
+#include <os/steam_shortcut.h>
 #include <discord/presence.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
@@ -327,6 +328,32 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
+    // This host-only command needs assets, but no game data, SDL window or GPU.
+    for (int i = 1; i < argc; ++i)
+        if (strcmp(argv[i], "--add-to-steam") == 0)
+        {
+            const auto result = steam_shortcut::AddToSteam();
+            const char* message = nullptr;
+            switch (result.status)
+            {
+            case steam_shortcut::Status::Added:
+                message = "Added to Steam. Restart Steam to see it."; break;
+            case steam_shortcut::Status::AddedFromFlatpak:
+                message = "Restart Steam to see it; if Steam was open, close it and add again."; break;
+            case steam_shortcut::Status::SteamRunning:
+                message = "Close Steam, then try again."; break;
+            case steam_shortcut::Status::SteamNotFound:
+                message = "Steam was not found. Install and open Steam first."; break;
+            case steam_shortcut::Status::UserNotFound:
+                message = "No Steam user found. Sign in to Steam, close it, then try again."; break;
+            default:
+                message = "Could not add to Steam."; break;
+            }
+            FILE* output = result.ok() ? stdout : stderr;
+            std::fprintf(output, "%s\n", message);
+            if (!result.detail.empty()) std::fprintf(output, "%s\n", result.detail.c_str());
+            return result.ok() ? 0 : 1;
+        }
     // --export-assets copies game files for mod authors, then exits. It runs
     // before the working-directory change (relative output folders), logs,
     // update check, mods, installer, window and GPU device.
