@@ -954,6 +954,15 @@ if(WIN32 AND LO_BUILD_GPU)
 endif()
 
 if(APPLE AND LO_BUILD_GPU)
+    add_executable(LoMetalTextureCopyTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/metal_texture_copy_test.mm)
+    set_target_properties(LoMetalTextureCopyTest PROPERTIES OBJCXX_STANDARD 20)
+    target_compile_options(LoMetalTextureCopyTest PRIVATE -fobjc-arc)
+    target_link_libraries(LoMetalTextureCopyTest PRIVATE plume
+        "-framework AppKit" "-framework QuartzCore" "-framework Metal" "-framework IOKit")
+    add_test(NAME metal_texture_copy COMMAND LoMetalTextureCopyTest)
+    set_tests_properties(metal_texture_copy PROPERTIES TIMEOUT 30 LABELS "gpu;macos")
+
     # The same HDR readback fixture runs on a Mac with a Metal device.
     add_executable(LoPresentationTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/presentation_test.cpp
