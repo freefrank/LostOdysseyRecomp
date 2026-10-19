@@ -2,7 +2,38 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.0.6 published — 2026-10-19
+
+[v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) was published at 2026-10-19T04:32:05Z by the workflow's own publish step. A GitHub API read on 2026-10-19 at about 04:35 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.6` at squash commit `b11c884e`, the release PR [#657](https://github.com/freefrank/LostOdysseyRecomp/pull/657). The previous release is v1.0.5, published 2026-10-18T17:56:24Z at `ca5cb373`.
+
+The release run is GitHub Actions run [39198555052](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/39198555052), `Release` on tag `v1.0.6`. Every job succeeded: the FSR Vulkan build inputs, draft release, macOS, Android, Linux, Windows and publish jobs. The release has the same five packages as v1.0.5. The macOS image was built by the GitHub-hosted macOS Release job.
+
+Changes since v1.0.5 (the [Changelog, v1.0.6](../CHANGELOG.md#v106--2026-10-19) section is the release body):
+
+- PR [#652](https://github.com/freefrank/LostOdysseyRecomp/pull/652) (`9310ac05`): the title menu quits with Back / View (Backspace on the keyboard) after a Yes/No confirmation. Validated on psvita: the legend and confirmation appeared, No returned to the menu, and Yes exited through the normal shutdown with exit code 0.
+- PR [#653](https://github.com/freefrank/LostOdysseyRecomp/pull/653) (`f27852b1`, [#631](https://github.com/freefrank/LostOdysseyRecomp/issues/631)): real-time cutscene audio routing corrected. The localized dialogue file (mono FC, handle +100) follows Voice volume, and the base mix (music and effects) keeps Sound effects. [#632](https://github.com/freefrank/LostOdysseyRecomp/pull/632) and [#394](https://github.com/freefrank/LostOdysseyRecomp/issues/394) had the two handles swapped, so in v1.0.5 the Music slider muted dialogue. Validated by psvita gain checks and a 196-check CPU fixture; no full real-time cutscene run.
+- PR [#654](https://github.com/freefrank/LostOdysseyRecomp/pull/654) (`26257de9`, [#646](https://github.com/freefrank/LostOdysseyRecomp/issues/646)): on Android, CTRL can hide all touch controls. Revealing the system bars or pressing Android Back shows CTRL for 4 s. Tested on the TB321FU tablet.
+- PR [#656](https://github.com/freefrank/LostOdysseyRecomp/pull/656) (`57f71ce5`, [#651](https://github.com/freefrank/LostOdysseyRecomp/issues/651)): fixes a macOS crash when starting a new game with frame generation on. Cause: Plume's texture copy treated the swap-chain drawable as a plain texture. The fix is in `tools/patches/plume-macos.patch`, with a new Mac GPU test `metal_texture_copy`. Validated on the M1 Max: frame generation on, New Game reached the opening battle, the run lasted 87 s and produced 960 generated/real pairs. The reporter's base M1 has not been retested.
+
+Docs-only PRs in the same range: [#647](https://github.com/freefrank/LostOdysseyRecomp/pull/647) (v1.0.5 record) and [#650](https://github.com/freefrank/LostOdysseyRecomp/pull/650) (README Switch section pointing to Ad0ky's homebrew build).
+
+Assets, as listed by the GitHub release API on 2026-10-19 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.0.6.zip` | 153,323,454 | `d332c86c8dabd71c1fcd13c2d70fe073192e32fc8928765ab45684c24a4ce4ec` |
+| `LostOdysseyRecomp-linux-x64-v1.0.6.AppImage` | 88,246,776 | `32fd391316645508ac6a4d6857b911fe98b77da7a1921667235bb0bd0ba2d542` |
+| `LostOdysseyRecomp-linux-x64-v1.0.6.flatpak` | 55,537,848 | `6451e6420af24dffaee5356acd13f1dcc573ec2e845c81efbc5d93b7a416732e` |
+| `LostOdysseyRecomp-android-arm64-v1.0.6.apk` | 47,251,399 | `99f88a2688ccfeecbbbf03a3e84e4436c59e044d8f0878b9534421217b03e1e1` |
+| `LostOdysseyRecomp-macos-arm64-v1.0.6.dmg` | 63,919,642 | `a948768b22f7172f6834c1b53677f864639b5ff2ad0fa1146a52d7596e6bed67` |
+
+Validation: the release run succeeded in every job. The checks above are per change; no game run with the published packages is recorded, and this record has no in-game result for v1.0.6 as a release.
+
+Acceptance: none. The maintainer has not accepted v1.0.6. Issues [#631](https://github.com/freefrank/LostOdysseyRecomp/issues/631), [#646](https://github.com/freefrank/LostOdysseyRecomp/issues/646) and [#651](https://github.com/freefrank/LostOdysseyRecomp/issues/651) were open at the 2026-10-19 04:33 UTC read and carry release mentions. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.5 published — 2026-10-18
+
+Update, 2026-10-19: v1.0.5 is no longer the latest release; [v1.0.6](#v106-published--2026-10-19) was published at 2026-10-19T04:32:05Z. The #631 Music change (PR [#632](https://github.com/freefrank/LostOdysseyRecomp/pull/632)) shipped in v1.0.5 with the Music slider muting the localized dialogue, because the two audio handles were swapped. PR [#653](https://github.com/freefrank/LostOdysseyRecomp/pull/653) corrected this in v1.0.6. The v1.0.5 list below is the release body as published and is not changed.
 
 [v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) was published at 2026-10-18T17:56:24Z by the workflow's own publish step. A GitHub API read on 2026-10-18 at about 18:10 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.5` at squash commit `ca5cb373`, the release PR [#644](https://github.com/freefrank/LostOdysseyRecomp/pull/644). The previous release is v1.0.4, published 2026-10-18T00:26:10Z at `e8c103a4`.
 

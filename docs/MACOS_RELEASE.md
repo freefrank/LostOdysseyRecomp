@@ -63,6 +63,20 @@ outputs and ccache are cached with toolchain, SDL and configuration identities;
 see [CI caches](notes/ci.md#caches). A hosted build, package check or headless load
 does not establish gameplay or macOS 15 runtime acceptance.
 
+### v1.0.6 image
+
+The v1.0.6 release was published at 2026-10-19T04:32:05Z from tag `v1.0.6` at
+`b11c884e` ([release record](STATUS.md#v106-published--2026-10-19)). The image
+was built by the macOS Release job of GitHub Actions run 39198555052, on a
+GitHub-hosted macOS runner, not on the maintainer's Mac. The run succeeded in
+every job. The asset `LostOdysseyRecomp-macos-arm64-v1.0.6.dmg` is 63,919,642
+bytes. GitHub reports its SHA-256 as
+`a948768b22f7172f6834c1b53677f864639b5ff2ad0fa1146a52d7596e6bed67`; the file was
+not downloaded again for this record.
+
+Limits: no game run with this image is recorded. The M1 Max validation of the
+#656 Metal fix is in the release record and is not a run of this published image.
+
 ### v1.0.5 image
 
 The v1.0.5 release was published at 2026-10-18T17:56:24Z from tag `v1.0.5` at
