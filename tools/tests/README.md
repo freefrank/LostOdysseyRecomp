@@ -48,6 +48,13 @@ ctest --test-dir out/review-regressions --output-on-failure --parallel 2
 
 ASan/UBSan are on by default (`-DLO_REVIEW_SANITIZE=OFF` disables them). `-DLO_REVIEW_SDL_TESTS=OFF` omits the SDL fixtures. The suite also runs `updater_appimage_cleanup_test.py`, `package_appimage_test.py` and `package_flatpak_test.py`; each also runs directly with `python3`. Packaging tests use stand-ins for linuxdeploy and flatpak, so the release workflow remains the real check.
 
+The suite includes `LoImportGameTest`, `LoImportIsoLocatorTest` and `LoImportReimportTest`, which use synthetic disc data. On Linux, `LoImportLinuxHomeTest` checks imports beneath the Fedora Atomic `/home` → `/var/home` system link and rejects other symlinks. It needs `bubblewrap` (`bwrap`) and unprivileged user/mount namespaces; it exits 77 (CTest skip) if either is unavailable. The fixture creates an isolated root and does not alter the host's `/home`. To run it directly after configuring the suite:
+
+```bash
+cmake --build out/review-regressions --target LoImportGameTest
+bash tools/tests/import_linux_home_test.sh out/review-regressions/LoImportGameTest
+```
+
 ## Selected native targets
 
 Examples of fixtures that stay out of the default build. Build only what the change needs.

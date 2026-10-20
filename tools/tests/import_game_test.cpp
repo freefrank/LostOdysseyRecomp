@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "install/import_game.h"
+#include "os/user_paths.h"
 #include "gpu/shader/resource_cpx_index_sha256.h"
 
 #ifndef _WIN32
@@ -246,6 +247,136 @@ void WriteDiscFiles(const std::filesystem::path& dir, uint32_t disc, bool includ
         out.write(dummy.data(), dummy.size());
     }
 }
+
+#if defined(__linux__) && !defined(__ANDROID__)
+// A complete synthetic disc, including a resource above the 4 GiB boundary.
+// Sparse padding exercises 64-bit ISO reads without real game data or a large copy.
+void WriteLinuxTestIso(const std::filesystem::path& path)
+{
+    constexpr uint64_t sector = 2048;
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> files{
+        {"default.xex", MakeXex()},
+    };
+    for (const char* name : {"lo.fpd", "lo.fpi", "xenon_battle.fpd", "xenon_chr.fpd", "xenon_event.fpd",
+             "xenon_field.fpd", "xenon_loc.fpd", "xenon_mov.fpd", "xenon_obj.fpd", "xenon_scr.fpd",
+             "xenon_snd.fpd", "xenon_sys.fpd", "xenon_vfx.fpd", "xenon_world.fpd"})
+        files.push_back({name, {'p', 'a', 'y', 'l', 'o', 'a', 'd'}});
+    auto le32 = [](uint8_t* p, uint32_t n) {
+        for (unsigned i = 0; i < 4; ++i) p[i] = static_cast<uint8_t>(n >> (8 * i));
+    };
+    std::array<uint8_t, sector> descriptor{}, directory{};
+    constexpr const char* magic = "MICROSOFT*XBOX*MEDIA";
+    std::memcpy(descriptor.data(), magic, 20);
+    std::memcpy(descriptor.data() + 0x7ec, magic, 20);
+    le32(descriptor.data() + 20, 33);
+    le32(descriptor.data() + 24, sector);
+    std::ofstream out(path, std::ios::binary);
+    out.seekp(0x10000);
+    out.write(reinterpret_cast<const char*>(descriptor.data()), descriptor.size());
+    size_t offset = 0;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        const auto& [name, data] = files[i];
+        const size_t next = (offset + 14 + name.size() + 3) & ~size_t{3};
+        if (i + 1 < files.size())
+        {
+            directory[offset + 2] = static_cast<uint8_t>(next / 4);
+            directory[offset + 3] = static_cast<uint8_t>((next / 4) >> 8);
+        }
+        const uint32_t fileSector = i + 1 == files.size() ? 4ULL * 1024 * 1024 * 1024 / sector + 1 : 34 + i;
+        le32(directory.data() + offset + 4, fileSector);
+        le32(directory.data() + offset + 8, data.size());
+        directory[offset + 13] = static_cast<uint8_t>(name.size());
+        std::memcpy(directory.data() + offset + 14, name.data(), name.size());
+        out.seekp(static_cast<uint64_t>(fileSector) * sector);
+        out.write(reinterpret_cast<const char*>(data.data()), data.size());
+        offset = next;
+    }
+    out.seekp(33 * sector);
+    out.write(reinterpret_cast<const char*>(directory.data()), directory.size());
+    out.close();
+    Require(static_cast<bool>(out), "could not write synthetic ISO");
+}
+
+// Run only inside an isolated Linux root with /home -> /var/home, e.g. bwrap.
+// The ordinary test suite never changes the machine's /home layout.
+void RunLinuxHomeTest()
+{
+    namespace fs = std::filesystem;
+    Require(fs::is_symlink("/home") && fs::canonical("/home") == "/var/home",
+            "--linux-home requires an isolated /home -> /var/home root");
+    const auto root = fs::path("/home/x") / ("lo-linux-import-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        fs::path path;
+        ~Cleanup() { std::error_code ec; fs::remove_all(path, ec); }
+    } cleanup{root};
+    fs::create_directories(root / "source");
+    const auto iso = root / "source" / "disc1.iso";
+    WriteLinuxTestIso(iso);
+    const auto scan = install::ScanContent(iso);
+    Require(scan.discs.size() == 1, "synthetic ISO under /home did not scan");
+    const auto canonicalRoot = fs::canonical(root);
+    Require(install::InstallContent(scan, canonicalRoot / "canonical-game").discs == std::vector<int>{1},
+            "canonical /var/home import failed");
+    std::cout << "[PASS] canonical destination and sparse ISO reads above 4 GiB" << std::endl;
+    os::user_paths::g_usePortableLayout = false;
+    const auto destination = install::DefaultGameDirectory("/app/bin");
+    Require(destination.string().starts_with("/home/x/"), "default HOME alias was not retained");
+    Require(install::InstallContent(scan, destination).discs == std::vector<int>{1},
+            "default destination under system /home alias failed");
+    Require(ReadBytes(destination / "disc1" / "xenon_world.fpd") ==
+            std::vector<uint8_t>({'p', 'a', 'y', 'l', 'o', 'a', 'd'}), "large-offset payload changed");
+    Require(install::ReimportContent(scan, destination).discs == std::vector<int>{1},
+            "reimport under system /home alias failed");
+    std::cout << "[PASS] HOME alias default destination, ISO extraction and reimport" << std::endl;
+    auto rejected = [&](const fs::path& dest, std::string_view expected) {
+        bool failed = false;
+        try { install::InstallContent(scan, dest); }
+        catch (const install::Error& error) { failed = std::string(error.what()).find(expected) != std::string::npos; }
+        Require(failed, "path protection did not reject " + dest.string());
+    };
+    rejected(canonicalRoot / "source", "Source and destination must be separate folders");
+    const auto canonicalScan = install::ScanContent(canonicalRoot / "source" / "disc1.iso");
+    bool overlap = false;
+    try { install::InstallContent(canonicalScan, root / "source"); }
+    catch (const install::Error& error) { overlap = std::string(error.what()).find("Source and destination must be separate folders") != std::string::npos; }
+    Require(overlap, "source/destination overlap through /home alias was accepted");
+    fs::create_directory_symlink(canonicalRoot, root / "user-link");
+    rejected(root / "user-link" / "game", "Destination ancestors must not contain links or junctions");
+    fs::create_directory_symlink(canonicalRoot, root / "linked-game");
+    rejected(root / "linked-game", "Destination ancestors must not contain links or junctions");
+    fs::create_directories(root / "linked-slot");
+    fs::create_directory_symlink(canonicalRoot / "canonical-game" / "disc1", root / "linked-slot" / "disc1");
+    bool slotRejected = false;
+    try { install::ReimportContent(scan, root / "linked-slot"); }
+    catch (const install::Error& error) { slotRejected = std::string(error.what()).find("Import target is a link") != std::string::npos; }
+    Require(slotRejected, "linked disc slot was accepted");
+    std::cout << "[PASS] arbitrary links, linked slots and canonical/alias overlap remain rejected" << std::endl;
+    fs::create_directories("/run/user/1000/doc/test-id");
+    WriteLinuxTestIso("/run/user/1000/doc/test-id/disc1.iso");
+    const auto portalScan = install::ScanContent("/run/user/1000/doc/test-id/disc1.iso");
+    Require(portalScan.discs.size() == 1 &&
+            install::InstallContent(portalScan, canonicalRoot / "portal-game").discs == std::vector<int>{1},
+            "single ISO at a portal-shaped path failed");
+    std::cout << "[PASS] portal-shaped path imports one disc without neighboring discs (ordinary filesystem)" << std::endl;
+}
+
+void RunLinuxOtherHomeTest()
+{
+    namespace fs = std::filesystem;
+    const auto source = fs::path("/var/home/x/source");
+    WriteDiscFiles(source, 1);
+    const auto scan = install::ScanContent(source);
+    bool rejected = false;
+    try { install::InstallContent(scan, "/home/x/game"); }
+    catch (const install::Error& error) {
+        rejected = std::string(error.what()) == "Destination ancestors must not contain links or junctions";
+    }
+    Require(rejected, "an unsupported /home link was accepted");
+    std::cout << "[PASS] unsupported /home links remain rejected" << std::endl;
+}
+#endif
 
 void RunDiscIoTest(const std::filesystem::path& source, const std::filesystem::path& root)
 {
@@ -701,6 +832,18 @@ void RunSharedArchiveTest()
 
 int main(int argc, char** argv)
 {
+#if defined(__linux__) && !defined(__ANDROID__)
+    if (argc > 1 && std::string(argv[1]) == "--linux-home")
+    {
+        try { RunLinuxHomeTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
+    if (argc > 1 && std::string(argv[1]) == "--linux-other-home")
+    {
+        try { RunLinuxOtherHomeTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
+#endif
     if (argc > 1 && std::string(argv[1]) == "--reimport")
     {
         try { RunReimportTest(); return 0; }
