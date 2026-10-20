@@ -1,9 +1,13 @@
 #include "text_format.h"
+#include "ue3_package.h"
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdio>
+#include <cstring>
 #include <map>
+#include <optional>
 #include <stdexcept>
 
 namespace modding::text
@@ -567,6 +571,349 @@ std::vector<uint8_t> RebuildCoalesced(std::span<const uint8_t> d, const Replacem
     if (unknownKeys) *unknownKeys = replacements.size() - known;
     return out;
 }
+
+// ---- xmlbin (loc/<l>/field/name_data.xmb): a node stream that names its strings by their offset in a pool ----
+// Header (LE): "xmlbin\0\0", u32 0x01000001, u32 1, u32 node offset, u32 node size, u32 pool offset,
+// u32 pool size. Nodes: 0x00 (1 byte); 0x10/0x20 element: u16 name, u16 count; 0x40 attribute: u16 name,
+// u16 value. Pool entry: u16 length, high bit set = that many bytes of ASCII, clear = UTF-16LE bytes.
+
+struct XmlBinString
+{
+    std::u16string value;
+    bool ascii = false;
+};
+
+struct XmlBinToken
+{
+    size_t at = 0;    // offset of the token byte in the file
+    uint8_t kind = 0; // 0x10, 0x20 or 0x40
+    uint16_t first = 0, second = 0;
+};
+
+struct XmlBin
+{
+    uint32_t nodeOffset = 0, nodeSize = 0, poolOffset = 0;
+    std::unordered_map<uint16_t, XmlBinString> pool;
+    std::vector<XmlBinToken> tokens;
+};
+
+uint16_t Le16(std::span<const uint8_t> b, size_t p) { return uint16_t(b[p] | b[p + 1] << 8); }
+
+XmlBin ReadXmlBin(std::span<const uint8_t> d)
+{
+    Require(d.size() >= 32 && std::memcmp(d.data(), "xmlbin\0\0", 8) == 0, "not an xmlbin file");
+    XmlBin x;
+    x.nodeOffset = Le32(d, 16);
+    x.nodeSize = Le32(d, 20);
+    x.poolOffset = Le32(d, 24);
+    const uint32_t poolSize = Le32(d, 28);
+    Require(uint64_t(x.nodeOffset) + x.nodeSize <= x.poolOffset && uint64_t(x.poolOffset) + poolSize <= d.size(),
+            "xmlbin sections out of range");
+    for (size_t p = 0; p < poolSize;)
+    {
+        Require(p + 2 <= poolSize && p <= 0xFFFF, "xmlbin pool entry out of range");
+        const uint16_t length = Le16(d, x.poolOffset + p);
+        const size_t bytes = length & 0x7FFF, at = x.poolOffset + p + 2;
+        Require(p + 2 + bytes <= poolSize, "xmlbin string out of range");
+        XmlBinString s;
+        s.ascii = (length & 0x8000) != 0;
+        if (s.ascii)
+            for (size_t i = 0; i < bytes; ++i) s.value.push_back(char16_t(d[at + i]));
+        else
+            s.value = ReadUtf16Le(d.subspan(at, bytes));
+        x.pool.emplace(uint16_t(p), std::move(s));
+        p += 2 + bytes;
+    }
+    // The node section starts with a u32; the tokens follow.
+    for (size_t p = x.nodeOffset + 4; p < size_t(x.nodeOffset) + x.nodeSize;)
+    {
+        const uint8_t kind = d[p];
+        if (kind == 0) { ++p; continue; }
+        if (kind != 0x10 && kind != 0x20 && kind != 0x40) break; // trailing bytes, kept as they are
+        Require(p + 5 <= size_t(x.nodeOffset) + x.nodeSize, "xmlbin token out of range");
+        XmlBinToken t{p, kind, Le16(d, p + 1), Le16(d, p + 3)};
+        Require(x.pool.contains(t.first) && (kind != 0x40 || x.pool.contains(t.second)), "xmlbin token names no string");
+        x.tokens.push_back(t);
+        p += 5;
+    }
+    return x;
+}
+
+// Attributes whose name ends in "ID" are numbers the game looks up; the rest are text.
+template <typename Visit> void XmlBinTexts(const XmlBin &x, Visit visit)
+{
+    int record = -1;
+    for (const auto &t : x.tokens)
+    {
+        if (t.kind == 0x20) { ++record; continue; }
+        if (t.kind != 0x40) continue;
+        const auto &name = x.pool.at(t.first).value;
+        if (name.size() >= 2 && name.ends_with(u"ID")) continue;
+        visit(t, std::to_string(std::max(record, 0)) + "." + UnitsToUtf8(name));
+    }
+}
+
+std::vector<Entry> ParseXmlBin(std::span<const uint8_t> d)
+{
+    const auto x = ReadXmlBin(d);
+    std::vector<Entry> entries;
+    XmlBinTexts(x, [&](const XmlBinToken &t, std::string key) { entries.push_back({std::move(key), EncodeUnits(x.pool.at(t.second).value)}); });
+    return entries;
+}
+
+std::vector<uint8_t> RebuildXmlBin(std::span<const uint8_t> d, const Replacements &replacements, size_t *unknownKeys)
+{
+    const auto x = ReadXmlBin(d);
+    std::unordered_map<size_t, std::u16string> values; // token offset -> new value
+    size_t known = 0;
+    XmlBinTexts(x, [&](const XmlBinToken &t, const std::string &key) {
+        if (const auto text = Find(replacements, key))
+        {
+            ++known;
+            auto value = DecodeText(*text);
+            if (value != x.pool.at(t.second).value) values.emplace(t.at, std::move(value));
+        }
+    });
+    if (unknownKeys) *unknownKeys = replacements.size() - known;
+    if (values.empty()) return {d.begin(), d.end()};
+    // A new pool with the strings still named, in the order they are first named.
+    std::vector<uint8_t> pool;
+    std::map<std::pair<bool, std::u16string>, uint16_t> placed;
+    auto place = [&](const std::u16string &value, bool asciiAllowed) {
+        const bool ascii = asciiAllowed && std::all_of(value.begin(), value.end(), [](char16_t c) { return c < 0x80; });
+        const auto key = std::make_pair(ascii, value);
+        if (const auto it = placed.find(key); it != placed.end()) return it->second;
+        const size_t bytes = ascii ? value.size() : value.size() * 2;
+        Require(bytes <= 0x7FFF && pool.size() + 2 + bytes <= 0x10000, "xmlbin string pool over 64 KiB");
+        const auto offset = uint16_t(pool.size());
+        const auto length = uint16_t(bytes | (ascii ? 0x8000 : 0));
+        pool.push_back(uint8_t(length));
+        pool.push_back(uint8_t(length >> 8));
+        if (ascii) for (const auto c : value) pool.push_back(uint8_t(c));
+        else AppendUtf16Le(pool, value);
+        placed.emplace(key, offset);
+        return offset;
+    };
+    std::vector<uint8_t> out(d.begin(), d.begin() + x.poolOffset);
+    auto put16 = [&](size_t at, uint16_t v) { out[at] = uint8_t(v); out[at + 1] = uint8_t(v >> 8); };
+    for (const auto &t : x.tokens)
+    {
+        const auto &first = x.pool.at(t.first);
+        put16(t.at + 1, place(first.value, first.ascii));
+        if (t.kind != 0x40) continue;
+        const auto &second = x.pool.at(t.second);
+        if (const auto it = values.find(t.at); it != values.end())
+            put16(t.at + 3, place(it->second, true));
+        else
+            put16(t.at + 3, place(second.value, second.ascii));
+    }
+    out.insert(out.end(), pool.begin(), pool.end());
+    for (int i = 0; i < 4; ++i) out[28 + i] = uint8_t(pool.size() >> (8 * i));
+    return out;
+}
+
+// ---- Thousand Years of Dreams (event/1000/<l>/*.xxx): UE3 packages; each InterpTrackLO_FontRect
+// export has Keys, an array of structs whose Title (StrProperty) is one piece of a page, shown at
+// Postion (Vector) inside Width x Hight, scaled by FontScaleW/FontScaleH. Key "<track>#<n>" is that
+// Title. Rebuild also takes "<track>#<n>.x", ".y", ".w", ".h" and ".scale" (both FontScale values),
+// so a language pack can lay a page out again; Parse does not list them.
+
+constexpr std::string_view kFontRect = "InterpTrackLO_FontRect";
+
+// A property tag: where it starts, where its value starts, and the value's size.
+struct DreamTag
+{
+    std::string name, type;
+    size_t begin = 0, value = 0, size = 0;
+};
+
+// The tags of a property list from r.pos up to "None"; r ends after "None".
+std::vector<DreamTag> DreamTags(const ue3::Package &package, ue3::Reader &r)
+{
+    std::vector<DreamTag> tags;
+    for (;;)
+    {
+        Require(tags.size() < 65536, "property count exceeds limit");
+        DreamTag tag;
+        tag.begin = r.pos;
+        tag.name = package.Name(r);
+        if (tag.name == "None") return tags;
+        tag.type = package.Name(r);
+        tag.size = r.U32();
+        r.U32();
+        if (tag.type == "StructProperty") package.Name(r);
+        if (tag.type == "BoolProperty") r.U32();
+        tag.value = r.pos;
+        r.Take(tag.size);
+        tags.push_back(std::move(tag));
+    }
+}
+
+void PutBe32At(std::vector<uint8_t> &out, size_t at, uint32_t value)
+{
+    for (int i = 0; i < 4; ++i) out[at + i] = uint8_t(value >> (24 - 8 * i));
+}
+
+// One key: the original element bytes with Title and the layout values replaced.
+// keyName: "<track>#<n>". Returns whether a replacement applied.
+bool RewriteDreamKey(const ue3::Package &package, std::span<const uint8_t> d, ue3::Reader &r, const std::string &keyName,
+                     const Replacements &replacements, std::vector<uint8_t> &out, size_t &known)
+{
+    const size_t begin = r.pos;
+    const auto tags = DreamTags(package, r);
+    const size_t end = r.pos; // after "None"
+    bool applied = false;
+    auto number = [&](const char *suffix) -> std::optional<float> {
+        const auto text = Find(replacements, keyName + suffix);
+        if (!text) return std::nullopt;
+        ++known;
+        applied = true;
+        return std::stof(*text);
+    };
+    const auto title = Find(replacements, keyName);
+    if (title) { ++known; applied = true; }
+    const auto x = number(".x"), y = number(".y"), w = number(".w"), h = number(".h"), scale = number(".scale");
+    size_t copied = begin;
+    for (const auto &tag : tags)
+    {
+        std::vector<uint8_t> value;
+        auto setFloat = [&](size_t offset, float v) {
+            const auto bits = std::bit_cast<uint32_t>(v);
+            for (int i = 0; i < 4; ++i) value[offset + i] = uint8_t(bits >> (24 - 8 * i));
+        };
+        value.assign(d.begin() + tag.value, d.begin() + tag.value + tag.size);
+        bool changed = false;
+        if (tag.name == "Title" && tag.type == "StrProperty" && title)
+        {
+            // An unchanged Title keeps its bytes (an empty narrow one is stored with its NUL).
+            size_t pos = tag.value;
+            const auto original = ReadFString(d.first(tag.value + tag.size), pos);
+            auto text = DecodeText(*title);
+            if (text != original.value)
+            {
+                value.clear();
+                WriteFString(value, FString{std::move(text), original.wide});
+                changed = true;
+            }
+        }
+        else if (tag.name == "Postion" && tag.size == 12 && (x || y))
+        {
+            if (x) setFloat(0, *x);
+            if (y) setFloat(4, *y);
+            changed = true;
+        }
+        else if (tag.type == "FloatProperty" && tag.size == 4)
+        {
+            const std::optional<float> v = tag.name == "Width" ? w : tag.name == "Hight" ? h :
+                                           tag.name == "FontScaleW" || tag.name == "FontScaleH" ? scale : std::nullopt;
+            if (v) { setFloat(0, *v); changed = true; }
+        }
+        if (!changed) continue;
+        // The tag header up to its size field, the new size, the rest of the header, the value.
+        out.insert(out.end(), d.begin() + copied, d.begin() + tag.begin + 16);
+        const size_t sizeAt = out.size();
+        out.insert(out.end(), d.begin() + tag.begin + 16, d.begin() + tag.value);
+        PutBe32At(out, sizeAt, uint32_t(value.size()));
+        out.insert(out.end(), value.begin(), value.end());
+        copied = tag.value + tag.size;
+    }
+    out.insert(out.end(), d.begin() + copied, d.begin() + end);
+    return applied;
+}
+
+template <typename Visit> void DreamTracks(const ue3::Package &package, Visit visit)
+{
+    for (const auto &e : package.exports)
+        if (e.size && package.ClassName(e) == kFontRect) visit(e);
+}
+
+std::vector<Entry> ParseDream(std::span<const uint8_t> d)
+{
+    const ue3::Package package(d);
+    std::vector<Entry> entries;
+    DreamTracks(package, [&](const ue3::Export &e) {
+        auto r = ue3::ObjectReader(package, e);
+        r.I32();
+        for (const auto &tag : DreamTags(package, r))
+        {
+            if (tag.name != "Keys" || tag.type != "ArrayProperty") continue;
+            ue3::Reader keys{d.first(tag.value + tag.size), tag.value};
+            const auto count = ue3::Count(keys, 8);
+            for (uint32_t k = 0; k < count; ++k)
+                for (const auto &key : DreamTags(package, keys))
+                    if (key.name == "Title" && key.type == "StrProperty")
+                    {
+                        size_t pos = key.value;
+                        entries.push_back({e.name + "#" + std::to_string(k), EncodeUnits(ReadFString(d.first(key.value + key.size), pos).value)});
+                    }
+        }
+    });
+    return entries;
+}
+
+std::vector<uint8_t> RebuildDream(std::span<const uint8_t> d, const Replacements &replacements, size_t *unknownKeys)
+{
+    const ue3::Package package(d);
+    size_t known = 0;
+    std::map<size_t, std::vector<uint8_t>> objects; // export index -> new serialized object
+    for (size_t i = 0; i < package.exports.size(); ++i)
+    {
+        const auto &e = package.exports[i];
+        if (!e.size || package.ClassName(e) != kFontRect) continue;
+        auto r = ue3::ObjectReader(package, e);
+        std::vector<uint8_t> object;
+        bool changed = false;
+        r.I32();
+        size_t copied = e.offset;
+        for (const auto &tag : DreamTags(package, r))
+        {
+            if (tag.name != "Keys" || tag.type != "ArrayProperty") continue;
+            ue3::Reader keys{d.first(tag.value + tag.size), tag.value};
+            const auto count = ue3::Count(keys, 8);
+            std::vector<uint8_t> value(d.begin() + tag.value, d.begin() + tag.value + 4);
+            for (uint32_t k = 0; k < count; ++k)
+                changed |= RewriteDreamKey(package, d, keys, e.name + "#" + std::to_string(k), replacements, value, known);
+            object.insert(object.end(), d.begin() + copied, d.begin() + tag.begin + 16);
+            const size_t sizeAt = object.size();
+            object.insert(object.end(), d.begin() + tag.begin + 16, d.begin() + tag.value);
+            PutBe32At(object, sizeAt, uint32_t(value.size()));
+            object.insert(object.end(), value.begin(), value.end());
+            copied = tag.value + tag.size;
+        }
+        if (!changed) continue;
+        object.insert(object.end(), d.begin() + copied, d.begin() + e.offset + e.size);
+        objects.emplace(i, std::move(object));
+    }
+    if (unknownKeys) *unknownKeys = replacements.size() - known;
+    if (objects.empty()) return {d.begin(), d.end()};
+    // Objects in file order; the bytes around them stay, the export table gets the new offsets and sizes.
+    std::vector<size_t> order;
+    for (size_t i = 0; i < package.exports.size(); ++i)
+        if (package.exports[i].size) order.push_back(i);
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return package.exports[a].offset < package.exports[b].offset; });
+    std::vector<uint8_t> out;
+    std::vector<std::pair<size_t, std::pair<uint32_t, uint32_t>>> table; // record -> (size, offset)
+    size_t copied = 0;
+    for (const auto i : order)
+    {
+        const auto &e = package.exports[i];
+        Require(e.offset >= copied, "overlapping UE3 export data");
+        out.insert(out.end(), d.begin() + copied, d.begin() + e.offset);
+        const auto it = objects.find(i);
+        const uint32_t offset = uint32_t(out.size());
+        if (it != objects.end()) out.insert(out.end(), it->second.begin(), it->second.end());
+        else out.insert(out.end(), d.begin() + e.offset, d.begin() + e.offset + e.size);
+        table.push_back({e.record, {uint32_t(out.size() - offset), offset}});
+        copied = size_t(e.offset) + e.size;
+    }
+    out.insert(out.end(), d.begin() + copied, d.end());
+    for (const auto &[record, values] : table)
+    {
+        PutBe32At(out, record + 32, values.first);
+        PutBe32At(out, record + 36, values.second);
+    }
+    return out;
+}
 } // namespace
 
 Format Detect(std::string_view path)
@@ -582,10 +929,14 @@ Format Detect(std::string_view path)
             if (EndsWith(name, "data.bin")) return Format::StringBank;
         }
         if (path == base + "staffroll/roll_" + lang + ".bin") return Format::StaffRoll;
+        if (path == base + "field/name_data.xmb") return Format::XmlBin;
         return Format::None;
     }
     if (!FolderAfter(path, "bin/xenon/scr/mes/").empty() && EndsWith(name, ".jmd")) return Format::Jmd;
     if (!FolderAfter(path, "bin/xenon/event/subtitle/").empty() && EndsWith(name, ".sub")) return Format::Subtitle;
+    if (const auto lang = FolderAfter(path, "bin/xenon/event/1000/"); !lang.empty() && EndsWith(name, "_" + lang + ".xxx") &&
+        path == "bin/xenon/event/1000/" + lang + "/" + name)
+        return Format::Dream;
     if (StartsWith(path, "rpgame/localization/coalesced.") && path.find('/', 30) == std::string_view::npos) return Format::Coalesced;
     return Format::None;
 }
@@ -600,6 +951,8 @@ const char *Name(Format format)
     case Format::Subtitle: return "subtitle";
     case Format::StaffRoll: return "staff_roll";
     case Format::Coalesced: return "coalesced";
+    case Format::XmlBin: return "xmlbin";
+    case Format::Dream: return "dream";
     case Format::None: break;
     }
     return "none";
@@ -607,7 +960,7 @@ const char *Name(Format format)
 
 std::string Language(std::string_view path)
 {
-    for (const auto prefix : {"bin/xenon/loc/", "bin/xenon/scr/mes/", "bin/xenon/event/subtitle/"})
+    for (const auto prefix : {"bin/xenon/loc/", "bin/xenon/scr/mes/", "bin/xenon/event/subtitle/", "bin/xenon/event/1000/"})
         if (auto lang = FolderAfter(path, prefix); !lang.empty()) return lang;
     if (StartsWith(path, "rpgame/localization/coalesced.")) return std::string(path.substr(30));
     return {};
@@ -705,6 +1058,8 @@ std::vector<Entry> Parse(Format format, std::span<const uint8_t> member)
     case Format::Subtitle: return ParseSubtitle(member);
     case Format::StaffRoll: return ParseStaffRoll(member);
     case Format::Coalesced: return ParseCoalesced(member);
+    case Format::XmlBin: return ParseXmlBin(member);
+    case Format::Dream: return ParseDream(member);
     case Format::None: break;
     }
     throw std::runtime_error("not a text format");
@@ -722,6 +1077,8 @@ std::vector<uint8_t> Rebuild(Format format, std::span<const uint8_t> member, con
     case Format::Subtitle: result = RebuildSubtitle(member, replacements, &unknown); break;
     case Format::StaffRoll: result = RebuildStaffRoll(member, replacements, &unknown); break;
     case Format::Coalesced: result = RebuildCoalesced(member, replacements, &unknown); break;
+    case Format::XmlBin: result = RebuildXmlBin(member, replacements, &unknown); break;
+    case Format::Dream: result = RebuildDream(member, replacements, &unknown); break;
     case Format::None: throw std::runtime_error("not a text format");
     }
     if (unknownKeys) *unknownKeys = unknown;

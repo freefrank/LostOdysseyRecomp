@@ -1,16 +1,18 @@
-# Debug 人物传送：逆向依据与验证边界（2026-09-04）
+# Debug character teleport: reverse-engineering basis and validation boundaries (2026-09-04)
 
-> **历史检查点。** 下文版本、Issue、进程和待办均是原时点记录；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+[简体中文](debug-teleport.zh-CN.md)
 
-> 2026-09-05 同步：本文保留逐轮取证记录；相关新增代码仍有本地未提交部分，发布范围见[当前状态](../STATUS.md)。历史 PID 和测试中状态不代表进程仍在运行。
+> **Historical checkpoint.** Versions, Issues, processes and to-dos below are the records as of that date. For current delivery and acceptance status, see [project status](../STATUS.md) and [roadmap](../ROADMAP.md).
 
-## 状态
+> 2026-09-05 sync: this page keeps the round-by-round investigation records. Related new code still has local uncommitted parts. For the release scope, see [current status](../STATUS.md). Historical PIDs and in-test states do not mean the processes are still running.
 
-`debug/teleport.cpp` 已实现游戏线程原生移动；传送、返回、恢复行走、菜单拒绝及 POI 落点的后台验证结果见本文后半部分。F1 窗口前台交互及全地图兼容性未完成验证。本文各 PID 和动态对象地址仅作为当时取证，不能跨进程复用。
+## Status
 
-## 玩家对象获取
+`debug/teleport.cpp` implements native movement on the game thread. The background validation results for teleport, return, resuming walking, menu refusal and POI landing are in the second half of this page. Foreground interaction with the F1 window and compatibility with all maps are not yet validated. The PIDs and dynamic object addresses in this page are only investigation evidence from the time and cannot be reused across processes.
 
-原生注册表的 `intAActorexecLocalPlayerControllers` 对应 `8250E158`。生成代码及只读反编译 `out/teleport-player.txt` 确认：
+## Getting the player object
+
+The native registry `intAActorexecLocalPlayerControllers` corresponds to `8250E158`. The generated code and the read-only decompilation `out/teleport-player.txt` confirm:
 
 ```text
 engine = *(0x83315FB4)
@@ -20,58 +22,58 @@ controller = *(localPlayer + 0x40)
 pawn = *(controller + 0x204)
 ```
 
-`822A6020`（PlayerController GetViewTarget 路径）使用 `controller+0x204` 作为角色回退目标；参见 `out/teleport-target.txt`。地图现场补证了 Pawn `+0x210` 反指同一控制器。后端每次在游戏线程重新获取上述链，并验证双向关系，不缓存动态 Pawn 指针用于下一帧。
+`822A6020` (the PlayerController GetViewTarget path) uses `controller+0x204` as the fallback character target. See `out/teleport-target.txt`. On-map evidence also confirmed that Pawn `+0x210` points back to the same controller. The backend re-reads this chain on the game thread every time and verifies the two-way relationship. It does not cache a dynamic Pawn pointer for the next frame.
 
-当时地图 Wasteland 的现场为：controller `0x4BED200`，pawn `0x3DA9000`，Pawn vtable `0x8201E4C8`。战斗时 controller `+0x204` 为零，控制器对象也不同。
+On-map values at that time, in map Wasteland: controller `0x4BED200`, pawn `0x3DA9000`, Pawn vtable `0x8201E4C8`. During battle, controller `+0x204` is zero, and the controller object is also different.
 
-## 坐标与原生移动
+## Coordinates and native movement
 
-注册表字符串 `intAActorexecSetLocation`（`0x8219FC3C`）映射到 `82470DA8`。它调用 `822FA548`：
+The registry string `intAActorexecSetLocation` (`0x8219FC3C`) maps to `82470DA8`. It calls `822FA548`:
 
-| 寄存器 | 值 |
+| Register | Value |
 |---|---|
-| r3 | `*(0x83318744)`，world |
+| r3 | `*(0x83318744)`, world |
 | r4 | Actor / Pawn |
-| r5 | guest 内存中的 FVector 指针，三个大端 float |
-| r6、r7、r8 | 0，与 execSetLocation 相同 |
-| 返回 r3 | 非零表示成功 |
+| r5 | Pointer to an FVector in guest memory, three big-endian floats |
+| r6, r7, r8 | 0, the same as execSetLocation |
+| Return r3 | Non-zero means success |
 
-`822FA548` 读取并更新 Actor 的 `+0xF8/+0xFC/+0x100`，不是凭 UE3 常见偏移猜测。地图现场值为 `(-2868.7700, -3599.7004, 175.2687)`。反编译证据在 `out/teleport-native.txt`、`out/teleport-move.txt`。
+`822FA548` reads and updates the Actor's `+0xF8/+0xFC/+0x100`. These offsets were not guessed from common UE3 offsets. On-map value: `(-2868.7700, -3599.7004, 175.2687)`. Decompilation evidence is in `out/teleport-native.txt` and `out/teleport-move.txt`.
 
-调用该原生函数保留了碰撞检查、附着对象移动、组件与触碰更新；后端不直接写 Actor.Location，不强制无碰撞。目的地可能被拒绝或调整，状态/日志以原生返回和实际坐标为准。
+Calling this native function keeps collision checks, movement of attached objects, and component and touch updates. The backend does not write Actor.Location directly, and does not force no-collision. The destination may be refused or adjusted. Status and logs follow the native return and the actual coordinates.
 
-后端使用一次分配的独立 guest 堆内存传递 FVector，在调用前后保存/恢复完整 PPCContext。原生返回后重新核对当前玩家身份，以处理 Touch 回调触发的场景变化。
+The backend passes the FVector through guest heap memory allocated once for the purpose. It saves and restores the full PPCContext before and after the call. After the native call returns, it re-checks the current player identity, to handle scene changes triggered by touch callbacks.
 
-## World / Level 身份
+## World / Level identity
 
-`822FA548` 的生成代码确实通过 world `+0x50` 取得另一个对象，再访问其 `+0x3C/+0x40` 数组数据/数量，并读取数组首 Actor 的世界属性。后端使用该 **Level 上下文指针** 与 world、pawn 一起识别场景变化。
+The generated code for `822FA548` does get another object through world `+0x50`, then accesses its `+0x3C/+0x40` array data and count, and reads the world properties of the first Actor in the array. The backend uses this **Level context pointer**, together with world and pawn, to identify scene changes.
 
-将它称作 `PersistentLevel` 与该 UE3 对象结构吻合，但本轮没有用反射字段表独立确认这个字段名。实现只依赖已观察到的指针身份，不依赖名称。不能声称同一 world/level/pawn 内的所有剧情变化都会由此检测到。
+Calling it `PersistentLevel` fits this UE3 object structure. However, this round did not independently confirm the field name using a reflection field table. The implementation depends only on the observed pointer identity, not on the name. It cannot be claimed that all story changes within the same world/level/pawn will be detected this way.
 
-## 游戏线程与禁用条件
+## Game thread and disabling conditions
 
-两次初始 hook（`82388BE0` / `82384D78`）均未在地图现场收到调用。进一步读原生注册字符串确认 `82384CC0` 实为 `intAbhHUDexecBattleUpdate`，因此 `82384D78` 是战斗 HUD 路径，不能将静态战斗调用链称作公共游戏 tick。初版笔记的这一判断已撤回。
+The two initial hooks (`82388BE0` / `82384D78`) never received a call on the live map. Further reading of the native registration string confirmed that `82384CC0` is actually `intAbhHUDexecBattleUpdate`. So `82384D78` is the battle HUD path, and the static battle call chain cannot be called a common game tick. The earlier draft conclusion on this point has been withdrawn.
 
-修正入口 `82290B60`：PID 21524 的 `*(0x83315FB4)` engine=`0x350E600`、vtable=`0x8200D128`，虚表 `+0x108` 实际指向该函数。该函数接收 f1，调用 `8231EE68`（world 更新、切图处理、全局计数递增），返回后检查延迟的地图 URL。证据为 `out/teleport-engine-tick3.txt` / `out/teleport-engine-tick4.txt`。hook 保存调用前 this 等于当前全局 engine 的判断，原生返回后才执行传送 Tick。
+Corrected entry `82290B60`: in PID 21524, `*(0x83315FB4)` engine=`0x350E600`, vtable=`0x8200D128`, and vtable `+0x108` actually points to this function. The function receives f1, calls `8231EE68` (world update, map-switch handling, and the global counter increment), and after returning checks the deferred map URL. Evidence: `out/teleport-engine-tick3.txt` / `out/teleport-engine-tick4.txt`. The hook saves the this pointer before the call and checks that it equals the current global engine. The teleport Tick runs only after the native return.
 
-该入口构建通过 `out/teleport-engine-hook-build.log`。主代理后续现场确认 hook 实际执行：3.602 秒日志 this=`0x351E600`、caller=`0x822902A0`，命令文件开始得到响应。该证据确认进入了实际引擎路径；具体传送结果单独验证。
+The build through this entry passed `out/teleport-engine-hook-build.log`. The main agent later confirmed on-site that the hook runs: in a 3.602 second log, this=`0x351E600`, caller=`0x822902A0`, and the command file began to get responses. This evidence confirms that the actual engine path was entered. The specific teleport result is validated separately.
 
-- `0x832CB6B4` 属于 bhHUD / battlecore 的状态字段（bhHUD+0x15D4、battlecore+0x15CC），不能称为普适地图类型：Hypocenter 可行走现场为 0，Wasteland 战后为 10。当前仅放行已观察的 0/10，并结合 Pawn/控制器和 PlayerWalking / PlayerIdling 判断；战斗路径使用 2。单独该字段不能证明玩家可控制。
-- 玩家链或 Pawn.Controller 关系无效、角色待销毁标志出现时禁用。
-- world/level/pawn 变化或 tick 超过 1 秒未更新，取消请求并令记录位置失效。
-- UI 仅读快照和提交请求；不从窗口线程读写客体对象。
+- `0x832CB6B4` belongs to the state fields of bhHUD / battlecore (bhHUD+0x15D4, battlecore+0x15CC). It cannot be called a universal map type: on the walkable Hypocenter scene it is 0, and on Wasteland after battle it is 10. Currently only the observed 0 and 10 are allowed, combined with Pawn/controller and PlayerWalking / PlayerIdling checks. The battle path uses 2. This field alone cannot prove the player is controllable.
+- Disabled when the player chain or the Pawn.Controller relationship is invalid, or when the character's pending-destroy flag appears.
+- If world/level/pawn changes, or the tick has not updated for more than 1 second, the request is cancelled and the recorded position is invalidated.
+- The UI only reads snapshots and submits requests. It does not read or write guest objects from the window thread.
 
-菜单 A/B 已确认：bhHUD 状态和 `PlayerWalking` 均可保持不变。因此后端另检查原生禁控标志（见下文），不能把 bhHUD 值或 Pawn 存在等同于接受输入。剧情、暂停及其它地图仍需实际回归。
+The menu A/B check confirmed that the bhHUD state and `PlayerWalking` can both stay unchanged. So the backend also checks the native input-disable flag (see below). The bhHUD value or the existence of a Pawn cannot be equated with accepting input. Story, pause and other maps still need live regression.
 
-`intAfcControllerexecSetPlayerControl` → `829EB0D8` → controller 虚表 `+0x49C`，参数为两个 bool。PID 40964 的地图控制器该虚函数为 `82A1C0C8`：bEnable 为真选 `PlayerWalking`，否则选 `PlayerNoControl` 并重置运动。证据：`out/teleport-control.txt`、`out/teleport-control-flags.txt`。
+`intAfcControllerexecSetPlayerControl` → `829EB0D8` → controller vtable `+0x49C`, with two bool parameters. On PID 40964's map controller, this virtual function is `82A1C0C8`: if bEnable is true it selects `PlayerWalking`, otherwise it selects `PlayerNoControl` and resets motion. Evidence: `out/teleport-control.txt`, `out/teleport-control-flags.txt`.
 
-当前后端额外允许状态名精确为 `PlayerWalking` 或 `PlayerIdling`：`822A95C8` 的状态名 getter 提供 `controller+0x18 → frame+0x1C → state+0x2C` 的 FName，`822A9668` 提供名字表 `*(0x833690D0)`、数量 `*(0x833690D4)`、条目文本 `+16` 的 UTF-16BE。读取时检查数组界限，编号后缀必须为零。没有固定动态 FName 编号或调用状态切换函数。
+The backend additionally allows only the state names exactly `PlayerWalking` or `PlayerIdling`. The state-name getter at `822A95C8` provides the FName along the path `controller+0x18 → frame+0x1C → state+0x2C`. `822A9668` provides the name table `*(0x833690D0)`, the count `*(0x833690D4)`, and the UTF-16BE entry text at `+16`. Reads check the array bounds, and the numeric suffix must be zero. There is no fixed dynamic FName number, and no state-switch function is called.
 
-PID 40964 现场为 controller `0x3096E00`、state `0x18D1D98`、FName `(0x32A5,0)`，表 `0x33E0000` 的对应条目实际读出 `PlayerWalking`。这些地址仅用于证据。此门禁明确拒绝 `PlayerNoControl`。随后 PID 19040 在 45.053 秒曾记录 available=true，站立后只读脚本读到 `PlayerIdling`：Walking-only 会导致可用性变化并反复清除记录坐标，因此实现扩为上述两个已确认状态的并集。游戏菜单仍可保持 `PlayerWalking`，所以控制状态名单不能替代下文的菜单禁控标志。
+PID 40964 on-site: controller `0x3096E00`, state `0x18D1D98`, FName `(0x32A5,0)`. The corresponding entry in table `0x33E0000` actually read `PlayerWalking`. These addresses are only evidence. This gate explicitly refuses `PlayerNoControl`. Later, PID 19040 recorded available=true at 45.053 seconds. After standing still, a read-only script read `PlayerIdling`. Walking-only caused the availability to change and repeatedly cleared the recorded coordinates, so the implementation was expanded to the union of the two confirmed states. The game menu can still keep `PlayerWalking`, so the control-state list cannot replace the menu input-disable flag described below.
 
-## 后台集成验证入口
+## Background integration validation entry
 
-设置 `LO_TELEPORT_COMMAND_FILE` 为独立测试目录中的文本文件，序号严格递增：
+Set `LO_TELEPORT_COMMAND_FILE` to a text file in a separate test directory. Serial numbers must increase strictly:
 
 ```text
 1 status
@@ -81,70 +83,70 @@ PID 40964 现场为 controller `0x3096E00`、state `0x18D1D98`、FName `(0x32A5,
 5 absolute -2868.77 -3599.70 175.27
 ```
 
-每次文件只保留一条命令；等日志完成后再写下一条。命令使用同一 UI 请求接口，不注入系统键鼠。`status` 输出可用状态、当前位置、是否有记录位置；`native result` 输出目标与实际坐标。上述坐标只是旧现场示例，不作为所有地图的默认目的地。
+Each file holds only one command. Write the next command only after the log has finished. Commands use the same UI request interface and do not inject system keyboard or mouse input. `status` outputs whether it is available, the current position, and whether a recorded position exists. `native result` outputs the target and the actual coordinates. The coordinates above are only old on-site examples. They are not default destinations for all maps.
 
-输入和偏移相加后的目标同时限制为有限数值、每轴绝对值不超过 `MaxTeleportCoordinate=1000000`；这是人为调试保护，避免极大输入破坏碰撞计算，不是逆向得到的引擎世界范围。
+The target after adding the input and offset is limited to finite values, with each axis's absolute value not exceeding `MaxTeleportCoordinate=1000000`. This is a human-made debug guard, to keep very large input from breaking collision calculations. It is not an engine world range obtained by reverse engineering.
 
-最低回归：地图记录→小位移→恢复→重启读档；战斗及游戏菜单拒绝；切图后旧记录不可恢复；不合法/非有限坐标拒绝；墙内目标由原生碰撞处理。完成后由实际运行者追加目录、截图和日志结果。
+Minimum regression: map record → small displacement → restore → restart and reload. Refusal in battle and in the game menu. After a map change, old records cannot be restored. Invalid and non-finite coordinates are rejected. A target inside a wall is handled by native collision. After finishing, the person who actually ran the test appends the directory, screenshots and log results.
 
 
-## 游戏菜单禁控现场与原生证据
+## Game menu input-disable state and native evidence
 
-PID 29764 的菜单关闭/打开只读快照保存为 `out/teleport-menu-baseline.json`、`out/teleport-menu-open.json`，差分 `out/teleport-menu-diff.txt`。菜单不改变 PlayerWalking，bhHUD 状态仍为 0，所以仅靠前述两者无法禁止菜单内传送。
+Read-only snapshots of the menu close and open on PID 29764 are saved as `out/teleport-menu-baseline.json` and `out/teleport-menu-open.json`, and the diff is `out/teleport-menu-diff.txt`. The menu does not change PlayerWalking, and bhHUD state stays 0. So the two checks above alone cannot block teleporting from inside the menu.
 
-关键变化为 controller `+0x5C8` 的 `0x20` 位由 0 变 1，controller `+0x639` 字节由 0 变 1。原生 `82A18080` 的确把 bool 参数写入该位；进入禁控分支时将 Pawn `+0x54` 保存到 controller `+0x638`，通过原生虚调用改变 Pawn 的物理状态，并记录 `+0x639` 模式；离开时恢复已保存的物理状态、清模式。`82A151D8` 查询该位及模式，`8235FCA0` 在查询为真或模式非零时跳过对应控制分支。完整只读反编译为 `out/teleport-menu-control.txt`。
+The key change: bit `0x20` of controller `+0x5C8` goes from 0 to 1, and the byte at controller `+0x639` goes from 0 to 1. The native `82A18080` does write the bool parameter into this bit. On entering the disabled-control branch, it saves Pawn `+0x54` into controller `+0x638`, changes the Pawn's physics state through a native virtual call, and records the mode in `+0x639`. On leaving, it restores the saved physics state and clears the mode. `82A151D8` queries this bit and mode, and `8235FCA0` skips the corresponding control branch when the query is true or the mode is non-zero. The full read-only decompilation is `out/teleport-menu-control.txt`.
 
-当前实现已整合保守门禁：`controller+0x5C8 & 0x20` 或 `byte(controller+0x639)!=0` 时拒绝，并与 Walking/Idling 名单、Pawn 双向关系共同判断。主代理正在 `out/teleport-control-verified/` 复测；本节的静态与菜单差分证据不等同于整合版已通过菜单拒绝测试。
+The current implementation combines a conservative gate: if `controller+0x5C8 & 0x20` or `byte(controller+0x639)!=0`, the request is refused. It is judged together with the Walking/Idling list and the two-way Pawn relationship. The main agent is re-testing in `out/teleport-control-verified/`. The static and menu-diff evidence in this section is not the same as the integrated build having passed the menu-refusal test.
 
-## 已完成的后台游戏验证
+## Completed background game validation
 
-整合版目录 `out/teleport-control-verified/`，运行时和测试副本一致；使用隐藏SDL窗口、进程内输入与传送命令文件，没有桌面键鼠或窗口激活。
+Integrated build directory `out/teleport-control-verified/`, with runtime and test copy identical. It used a hidden SDL window, in-process input and the teleport command file. No desktop keyboard or mouse, and no window activation.
 
-- 63.901秒记录 `(896,1008,41.921627)`，65.899秒原生传送到 `(1046,1008,41.921627)` 返回成功；87.096秒仍保持X/Y，Z由地面物理调整到44.07163，未被旧位置覆盖。
-- 89.107秒返回记录点，原生实际坐标与记录完全一致。截图 before.png、offset.png、restored.png。
-- 打开游戏菜单后出现 `game menu/control suspended`，96.638秒偏移请求accepted=false。关闭菜单后旧记录已失效，restore被拒绝。
-- 超限坐标1000001被拒绝；137.442秒绝对坐标 `(896,1060,50)`传送成功。
-- 随后通过游戏输入正常行走，143.442秒坐标变为 `(1274.8342,1086.3708,46.09128)`，截图walk-after.png，说明物理/移动继续执行。
+- At 63.901 seconds, `(896,1008,41.921627)` was recorded. At 65.899 seconds, the native teleport to `(1046,1008,41.921627)` returned success. At 87.096 seconds X/Y were still kept, and Z was adjusted by ground physics to 44.07163, not overwritten by the old position.
+- At 89.107 seconds, return to the recorded point. The native actual coordinates matched the record exactly. Screenshots before.png, offset.png, restored.png.
+- After opening the game menu, `game menu/control suspended` appeared. At 96.638 seconds, the offset request had accepted=false. After closing the menu, the old record was invalid, and restore was refused.
+- Out-of-range coordinate 1000001 was refused. At 137.442 seconds, absolute coordinates `(896,1060,50)` teleported successfully.
+- After that, normal walking with game input worked. At 143.442 seconds the coordinates became `(1274.8342,1086.3708,46.09128)`, screenshot walk-after.png, which shows that physics and movement continue to run.
 
-F1菜单代码构建通过；本轮依用户约定没有打开前台菜单，测试命令走相同请求接口。战斗与教学边界实测见下一节；尚未验证所有跨区域切图。
+The F1 menu code build passed. Following the user's convention in this round, the foreground menu was not opened. Test commands used the same request interface. Battle and tutorial boundary tests are in the next section. Cross-area map changes have not been validated.
 
-### 战斗/教学边界与最终构建
+### Battle/tutorial boundary and final build
 
-同一进程在传送恢复后正常走过残骸、取得戒指并到下一场遇敌。301.051秒戒指教学期间available=false。400.270秒在地图重新记录位置；404.835秒进入战斗HUD状态，429.471秒offset被拒绝，431.470秒restore被拒绝，433.468秒status确认available=false、bookmark=false。证据battle-disabled.png及run.log，没有通过传送修改战斗角色。
+In the same process, after teleport recovery it normally walked through the wreckage, obtained the ring, and reached the next encounter. During the ring tutorial at 301.051 seconds, available=false. At 400.270 seconds the position was recorded again on the map. At 404.835 seconds it entered the battle HUD state. At 429.471 seconds offset was refused, at 431.470 seconds restore was refused, and at 433.468 seconds status confirmed available=false and bookmark=false. Evidence: battle-disabled.png and run.log. No battle character was changed by teleport.
 
-实测后端二进制SHA256为 `B5772F7F22E337938A2FE808A776D0816548D1F0A0196ED60FE621681F983D9D`。最终仅将坐标输入框初值由0改为空，避免未填坐标就传送到原点；最终构建 `out/teleport-final-build.log` 通过，SHA256 `46D132782BA1E6615DC2995114A35FFE3F06760FEE94D06169E746E8328D2761`。F1界面没有在前台打开，后台命令通过同一请求路径测试。尚未验证全游戏地图、任意墙内目标和全部演出状态。
+The measured backend binary SHA256 is `B5772F7F22E337938A2FE808A776D0816548D1F0A0196ED60FE621681F983D9D`. The only final change was to change the initial value of the coordinate input box from 0 to empty, to avoid teleporting to the origin when no coordinates are entered. The final build `out/teleport-final-build.log` passed, SHA256 `46D132782BA1E6615DC2995114A35FFE3F06760FEE94D06169E746E8328D2761`. The F1 interface was not opened in the foreground. Background commands were tested through the same request path. Not yet validated: all game maps, arbitrary targets inside walls, and all event states.
 
-## 当前地图 POI 列表（2026-09-04）
+## Current map POI list (2026-09-04)
 
-在F1传送区加入POI下拉列表、落点坐标/距离预览和“传送到此POI”。仅枚举当前world已经加载的Level，不提供跨图加载；每秒刷新，传送执行时重新确认Actor仍在加载列表中。菜单线程只读取快照、提交不复用的POI编号。
+A POI dropdown list, landing coordinate and distance preview, and "Teleport to this POI" were added to the F1 teleport area. It only lists Levels already loaded in the current world. It does not provide cross-map loading. It refreshes every second, and when teleporting, it re-confirms that the Actor is still in the loaded list. The menu thread only reads snapshots and submits non-reused POI numbers.
 
-数据依据来自后台只读枚举：UWorld+0x44/+0x48是已加载Level数组；每个对象的Class（UObject+0x34）名称为Level，其Actor数组在+0x3C/+0x40。Actor的Outer(+0x28)反指相应Level，FName在+0x2C/+0x30。Hypocenter实际加载Entry及u11_0_mapw/scrw/camw/sndw/colw/navw/lvdw八个Level；只枚举world+0x50会遗漏地图POI。
+The data basis comes from background read-only enumeration: UWorld+0x44/+0x48 is the loaded Level array. For each object, the Class (UObject+0x34) name is Level, and its Actor array is at +0x3C/+0x40. An Actor's Outer (+0x28) points back to the corresponding Level, and its FName is at +0x2C/+0x30. Hypocenter actually loads the Entry and eight Levels: u11_0_mapw/scrw/camw/sndw/colw/navw/lvdw. Enumerating only world+0x50 would miss map POIs.
 
-识别类：fgGimmickSavePoint（存档）、fnMapJumpPoint（出口）、PlayerStart（入口/落脚）、fgGimmickAttackPoint（机关）、fgGimmickTouchPoint及fiItem（拾取/触碰）。不把动态提示fpNoticeActor、灯光、体积和任意dummy点当POI。Entry的备用PlayerStart在Z=-14924，已排除；零坐标占位点、待删除对象、不合法坐标也排除。
+Recognised classes: fgGimmickSavePoint (save), fnMapJumpPoint (exit), PlayerStart (entry/landing), fgGimmickAttackPoint (mechanism), fgGimmickTouchPoint and fiItem (pickup/touch). Dynamic hint fpNoticeActor, lights, volumes, and arbitrary dummy points are not counted as POIs. The Entry's spare PlayerStart at Z=-14924 was excluded. Zero-coordinate placeholders, objects marked for deletion, and invalid coordinates are also excluded.
 
-存档标记使用效果/地面原点，例如(896,1008,-54.846)，不能直接当玩家落点；优先匹配附近fdDummyPoint。出口优先匹配附近PlayerStart，例如Hypocenter出口对应(9982.069,-3972.467,61.457)。其他标记上移100游戏单位作为候选。若原生SetLocation拒绝，最多检查128/256半径各8个候选，保留碰撞，不强制穿模；全部失败则提示拒绝。上移和搜索半径是debug落点策略，不是推断出的引擎字段。
+Save markers use the effect/ground origin, for example (896,1008,-54.846), which cannot be used directly as the player's landing point. The backend prefers matching a nearby fdDummyPoint. Exits prefer matching a nearby PlayerStart, for example the Hypocenter exit corresponds to (9982.069,-3972.467,61.457). Other markers are moved up by 100 game units as candidates. If the native SetLocation refuses, it checks up to 8 candidates each at radius 128 and 256, keeps collision, and does not force clipping through walls. If all fail, it reports the refusal. The upward shift and search radii are debug landing policy, not engine fields inferred from the data.
 
-数据不是全收集清单；尚未加载的区域、脚本尚未生成的道具和未识别类别不会出现。通用编号是调试标签，不冒充本地化道具名。POI到达仍可能触发遇敌/剧情/切图。
+The data is not a complete collection list. Areas not yet loaded, props not yet spawned by scripts, and unrecognised categories will not appear. The generic numbers are debug labels and do not pass as localised item names. Reaching a POI can still trigger encounters, story or map changes.
 
-第一轮out/poi-verified列出20点，存档POI传送成功；机关标记被碰撞拒绝且角色保留原位，促成附近落点搜索。
+The first round, out/poi-verified, listed 20 points. Teleport to the save POI succeeded. The mechanism marker was refused by collision, and the character stayed in its original position, which led to the nearby landing search.
 
-### POI 整合版后台验证
+### POI integrated build background validation
 
-目录 `out/poi-landing-verified/`，使用独立save/profile副本、隐藏窗口及进程内命令；没有桌面输入或窗口激活。`run.log`与截图保留以下证据：
+Directory `out/poi-landing-verified/`, using an independent save/profile copy, a hidden window and in-process commands. No desktop input or window activation. The `run.log` and screenshots keep the following evidence:
 
-- 38.653秒列出Hypocenter的20个POI。133.858秒传送到机关点，原坐标被碰撞拒绝后，在128半径找到落点 `(6211.241,150.47495,121.66301)`；截图 `interaction-poi.png` 出现原生 A Ram 提示。
-- 149.857秒返回存档POI成功，截图 `save-poi.png` 出现 A Save 提示。原生落点使用执行时新读到的anchor，而非首次列表中的旧坐标。
-- 167.291秒打开游戏菜单触发禁控；175.017秒POI请求被拒绝，185.416秒列表为空。关闭菜单后205.018秒旧编号33仍被拒绝；213.019秒新列表为20点，编号从41起，不复用之前的21–40。
-- 228.220秒传送到出口附近成功，目标 `(9982.069,-3972.4673,61.456505)`，原生碰撞将实际Z调整到76.17852；截图 `exit-poi.png` 可见出口通道和站立角色。未把“到出口附近”等同于已完成切图。
+- At 38.653 seconds, the 20 POIs in Hypocenter were listed. At 133.858 seconds, it teleported to the mechanism point. The original coordinate was refused by collision, and a landing point was found within radius 128 at `(6211.241,150.47495,121.66301)`. Screenshot `interaction-poi.png` shows the native A Ram prompt.
+- At 149.857 seconds, return to the save POI succeeded. Screenshot `save-poi.png` shows the A Save prompt. The native landing used the anchor read at execution time, not the old coordinate from the first list.
+- At 167.291 seconds the game menu was opened, which triggered control disable. At 175.017 seconds the POI request was refused. At 185.416 seconds the list was empty. After closing the menu, at 205.018 seconds the old number 33 was still refused. At 213.019 seconds the new list had 20 points, with numbers starting from 41, not reusing 21–40.
+- At 228.220 seconds, teleport to near the exit succeeded, target `(9982.069,-3972.4673,61.456505)`. Native collision adjusted the actual Z to 76.17852. Screenshot `exit-poi.png` shows the exit passage and the standing character. "Near the exit" was not equated with completing a map change.
 
-最终构建 `out/poi-final-build.log` 成功，SHA256 `2D9A5696DDD48B77593792FF61D2BBBD89F566F319940D0E26D5D488BD492BD5`。相对实测版本只增加菜单窗口高度，避免底部说明裁切；后端一致。F1窗口未前台打开，后台命令走相同请求接口。尚未验证全游戏地图和全部类型落点；此列表只保证当前已加载、已识别的候选点，实际传送仍由原生碰撞与控制状态决定。
+The final build `out/poi-final-build.log` succeeded, SHA256 `2D9A5696DDD48B77593792FF61D2BBBD89F566F319940D0E26D5D488BD492BD5`. Compared with the measured version, it only increases the menu window height, to avoid clipping the bottom help text. The backend is the same. The F1 window was not opened in the foreground. Background commands used the same request interface. The whole game map and all types of landing points have not been validated. This list only guarantees the currently loaded and recognised candidate points. Actual teleporting is still decided by native collision and control state.
 
-## 前台菜单回归（2026-09-05）
+## Foreground menu regression (2026-09-05)
 
-新增普通应用窗口样式，使调试面板可通过任务栏独立切换。显示标签仅在文字变化时刷新，避免连续 WM_SETTEXT 导致短暂空白。`LO_DEBUG_MENU_OPEN=1` 是可选的启动打开入口；正常启动仍不打开。
+A normal application window style was added, so the debug panel can be switched independently from the taskbar. The display label refreshes only when the text changes, to avoid a brief blank caused by repeated WM_SETTEXT. `LO_DEBUG_MENU_OPEN=1` is an optional startup open entry. Normal startup still does not open it.
 
-`out/map-info-current-01/window.log` 的 Gorge 独立存档副本：实际点击“记住当前位置”、X +100、“返回记录位置”；原生结果分别移动到 X=-3369.0159 并返回 X=-3469.0159，返回三轴坐标与记录完全相同。前台按钮启用/禁用、状态和坐标已截图检查。
+Gorge independent save copy in `out/map-info-current-01/window.log`: actual clicks on "Remember current position", X +100, and "Return to recorded position". The native result moved to X=-3369.0159 and returned to X=-3469.0159. The three-axis coordinates on return were exactly the same as the record. Foreground button enabled/disabled state, status and coordinates were checked with screenshots.
 
-`out/map-info-hypocenter-01/final.log` 使用改为按需刷新标签的最终构建，在 Hypocenter 点击“传送到此 POI”到出口附近，原生碰撞后站立在 X=9982.069、Y=-3972.4673；界面显示“传送完成”。此前后台边界测试继续有效。
+`out/map-info-hypocenter-01/final.log` uses the final build, which changes the label to refresh on demand. In Hypocenter, "Teleport to this POI" was clicked to the exit area. After native collision, the character stood at X=9982.069, Y=-3972.4673, and the interface showed "Teleport complete". The earlier background boundary tests remain valid.
 
-本轮 F1 在面板内关闭已验证；自动化从游戏窗口发送 F1 未观察到 SDL 键盘日志，不将该自动输入称为已通过。启动打开与鼠标按钮已验证，不修改原有 SDL 快捷键定义。
+Closing F1 from inside the panel was verified this round. Sending F1 to the game window by automation did not produce an SDL keyboard log, so this automatic input is not counted as passed. Startup opening and mouse buttons were verified. The original SDL shortcut definitions were not changed.

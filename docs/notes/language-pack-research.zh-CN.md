@@ -1,5 +1,7 @@
 # 语言包（#369）：导出、导入、新增语言的设计与可行性
 
+[English](language-pack-research.md)
+
 2026-10-09。来源：静态阅读 main `ae84cf7e` 的代码和重编译 PPC；离线解析 Asia 版（int/jpn/kor/chi/sch）和 USA/Europe 版（int/jpn/deu/fra/spa/ita）光盘的 `LO.fpi`/`*.fpd`；一份已有的 debug 运行日志（Asia 盘 + 3 个 DLC，带 `NtReadFile` 行）。没有运行游戏。依据一栏：「代码」= 读代码确认，「离线」= 离线解析或原型验证，「日志」= 运行日志，「推断」= 未验证。
 
 目标：modder 能把游戏文本导出成可编辑文件、翻译后导入游戏，并把译文作为新语言出现在设置里。第一个目标语言是巴西葡萄牙语。

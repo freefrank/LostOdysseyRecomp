@@ -8,15 +8,149 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
+
+### 简体中文
+
+- Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
+
+## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19
+
+### English
+
+- macOS: fixed a crash when starting a new game with frame generation enabled (#651).
+- Android: CTRL can now hide all touch controls for screenshots; reveal the system bars or use Android Back to show CTRL again (#646).
+- The title menu now lets you quit the game with Back / View (Backspace on the keyboard), after a Yes/No confirmation.
+- Real-time cutscenes: Voice volume now sets the dialogue, and the Music volume no longer mutes it. Cutscene music is mixed with the sound effects, so it follows Sound effects (#631).
+
+### 简体中文
+
+- macOS：修复开启插帧后开始新游戏时崩溃的问题（#651）。
+- Android：CTRL 现在可隐藏所有触控控件，方便截图；呼出系统栏或使用 Android 返回即可再次显示 CTRL（#646）。
+- 标题菜单现在可按 Back／View（键盘 Backspace），确认后退出游戏。
+- 即时演算过场：语音音量现在控制对白，音乐音量不再把对白静音。过场配乐和音效混在一起，跟随音效音量（#631）。
+
+## [v1.0.5](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.5) — 2026-10-18
+
+### English
+
+- Cheats: the fast-forward button can be LT or LB (#640).
+- Linux: the AppImage now starts from the Steam Beta client and other places where it cannot mount itself (#639).
+- Settings → Graphics → Loading speed: Original keeps the Xbox 360 loading pace, Fast (the default) is the current faster loading (#633).
+- Cutscenes and the pause overlay now show black bars outside 16:9 on taller and ultrawide screens (#602).
+- The Music volume now also lowers the music in real-time cutscenes (#631).
+- Right-to-left language packs: tutorial text ends at the right of its box, a long location name on the battle results no longer covers the play time, and text that types in letter by letter appears whole instead of from the left.
+- Language packs can translate the achievements: an `achievements.ini` in the pack gives the notification's heading and each achievement's name and texts, shown in the notification and in Settings → System → Achievements. Arabic there is joined and drawn right to left. In right-to-left packs, pop-ups and narration appear whole too and are no longer cut mid-word every 26 letters, the speaker's name sits at the right of the message window, and the Thousand Years of Dreams pages keep their right-to-left lines while the game animates them.
+
+### 简体中文
+
+- “辅助”菜单：快进按键可选 LT 或 LB（#640）。
+- Linux：AppImage 现在可以从 Steam 测试版客户端等无法挂载的环境中启动（#639）。
+- “设置 → 图形 → 加载速度”：原版保持 Xbox 360 的加载节奏，快速（默认）即现在更快的加载方式（#633）。
+- 过场动画和暂停画面现在会在较高及超宽屏幕的 16:9 范围外显示黑边（#602）。
+- 音乐音量现也能调低即时演算过场中的配乐（#631）。
+- 从右到左的语言包：教程文字靠框的右侧对齐；战斗结算画面中较长的地点名称不再盖住游戏时间；逐字出现的文字改为整段显示，不再从左侧开始出现。
+- 语言包可以翻译成就：包中的 `achievements.ini` 提供成就通知的标题以及每个成就的名称和说明，显示在通知和“设置 → 系统 → 成就”中；其中的阿拉伯文会正确连写并从右到左显示。从右到左的语言包中，弹出提示和旁白也会整段显示，不再每 26 个字母就从词中间断行；说话人的名字显示在对话框右侧；“千年之梦”页面在游戏播放动画时也保持从右到左的排列。
+
+## [v1.0.4](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.4) — 2026-10-18
+
+### English
+
+- Fixed the save menu sometimes no longer responding after saving (#615).
+
+### 简体中文
+
+- 修复存档后存档菜单偶尔不再响应的问题（#615）。
+
+## [v1.0.3](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.3) — 2026-10-17
+
+### English
+
+- Fixed the save menu sometimes hanging after saving, a problem introduced in v1.0.2.
+
+### 简体中文
+
+- 修复 v1.0.2 引入的存档后存档菜单偶尔卡住的问题。
+
+## [v1.0.2](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.2) — 2026-10-17
+
+### English
+
+- Debug log is now on by default, including existing installs, so crash reports include more detail.
+- Direct3D 12: fixed two bugs that could close the game with a "GPU stopped" error.
+- Language packs for right-to-left languages such as Arabic (`direction=rtl` in `language.ini`): text is right-aligned in menus, lists, help bars and dialogue (layout is not mirrored), Arabic joins correctly on the title and pause screens, and Arabic mod names show in the settings menu. Packs can also translate the Thousand Years of Dreams text and the place names (name_data.xmb).
+- Fixed the save menu sometimes no longer responding after saving (#615).
+
+### 简体中文
+
+- 调试日志现已默认开启，已有安装也会启用，让崩溃反馈包含更多细节。
+- Direct3D 12：修复两处可能让游戏因“GPU 停止工作”错误而关闭的问题。
+- 支持阿拉伯语等从右到左书写的语言包（`language.ini` 中写 `direction=rtl`）：菜单、列表、帮助栏和对话中的文字右对齐（界面布局不镜像），标题画面和暂停画面的阿拉伯文字母正确连写，设置菜单可显示阿拉伯语的 Mod 名称。语言包还可以翻译“千年之梦”的文字和地名（name_data.xmb）。
+- 修复存档后存档菜单偶尔不再响应的问题（#615）。
+
+## [v1.0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.1) — 2026-10-17
+
+### English
+
+- Fixed ground flickering near balloon enemies with TAA or temporal upscaling enabled (#604).
+
+### 简体中文
+
+- 修复启用 TAA 或时序超分辨率时，气球敌人附近的地面闪烁（#604）。
+
+## [v1.0.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.0) — 2026-10-17
+
+### English
+
+- The title screen shows Lost Odyssey Recomp's free and open-source notice, project address and a refund reminder for anyone who paid for the port.
+- Desktop: Discord Rich Presence shows your location, disc and current activity; Settings → System → Discord status turns it on or off.
+- Settings → Graphics → Dynamic shadows has a Low choice: only the 8 largest characters and objects on screen cast shadows, which lightens the GPU load in busy areas.
+- Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
+- Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
+- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
+- Cheats → Encounter rate offers Normal, Half, None or the temporary Every step mode, alongside a separate Battle EXP ×2 switch.
+- Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
+- The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
+- Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
+- Areas and battles load faster with a higher frame-rate limit during loading.
+
+### 简体中文
+
+- 标题画面新增 Lost Odyssey Recomp 免费开源署名、项目地址，以及付费购买后申请退款的提示。
+- 桌面版：Discord 状态显示当前地点、光盘和活动，可在“设置 → 系统 → Discord 状态”中开关。
+- 设置 → 图像 → 动态阴影新增“低”：只给画面上最大的 8 个角色和物体画阴影，减轻人多场景的 GPU 负担。
+- 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。
+- Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
+- 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
+- 调试菜单的 Cheats → 遇敌率可选正常、减半、关闭或临时的一步一遇敌模式，另有独立的战斗经验 ×2 开关。
+- 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
+- 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
+- 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
+- 加载地图和战斗时临时提高帧率上限，缩短等待时间。
+
+## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
+
+### English
+
 - Language packs can add missing letters to the Japanese fonts too, including the dream fonts on uncompressed pages.
 - Live mod reload keeps the active and open files safe while preparing another configuration, and edited translated text reloads from disk.
 - Memory used by a finished replacement cutscene is now released shortly after playback ends.
+- Android: Settings → System → Import discs & DLC now opens the Android importer so you can import discs and DLC (#559).
+- Settings → System → Prepare shaders again lets you run the full shader preparation at the next startup after skipping it, while keeping downloaded shaders.
+- The HDR and brightness calibration previews show the game scene from just before the menu opened, and the game no longer keeps copies of the screen in graphics memory while you play; turning MetalFX off also frees its memory.
+- Android: on Adreno 650 devices such as the Retroid Pocket 5, the game no longer freezes and closes during battles with Turnip drivers (#558).
+- Game folders imported before v0.9.57 store some disc files twice. At startup the game now offers to free that space, about 5.8 GB for all four discs, where the drive supports it.
 
 ### 简体中文
 
 - 语言包也可以给日文字体补充缺少的字母，包括使用未压缩页面的梦境字体。
 - 实时重载 Mod 时，准备另一套配置不会删除当前或仍在使用的文件，修改后的译文也会从磁盘重新加载。
 - 替换过场视频播放结束后会及时释放所占内存。
+- Android：设置 → 系统 →“导入光盘和 DLC”现在会打开 Android 导入器，可导入光盘和 DLC（#559）。
+- 设置 → 系统 → 重新准备着色器：跳过着色器准备后，可在下次启动时重新进行完整准备，同时保留已下载的着色器。
+- HDR 和亮度校准的预览显示打开菜单前那一刻的游戏画面，游玩时不再在显存里保留画面副本；关闭 MetalFX 后也会释放它占用的显存。
+- Android：在 Retroid Pocket 5 等 Adreno 650 设备上使用 Turnip 驱动时，游戏不再在战斗中卡死退出（#558）。
+- v0.9.57 之前导入的游戏目录里有些光盘文件存了两份。现在启动时会提示释放这部分空间（四张光盘约 5.8 GB），前提是所在磁盘支持。
 
 ## [v0.9.57](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.57) — 2026-10-15
 

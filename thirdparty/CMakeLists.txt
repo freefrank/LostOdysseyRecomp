@@ -76,6 +76,25 @@ if(LO_BUILD_GPU)
                 nx)
         endif()
     endif()
+    if(LO_TARGET_PLATFORM STREQUAL "switch")
+        # Optional Lossless Scaling frame generation (LO_FRAMEGEN=1, the user's
+        # own Lossless.dll): lsfg-vk's backend as vendored by NetherSX2_nx
+        # (GPL-3.0-or-later; see thirdparty/lsfg-vk/README.md).
+        file(GLOB LO_LSFG_SOURCES
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-common/src/helpers/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-common/src/vulkan/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/src/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/src/extraction/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/src/helpers/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/src/shaderchains/*.cpp")
+        add_library(lo_lsfg STATIC ${LO_LSFG_SOURCES})
+        target_include_directories(lo_lsfg PUBLIC
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-common/include"
+            "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/include"
+            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/lsfg-vk/lsfg-vk-backend/src")
+        target_compile_features(lo_lsfg PUBLIC cxx_std_20)
+        target_link_libraries(lo_lsfg PUBLIC plume)
+    endif()
     if(TARGET sdl_headers_copy)
         add_dependencies(plume sdl_headers_copy)
     endif()

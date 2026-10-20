@@ -82,6 +82,8 @@ def stage_licenses(licenses):
     shutil.copy2(ROOT / "LICENSE", licenses / "LostOdysseyRecomp.txt")
     shutil.copy2(ROOT / "thirdparty/miniz-UNLICENSE.txt", licenses / "miniz-UNLICENSE.txt")
     shutil.copy2(ROOT / "thirdparty/licenses/XeGTAO.txt", licenses / "XeGTAO.txt")
+    shutil.copy2(ROOT / "thirdparty/signalsmith-stretch/LICENSE.txt", licenses / "Signalsmith-Stretch.txt")
+    shutil.copy2(ROOT / "thirdparty/signalsmith-stretch/signalsmith-linear/LICENSE.txt", licenses / "Signalsmith-Linear.txt")
     shutil.copy2(ROOT / "thirdparty/nlohmann-json-LICENSE.txt", licenses / "nlohmann-json-LICENSE.txt")
     shutil.copy2(ROOT / "thirdparty/lzokay/LICENSE", licenses / "lzokay-LICENSE.txt")
     shutil.copy2(ROOT / "LostOdysseyRecomp/install/FONT-PROVENANCE.md", licenses / "FONT-PROVENANCE.md")
@@ -153,6 +155,10 @@ def main():
         resources = bundle / "Contents/Resources"
         executables.mkdir(parents=True)
         resources.mkdir(parents=True)
+        steam_art = resources / "assets/steam"
+        steam_art.mkdir(parents=True)
+        for name in ("portrait.png", "header.png", "hero.png", "logo.png", "icon.png"):
+            shutil.copy2(ROOT / "assets/steam" / name, steam_art / name)
         shutil.copy2(runtime, executables / "LostOdysseyRecomp")
         # The runtime loads DXC from @executable_path.
         shutil.copy2(dxc, executables / "libdxcompiler.dylib")

@@ -4,10 +4,12 @@
 #if LO_PLATFORM_SWITCH
 #include <os/netlog.h>
 #include <os/switch_platform.h>
+#include <os/switch_cpu_profiler.h>
 #include <switch.h>
 #include <sys/iosupport.h>
 #include <atomic>
 #include <cinttypes>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -30,6 +32,10 @@ extern "C"
     alignas(16) u8 __nx_exception_stack[0x8000];
     u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
 }
+
+// libnx's bounds of newlib's heap (sbrk hands out memory between them).
+extern "C" char* fake_heap_start;
+extern "C" char* fake_heap_end;
 
 // os/log_file.h (not included: this file sees libnx headers, not the PCH).
 namespace os::logger { void DrainForExit() noexcept; }
@@ -57,6 +63,49 @@ ssize_t StderrWrite(struct _reent*, void*, const char* data, size_t size)
 }
 
 char g_crashLogPath[512] = "sdmc:/switch/LostOdysseyRecomp/crash.log";
+
+// RawAppend's own file system session (see switch_platform.h). The requests are libnx's fs.c ones,
+// sent directly on this session.
+Service g_rawFs{};
+Service g_rawSd{};
+bool g_rawReady = false;
+char g_rawRoot[256] = "/switch/LostOdysseyRecomp";
+Mutex g_rawMutex;
+
+Result RawInitialize()
+{
+    Result rc = smGetService(&g_rawFs, "fsp-srv");
+    if (R_FAILED(rc))
+        return rc;
+    const uint64_t pidPlaceholder = 0;
+    rc = serviceDispatchIn(&g_rawFs, 1, pidPlaceholder, .in_send_pid = true); // SetCurrentProcess
+    if (R_SUCCEEDED(rc))
+        rc = serviceDispatch(&g_rawFs, 18, .out_num_objects = 1, .out_objects = &g_rawSd); // OpenSdCardFileSystem
+    if (R_FAILED(rc))
+    {
+        serviceClose(&g_rawFs);
+        return rc;
+    }
+    g_rawReady = true;
+    return 0;
+}
+
+// The crash report is built here: the handler must not allocate.
+char g_crashText[8192];
+size_t g_crashLength = 0;
+std::atomic<int> g_crashDepth{0};
+
+__attribute__((format(printf, 1, 2))) void CrashAppend(const char* format, ...)
+{
+    if (g_crashLength + 1 >= sizeof(g_crashText))
+        return;
+    va_list args;
+    va_start(args, format);
+    const int length = std::vsnprintf(g_crashText + g_crashLength, sizeof(g_crashText) - g_crashLength, format, args);
+    va_end(args);
+    if (length > 0)
+        g_crashLength = std::min(sizeof(g_crashText) - 1, g_crashLength + size_t(length));
+}
 uintptr_t g_moduleBase = 0;
 uintptr_t g_moduleEnd = 0;
 
@@ -145,29 +194,48 @@ void OnTerminate()
 
 extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx)
 {
-    // Runs on __nx_exception_stack. Best effort: stdio may be unusable if the
-    // fault happened inside it.
-    FILE* file = std::fopen(g_crashLogPath, "a");
-    if (!file)
-        ExitWithLog();
-    const std::time_t now = std::time(nullptr);
-    std::fprintf(file, "\n=== Lost Odyssey Recomp crash, %s", std::ctime(&now));
-    std::fprintf(file, "error_desc %#x  esr %#x  far %016" PRIx64 "  pstate %#x\n",
+    // Runs on __nx_exception_stack. Nothing here allocates or uses stdio until the report is on the
+    // card: a crash with an empty crash.log (Uhra, round 6) means the old fopen/fprintf path got stuck.
+    if (g_crashDepth.fetch_add(1) != 0)
+    {
+        // A second fault: in this handler, or another thread while the first is being reported
+        // (they share the exception stack). Note it and leave.
+        char line[192];
+        const int length = std::snprintf(line, sizeof(line), "=== second fault while reporting a crash: pc %016" PRIx64
+            " (elf+%#" PRIx64 ") far %016" PRIx64 "\n", ctx->pc.x, ctx->pc.x - g_moduleBase, ctx->far.x);
+        if (length > 0)
+            os::switch_platform::RawAppend("crash.log", line, std::min(size_t(length), sizeof(line) - 1));
+        svcExitProcess();
+    }
+
+    g_crashLength = 0;
+    char thread[48] = "(unnamed)";
+    os::switch_cpu_profiler::TryGetCurrentThreadName(thread, sizeof(thread));
+    u64 seconds = 0;
+    timeGetCurrentTime(TimeType_Default, &seconds);
+    CrashAppend("\n=== Lost Odyssey Recomp crash, unix time %llu, thread %s\n", (unsigned long long)seconds, thread);
+    CrashAppend("error_desc %#x  esr %#x  far %016" PRIx64 "  pstate %#x\n",
         ctx->error_desc, ctx->esr, ctx->far.x, ctx->pstate);
-    std::fprintf(file, "module %016" PRIxPTR "-%016" PRIxPTR "\n", g_moduleBase, g_moduleEnd);
-    WriteAddress(file, "pc", ctx->pc.x);
-    WriteAddress(file, "lr", ctx->lr.x);
-    WriteAddress(file, "sp", ctx->sp.x);
-    WriteAddress(file, "fp", ctx->fp.x);
+    CrashAppend("module %016" PRIxPTR "-%016" PRIxPTR "\n", g_moduleBase, g_moduleEnd);
+    auto address = [](const char* name, uint64_t value) {
+        if (value >= g_moduleBase && value < g_moduleEnd)
+            CrashAppend("%-4s %016" PRIx64 "  (elf+%#" PRIx64 ")\n", name, value, value - g_moduleBase);
+        else
+            CrashAppend("%-4s %016" PRIx64 "\n", name, value);
+    };
+    address("pc", ctx->pc.x);
+    address("lr", ctx->lr.x);
+    address("sp", ctx->sp.x);
+    address("fp", ctx->fp.x);
     for (int i = 0; i < 29; ++i)
     {
         char name[8];
         std::snprintf(name, sizeof(name), "x%d", i);
-        WriteAddress(file, name, ctx->cpu_gprs[i].x);
+        address(name, ctx->cpu_gprs[i].x);
     }
     // Frame-pointer chain of the host code (the recompiled game code omits
     // frame pointers, so the chain stops at the first guest function).
-    std::fprintf(file, "backtrace:\n");
+    CrashAppend("backtrace:\n");
     uintptr_t frame = ctx->fp.x;
     for (int depth = 0; depth < 32 && frame && (frame & 7) == 0; ++depth)
     {
@@ -176,12 +244,27 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx)
         if (R_FAILED(svcQueryMemory(&info, &page, frame)) || !(info.perm & Perm_R))
             break;
         const auto* record = reinterpret_cast<const uintptr_t*>(frame);
-        WriteAddress(file, "  at", record[1]);
+        address("  at", record[1]);
         if (record[0] <= frame)
             break;
         frame = record[0];
     }
-    std::fclose(file);
+
+    if (os::switch_platform::RawAppend("crash.log", g_crashText, g_crashLength))
+    {
+        // Where every other thread was: the crash may be a symptom of one of them.
+        size_t size = 0;
+        const char* threads = os::switch_cpu_profiler::DumpThreads("other threads at the crash:\n", size, "crash.log");
+        os::switch_platform::RawAppend("crash.log", threads, size);
+        static const char done[] = "=== end of crash report\n";
+        os::switch_platform::RawAppend("crash.log", done, sizeof(done) - 1);
+    }
+    else if (FILE* file = std::fopen(g_crashLogPath, "a"))
+    {
+        // No session of our own: the old path, best effort.
+        std::fwrite(g_crashText, 1, g_crashLength, file);
+        std::fclose(file);
+    }
     ExitWithLog();
 }
 
@@ -275,6 +358,43 @@ void ApmThreadMain(void*)
 
 namespace os::switch_platform
 {
+bool RawAppend(const char* fileName, const char* data, size_t size)
+{
+    if (!g_rawReady || size == 0)
+        return false;
+    // The watchdog and the crash handler may both write. Never wait long: a stuck writer must
+    // not stop the other one.
+    bool locked = false;
+    for (int attempt = 0; attempt < 100 && !(locked = mutexTryLock(&g_rawMutex)); ++attempt)
+        svcSleepThread(1'000'000);
+    char path[0x301]{};
+    std::snprintf(path, sizeof(path), "%s/%s", g_rawRoot, fileName);
+    const struct { u32 option; u32 pad; s64 size; } create = { 0, 0, 0 };
+    serviceDispatchIn(&g_rawSd, 0, create, // CreateFile; fails harmlessly if it exists
+        .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_In }, .buffers = { { path, sizeof(path) } });
+    Service file{};
+    const u32 mode = FsOpenMode_Write | FsOpenMode_Append;
+    Result rc = serviceDispatchIn(&g_rawSd, 8, mode, // OpenFile
+        .buffer_attrs = { SfBufferAttr_HipcPointer | SfBufferAttr_In }, .buffers = { { path, sizeof(path) } },
+        .out_num_objects = 1, .out_objects = &file);
+    if (R_SUCCEEDED(rc))
+    {
+        s64 offset = 0;
+        rc = serviceDispatchOut(&file, 4, offset); // GetSize
+        if (R_SUCCEEDED(rc))
+        {
+            const struct { u32 option; u32 pad; s64 offset; s64 size; } in = { FsWriteOption_Flush, 0, offset, s64(size) };
+            rc = serviceDispatchIn(&file, 1, in, // Write
+                .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In | SfBufferAttr_HipcMapTransferAllowsNonSecure },
+                .buffers = { { data, size } });
+        }
+        serviceClose(&file);
+    }
+    if (locked)
+        mutexUnlock(&g_rawMutex);
+    return R_SUCCEEDED(rc);
+}
+
 void StartHandheldGpuBoost()
 {
     // A libnx thread: it ends on its own and is never joined.
@@ -287,6 +407,13 @@ void Initialize(const std::filesystem::path& dataRoot)
     std::error_code ec;
     std::filesystem::create_directories(dataRoot, ec);
     std::snprintf(g_crashLogPath, sizeof(g_crashLogPath), "%s", (dataRoot / "crash.log").c_str());
+    {
+        const std::string root = dataRoot.string();
+        std::snprintf(g_rawRoot, sizeof(g_rawRoot), "%s", root.compare(0, 5, "sdmc:") == 0 ? root.c_str() + 5 : root.c_str());
+        mutexInit(&g_rawMutex);
+        if (R_FAILED(RawInitialize()))
+            g_rawReady = false;
+    }
     CaptureModuleRange();
     std::set_terminate(OnTerminate);
 
@@ -338,6 +465,12 @@ void AllowExit()
     appletUnlockExit();
 }
 
+void ExitNow()
+{
+    appletUnlockExit();
+    ExitWithLog();
+}
+
 void ShowError(const std::string& summary, const std::string& details)
 {
     std::fprintf(stderr, "fatal: %s\n%s\n", summary.c_str(), details.c_str());
@@ -374,9 +507,12 @@ std::string MemorySummary()
     // The heap is where nearly everything lives (guest memory chunks, NVK
     // buffers, thread stacks); UsedMemorySize does not count it for us.
     const struct mallinfo heap = mallinfo();
-    char text[192];
-    std::snprintf(text, sizeof(text), "heap in use %llu MiB (arena %llu MiB), process %llu/%llu MiB, threads %llu/%llu",
+    // libnx gives newlib's heap [fake_heap_start, fake_heap_end); the arena can grow up to that.
+    const size_t heapLimit = size_t(fake_heap_end - fake_heap_start);
+    char text[224];
+    std::snprintf(text, sizeof(text), "heap in use %llu MiB (arena %llu of %llu MiB), process %llu/%llu MiB, threads %llu/%llu",
         static_cast<unsigned long long>(size_t(heap.uordblks) >> 20), static_cast<unsigned long long>(size_t(heap.arena) >> 20),
+        static_cast<unsigned long long>(heapLimit >> 20),
         static_cast<unsigned long long>(used >> 20), static_cast<unsigned long long>(total >> 20),
         static_cast<unsigned long long>(threadsUsed), static_cast<unsigned long long>(threadsLimit));
     return text;

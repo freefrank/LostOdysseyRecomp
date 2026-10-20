@@ -59,6 +59,11 @@ jobs:
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-macos.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch
+      - name: Test Discord desktop IPC (no game data)
+        run: |
+          cmake -S tools/tests/discord_rpc -B out/build/discord-rpc -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/build/discord-rpc --parallel 4
+          ctest --test-dir out/build/discord-rpc --output-on-failure
       - name: Build recompiler tools
         run: |
           cmake -S tools/xexdump -B out/build/tools -G Ninja -DCMAKE_BUILD_TYPE=Release

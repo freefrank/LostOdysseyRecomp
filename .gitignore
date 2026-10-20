@@ -158,3 +158,8 @@ docs/MACOS_PORT_TODO.md
 docs/MACOS_PORT_WORKLOG.md
 /saves/
 /dlc-packages/
+
+# Local tool files (sync, search, npm), not part of the project
+/.ignore
+/.stignore
+/package-lock.json

@@ -64,6 +64,9 @@ namespace
 
 int main()
 {
+#if LO_PLATFORM_LINUX && !LO_PLATFORM_ANDROID
+    unsetenv("APPIMAGE");
+#endif
     Fixture fixture;
     const auto originalDirectory = fs::current_path();
     const auto unrelatedDirectory = fixture.root / "unrelated-working-directory";
@@ -232,6 +235,79 @@ int main()
               "non-portable fallback did not use the per-user data game directory");
         Check(nonPortable.source == Source::Fallback && !nonPortable.valid,
               "non-portable missing default did not report fallback state");
+#if LO_PLATFORM_LINUX && !LO_PLATFORM_ANDROID
+        const auto previousExecutableDirectory = os::user_paths::ExecutableDir();
+        const auto extractedExecutable = fixture.root / "temporary extraction/usr/bin";
+        const auto extractedDisc = extractedExecutable / "game/disc1";
+        const auto appImageDirectory = fixture.root / fs::path(std::u8string(u8"游戏 AppImage folder"));
+        const auto originalGame = appImageDirectory / "game";
+        const auto originalDisc = originalGame / "disc1";
+        const auto appImage = appImageDirectory / "Lost Odyssey.AppImage";
+        fixture.Marker(extractedDisc);
+        fixture.Marker(originalDisc);
+        fixture.Marker(originalGame);
+        fixture.Marker(dataDisc);
+        fixture.Marker(dataGame);
+        setenv("APPIMAGE", appImage.c_str(), 1);
+        os::user_paths::Initialize(extractedExecutable);
+        Check(!os::user_paths::UsePortableLayout(), "extracted AppImage selected portable game paths");
+        Check(settings::game_path::DefaultGameRoot(extractedExecutable) == dataGame,
+              "AppImage changed the default import destination from XDG data");
+        fs::create_directories(os::user_paths::ConfigDir());
+        const auto writeAppImageConfig = [&](const fs::path& game) {
+            std::ofstream(os::user_paths::ConfigDir() / "game-path.txt", std::ios::binary)
+                << game.string() << '\n';
+        };
+        writeAppImageConfig(direct);
+        CheckRoot(Resolve(extractedExecutable, explicitImported), explicitImportedDisc,
+                  Source::ExplicitArgument, "AppImage defaults overrode explicit --game");
+        const auto missingAppImageExplicit = Resolve(extractedExecutable, missing);
+        Check(missingAppImageExplicit.root == missing && !missingAppImageExplicit.valid &&
+              missingAppImageExplicit.source == Source::ExplicitArgument,
+              "missing AppImage --game fell through to another installation");
+        CheckRoot(Resolve(extractedExecutable), direct, Source::ConfiguredFile,
+                  "AppImage defaults overrode a valid configured game");
+        writeAppImageConfig({});
+        CheckRoot(Resolve(extractedExecutable), dataDisc, Source::DefaultSearch,
+                  "AppImage adjacent game overrode XDG game/disc1");
+        fs::remove_all(dataDisc, error);
+        CheckRoot(Resolve(extractedExecutable), dataGame, Source::DefaultSearch,
+                  "AppImage adjacent game overrode direct XDG game");
+        fs::remove_all(dataGame, error);
+        CheckRoot(Resolve(extractedExecutable), originalDisc, Source::DefaultSearch,
+                  "AppImage did not find original adjacent game/disc1 before extracted decoy");
+        fs::remove_all(originalDisc, error);
+        CheckRoot(Resolve(extractedExecutable), originalGame, Source::DefaultSearch,
+                  "AppImage did not find original adjacent direct game before extracted decoy");
+        fs::remove_all(originalGame, error);
+        CheckRoot(Resolve(extractedExecutable), extractedDisc, Source::DefaultSearch,
+                  "AppImage lost existing executable-tree fallback");
+        fixture.Marker(originalDisc);
+        writeAppImageConfig(missingConfigured);
+        const auto movedAppImage = Resolve(extractedExecutable);
+        CheckRoot(movedAppImage, originalDisc, Source::DefaultSearch,
+                  "stale configured AppImage path did not recover beside original file");
+        Check(movedAppImage.configuredPathRejected, "stale AppImage game path was not reported");
+        fixture.Marker(dataDisc);
+        const auto movedXdg = Resolve(extractedExecutable);
+        CheckRoot(movedXdg, dataDisc, Source::DefaultSearch,
+                  "stale AppImage path recovery did not preserve XDG priority");
+        Check(movedXdg.configuredPathRejected, "stale XDG game path was not reported");
+        fs::remove_all(dataGame, error);
+        fs::remove_all(originalGame, error);
+        const auto rejectedAppImage = Resolve(extractedExecutable);
+        Check(rejectedAppImage.root == missingConfigured && !rejectedAppImage.valid &&
+              rejectedAppImage.source == Source::ConfiguredFile && rejectedAppImage.configuredPathRejected,
+              "stale AppImage config unexpectedly recovered into extracted decoy");
+        writeAppImageConfig({});
+        fs::remove_all(extractedExecutable / "game", error);
+        const auto missingAppImage = Resolve(extractedExecutable);
+        Check(missingAppImage.root == dataGame && !missingAppImage.valid &&
+              missingAppImage.source == Source::Fallback,
+              "missing AppImage game did not retain the XDG installer destination");
+        unsetenv("APPIMAGE");
+        os::user_paths::g_executableDirectory = previousExecutableDirectory;
+#endif
         os::user_paths::g_usePortableLayout = previousPortable;
         const auto restoreEnv = [](const char* name, const std::optional<std::string>& value) {
             if (value) setenv(name, value->c_str(), 1);

@@ -185,6 +185,8 @@ Switch-specific options and diagnostics:
 | `LO_RT32` | off | Set to `1` to use 32-bit formats for the two 10-bit render-target classes; on Switch the 7e3 class uses `R11G11B10_FLOAT`, so its 2-bit alpha is read as 1 |
 | `LO_GUEST_AFFINITY` | off | Set to `1` to map Xbox guest thread affinity onto the Switch's three cores |
 | `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout |
+| `LO_ZPD_MODE` | host queries | Set to `xenia` for made-up occlusion query counts instead of host queries |
+| `LO_SKIP_NOOP_DRAWS` | `1` | Set to `0` to draw the draws that write no colour, depth or stencil |
 | `LO_XAUDIO_WORKER_PRIORITY` | `0x2D` | Hex priority for Switch XAudio workers; `0` keeps the default `0x3B` |
 | `LO_NATIVE_MOVIES` | off | Set to `1` to opt into the experimental host WMV decoder; failures fall back to the guest decoder |
 | `LO_MOVIE_GUEST_VIDEO_PRIORITY` | `0x3F` | Hex priority for the guest video thread while native movies are active; `0` keeps the game's priority |

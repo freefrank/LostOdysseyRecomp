@@ -25,7 +25,7 @@ Guides describe maintained procedures. Research notes explain mechanisms and the
 
 Keep established paths and anchors when practical. If a document is superseded, add its successor and preserve the original evidence. A document that is outdated (a finished handoff or progress log, a fixed-bug timeline, a past release plan, a one-off measurement a later one replaced) moves to [`docs/archive/`](archive/README.md) with `git mv`: notes keep their file name under `archive/notes/`, root documents go to `archive/`. Repair every incoming relative link and path mention in the same change, leave no redirect stub, and add a row to the archive index. Avoid duplicating changing version or task status throughout indexes. Source commits and stable identifiers are better references than moving line numbers. Local `out/` evidence is not shipped with the repository; label unavailable paths explicitly instead of presenting them as working download links. Do not index generated `out/` content.
 
-The main README is English and links to the synchronized Chinese README. Existing language pairs remain paired; most engineering notes are Chinese. Third-party and skill-submodule documentation remains maintained upstream. Follow any workspace or session `AGENTS.md` instructions and the versioned [engineering principles](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md).
+The main README is English and links to the synchronized Chinese README. Existing language pairs remain paired; notes default to English, and an existing Chinese version stays as `name.zh-CN.md`, linked from the English note. Third-party and skill-submodule documentation remains maintained upstream. Follow any workspace or session `AGENTS.md` instructions and the versioned [engineering principles](LORecomp_ENGINEERING_PRINCIPLES.md).
 
 Reusable investigation methods and constraints may also be summarized in Basic Memory, with source paths, dates and applicability limits. Search for existing notes before creating another entity. Repository documents retain technical evidence and current project state; the private knowledge base is not a release ledger. The [2026-09-30 documentation review](archive/audits/documentation-2026-09-30.md) records this normalization and its knowledge-base handoff.
 
@@ -33,13 +33,14 @@ Reusable investigation methods and constraints may also be summarized in Basic M
 
 | Document | Scope |
 |---|---|
-| [Engineering principles](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md) | Correctness, performance, supported data and proportionate validation |
+| [Engineering principles](LORecomp_ENGINEERING_PRINCIPLES.md) / [简体中文](LORecomp_ENGINEERING_PRINCIPLES.zh-CN.md) | Correctness, performance, supported data and proportionate validation |
+| [AI collaboration workflow](AI_WORKFLOW.md) / [简体中文](AI_WORKFLOW.zh-CN.md) | How the maintainer works with AI coding agents: roles, subagent rules, issue-to-release flow, and pitfalls for porting other Xbox 360 games |
 | [Portable shader packs](PORTABLE_SHADER_PACK.md) | Vulkan/DX12 distribution, tools and historical pack measurements |
 | [macOS releases](MACOS_RELEASE.md) | macOS app packaging and release checks |
 | [Linux AArch64 build](LINUX_ARM64.md) | Experimental source-build path for Linux arm64; not a published artifact |
 | [Repository synchronization](PUBLISHING.md) | Remote selection and publication workflow |
-| [Release packaging](../tools/release/README.md) | Package assembly and release-note extraction; the release workflow runs on Gitea Actions and publishes to GitHub |
-| [Pull request checks and releases](notes/ci-gitea.md) | Gitea Actions workflows (PR checks and release packaging), runners and the `gitea/<workflow>` status reported back to GitHub |
+| [Release packaging](../tools/release/README.md) | Package assembly and release-note extraction; the release workflow runs on GitHub-hosted runners and publishes to GitHub |
+| [Pull request checks and releases](notes/ci.md) | GitHub-hosted workflows, native checks, release packaging, credentials and caches |
 | [AppImage compatibility](../packaging/linux/APPIMAGE_COMPATIBILITY.md) | ABI baseline, packaging evidence and hardware limits |
 | [Project synchronization](project-management/README.md) | Manifest ownership, conflict handling and live state reconciliation |
 | [TAA live debug](TAA_LIVE_DEBUG.md) | Local panel reference plus dated Bell/Uhra experiments |

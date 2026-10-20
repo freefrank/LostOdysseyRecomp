@@ -32,6 +32,34 @@ of the main executable's GCC runtimes outside the package are fatal. Extraction
 requires no FUSE mount; no GPU or private game data is initialized by this check.
 Flatpak is then built from this same verified extracted AppDir.
 
+## Launching without FUSE
+
+Builds after v1.0.4 embed a statically linked, pinned type2-runtime rather
+than the runtime selected by linuxdeploy's output plugin. See
+[runtime build and license details](appimage-runtime/README.md) for the
+source commit, archive checksum, immutable Alpine base, local MIT patch and
+bundled LGPL relink materials. The runtime uses normal FUSE mounting first;
+if mounting is unavailable (including restricted Steam Runtime environments),
+it automatically extracts to a private temporary directory and runs AppRun.
+No launch option or system libfuse installation is required for that fallback.
+Arguments, exit status and the original `APPIMAGE` path are preserved. Each
+launch gets a separate directory, removed after exit or handled termination.
+
+The application uses the same XDG settings, saves and import destination in
+both modes, even though an extracted AppDir is writable. Game discovery also
+checks `game/disc1` and `game` beside the original `.AppImage`, after explicit
+or configured paths and existing XDG game data. Packaged libraries continue
+to load relative to the actual executable inside AppDir. `APPDIR` identifies
+the mounted/extracted payload; `ARGV0` retains the original launch name.
+
+Manjaro WSL probe tests cover real FUSE mounting and `/dev/fuse` hidden in a
+private mount namespace: zero/empty/Unicode/spaced arguments, exit code 37,
+simultaneous launches, original image paths and directory cleanup. Separate
+C++ path tests cover writable extracted AppDirs, XDG persistence and adjacent
+game discovery. These checks do not establish SteamOS hardware or gameplay
+acceptance. On v1.0.4 or older, use
+`APPIMAGE_EXTRACT_AND_RUN=1 %command%` in Steam launch options or the Flatpak.
+
 ## Release and verification
 
 The existing `LostOdysseyRecomp-linux-x64-<tag>.AppImage` name is intentionally

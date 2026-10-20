@@ -1,5 +1,7 @@
 # 合并 render pass：v1.0.0 设计调研
 
+[English](render-pass-merging-design-2026-10-10.md)
+
 - 日期：2026-10-10。只读调研，没有改代码、没有构建、没有跑游戏。
 - 代码基线：main `aaaf38fa`（worktree `li-1-0-0-progress-a93a50`）。`gpu/renderer.cpp` 和 `tools/patches/` 从 v0.9.22（`d3888a0d`）到 `aaaf38fa` 没有改动，所以平板 v0.9.22 的 trace 和这里引用的行号对得上。
 - plume 引用：`tools/patches/plume-lostodyssey.patch` 的行号，加上已打补丁的 `C:\Users\freefrank\worktrees\LostOdysseyRecomp\apk-v100\thirdparty\plume\`。apk-v100 里的这份文件带着诊断插桩，行号会变，所以下文按函数名引用。

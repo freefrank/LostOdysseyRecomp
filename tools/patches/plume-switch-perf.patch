@@ -414,7 +414,7 @@ index 0000000..e9914b8
 +    }
 +};
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index 9db5baa..ea99d72 100644
+index 9db5baa..82de1f5 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -9,6 +9,11 @@
@@ -569,8 +569,18 @@ index 9db5baa..ea99d72 100644
              if (desc.geometryShader != nullptr) {
                  stages[stageCount++] = libraryStage(desc.geometryShader, VK_SHADER_STAGE_GEOMETRY_BIT);
              }
+@@ -5027,7 +5118,8 @@ namespace plume {
+         }
+ 
+         VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {};
+-        const bool timelineFound = interpolationFeatures && (physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2 ||
++        const bool timelineFound = (interpolationFeatures || renderInterface->enableTimelineSemaphores) &&
++            (physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2 ||
+             supportedOptionalExtensions.find(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME) != supportedOptionalExtensions.end());
+         if (timelineFound) {
+             timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 293ce15..e7bebc6 100644
+index 293ce15..0812fd5 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
 @@ -183,6 +183,14 @@ namespace plume {
@@ -588,3 +598,13 @@ index 293ce15..e7bebc6 100644
          VulkanShader(VulkanDevice *device, const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format);
          ~VulkanShader() override;
          virtual void setName(const std::string &name) override;
+@@ -590,6 +598,9 @@ namespace plume {
+         // interpolation extensions and features. Other SDKs can supply aggregate
+         // Vulkan feature structs that must not coexist with these individual structs.
+         bool enableFrameInterpolationFeatures = false;
++        // LostOdysseyRecomp (Switch LSFG frame generation): timeline semaphores
++        // alone, without the other interpolation features.
++        bool enableTimelineSemaphores = false;
+         RenderInterfaceCapabilities capabilities;
+         std::vector<std::string> deviceNames;
+         VulkanExtensionHooks extensionHooks;

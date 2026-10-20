@@ -9,8 +9,10 @@
 #include "gpu/upscaling_plan.h"
 #include "../../shared/frame_generation/core.h"
 #include "hid/input_map.h"
+#include "encounter_rate.h"
 namespace settings
 {
+inline constexpr uint32_t MenuAnimationRates[] = {1, 2, 4};
 // Persisted 2 (the removed exclusive fullscreen) loads as Borderless.
 enum class WindowMode : uint32_t
 {
@@ -111,6 +113,7 @@ struct Config
     uint32_t shadowResolution = 1; // Shadow map width and height multiplier: 1/2/4.
     uint32_t ambientOcclusion = 0; // 0 Off, 1 SSAO, 2 GTAO.
     uint32_t frameRate = 30;
+    uint32_t loadingTransitions = 2; // Loading pace: 0 Original, 2 Fast (default). Transition effects keep their normal speed.
     // Settings -> Graphics -> VSync: Off, On, or FreeSync / G-SYNC Compatible
     // (variableRefreshRate, which wins over vsync). Applied live.
     bool vsync = true;
@@ -130,7 +133,9 @@ struct Config
     uint32_t depthOfFieldPercent = 100; // Tone-map DoF strength; 0 Off, 100 retail. Applied live.
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
     bool motionBlur = true; // The game's motion blur pass. Applied live.
-    bool dynamicShadows = true; // The game's shadow-map rendering. Applied live.
+    // The game's per-object shadows, applied live: 0 Off, 1 On (retail), 2 Low
+    // (only objects large on screen cast one, patches/shadow_budget.cpp).
+    uint32_t dynamicShadows = 1;
     // View-frustum culling, 0..200 in steps of 10: 100 retail, lower draws
     // objects at the screen edges longer, higher hides them sooner. Applied live.
     uint32_t cullingPercent = 100;
@@ -164,7 +169,9 @@ struct Config
     hid::input_map::KeyboardMap keyboardMap = hid::input_map::DefaultKeyboard;
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
-    bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
+    bool discordStatus = true; // Discord Rich Presence; desktop only. Applied live.
+    bool askCompactGameData = true; // Offer to share duplicate disc archives before the game starts.
+    bool debugLog = true; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.
     uint32_t audioMatrixRear = 110; // Matrix surround rear angle, 90-150 degrees in 10 degree steps. Applied live.
     uint32_t voiceVolume = 100; // Cutscene dialogue, 0-100, in place of the Sound effects volume. Applied live.
@@ -176,12 +183,16 @@ struct Config
     // 1 FPS, 2 Detailed (upscaler, FG, CPU and GPU load). Applied live.
     uint32_t performanceOverlay = 0;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
-    bool noRandomEncounters = false; // Debug-only preference, persisted like saveAnywhere.
+    EncounterRate encounterRate = EncounterRate::Normal; // Debug-only walking encounters.
+    bool battleExpDouble = false; // Debug-only battle reward preference.
     // Debug-menu fast-forward, persisted like saveAnywhere: switch, 0 Hold / 1 Toggle,
     // multiplier (one of debug_menu::fast_forward::Rates).
     bool fastForward = false;
     uint32_t fastForwardMode = 0;
+    uint32_t fastForwardButton = 0; // 0 LT, 1 LB.
     uint32_t fastForwardRate = 2;
+    bool fastForwardKeepAudioPitch = true;
+    uint32_t menuAnimationRate = 1; // Debug-only camp-menu transitions: 1 Normal, 2 Fast, 4 Faster.
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
@@ -190,8 +201,12 @@ void PreviewConfig(const Config &config);
 bool SaveConfig(const Config &config);
 bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
-bool SaveNoRandomEncounters(bool enabled);
-bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate);
+bool SaveEncounterRate(EncounterRate rate);
+bool SaveBattleExpDouble(bool enabled);
+bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button);
+bool SaveMenuAnimationRate(uint32_t rate);
+// Cheap, thread-safe read for the camp-menu tween hook.
+uint32_t MenuAnimationRate();
 bool SaveAudioOutput(uint32_t output);
 // The player moved the window to another display (Win+Shift+arrow, dragging):
 // saves only the display choice, merged with the persisted settings.

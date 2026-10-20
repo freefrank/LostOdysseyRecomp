@@ -1,3 +1,4 @@
+#include <discord/presence.h>
 #include <stdafx.h>
 #include <settings/config.h>
 #include <vector>
@@ -634,7 +635,11 @@ static void ExTerminateThread(uint32_t exitCode)
         LOG_KERNEL("exit code {:#x}", exitCode);
     if (t_terminateJump)
         longjmp(*t_terminateJump, 1);
-    (os::shaderlog::CloseForExit(), std::_Exit(int(exitCode)));
+#if LO_PLATFORM_SWITCH
+    os::shaderlog::CloseForExit();
+    os::switch_platform::ExitNow();
+#endif
+    (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(int(exitCode)));
 }
 
 void GuestThreadRunWithTerminateHook(void (*run)(void*), void* arg)
@@ -1303,7 +1308,11 @@ static void DbgBreakPoint()
 static void HalReturnToFirmware(uint32_t routine)
 {
     LOG_INFO("HalReturnToFirmware({}) - exiting", routine);
-    (os::shaderlog::CloseForExit(), std::_Exit(0));
+#if LO_PLATFORM_SWITCH
+    os::shaderlog::CloseForExit();
+    os::switch_platform::ExitNow();
+#endif
+    (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(0));
 }
 
 static uint32_t KeGetCurrentProcessType() { return 1; }
@@ -1603,7 +1612,15 @@ static uint32_t XamGetExecutionId(be<uint32_t>* info)
 static uint32_t XamLoaderGetLaunchDataSize(be<uint32_t>* size) { if (size) *size = 0; return 0; }
 static uint32_t XamLoaderGetLaunchData(void*, uint32_t) { return 0; }
 static uint32_t XamLoaderSetLaunchData(void*, uint32_t) { return 0; }
-static void XamLoaderTerminateTitle() { LOG_INFO("title terminated"); (os::shaderlog::CloseForExit(), std::_Exit(0)); }
+static void XamLoaderTerminateTitle()
+{
+    LOG_INFO("title terminated");
+#if LO_PLATFORM_SWITCH
+    os::shaderlog::CloseForExit();
+    os::switch_platform::ExitNow();
+#endif
+    (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(0));
+}
 static uint32_t XamLoaderLaunchTitle(const char* path, uint32_t) { LOG_INFO("launch title '{}'", path ? path : ""); return 0; }
 
 // ---------------------------------------------------------------------------

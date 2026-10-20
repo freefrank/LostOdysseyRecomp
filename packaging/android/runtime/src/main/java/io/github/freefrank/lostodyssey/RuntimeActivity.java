@@ -1,12 +1,15 @@
 package io.github.freefrank.lostodyssey;
 
 import android.content.Intent;
+import android.app.AlertDialog;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -22,6 +25,8 @@ import org.libsdl.app.SDLActivity;
 
 /** Game runtime. User-supplied discs live in app-owned storage. */
 public final class RuntimeActivity extends SDLActivity {
+    /** Matches the SDL_SendAndroidMessage command in settings/menu.cpp. */
+    private static final int COMMAND_OPEN_GAME_FOLDER = 0x8000;
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";
     /** Files and folders picked in the system file picker, which the importer scans at once. */
@@ -52,7 +57,11 @@ public final class RuntimeActivity extends SDLActivity {
         // whenever the bars come back later (SDL window-style changes, a swipe).
         bootHandler.post(this::hideSystemBars);
         ViewCompat.setOnApplyWindowInsetsListener(getWindow().getDecorView(), (view, insets) -> {
-            if (insets.isVisible(WindowInsetsCompat.Type.systemBars())) scheduleHideSystemBars();
+            if (insets.isVisible(WindowInsetsCompat.Type.statusBars())
+                    || insets.isVisible(WindowInsetsCompat.Type.navigationBars())) {
+                if (touchControls != null) touchControls.revealCtrl();
+                scheduleHideSystemBars();
+            }
             return insets;
         });
         GameStorage.prepare(this);
@@ -75,6 +84,21 @@ public final class RuntimeActivity extends SDLActivity {
         graphicsFailure = reason;
     }
 
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP
+                && !event.isCanceled() && touchControls != null) touchControls.revealCtrl();
+        // Keep SDL's existing Back mapping/consumption, including gesture-generated keys.
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (touchControls != null) touchControls.revealCtrl();
+        // Preserve SDL's fallback behavior on Android versions that call this directly.
+        super.onBackPressed();
+    }
+
     /** Opens the GPU driver page over the game (CTRL dialog). */
     void openGpuDriverPage() {
         Intent intent = new Intent(this, GpuDriverActivity.class);
@@ -82,7 +106,16 @@ public final class RuntimeActivity extends SDLActivity {
         startActivity(intent);
     }
 
-    /** Opens the game folder page over the game (CTRL dialog). */
+    @Override
+    protected boolean onUnhandledMessage(int command, Object param) {
+        if (command == COMMAND_OPEN_GAME_FOLDER) {
+            openGameFolderPage();
+            return true;
+        }
+        return super.onUnhandledMessage(command, param);
+    }
+
+    /** Opens the game folder page over the game (CTRL dialog or native settings). */
     void openGameFolderPage() {
         Intent intent = new Intent(this, GameFolderActivity.class);
         intent.putExtra(GameFolderActivity.EXTRA_FROM_GAME, true);
@@ -126,8 +159,18 @@ public final class RuntimeActivity extends SDLActivity {
         }
         WindowInsetsControllerCompat controller =
             WindowCompat.getInsetsController(window, window.getDecorView());
-        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        updateSystemBarsBehavior();
         controller.hide(WindowInsetsCompat.Type.systemBars());
+    }
+
+    void updateSystemBarsBehavior() {
+        // Transient bars can stay "hidden" in app insets even while drawn. Use
+        // normal swipe-revealed bars in hide-all mode so their visibility can
+        // restore CTRL; the existing timer hides the bars again after 2.5 s.
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+            .setSystemBarsBehavior(touchControls != null && touchControls.hidesAllControls()
+                ? WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                : WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
     }
 
     /** Bars shown by a swipe stay for a moment, like Android's own transient bars. */
@@ -212,6 +255,9 @@ public final class RuntimeActivity extends SDLActivity {
             nativeSetenv("LO_CUSTOM_DRIVER_DIR", driver.directory.getAbsolutePath() + "/");
             nativeSetenv("LO_VK_CUSTOM_DRIVER", driver.metadata.libraryName);
             nativeSetenv("LO_VK_CUSTOM_DRIVER_MODE", GpuDriverStore.loadMode(this, driver));
+            if (GpuDriverStore.needsAdreno650SyncDraw(GpuDriverStore.gpuModel(), driver.metadata)) {
+                nativeSetenv("LO_VK_ADRENO650_SYNC_DRAW", "1");
+            }
             // PanVK refuses the Mali GPUs Mesa marks experimental without this.
             if (driver.metadata.isPanVk()) nativeSetenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER", "1");
         }
@@ -240,6 +286,21 @@ public final class RuntimeActivity extends SDLActivity {
             if (sources != null) for (String source : sources) arguments.addAll(Arrays.asList("--install-source", source));
             return arguments.toArray(new String[0]);
         }
+        // SDL calls this before nativeRunMain. Never migrate in an Activity lifecycle
+        // callback: the guest may still be writing even while another page is visible.
+        SaveLocationState.Run saves = SaveLocationStore.prepare(this);
+        nativeSetenv("LO_SAVE_DIR", saves.root.getAbsolutePath());
+        nativeSetenv("LO_SAVE_SHARED", saves.usesSharedStorage(SaveTransfer.saveRoot(getFilesDir())) ? "1" : "0");
+        if (saves.fallback || saves.conflict || saves.error != null) runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            Context strings = SaveLocationStrings.context(this);
+            int reason = saves.conflict ? R.string.save_location_conflict
+                : saves.fallback ? R.string.save_location_fallback : R.string.save_location_failed;
+            new AlertDialog.Builder(this).setTitle(strings.getString(R.string.save_location_warning_title))
+                .setMessage(strings.getString(reason) + "\n\n"
+                    + strings.getString(R.string.save_location_current, saves.root.getAbsolutePath()))
+                .setPositiveButton(strings.getString(R.string.save_location_ok), null).show();
+        });
         return new String[] { "--game", game.getAbsolutePath(), "--quiet-kernel" };
     }
 }

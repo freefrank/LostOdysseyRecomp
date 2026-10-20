@@ -4,6 +4,7 @@
 #include "xma_loop.h"
 #include "xma_decode_reporting.h"
 #include <kernel/memory.h>
+#include <kernel/guest_address_space.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
 #include <cmath>
@@ -206,6 +207,37 @@ namespace apu::xma
             return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF)));
         }
 
+        // Physical() for a range the decoder is about to touch. On the Switch,
+        // guest memory is only backed where the game allocated it; a context
+        // can still point at a buffer in a chunk that was never allocated
+        // (seen entering Uhra). The PC maps the whole space, so such reads
+        // return zeros there; back the chunk the same way instead of faulting.
+        // Returns nullptr if the range cannot be backed.
+        uint8_t* PhysicalBacked(uint32_t physicalAddress, uint32_t size)
+        {
+#if LO_PLATFORM_SWITCH
+            using GuestAddressSpace::Backing;
+            const uint32_t address = 0xA0000000u + (physicalAddress & 0x1FFFFFFF);
+            const Backing backing = GuestAddressSpace::EnsureBacked(address, size);
+            if (backing == Backing::Repaired)
+                GuestAddressSpace::LogRepair("xma");
+            else if (backing != Backing::AlreadyBacked)
+            {
+                static std::atomic<unsigned> reports{0};
+                if (reports.fetch_add(1, std::memory_order_relaxed) < 8)
+                    LOG_WARNING("guest memory: xma buffer {:#x} (+{:#x}) is in unallocated memory: {}", address, size,
+                        backing == Backing::Failed ? "cannot back it, skipping" : "backed it");
+                if (backing == Backing::Failed)
+                {
+                    if (GuestAddressSpace::LastRepair().count != 0)
+                        GuestAddressSpace::LogRepair("xma (failed repair)");
+                    return nullptr;
+                }
+            }
+#endif
+            return Physical(physicalAddress);
+        }
+
         // Output ring bookkeeping with Xenia's RingBuffer conventions:
         // read == write means empty (the whole capacity is writable).
         struct Ring
@@ -324,7 +356,14 @@ namespace apu::xma
                     data.setInputReadOffset((packetIndex + skip) * kBitsPerPacket);
                     continue;
                 }
-                const auto* packet = Physical(data.currentBuffer() ? data.input1Ptr() : data.input0Ptr()) + packetIndex * kBytesPerPacket;
+                const uint32_t packetAddress = (data.currentBuffer() ? data.input1Ptr() : data.input0Ptr()) + packetIndex * kBytesPerPacket;
+                const auto* packet = PhysicalBacked(packetAddress, kBytesPerPacket);
+                if (!packet)
+                {
+                    if (data.currentBuffer()) data.setInput1Valid(false);
+                    else data.setInput0Valid(false);
+                    return;
+                }
                 uint32_t offset = data.inputReadOffset() % kBitsPerPacket;
                 if (offset < kBitsPerPacketHeader)
                 {
@@ -524,6 +563,8 @@ namespace apu::xma
                 LOG_WARNING("xma: context {} has an output ring of {} bytes", id, ring.capacity);
                 return;
             }
+            if (!PhysicalBacked(data.outputPtr(), ring.capacity))
+                return;
             ctx.freeBlocks = int32_t(ring.WriteCount() / kOutputBytesPerBlock);
             const int32_t minimumBlocks = data.isStereo() ? 2 : 1;
             if (minimumBlocks > ctx.freeBlocks)

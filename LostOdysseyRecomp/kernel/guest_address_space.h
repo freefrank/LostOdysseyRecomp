@@ -57,8 +57,34 @@ void Release(uint8_t* base);
 // its C and E aliases). Returns false when the console is out of memory.
 bool Commit(uint32_t address, uint32_t size);
 size_t CommittedBytes();
+// For a guest pointer the game reads although nothing was allocated there
+// (the desktop builds read zeros from such pages; the Switch would fault):
+// backs [address, address + size) with zeroed memory. C and E addresses are
+// committed through their A pages. Cheap when already backed.
+// Repaired: the chunk was committed but the kernel no longer had the page
+// mapped there; the view was mapped again (see LastRepair).
+enum class Backing { Failed, AlreadyBacked, NewlyBacked, Repaired };
+Backing EnsureBacked(uint32_t address, uint32_t size);
+struct RepairInfo
+{
+    uint32_t count;           // repairs so far
+    uint32_t address;         // guest address that was not mapped
+    uint32_t type, attribute, permission; // what svcQueryMemory reported there
+    uint64_t regionStart, regionSize;     // that memory block (guest offsets)
+    uint32_t aliasType, aliasPermission;  // the same page through C
+    uint32_t result;          // svcMapProcessMemory result of the repair
+    uint64_t source;          // the chunk's code-memory source (0: none recorded)
+    uint32_t sourceType, sourcePermission;
+    uint64_t mappedStart, mappedSize;     // what the repair mapped (guest offsets)
+    char layout[320];         // the chunk's memory blocks: "start-end tTYPE pPERM, ..."
+};
+RepairInfo LastRepair();
+// Logs LastRepair() as an error (patches/unbacked_guest_reads.cpp); the first few only.
+void LogRepair(const char* who);
 #else
 // Desktop hosts commit on first touch.
 inline bool Commit(uint32_t, uint32_t) { return true; }
+enum class Backing { Failed, AlreadyBacked, NewlyBacked, Repaired };
+inline Backing EnsureBacked(uint32_t address, uint32_t) { return address >= 0x1000 ? Backing::AlreadyBacked : Backing::Failed; }
 #endif
 }

@@ -487,6 +487,10 @@ int main(int argc, char** argv)
         for (unsigned y = 0; y < h; y++)
             memcpy(result.data() + w * y, mapped + 64 * y, w * 4);
         readback->unmap();
+        // The fence has completed; discard cached framebuffers before this
+        // render's caller-owned target is destroyed and its address is reused.
+        presentation.ForgetTargets();
+        scenePresentation.ForgetTargets();
         if (!recorded) result.clear();
         return result;
     };

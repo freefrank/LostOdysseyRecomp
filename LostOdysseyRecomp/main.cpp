@@ -1,4 +1,8 @@
 #include <os/log_collection.h>
+#if !defined(__SWITCH__)
+#include <os/steam_shortcut.h>
+#endif
+#include <discord/presence.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -12,6 +16,7 @@
 #include <gpu/renderer.h>
 #include <gpu/video.h>
 #include <gpu/pipeline_prepare_progress.h>
+#include <gpu/rtl_text.h>
 #include <apu/audio.h>
 #include <apu/xma.h>
 #include <hid/hid.h>
@@ -42,6 +47,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
 #include "modding/text_overlay.h"
@@ -184,9 +190,14 @@ static int CompactGameDataCommand(const std::filesystem::path& gameRoot)
             }
         });
         const auto after = std::filesystem::space(gameRoot, ec).available;
-        LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
-                   "{} archive bytes stored once in all, {} not shared",
-                   result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
+        if (!result.replaced && result.sharedBytes > 0)
+            LOG_NOTICE("compact game data: Already done: these files are stored once (about {:.1f} GB saved); "
+                       "{} copies replaced, {} archive bytes stored once in all, {} not shared",
+                       double(result.sharedBytes) / 1'000'000'000.0, result.replaced, result.sharedBytes, result.failed);
+        else
+            LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
+                       "{} archive bytes stored once in all, {} not shared",
+                       result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
         return 0;
     }
     catch (const std::exception& error)
@@ -281,6 +292,9 @@ static int RunGuest(uint32_t entry)
         }
     }));
 #endif
+    discord_rpc::SetEnabled(settings::GetConfig().discordStatus);
+    discord_rpc::Initialize([](const char* message) { LOG_NOTICE("discord: {}", message); });
+
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
     os::scheduling::PreferPerformanceCores(true);
@@ -296,7 +310,7 @@ static int RunGuest(uint32_t entry)
     // already stopped, still avoid global teardown while guest threads survive.
     os::shaderlog::CloseForExit();
     std::fflush(nullptr);
-    std::_Exit(EXIT_SUCCESS);
+    (discord_rpc::Shutdown(), std::_Exit(EXIT_SUCCESS));
 }
 
 #if LO_PLATFORM_ANDROID
@@ -408,6 +422,35 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
+#if !LO_PLATFORM_SWITCH
+    // This host-only command reads original artwork from available game data,
+    // then exits without an SDL window or GPU (bundled art remains a fallback).
+    for (int i = 1; i < argc; ++i)
+        if (strcmp(argv[i], "--add-to-steam") == 0)
+        {
+            const auto result = steam_shortcut::AddToSteam(FindGameRoot(executableDirectory, explicitGamePath).root);
+            const char* message = nullptr;
+            switch (result.status)
+            {
+            case steam_shortcut::Status::Added:
+                message = "Added to Steam. Restart Steam to see it."; break;
+            case steam_shortcut::Status::AddedFromFlatpak:
+                message = "Restart Steam to see it; if Steam was open, close it and add again."; break;
+            case steam_shortcut::Status::SteamRunning:
+                message = "Close Steam, then try again."; break;
+            case steam_shortcut::Status::SteamNotFound:
+                message = "Steam was not found. Install and open Steam first."; break;
+            case steam_shortcut::Status::UserNotFound:
+                message = "No Steam user found. Sign in to Steam, close it, then try again."; break;
+            default:
+                message = "Could not add to Steam."; break;
+            }
+            FILE* output = result.ok() ? stdout : stderr;
+            std::fprintf(output, "%s\n", message);
+            if (!result.detail.empty()) std::fprintf(output, "%s\n", result.detail.c_str());
+            return result.ok() ? 0 : 1;
+        }
+#endif
     // --export-assets copies game files for mod authors, then exits. It runs
     // before the working-directory change (relative output folders), logs,
     // update check, mods, installer, window and GPU device.
@@ -688,6 +731,9 @@ int main(int argc, char* argv[])
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
         const auto pack = settings::GameLanguagePack();
         modding::text_overlay::SelectLanguagePack(pack);
+        for (const auto& languagePack : modding::LanguagePacks())
+            if (languagePack.id == pack)
+                rtl_text::SetEnabled(languagePack.rightToLeft);
         modding::text_overlay::EnablePrebuild();
         if (!pack.empty())
             LOG_NOTICE("settings: game language {} with language pack {}", settings::GameLanguage(), pack);
@@ -748,6 +794,9 @@ int main(int argc, char* argv[])
 
     LOG_INFO("game root: {}", FileSystem::PathUtf8(gameRoot));
 
+    // The startup offer and compaction finish before any disc archive opens.
+    if (!prepareShadersOnly)
+        install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
     XamInit();
 
@@ -779,7 +828,7 @@ int main(int argc, char* argv[])
         const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
-        (os::shaderlog::CloseForExit(), std::_Exit(prepared ? 0 : 1));
+        (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(prepared ? 0 : 1));
     }
 
     // macOS: AppKit accepts window work only on the process main thread, so the

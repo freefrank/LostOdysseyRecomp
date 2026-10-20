@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/cinematic_bars.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
@@ -13,7 +14,9 @@
 #include <host_ui/host_ui.h>
 #include "cheats.h"
 #include "battle_tour.h"
+#include "soft_reset.h"
 #include <patches/mod_hot_reload.h>
+#include <discord/game_state.h>
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -433,6 +436,7 @@ void MapJumpTick(PPCContext& ctx, uint8_t* base)
         LOG_INFO("debug map jump rejected target={}: {}", map, reason);
     };
     const auto engine = PPC_LOAD_U32(EngineAddress);
+    if (PPC_LOAD_U32(0x832631D0) != 0) return refuse(L"地图切换进行中", "native reset pending");
     if (!ObjectAddress(engine)) return refuse(L"引擎未就绪，无法跳转地图", "engine");
     if (!FindPlayer(base).pawn) return refuse(L"无可控制角色，无法跳转地图", "no player");
     if (PPC_LOAD_U32(PendingMapAddress) != 0) return refuse(L"地图切换进行中", "map change pending");
@@ -484,6 +488,12 @@ debug_menu::TeleportSnapshot debug_menu::GetTeleportSnapshot()
     return result;
 }
 
+bool debug_menu::TeleportRequestPending()
+{
+    std::lock_guard lock(stateMutex);
+    return pending != Operation::None || !pendingMap.empty();
+}
+
 bool debug_menu::RequestTeleport(Position p) { return Request(Operation::Absolute, p); }
 bool debug_menu::RequestTeleportOffset(Position p) { return Request(Operation::Offset, p); }
 bool debug_menu::RequestSavePosition() { return Request(Operation::Save); }
@@ -515,11 +525,13 @@ PPC_FUNC(sub_82290B60)
     if (teleportCommandFile && !observed.exchange(true))
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
-    if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+    if (engine) { debug_menu::soft_reset::Tick(ctx, base); debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
     __imp__sub_82290B60(ctx, base);
     if (engine)
     {
         debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::PollSceneLoads(base); debug_menu::battle_tour::Poll(base);
+        gpu::cinematic_bars::UpdatePause(base);
+        discord_rpc::Tick(base);
         bool playerInField;
         {
             std::lock_guard lock(stateMutex);

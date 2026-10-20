@@ -1677,6 +1677,51 @@ constexpr const char *kNoDlcWarning =
     "no DLC found, so the DLC dungeon text is the discs' unfinished version; "
     "export from a game with the DLC installed if you have it";
 
+TextureImage ReadTexture(const fs::path &gameRoot, std::string_view packagePath, std::string_view objectName)
+{
+    Require(!gameRoot.empty(), "no game data selected");
+    // The shared title/menu resources are on Disc 1 in both retail editions.
+    // Prefer it even when the runtime currently booted a later sibling disc.
+    std::error_code error;
+    auto discRoot = gameRoot;
+    if (fs::is_regular_file(gameRoot / "disc1" / "LO.fpi", error))
+        discRoot /= "disc1";
+    else if (fs::is_regular_file(gameRoot.parent_path() / "disc1" / "LO.fpi", error))
+        discRoot = gameRoot.parent_path() / "disc1";
+    const auto disc = ReadDisc(discRoot);
+    const auto path = Lower(std::string(packagePath));
+    const auto entry = std::find_if(disc.entries.begin(), disc.entries.end(), [&](const Entry &e) { return e.path == path; });
+    Require(entry != disc.entries.end(), "artwork package is absent from the disc index");
+    Require(entry->archive < disc.archives.size() && !disc.archives[entry->archive].empty(), "artwork archive is missing");
+    Require(entry->size && entry->size <= 128u * 1024 * 1024 && entry->offset <= disc.archiveSizes[entry->archive] &&
+            entry->size <= disc.archiveSizes[entry->archive] - entry->offset, "artwork package extent is invalid");
+    auto bytes = ReadExtent(disc.archives[entry->archive], entry->offset, entry->size);
+    if (bytes.size() >= 3 && std::memcmp(bytes.data(), "cpx", 3) == 0)
+        Require(cpx::Decode(bytes, bytes), "invalid artwork CPX stream");
+    const Package package(bytes);
+    const auto object = std::find_if(package.exports.begin(), package.exports.end(), [&](const Export &e) {
+        return e.name == objectName && package.ClassName(e) == "Texture2D";
+    });
+    Require(object != package.exports.end(), "artwork Texture2D object is absent");
+    const auto decoded = DecodeTexture(package, *object);
+    TextureImage image{decoded.width, decoded.height, std::vector<uint8_t>(size_t(decoded.width) * decoded.height * 4)};
+    for (size_t i = 0, j = 0; i < image.rgba.size(); i += 4, j += decoded.channels)
+    {
+        image.rgba[i] = decoded.pixels[j];
+        image.rgba[i + 1] = decoded.pixels[j + (decoded.channels == 1 ? 0 : 1)];
+        image.rgba[i + 2] = decoded.pixels[j + (decoded.channels == 1 ? 0 : 2)];
+        image.rgba[i + 3] = decoded.channels == 4 ? decoded.pixels[j + 3] : 255;
+    }
+    return image;
+}
+
+std::vector<uint8_t> EncodeTexturePng(const TextureImage &image)
+{
+    Require(image.width && image.height && image.width <= 8192 && image.height <= 8192 &&
+            uint64_t(image.width) * image.height * 4 == image.rgba.size(), "invalid artwork image");
+    return EncodePng(Image{image.width, image.height, 4, nullptr, image.rgba});
+}
+
 std::optional<Request> ParseArguments(int argc, char **argv)
 {
     bool option = false;

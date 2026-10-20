@@ -33,10 +33,18 @@ def offline_checks(module):
 
     test_appimage_compat.py covers their parsing and version policy.
     """
-    with patch.object(module, 'compiler_libraries', return_value=COMPILER_RUNTIMES), \
+    with tempfile.TemporaryDirectory() as runtime_directory:
+        runtime = Path(runtime_directory) / 'runtime-x86_64'
+        runtime.write_bytes(b'package')
+        (runtime.parent / 'licenses').mkdir()
+        for filename in ('runtime-relink.tar.gz', 'build-packages.txt', 'runtime.sha256', 'patch.sha256'):
+            (runtime.parent / filename).write_bytes(b'fixture')
+        with patch.object(module, 'APPIMAGE_RUNTIME', runtime), \
+            patch.object(module, 'compiler_libraries', return_value=COMPILER_RUNTIMES), \
             patch.object(module, 'validate_abi') as abi, \
+            patch.object(module, 'validate_image_runtime'), \
             patch.object(module, 'validate_loader') as loader:
-        yield abi, loader
+            yield abi, loader
 
 
 def with_image(linuxdeploy):
@@ -65,6 +73,20 @@ def load_packager():
 
 
 class PackageAppImageTests(unittest.TestCase):
+    def test_runtime_mismatch_is_rejected(self):
+        module = load_packager()
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary) / 'runtime'
+            image = Path(temporary) / 'image'
+            runtime.write_bytes(bytes(16) + b'pinned runtime')
+            image.write_bytes(b'1234567890123456pinned runtime' + b'squashfs payload')
+            with patch.object(module.subprocess, 'check_output', return_value=
+                              '.digest_md5 PROGBITS 00000000 000000 000010'):
+                module.validate_image_runtime(image, runtime)
+                image.write_bytes(bytes(16) + b'other runtime' + b'squashfs payload')
+                with self.assertRaisesRegex(SystemExit, 'selected runtime'):
+                    module.validate_image_runtime(image, runtime)
+
     def test_explicit_appdir_persists_final_linuxdeploy_tree(self):
         module = load_packager()
         with tempfile.TemporaryDirectory(prefix='lo-persist-appdir-') as tmp:
@@ -101,7 +123,12 @@ class PackageAppImageTests(unittest.TestCase):
             self.assertEqual(len(calls), 2)
             self.assertEqual((destination / 'usr/bin/LostOdysseyRecomp').read_bytes(), b'mock-runtime')
             self.assertEqual((destination / 'usr/lib/libcurl.so.4').read_bytes(), b'linuxdeploy dependency')
+            self.assertEqual((destination / 'AppImage-runtime/runtime-relink.tar.gz').read_bytes(), b'fixture')
+            self.assertFalse((destination / 'usr/share/licenses/lost-odyssey-recomp/AppImage-runtime').exists())
             self.assertTrue((destination / 'usr/share/metainfo/io.github.freefrank.LostOdysseyRecomp.metainfo.xml').is_file())
+            for filename in ('portrait.png', 'header.png', 'hero.png', 'logo.png', 'icon.png'):
+                self.assertEqual((destination / 'usr/share/lost-odyssey-recomp/steam' / filename).read_bytes(),
+                                 (ROOT / 'assets/steam' / filename).read_bytes())
             self.assertEqual((destination / 'usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt').read_bytes(),
                              (ROOT / 'thirdparty/licenses/XeGTAO.txt').read_bytes())
             self.assertTrue((destination / 'AppRun').is_file())
@@ -207,6 +234,7 @@ class PackageAppImageTests(unittest.TestCase):
                 if '--output' not in cmd:
                     create_mock_apprun(cmd)
                 else:
+                    self.assertTrue(Path(kwargs['env']['LDAI_RUNTIME_FILE']).is_absolute())
                     Path(kwargs['cwd'], 'LostOdysseyRecomp-x86_64.AppImage').write_bytes(b'ok')
 
             argv = [
@@ -441,6 +469,11 @@ class PackageAppImageTests(unittest.TestCase):
             gtao_license = fake_root / 'thirdparty/licenses/XeGTAO.txt'
             gtao_license.parent.mkdir(parents=True, exist_ok=True)
             gtao_license.write_text('mock XeGTAO license', encoding='utf-8')
+            for relative in ('LICENSE.txt', 'signalsmith-linear/LICENSE.txt'):
+                audio_license = fake_root / 'thirdparty/signalsmith-stretch' / relative
+                audio_license.parent.mkdir(parents=True, exist_ok=True)
+                audio_license.write_text('mock MIT license', encoding='utf-8')
+            shutil.copytree(ROOT / 'assets/steam', fake_root / 'assets/steam')
 
             listing = io.StringIO()
             with patch.object(module, 'ROOT', fake_root):
@@ -450,6 +483,8 @@ class PackageAppImageTests(unittest.TestCase):
             files = set(listing.getvalue().splitlines())
             self.assertIn('usr/bin/ngx/libnvidia-ngx-dlss.so.310.9.1', files)
             self.assertIn('usr/share/licenses/lost-odyssey-recomp/NVIDIA-DLSS/LICENSE.txt', files)
+            self.assertIn('usr/share/licenses/lost-odyssey-recomp/Signalsmith-Stretch.txt', files)
+            self.assertIn('usr/share/licenses/lost-odyssey-recomp/Signalsmith-Linear.txt', files)
             self.assertIn('usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt', files)
             # Nothing linuxdeploy rewrites may hold or alias the snippet.
             self.assertEqual([name for name in files

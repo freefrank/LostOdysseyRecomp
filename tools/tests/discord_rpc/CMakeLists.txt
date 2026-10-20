@@ -1,0 +1,55 @@
+cmake_minimum_required(VERSION 3.20)
+project(LoDiscordRpcTests LANGUAGES CXX)
+enable_testing()
+find_package(Threads REQUIRED)
+get_filename_component(REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(LO_DISCORD_CLIENT_SOURCES
+    "${REPO_ROOT}/LostOdysseyRecomp/discord/protocol.cpp"
+    "${REPO_ROOT}/LostOdysseyRecomp/discord/ipc_transport.cpp"
+    "${REPO_ROOT}/LostOdysseyRecomp/discord/presence.cpp")
+# The repository's existing JSON header predates Clang's literal-operator
+# spelling deprecation. Keep -Werror on our code without modifying that vendor.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-Wno-deprecated-literal-operator" LO_DISCORD_JSON_LITERAL_FLAG)
+endif()
+function(configure_discord_client_target target)
+    target_include_directories(${target} PRIVATE "${REPO_ROOT}/LostOdysseyRecomp")
+    target_include_directories(${target} SYSTEM PRIVATE
+        "${REPO_ROOT}/tools/XenonRecomp/thirdparty/tomlplusplus/vendor")
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    target_link_libraries(${target} PRIVATE Threads::Threads)
+    set_target_properties(${target} PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+    if(MSVC)
+        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${target} PRIVATE /W4 /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+    if(LO_DISCORD_JSON_LITERAL_FLAG)
+        target_compile_options(${target} PRIVATE -Wno-deprecated-literal-operator)
+    endif()
+endfunction()
+
+add_executable(LoDiscordRpcTest discord_rpc_test.cpp ${LO_DISCORD_CLIENT_SOURCES})
+configure_discord_client_target(LoDiscordRpcTest)
+# Manual opt-in only: contacts the local Discord client and changes its activity.
+add_executable(LoDiscordRpcHarness EXCLUDE_FROM_ALL real_pipe_harness.cpp ${LO_DISCORD_CLIENT_SOURCES})
+configure_discord_client_target(LoDiscordRpcHarness)
+foreach(scenario IN ITEMS protocol mapping policy ipc lifecycle unresponsive retry dry-run diagnostics)
+    add_test(NAME discord_rpc_${scenario} COMMAND LoDiscordRpcTest ${scenario})
+    set_tests_properties(discord_rpc_${scenario} PROPERTIES TIMEOUT 20)
+endforeach()
+
+add_executable(LoDiscordGameStateTest "${REPO_ROOT}/tools/tests/discord_game_state_test.cpp"
+    "${REPO_ROOT}/LostOdysseyRecomp/discord/game_state.cpp")
+target_include_directories(LoDiscordGameStateTest PRIVATE "${REPO_ROOT}/LostOdysseyRecomp")
+target_compile_features(LoDiscordGameStateTest PRIVATE cxx_std_20)
+set_target_properties(LoDiscordGameStateTest PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+if(MSVC)
+    target_compile_options(LoDiscordGameStateTest PRIVATE /W4 /utf-8 /UNDEBUG)
+else()
+    target_compile_options(LoDiscordGameStateTest PRIVATE -Wall -Wextra -Werror -pedantic -UNDEBUG)
+endif()
+add_test(NAME discord_rpc_game_state COMMAND LoDiscordGameStateTest)
+set_tests_properties(discord_rpc_game_state PROPERTIES TIMEOUT 20)

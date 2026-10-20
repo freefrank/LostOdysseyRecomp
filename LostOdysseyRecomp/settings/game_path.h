@@ -140,6 +140,18 @@ namespace settings::game_path
         }
 
         Resolution result;
+        const auto packageDefault = DefaultGameRoot(exeDirectory);
+        std::vector<std::filesystem::path> candidates = { packageDefault / "disc1", packageDefault };
+#if LO_PLATFORM_LINUX && !LO_PLATFORM_ANDROID
+        // APPIMAGE names the original file even when the runtime extracted
+        // APPDIR into /tmp. Search the user's adjacent game before that tree.
+        if (const char* appImage = std::getenv("APPIMAGE"); appImage != nullptr && *appImage != '\0')
+        {
+            const auto appImageDirectory = AbsoluteFrom(appImage, std::filesystem::current_path()).parent_path();
+            candidates.push_back(appImageDirectory / "game" / "disc1");
+            candidates.push_back(appImageDirectory / "game");
+        }
+#endif
         const auto configPath = os::user_paths::UsePortableLayout()
             ? exeDirectory / "game-path.txt"
             : os::user_paths::ConfigDir() / "game-path.txt";
@@ -152,12 +164,11 @@ namespace settings::game_path
                 return { *root, Source::ConfiguredFile, true, false };
             // The game folder was moved or copied with its imported discs, and
             // game-path.txt still names the old place (older importers wrote
-            // absolute paths): use the package default beside this
-            // executable. Anything else stays the user's explicit choice, kept
+            // absolute paths): use the package default or the game beside the
+            // original AppImage. Anything else stays the user's explicit choice, kept
             // for the loader's error/installer flow rather than accidentally
             // selecting another installation elsewhere.
-            const auto packageDefault = DefaultGameRoot(exeDirectory);
-            for (const auto& candidate : { packageDefault / "disc1", packageDefault })
+            for (const auto& candidate : candidates)
             {
                 if (const auto root = RecognizeDefaultDirectory(candidate))
                     return { *root, Source::DefaultSearch, true, true };
@@ -166,16 +177,14 @@ namespace settings::game_path
         }
 
         // The order is intentional: an empty file (or no file) first gets the
-        // package default ./game beside the executable, then direct EXE,
-        // parent ../game and legacy/dev layouts. Every candidate is checked for a real default.xex.
-        std::vector<std::filesystem::path> candidates;
+        // package default, then the original AppImage's adjacent game, then
+        // the executable tree and legacy/dev layouts. Every candidate is
+        // checked for a real default.xex.
         if (!os::user_paths::UsePortableLayout())
         {
-            candidates.push_back(os::user_paths::DataDir() / "game" / "disc1");
-            candidates.push_back(os::user_paths::DataDir() / "game");
+            candidates.push_back(exeDirectory / "game" / "disc1");
+            candidates.push_back(exeDirectory / "game");
         }
-        candidates.push_back(exeDirectory / "game" / "disc1");
-        candidates.push_back(exeDirectory / "game");
         candidates.push_back(exeDirectory);
         candidates.push_back(exeDirectory / ".." / "game" / "disc1");
         candidates.push_back(exeDirectory / ".." / "game");

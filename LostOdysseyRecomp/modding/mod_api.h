@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -42,7 +43,8 @@ struct Diagnostic { std::filesystem::path manifest; size_t line = 0; std::string
 // optional fonts/ folder glyphs for letters the game's fonts lack. It
 // applies only while the player has it selected in Settings, in every mode.
 // id is lower case; base is a three-letter game language code (int, jpn...).
-struct LanguagePack { std::string id, name, base; std::filesystem::path folder; };
+// rightToLeft: direction=rtl, text drawn from the right (gpu/rtl_text.cpp).
+struct LanguagePack { std::string id, name, base; std::filesystem::path folder; bool rightToLeft = false; };
 // Mod: a folder with a mod.ini. LanguagePack: a folder with a language.ini
 // (never a mod, even beside a mod.ini); listed read-only, chosen in Settings.
 enum class ModKind : uint32_t { Mod, LanguagePack };
@@ -115,6 +117,10 @@ std::vector<ResolvedAsset> ListTexts(const LanguagePack& pack);
 // The pack's fonts/ files (glyphs it adds to the game's fonts, modding/font_patch.h):
 // fonts/<package member path>/<font>.lofont, keyed <package member path>#<font>.
 std::vector<ResolvedAsset> ListFonts(const LanguagePack& pack);
+// The pack's achievements.ini (UTF-8 key=value, at most 64 KiB): heading= for "Achievement
+// unlocked", and <id>.name=, <id>.unlocked=, <id>.locked= for an achievement's texts. Other keys,
+// and values longer than 512 bytes or with control characters, are left out.
+std::map<std::string, std::string> AchievementTexts(const LanguagePack& pack);
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request);
 // Opens a resolved file at its first byte; length is its size. An archive
 // entry ends before the archive does, so readers stop at length.

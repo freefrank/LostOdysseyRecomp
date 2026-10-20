@@ -1,5 +1,7 @@
 # DLSS 5 NR 接入研究
 
+[English](dlss5-nr-research.md)
+
 日期：2026-10-08。源码、SDK、驱动和外部实现的核对结果，以及 Vulkan 实现的依据。
 
 ## 结论

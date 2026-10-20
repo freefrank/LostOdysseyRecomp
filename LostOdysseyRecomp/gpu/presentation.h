@@ -79,6 +79,12 @@ class Presentation
     // instance pending, before targets are replaced without a size change (swap
     // chain resize or recreation).
     void ForgetTargets();
+    // Black out the margins of the presented source's centred 16:9 safe area.
+    // Call after final scene processing and before host overlays. Works after
+    // both graphics and storage/compute presentation; target ends COLOR_WRITE.
+    void DrawContentBars(plume::RenderCommandList *commands, plume::RenderTexture *target,
+                         uint32_t sourceWidth, uint32_t sourceHeight,
+                         uint32_t outputWidth, uint32_t outputHeight);
     // Process an opaque, display-encoded pre-UI scene at its actual resolution.
     // Source: sampleable RGBA8 UNORM, at least width x height (top-left crop).
     // Target: distinct, caller-owned RGBA8 UNORM render target, exactly width x
