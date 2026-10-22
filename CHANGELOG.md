@@ -8,14 +8,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Graphics hang logs now identify the presentation step and submission serials (#692).
 - Linux: fixed imports to game folders below the system `/home` → `/var/home` link used by Bazzite and Fedora Atomic (#665).
 - Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 - Settings → Graphics → Scene fades: Off replaces the short crossfade between scenes with a clean cut (#666).
 
 ### 简体中文
 
-- 图形挂起日志现在会记录停滞的呈现步骤和提交序号（#692）。
 - Linux：修复向 Bazzite 和 Fedora Atomic 的系统 `/home` → `/var/home` 链接下的游戏目录导入失败的问题（#665）。
 - Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 - “设置 → 图像 → 场景淡入淡出”设为关闭后，场景之间的短暂交叉淡化改为直接切换（#666）。
