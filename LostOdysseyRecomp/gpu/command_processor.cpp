@@ -773,9 +773,15 @@ namespace gpu
                 {
                     if (++stillFrames == 300 && swaps > 0 && dumps++ < 2)
                     {
-                        LOG_WARNING("GPU progress stalled: completed={} submitted={} stage={} opcode={:#x}",
+                        LOG_WARNING("GPU progress stalled: completed={} submitted={} stage={} opcode={:#x} counters=guest_swaps",
                             swaps, g_swapCount.load(), g_workerStage.load(std::memory_order_relaxed),
                             g_lastOpcode.load(std::memory_order_relaxed));
+#ifdef LO_GPU_PLUME
+                        const auto present = video::PresentationProgress();
+                        LOG_WARNING("presentation progress: stage={} last_submit_serial={} last_completed_serial={} pending_present_fence_serial={} image={} swapchain_generation={} loading={} vsync={} observations=independent",
+                            presentation_progress::Name(present.stage), present.submitted, present.completed,
+                            present.pendingFence, present.image, present.swapchainGeneration, present.loading, present.vsync);
+#endif
                         ::DumpGuestThreadStates();
                     }
                 }

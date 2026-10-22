@@ -44,6 +44,7 @@ lo_review_test(LoDebugMenuInteractionTest debug_menu_interaction_test.cpp "${LO_
 lo_review_test(LoSoftResetTest soft_reset_test.cpp)
 lo_review_test(LoAudioCallbackTest audio_callback_test.cpp)
 lo_review_test(LoFramePacerTest frame_pacer_test.cpp)
+lo_review_test(LoPresentationProgressTest presentation_progress_test.cpp)
 lo_review_test(LoLoadingStateTest loading_state_test.cpp)
 lo_review_test(LoSettingsPathTest settings_path_test.cpp "${LO_RUNTIME}/updater/update.cpp")
 lo_review_test(LoUserPathsTest user_paths_test.cpp)

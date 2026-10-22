@@ -6,6 +6,7 @@
 #include "display_change.h"
 #include "display_choice.h"
 #include "present_capture.h"
+#include "presentation_progress.h"
 #include "upscaling_plan.h"
 #include "frame_generation_status.h"
 #include "../../shared/frame_generation/core.h"
@@ -154,6 +155,8 @@ namespace gpu::video
     // Waits the independent presentation submission before renderer resources
     // referenced by it are retired. Called on the command processor thread.
     bool WaitForPresentGpu();
+    // Atomic observations for the vblank stall report; never queries the driver.
+    presentation_progress::Snapshot PresentationProgress();
     // Presents the host menu overlay (settings or debug overlay) on the presentation thread.
     bool IsHostOverlayActive();
     void PresentHostOverlay();

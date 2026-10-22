@@ -776,6 +776,11 @@ add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
 
+add_executable(LoPresentationProgressTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/presentation_progress_test.cpp)
+target_include_directories(LoPresentationProgressTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPresentationProgressTest PRIVATE cxx_std_20)
+target_link_libraries(LoPresentationProgressTest PRIVATE Threads::Threads)
+
 add_executable(LoHostUiCompositeTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/host_ui_composite_test.cpp)
 target_include_directories(LoHostUiCompositeTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoHostUiCompositeTest PRIVATE cxx_std_20)
