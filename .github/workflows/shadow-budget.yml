@@ -1,0 +1,85 @@
+name: Shadow budget contracts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/shadow-budget.yml'
+      - 'LostOdysseyRecomp/patches/shadow_budget.cpp'
+      - 'LostOdysseyRecomp/patches/graphics_effects.cpp'
+      - 'tools/tests/shadow_budget/**'
+  pull_request:
+    paths:
+      - '.github/workflows/shadow-budget.yml'
+      - 'LostOdysseyRecomp/patches/shadow_budget.cpp'
+      - 'LostOdysseyRecomp/patches/graphics_effects.cpp'
+      - 'tools/tests/shadow_budget/**'
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Configure (Linux GCC, Windows clang-cl)
+        shell: bash
+        run: |
+          extra=()
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            extra+=(-DCMAKE_CXX_COMPILER=clang-cl)
+          else
+            extra+=(-DLO_SHADOW_SANITIZE=ON)
+          fi
+          cmake -S tools/tests/shadow_budget -B out/shadow-budget -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release "${extra[@]}"
+      - name: Build and test production hooks
+        shell: bash
+        run: |
+          cmake --build out/shadow-budget --parallel 2
+          ctest --test-dir out/shadow-budget --output-on-failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shadow-budget-${{ runner.os }}-logs
+          path: out/shadow-budget/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+      - name: Install pinned NDK
+        run: sdkmanager 'ndk;28.2.13676358'
+      - name: Cross-compile and link the production-hook fixture
+        run: |
+          cmake -S tools/tests/shadow_budget -B out/shadow-budget-android -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/28.2.13676358/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=26
+          cmake --build out/shadow-budget-android --parallel 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shadow-budget-android-arm64-native-fixture
+          path: out/shadow-budget-android/LoShadowBudgetTest
+          retention-days: 7
