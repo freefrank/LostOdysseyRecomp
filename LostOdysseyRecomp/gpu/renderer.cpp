@@ -1546,6 +1546,9 @@ namespace gpu::renderer
             bool temporalForced=false,temporalForcedHistory=false,temporalForcedJitter=false,temporalForcedStable=false;
             bool temporalInitFailed=false;
             uint64_t temporalSupportedFrame=~0ull;
+            // Last frame whose scene had two camera views (split screen), and the
+            // first frame of that run, for the frame-start jitter policy and the log.
+            uint64_t temporalSplitViewFrame=~0ull,temporalSplitViewStart=~0ull;
             uint32_t temporalJitterDraws=0,temporalJitterMisses=0,temporalJitterUnknowns=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
             temporal::JitterSample actualRasterJitter{}, frameRasterJitter{};
@@ -9880,6 +9883,7 @@ void main()
                     frameStart.supportedFrame = temporalSupportedFrame;
                     frameStart.diagnosticJitter = taaDiagnosticJitter;
                     frameStart.diagnosticHistory = taaDiagnosticHistory;
+                    frameStart.previousSplitView = temporalSplitViewFrame != ~0ull && temporalSplitViewFrame + 1 == frame;
                     frameStart.motionSupportsDlss = motionOptions.Supports(upscaling::TemporalConsumer::DlssInputs) ||
                         (route.sr && activePlan.frameGeneration == upscaling::FrameGeneration::Off &&
                          temporal::SrHybridMotionEnabled());
@@ -15374,6 +15378,23 @@ void main()
                 }
                 temporal::CommitTemporalFrameEnd(*owner, temporalEnd, now, r.temporalSupportedFrame, r.temporalEpoch, r.temporalFrameTime);
                 r.temporalJitterDraws=r.temporalJitterMisses=r.temporalJitterUnknowns=0;
+                // Split-screen shots (#702) draw a full scene per panel. No upscaler
+                // can take two cameras, so these frames are shown as rendered.
+                const bool splitView = r.temporalScene.Frame() == r.frame &&
+                    r.temporalScene.Reason() == temporal::SceneObservation::Rejection::AmbiguousCamera;
+                const bool splitRun = r.temporalSplitViewFrame != ~0ull && r.temporalSplitViewFrame + 1 == r.frame;
+                static uint32_t splitLogs = 0;
+                if (splitView) {
+                    if (!splitRun) {
+                        r.temporalSplitViewStart = r.frame;
+                        if (splitLogs < 64 && r.dlssSrRequested)
+                            LOG_INFO("renderer: split-screen scene from frame={}; upscaling waits for one camera", r.frame);
+                    }
+                    r.temporalSplitViewFrame = r.frame;
+                } else if (splitRun && splitLogs < 64 && r.dlssSrRequested) {
+                    ++splitLogs;
+                    LOG_INFO("renderer: split-screen scene ended frame={} frames={}", r.frame, r.frame - r.temporalSplitViewStart);
+                }
                 }
             }
             if (g_renderer->evaluatePage && g_renderer->evaluatePage->frame == g_renderer->frame) {

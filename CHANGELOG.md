@@ -16,6 +16,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Linux: fixed imports to game folders below the system `/home` → `/var/home` link used by Bazzite and Fedora Atomic (#665).
 - Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 - Settings → Graphics → Scene fades: Off replaces the short crossfade between scenes with a clean cut (#666).
+- Split-screen shots in cutscenes no longer shimmer with DLSS, FSR or XeSS on (#702).
 
 ### 简体中文
 - 设置菜单中的按键名称改用游戏自带的按键图标（包括 PlayStation 提示、按键设定页的摇杆按下与方向键），这些文字不再切换为像素字体；标题菜单的 Back 键也使用同一图标（#667）。
@@ -27,6 +28,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Linux：修复向 Bazzite 和 Fedora Atomic 的系统 `/home` → `/var/home` 链接下的游戏目录导入失败的问题（#665）。
 - Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 - “设置 → 图像 → 场景淡入淡出”设为关闭后，场景之间的短暂交叉淡化改为直接切换（#666）。
+- 开启 DLSS、FSR 或 XeSS 时，过场动画中的分屏镜头不再闪烁抖动（#702）。
 
 ## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19
 
