@@ -16,7 +16,12 @@ set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory("${LO_PROBE_REPO_ROOT}/thirdparty/SDL" "${CMAKE_CURRENT_BINARY_DIR}/SDL")
 
-add_library(main SHARED main.cpp memory_probe.cpp vulkan_probe.cpp)
+add_library(main SHARED main.cpp memory_probe.cpp vulkan_probe.cpp movie_probe.cpp
+    "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp/movie/byte_source.cpp"
+    "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp/movie/movie_decoder.cpp"
+    "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp/movie/movie_decoder_android.cpp"
+    "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp/movie/mp4_demux.cpp"
+    "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp/modding/mod_api.cpp")
 target_compile_features(main PRIVATE cxx_std_20)
 target_include_directories(main PRIVATE "${LO_PROBE_REPO_ROOT}/LostOdysseyRecomp")
 target_link_libraries(main PRIVATE SDL3::SDL3 vulkan android log)

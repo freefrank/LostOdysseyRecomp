@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
     }
     std::sort(times.begin(), times.end());
     const double p95 = times.empty() ? 0.0 : times[size_t(double(times.size() - 1) * 0.95)];
-    std::printf("decoder: %s, hardware: %s, open %.1f ms\n", decoder->Name(), decoder->Hardware() ? "yes" : "no", openMs);
+    std::printf("decoder: %s, acceleration: %s, open %.1f ms\n", decoder->Name(), decoder->AccelerationName(), openMs);
     std::printf("frames: %llu, output %ux%u, pts %s\n", static_cast<unsigned long long>(frames), frame.width, frame.height,
                 ordered ? "strictly increasing" : "NOT increasing");
     if (frames > 1) {

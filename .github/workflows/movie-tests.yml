@@ -1,0 +1,80 @@
+name: Movie decoder contracts
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - '.github/workflows/movie-tests.yml'
+      - 'LostOdysseyRecomp/movie/**'
+      - 'tools/tests/movie*/**'
+      - 'tools/tests/movie*.*'
+      - 'tools/android_probe/**'
+      - 'packaging/android/app/**'
+  pull_request:
+    paths:
+      - '.github/workflows/movie-tests.yml'
+      - 'LostOdysseyRecomp/movie/**'
+      - 'tools/tests/movie*/**'
+      - 'tools/tests/movie*.*'
+      - 'tools/android_probe/**'
+      - 'packaging/android/app/**'
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Initialize pinned test dependencies
+        run: |
+          git submodule update --init --depth 1 thirdparty/SDL tools/XenonRecomp
+          git -C tools/XenonRecomp submodule update --init --depth 1 thirdparty/fmt
+      - name: Build and run movie data and JNI checks
+        run: |
+          cmake -S tools/tests/movie -B build/movie -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/movie --parallel 4
+          ctest --test-dir build/movie --output-on-failure
+  windows-decoder:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build existing Media Foundation tests
+        run: |
+          cmake -S . -B build/movie -DLO_BUILD_RUNTIME=OFF -DLO_BUILD_RECOMP_LIB=OFF -DLO_BUILD_AUDIO_TESTS=OFF -DLO_BUILD_MOD_TESTS=ON
+          cmake --build build/movie --config Debug --target LoMovieDecodeTest --parallel 4
+          ctest --test-dir build/movie -C Debug -R '^LoMovieDecodeTest' --output-on-failure
+  android-probe:
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Initialize pinned SDL
+        run: git submodule update --init --depth 1 thirdparty/SDL
+      - name: Prepare Android toolchain
+        run: |
+          { yes || true; } | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' >/dev/null
+      - name: Build and lint game-free movie probe APK
+        working-directory: packaging/android
+        run: ./gradlew :app:assembleDebug :app:lintDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-movie-probe
+          path: packaging/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7

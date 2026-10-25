@@ -1,5 +1,6 @@
 #include "memory_probe.h"
 #include "vulkan_probe.h"
+#include "movie_probe.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
@@ -71,7 +72,9 @@ Java_io_github_freefrank_lostodyssey_probe_ProbeActivity_nativeRequestTone(JNIEn
     runTone.store(true);
 }
 
-extern "C" int SDL_main(int, char**) {
+extern "C" int SDL_main(int argc, char** argv) {
+    const std::string moviePath = argc >= 3 && std::string(argv[1]) == "--movie" ? argv[2] : "";
+    const bool movieSoftware = argc >= 4 && std::string(argv[3]) == "--software";
     // SDLActivity may restart the entry point without unloading libmain.so.
     runProbe.store(true);
     runTone.store(false);
@@ -79,10 +82,10 @@ extern "C" int SDL_main(int, char**) {
         Publish(std::string("SDL video initialization failed: ") + SDL_GetError());
         return 1;
     }
-    const bool audioReady = SDL_InitSubSystem(SDL_INIT_AUDIO);
-    const bool inputReady = SDL_InitSubSystem(SDL_INIT_GAMEPAD);
-    SDL_Window* window = SDL_CreateWindow("Lost Odyssey Android Probe", 960, 540,
-            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    const bool audioReady = moviePath.empty() && SDL_InitSubSystem(SDL_INIT_AUDIO);
+    const bool inputReady = moviePath.empty() && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    SDL_Window* window = moviePath.empty() ? SDL_CreateWindow("Lost Odyssey Android Probe", 960, 540,
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE) : nullptr;
     std::string windowError = window ? "" : SDL_GetError();
     SDL_AudioSpec desired{};
     desired.freq = 48000;
@@ -100,6 +103,12 @@ extern "C" int SDL_main(int, char**) {
         if (foreground && runProbe.exchange(false)) {
             std::ostringstream result;
             result << "Lost Odyssey Android port probe 0.1\nNo game/runtime compatibility claim.\n\n";
+            if (!moviePath.empty()) {
+                result << lo::android_probe::ProbeMovie(moviePath, movieSoftware);
+                report = result.str();
+                Publish(report);
+                continue;
+            }
             result << lo::android_probe::ProbeMemory() << "\n";
             result << (window ? lo::android_probe::ProbeVulkan(window)
                               : "Vulkan window creation failed: " + windowError) << "\n";

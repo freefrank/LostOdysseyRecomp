@@ -30,6 +30,15 @@ public final class ProbeActivity extends SDLActivity {
     }
 
     @Override
+    protected String[] getArguments() {
+        String movie = getIntent().getStringExtra("movie");
+        if (movie == null || movie.isEmpty()) return new String[0];
+        return getIntent().getBooleanExtra("software", false)
+                ? new String[] { "--movie", movie, "--software" }
+                : new String[] { "--movie", movie };
+    }
+
+    @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         LinearLayout panel = new LinearLayout(this);

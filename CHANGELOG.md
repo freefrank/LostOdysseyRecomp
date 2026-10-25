@@ -7,6 +7,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 ## Unreleased
 
 ### English
+- Android: experimental H.264 MP4 replacement-movie decoding through MediaCodec, with the original video retained on failure.
 - Android: the CTRL menu follows the game's language.
 - Settings shows button names as the game's own button icons, including PlayStation prompts, stick clicks and the D-pad on the Controls page, so these lines keep the game font instead of switching to the small pixel font. The title menu's Back key uses the same icon (#667).
 - Settings uses the same HD font pages as the game when a font mod replaces them, and Latin menus use the European game's font with its accented letters (#668).
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Split-screen shots in cutscenes no longer shake while DLSS, FSR or XeSS pause for them (#702).
 
 ### 简体中文
+- Android：新增通过 MediaCodec 解码 H.264 MP4 替换视频的实验性支持，解码失败时保留原始视频。
 - Android：CTRL 菜单现在跟随游戏的界面语言。
 - 设置菜单中的按键名称改用游戏自带的按键图标（包括 PlayStation 提示、按键设定页的摇杆按下与方向键），这些文字不再切换为像素字体；标题菜单的 Back 键也使用同一图标（#667）。
 - 字体 Mod 替换字体页面后，设置菜单也使用与游戏相同的高清字体页面；拉丁语系菜单使用欧版游戏带重音字母的字体（#668）。

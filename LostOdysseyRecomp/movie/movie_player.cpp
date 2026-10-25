@@ -81,6 +81,7 @@ public:
         cv_.notify_all();
     }
     bool Failed() const { return failed_.load(std::memory_order_acquire); }
+    bool Ready() const { return ready_.load(std::memory_order_acquire); }
 
     bool FrameAt(int64_t us, DrawFrame& out) {
         std::lock_guard lock(mutex_);
@@ -117,9 +118,13 @@ private:
         if (source && ParseMp4(*source, track, error)) {
             decoder = CreateMovieDecoder(true);
             if (!decoder) error = "no H.264 decoder on this platform";
-            else if (!decoder->Open(track, *source, error)) decoder.reset();
+            else {
+                decoder->SetStopFlag(&stop_);
+                if (!decoder->Open(track, *source, error)) decoder.reset();
+            }
         }
         if (!decoder) {
+            if (stop_.load(std::memory_order_relaxed)) return;
             LOG_WARNING("movie: {} keeps the original video, {} not used: {}", name_, modding::DescribeAsset(asset_), error);
             failed_.store(true, std::memory_order_release);
             return;
@@ -146,21 +151,29 @@ private:
             }
             if (!frame) frame = std::make_shared<Nv12Frame>();
             if (!decoder->Next(*frame, error)) {
-                if (!error.empty()) LOG_WARNING("movie: {} decoding stopped: {}", name_, error);
+                if (stop_.load(std::memory_order_relaxed)) return;
+                if (!error.empty()) {
+                    failed_.store(true, std::memory_order_release);
+                    LOG_WARNING("movie: {} decoding stopped: {}", name_, error);
+                }
                 std::lock_guard lock(mutex_);
                 ended_ = true;
+                if (!error.empty()) {
+                    queue_.clear(); shown_ = {}; spare_.clear();
+                }
                 return;
             }
             if (first) {
                 first = false;
                 LOG_NOTICE("movie: {} replaced by {} ({}x{}, {:.3f} fps, {} {})", name_, modding::DescribeAsset(asset_),
-                    track.width, track.height, 1e6 / frameUs, decoder->Name(), decoder->Hardware() ? "hardware" : "software");
+                    track.width, track.height, 1e6 / frameUs, decoder->Name(), decoder->AccelerationName());
                 if (scale != 1.0)
                     LOG_NOTICE("movie: {} is {:.3f} s, fitted to the original's {:.3f} s", name_, lengthUs / 1e6, originalUs / 1e6);
             }
             const int64_t us = int64_t(1e6 * double(frame->pts) * scale / track.timescale);
             std::lock_guard lock(mutex_);
             queue_.push_back({std::move(frame), us, ++gSerial});
+            ready_.store(true, std::memory_order_release);
         }
     }
 
@@ -171,9 +184,11 @@ private:
     std::deque<Decoded> queue_; // display order
     Decoded shown_;
     std::vector<std::shared_ptr<Nv12Frame>> spare_;
-    bool stop_ = false, ended_ = false;
+    std::atomic<bool> stop_{false};
+    bool ended_ = false;
     int64_t endHoldUs_ = 25000;
     std::atomic<bool> failed_{false};
+    std::atomic<bool> ready_{false};
     std::thread thread_;
 };
 
@@ -298,7 +313,9 @@ uint32_t ReplacementSession(uint32_t guestMovie) {
 
 bool GuestUpdateDue(uint32_t session, double nowMs) {
     const auto s = Find(session);
-    return !s || s->clock.Due(nowMs);
+    // Keep collecting the guest clock during startup, but retain the guest's
+    // original pacing until a replacement picture is actually available.
+    return !s || !s->Ready() || s->clock.Due(nowMs);
 }
 
 void GuestFrameShown(uint32_t session, double ptsMs, double nowMs) {

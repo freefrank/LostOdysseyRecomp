@@ -3,6 +3,7 @@
 #include "mp4_demux.h"
 #include <cstdint>
 #include <memory>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,15 @@ public:
     virtual const char* Name() const = 0;
     // True when frames come out of a GPU video decoder (valid after the first Next).
     virtual bool Hardware() const = 0;
+    // Older Android versions cannot reliably classify vendor codecs.
+    virtual const char* AccelerationName() const { return Hardware() ? "hardware" : "software"; }
+    // Set before Open; the flag must outlive this decoder. Only the flag is
+    // touched by other threads: codec calls remain on the decoding thread.
+    void SetStopFlag(const std::atomic<bool>* flag) { stopFlag_ = flag; }
+protected:
+    bool StopRequested() const { return stopFlag_ && stopFlag_->load(std::memory_order_relaxed); }
+private:
+    const std::atomic<bool>* stopFlag_ = nullptr;
 };
 
 // Null when this platform has no backend. preferHardware false forces software.

@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include "movie_decoder.h"
+#include "h264_sample.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -273,25 +274,11 @@ private:
         if (!source_->ReadAt(s.offset, raw_.data(), raw_.size())) { error = "cannot read a video sample"; return false; }
         annexb_.clear();
         if (!headerSent_) {
-            for (const auto* list : {&track_->sps, &track_->pps}) {
-                for (const auto& nal : *list) {
-                    AppendStartCode();
-                    annexb_.insert(annexb_.end(), nal.begin(), nal.end());
-                }
-            }
+            AppendH264ParameterSets(track_->sps, annexb_);
+            AppendH264ParameterSets(track_->pps, annexb_);
             headerSent_ = true;
         }
-        const size_t lenBytes = track_->nalLengthSize;
-        for (size_t pos = 0; pos < raw_.size();) {
-            if (raw_.size() - pos < lenBytes) { error = "truncated NAL length in a sample"; return false; }
-            size_t n = 0;
-            for (size_t i = 0; i < lenBytes; ++i) n = (n << 8) | raw_[pos + i];
-            pos += lenBytes;
-            if (n > raw_.size() - pos) { error = "NAL length runs past its sample"; return false; }
-            AppendStartCode();
-            annexb_.insert(annexb_.end(), raw_.begin() + pos, raw_.begin() + pos + n);
-            pos += n;
-        }
+        if (!AppendH264Sample(raw_, track_->nalLengthSize, annexb_, error)) return false;
         ComPtr<IMFMediaBuffer> buffer;
         ComPtr<IMFSample> sample;
         HRESULT hr = MFCreateMemoryBuffer(DWORD(annexb_.size()), &buffer);
@@ -313,8 +300,6 @@ private:
         ++next_;
         return true;
     }
-
-    void AppendStartCode() { annexb_.insert(annexb_.end(), {0, 0, 0, 1}); }
 
     int64_t ToHns(int64_t t) const {
         return int64_t(std::llround((long double)t * 10000000.0L / track_->timescale));
