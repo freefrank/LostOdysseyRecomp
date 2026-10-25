@@ -396,6 +396,12 @@ namespace gpu::occlusion
     // transition frames. After leaving, Fast holds for a cooldown that doubles
     // each time Strict lasted only briefly, so a view on the edge settles in
     // Fast instead of switching back and forth.
+    //
+    // A map load starts over in Fast (Reset). Strict's own zero share cannot
+    // tell a street from a room: Uhra's main street reads about 35% in Fast
+    // and 20-35% in Strict, between the two thresholds, so Strict carried out
+    // of the Residential Area (57%) stayed on the street until a view below
+    // 20% came along, about a minute later (#694).
     class AdaptiveMode
     {
     public:
@@ -453,6 +459,15 @@ namespace gpu::occlusion
             cooldown_ = hold_;
             hold_ = std::min(hold_ * 2, kMaxCooldownFrames);
             return true;
+        }
+
+        // A new map: Fast, no windows, votes, cooldown or backoff from the
+        // previous one. Returns true when it leaves Strict.
+        bool Reset()
+        {
+            const bool strict = mode_ == Mode::Strict;
+            *this = AdaptiveMode{};
+            return strict;
         }
 
     private:

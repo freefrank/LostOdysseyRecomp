@@ -276,6 +276,16 @@ int main()
         run(adaptive.Cooldown() + switchFrames, 949, 760);
         run(switchFrames * 4, 290, 101);
         Check(run(switchFrames, 560, 5) == 1 && adaptive.Cooldown() == AdaptiveMode::kCooldownFrames, "backoff reset");
+        // A map load starts over in Fast: Strict from a mostly hidden interior
+        // does not carry onto a street that reads between the thresholds (#694).
+        Check(run(adaptive.Cooldown() + switchFrames, 949, 760) == 1 && adaptive.Current() == Mode::Strict, "strict in a hidden room");
+        Check(adaptive.Reset() && adaptive.Current() == Mode::Fast && adaptive.Cooldown() == 0, "a map load leaves strict");
+        // Uhra's main street: 250 queries, 35% zero.
+        Check(run(switchFrames * 4, 250, 88) == 0 && adaptive.Current() == Mode::Fast, "the street stays fast after the load");
+        Check(!adaptive.Reset() && adaptive.Current() == Mode::Fast, "a load in fast changes nothing");
+        // Within a map, a mostly hidden view still switches after two full windows.
+        Check(run(switchFrames - 1, 949, 760) == 0 && run(1, 949, 760) == 1 && adaptive.Current() == Mode::Strict,
+            "strict still engages within a map");
     }
     {
         // Strict: shutdown releases every waiting guest with a visible answer.

@@ -4779,6 +4779,16 @@ void main()
                         occlusionAdaptive.ZerosPerFrame(), occlusionAdaptive.Cooldown(), switches);
             }
 
+            // A map started loading (ProcessScenePrefetch, at a frame end):
+            // Policy::Adaptive starts over in Fast (AdaptiveMode::Reset).
+            void ResetOcclusionForMap(uint32_t tag)
+            {
+                if (!hostOcclusion || occlusionPolicy != gpu::occlusion::Policy::Adaptive) return;
+                const bool strict = occlusionAdaptive.Reset();
+                occlusion.SetMode(gpu::occlusion::Mode::Fast);
+                LOG_INFO("renderer: occlusion mode reset for map load f{} map={} was_strict={}", frame, tag & 0x0FFFFFFFu, strict);
+            }
+
             void LogOcclusionDraw(uint32_t index, bool pixelShader, const HostTexture* target)
             {
                 static uint32_t logged = 0;
@@ -6350,6 +6360,7 @@ void main()
             // Render thread, once a frame: queues the recipes of each scene that
             // started loading since the last frame. Shader modules the pack still has
             // to provide are made by the workers first (MSL compilation on Metal).
+            // A map load also starts adaptive occlusion over (ResetOcclusionForMap).
             void ProcessScenePrefetch()
             {
                 std::vector<uint32_t> tags;
@@ -6357,6 +6368,11 @@ void main()
                     std::lock_guard lock(g_scenePrefetchMutex);
                     tags.swap(g_scenePrefetchRequests);
                 }
+                for (const uint32_t tag : tags)
+                    if (tag >> 28 == gpu::pipeline_cache::kSceneMap) {
+                        ResetOcclusionForMap(tag);
+                        break;
+                    }
                 if (!scenePrefetchEnabled || !pipelineCacheEnabled) return;
                 for (const uint32_t tag : tags) {
                     const auto started = std::chrono::steady_clock::now();
