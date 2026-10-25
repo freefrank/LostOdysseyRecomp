@@ -18,6 +18,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 - Settings → Graphics → Scene fades: Off replaces the short crossfade between scenes with a clean cut (#666).
 - Fixed low frame rates that could persist after leaving a building, such as on Uhra's main street (#694).
+- Split-screen shots in cutscenes no longer shake while DLSS, FSR or XeSS pause for them (#702).
 
 ### 简体中文
 - Android：CTRL 菜单现在跟随游戏的界面语言。
@@ -31,6 +32,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 - “设置 → 图像 → 场景淡入淡出”设为关闭后，场景之间的短暂交叉淡化改为直接切换（#666）。
 - 修复离开建筑后帧率可能持续偏低的问题，例如乌拉主街（#694）。
+- 开启 DLSS、FSR 或 XeSS 时，过场动画的分屏镜头在升采样暂停期间不再抖动（#702）。
 
 ## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19
 

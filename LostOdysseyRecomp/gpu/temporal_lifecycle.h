@@ -46,6 +46,8 @@ struct FrameStartPolicy {
     int diagnosticJitter = -1;
     int diagnosticHistory = -1;
     bool motionSupportsDlss = true;
+    // The previous frame drew two scene views (a split-screen cutscene shot).
+    bool previousSplitView = false;
 };
 
 struct FrameStartConsumers {
@@ -85,6 +87,11 @@ inline FrameStartConsumers ResolveFrameStartConsumers(const FrameStartPolicy& po
         out.dlssSr = false;
     }
     ApplyDlssConsumerFrameStart(out.inputProbe, out.dlssSr, out.jitter, out.allowHistory, out.stableGrid);
+    // A split view has one camera per panel, so the upscaler skips it and the
+    // frame is shown as rendered. Unresolved jitter would shake it; the next
+    // frame is most likely split too. The frame after a split starts a new
+    // history either way, so one unjittered input costs nothing.
+    if (out.dlssSr && policy.previousSplitView && policy.diagnosticJitter < 0) out.jitter = false;
     return out;
 }
 
