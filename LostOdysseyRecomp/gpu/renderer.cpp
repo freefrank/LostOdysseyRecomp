@@ -15384,15 +15384,19 @@ void main()
                     r.temporalScene.Reason() == temporal::SceneObservation::Rejection::AmbiguousCamera;
                 const bool splitRun = r.temporalSplitViewFrame != ~0ull && r.temporalSplitViewFrame + 1 == r.frame;
                 static uint32_t splitLogs = 0;
+                static bool splitLogged = false;
                 if (splitView) {
                     if (!splitRun) {
                         r.temporalSplitViewStart = r.frame;
-                        if (splitLogs < 64 && r.dlssSrRequested)
+                        splitLogged = splitLogs < 64 && r.dlssSrRequested;
+                        if (splitLogged) {
+                            ++splitLogs;
                             LOG_INFO("renderer: split-screen scene from frame={}; upscaling waits for one camera", r.frame);
+                        }
                     }
                     r.temporalSplitViewFrame = r.frame;
-                } else if (splitRun && splitLogs < 64 && r.dlssSrRequested) {
-                    ++splitLogs;
+                } else if (splitRun && splitLogged) {
+                    splitLogged = false;
                     LOG_INFO("renderer: split-screen scene ended frame={} frames={}", r.frame, r.frame - r.temporalSplitViewStart);
                 }
                 }
