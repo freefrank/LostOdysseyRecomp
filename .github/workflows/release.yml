@@ -747,9 +747,11 @@ jobs:
           if-no-files-found: error
 
   # The build jobs only produce run artifacts. Writing to the GitHub release
-  # happens here, after all platforms have built.
+  # happens here, after all platforms have built. The release environment
+  # accepts only v* tags and waits for the maintainer's approval.
   publish-release:
     name: Publish complete release
+    environment: release
     permissions:
       contents: write
       actions: write
