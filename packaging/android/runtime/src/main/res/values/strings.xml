@@ -27,4 +27,17 @@
     <string name="save_location_cancel_pending">Cancel pending change</string>
     <string name="touch_hide_all">Hide all touch controls</string>
     <string name="touch_hide_all_help">Reveal the system bars or use Android Back to show CTRL for 4 seconds.</string>
+    <string name="touch_settings_title">Controller settings</string>
+    <string name="touch_show_controls">Show touch controls</string>
+    <string name="touch_controller_hint">Physical controller connected. Touch controls hide automatically; turn them on here to use both together.</string>
+    <string name="touch_control_size">Control size: %1$d%%</string>
+    <string name="touch_opacity">Opacity: %1$d%%</string>
+    <string name="touch_ctrl_auto_hide">Auto-hide CTRL button</string>
+    <string name="touch_gpu_driver">GPU driver: %1$s …</string>
+    <string name="touch_gpu_driver_system">System</string>
+    <string name="touch_saves_logs">Saves and logs: export / import …</string>
+    <string name="touch_game_folder">Game folder …</string>
+    <string name="touch_apply">Apply</string>
+    <string name="touch_edit_layout">Edit layout</string>
+    <string name="touch_cancel">Cancel</string>
 </resources>
