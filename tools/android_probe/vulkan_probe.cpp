@@ -1,4 +1,5 @@
 #include "vulkan_probe.h"
+#include "descriptor_buffer_probe.h"
 #include "../../LostOdysseyRecomp/gpu/backend_selection.h"
 #include "../../LostOdysseyRecomp/gpu/render_arena_policy.h"
 
@@ -371,6 +372,8 @@ std::string ProbeVulkan(SDL_Window* window) {
             << " maxStorageBufferRange=" << limits.maxStorageBufferRange << " bytes"
             << " vertexArena=" << gpu::render_arena::kVertexArenaSize << " bytes\n";
         bool formatsOk = true;
+        out << DescribeDescriptorBuffer(physical,
+            featureQueryAvailable ? getFeatures2 : nullptr, featureQueryAvailable ? getProperties2 : nullptr);
         for (const auto& format : std::array<std::pair<const char*, VkFormat>, 6>{{
                  {"BC1 UNORM", VK_FORMAT_BC1_RGBA_UNORM_BLOCK},
                  {"BC1 SRGB", VK_FORMAT_BC1_RGBA_SRGB_BLOCK},
