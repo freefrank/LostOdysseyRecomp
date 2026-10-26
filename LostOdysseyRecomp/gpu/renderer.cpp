@@ -14177,16 +14177,22 @@ void main()
                 const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
                 if (rs.tex->format == color.format)
                 {
-                    Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
-                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy)) {
+                    // A reused copy has no transfer access to synchronize. Keep
+                    // the destination readable instead of making a COPY_DEST ->
+                    // SHADER_READ round trip. Pending clears must still execute
+                    // through Transition before deciding that pixels are reusable.
+                    if (resolveCopyReuse && color.pendingClear.Empty() && rs.tex->pendingClear.Empty() &&
+                        consecutiveResolveCopies.CanReuse(copy)) {
+                        MarkFgWritable(*rs.tex, "writable_transition");
                         ++resolveCopiesSkipped;
                         resolveOperation = "copy_reused";
                     }
                     else
                     {
+                        Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                        Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                         RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
                         commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
                             RenderTextureCopyLocation::Subresource(color.texture.get()), x0, y0, 0, &box);
