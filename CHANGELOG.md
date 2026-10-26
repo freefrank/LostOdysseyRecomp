@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Fixed an audio streaming wait that could block other voices and retire an unwritten output buffer.
+
+### 简体中文
+
+- 修复音频流等待时可能阻塞其他声音并错误结束未写入输出缓冲区的问题。
+
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
 ### English

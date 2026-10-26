@@ -17,6 +17,26 @@ int main()
     require(g_memory.FindFunction(0x82AFD150) == sub_82AFD150, "second leaf has its own generated dispatch entry");
     require(g_memory.FindFunction(0x82AFA388) != g_memory.FindFunction(0x82AFA2E8), "first leaf is separate from preceding function");
     require(g_memory.FindFunction(0x82AFD150) != g_memory.FindFunction(0x82AFD038), "second leaf is separate from preceding function");
+    // The Android log's 0x82F81040 is a local switch case, not a function.
+    // Run the actual regenerated comparison helper through all seven classes.
+    require(g_memory.FindFunction(0x82F80F48) == sub_82F80F48, "comparison helper remains registered");
+    PPC_STORE_U32(0x82000E50, std::bit_cast<uint32_t>(0.0f));
+    PPC_STORE_U32(0x82007784, std::bit_cast<uint32_t>(1.0f));
+    PPC_STORE_U32(0x82000D80, std::bit_cast<uint32_t>(1.0f));
+    constexpr uint32_t labels[]{0x82F8100C,0x82F81014,0x82F8101C,0x82F81024,0x82F8102C,0x82F81034,0x82F81040};
+    for (uint32_t i=0; i<7; ++i) PPC_STORE_U32(0x82F80FF0+4*i,labels[i]);
+    struct CompareCase { double a,b; uint32_t mask; };
+    const CompareCase cases[]{{0,0,0x28},{1,0,0x18},{0,1,0x30},{.25,0,8},
+                              {.6,.6,0x10},{0,.5,0x20},{.2,.3,0},{1,.5,~0u}};
+    for (const auto& c:cases)
+        for (uint32_t mask=0; mask<64; ++mask)
+        {
+            PPCContext ctx{};
+            ctx.r3.u64=mask; ctx.f1.f64=c.a; ctx.f2.f64=c.b; ctx.lr=0x82F86788;
+            g_memory.FindFunction(0x82F80F48)(ctx,base);
+            const uint64_t expected=c.mask==~0u ? 0 : uint64_t(!(mask&c.mask));
+            require(ctx.r3.u64==expected,"comparison helper preserves every local case and its shared Boolean return");
+        }
     constexpr uint32_t object=0x2000, flags=0x3000, script=0x4000, stream=0x5000, actor=0x6000;
     for (unsigned alternate=0; alternate<2; ++alternate) {
         for (unsigned command=0; command<5; ++command) {

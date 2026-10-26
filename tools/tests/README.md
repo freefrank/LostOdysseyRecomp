@@ -22,6 +22,7 @@ Each directory configures on its own, without game data or the full dependency t
 | Directory | Covers | Configure |
 |---|---|---|
 | `review_regressions/` | Sanitizer fixtures from the 2026-09-30 project review, updater and packaging scripts | see below |
+| `xma_streaming/` | Production XMA input waits, pending PCM/output state and bit-exact packet assembly across stream/buffer boundaries; decoder stand-in | `cmake -S tools/tests/xma_streaming -B out/xma-streaming` |
 | `cinematic_bars/` | Native cutscene, fade-tail and game-pause signals against guest-call stubs; also included in review regressions | `cmake -S tools/tests/cinematic_bars -B out/cinematic-tests` |
 | `settings_menu/` | Settings menu interaction and raster contracts | `cmake -S tools/tests/settings_menu -B out/menu` |
 | `streamline_fg/` | GPU-free frame generation, selection and SR input contracts (plus `settings_menu/`) | `cmake -S tools/tests/streamline_fg -B out/fg-contracts` |
@@ -30,6 +31,7 @@ Each directory configures on its own, without game data or the full dependency t
 | `motion_replay/` | Motion vector replay and TAA (GPU) and renderer compile boundary | `cmake -S tools/tests/motion_replay -B out/motion` |
 | `optiscaler/`, `vrr/`, `fsr/` | OptiScaler loader, VRR config, FSR policy fixtures | configure the directory |
 | `recompiler_switch/`, `recompiler_semantics/` | PPC recompiler regressions | see below |
+| `guest_entry/` | Production analysis, switch metadata, local case dispatch and shared returns on a reduced PPC comparison helper | `cmake -S tools/tests/guest_entry -B out/guest-entry` (Clang, patched XenonRecomp and its dependencies) |
 | `controller_atlas/` | Controller glyph atlas decode and the renderer's Xbox/PlayStation atlas swap; needs the local UI export ([README](controller_atlas/README.md)) | `cmake -S tools/tests/controller_atlas -B out/atlas` |
 
 Build and run with `cmake --build <dir>` then `ctest --test-dir <dir> --output-on-failure`.
@@ -101,6 +103,37 @@ python -B tools/tests/recompiler_semantics_test.py --output out/tests/recompiler
 ```
 
 Same approach for instruction semantics (carry, masks, shifts, Rc forms, memory addressing, branches). Needs Python, CMake, Ninja, `clang-cl`, the Windows SDK and the checked-out recompiler dependencies. Takes a new output directory each run.
+
+## Guest comparison switch regression
+
+`guest_entry/` uses production analysis and code generation on a reduced PPC
+fixture. Initialize the recursive `tools/XenonRecomp` submodule and apply the
+tracked `tools/patches/XenonRecomp-lostodyssey.patch` if it is not already applied.
+Configure with Clang, build, then run CTest:
+
+```bash
+cmake -S tools/tests/guest_entry -B out/guest-entry -G Ninja \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build out/guest-entry
+ctest --test-dir out/guest-entry --output-on-failure
+```
+
+`LO_GUEST_ENTRY_SANITIZE=ON` enables ASan/UBSan on supported hosts. The
+`LO_GUEST_ENTRY_NEGATIVE_CONTROL` modes `missing-table` and `baseline` must fail
+the comparison assertion; the workflow checks both, including the shared return
+without a missing lookup. Restore `OFF` after experimenting with these modes.
+
+Optional binary evidence needs Python `pyelftools`, `unicorn` and the official
+v1.1.0 ARM64 APK; both APK/library hashes are pinned by the script:
+
+```bash
+python tools/tests/guest_entry/inspect_release.py --apk /path/to/v1.1.0.apk --output observations.json
+```
+
+This runs bounded ARM64 emulation with controlled inputs, not Android gameplay.
+See [the investigation](../../docs/notes/android-60fps-runtime-20261026.md) for
+scope, expected negative results and real-device acceptance.
 
 ## Tools that use fixtures
 

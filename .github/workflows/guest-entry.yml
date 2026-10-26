@@ -1,0 +1,78 @@
+name: Guest comparison switch regression
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/guest-entry.yml'
+      - 'LostOdysseyRecompLib/config/**'
+      - 'tools/patches/XenonRecomp-lostodyssey.patch'
+      - 'tools/tests/guest_entry/**'
+  pull_request:
+    paths:
+      - '.github/workflows/guest-entry.yml'
+      - 'LostOdysseyRecompLib/config/**'
+      - 'tools/patches/XenonRecomp-lostodyssey.patch'
+      - 'tools/tests/guest_entry/**'
+
+permissions:
+  contents: read
+
+jobs:
+  generated-dispatch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Initialize the pinned recompiler
+        shell: bash
+        run: |
+          git submodule update --init --recursive --depth 1 tools/XenonRecomp
+          git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+      - name: Configure and build the synthetic production-generator fixture
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            cc=clang-cl
+            cxx=clang-cl
+          else
+            cc=clang
+            cxx=clang++
+          fi
+          cmake -S tools/tests/guest_entry -B build/guest-entry -G Ninja \
+            -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build/guest-entry --parallel 4
+          ctest --test-dir build/guest-entry --output-on-failure
+      - name: Verify both missing-switch negative controls
+        shell: bash
+        run: |
+          for control in missing-table baseline; do
+            cmake -S tools/tests/guest_entry -B build/guest-entry -DLO_GUEST_ENTRY_NEGATIVE_CONTROL="$control"
+            cmake -E rm -f build/guest-entry/generated/ppc_recomp.0.cpp build/guest-entry/generated/ppc_func_mapping.cpp
+            cmake --build build/guest-entry --parallel 4
+            if ctest --test-dir build/guest-entry --output-on-failure > negative-control.log 2>&1; then
+              cat negative-control.log
+              echo 'The fixture failed to detect a missing comparison switch'
+              exit 1
+            fi
+            cat negative-control.log
+            python -c "from pathlib import Path; assert 'comparison switch lost a case or its shared return' in Path('negative-control.log').read_text()"
+          done
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          exe = Path('build/guest-entry/LoGuestEntryTest' + ('.exe' if os.name == 'nt' else ''))
+          result = subprocess.run([str(exe), '--case', '1'], capture_output=True, text=True)
+          output = result.stdout + result.stderr
+          print(output)
+          assert result.returncode != 0 and 'missing=0' in output
+          assert 'comparison switch lost a case or its shared return' in output
+          PY
