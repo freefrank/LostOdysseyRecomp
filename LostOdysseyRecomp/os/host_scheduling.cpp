@@ -17,6 +17,9 @@
 #include <cstring>
 #include <mutex>
 #include <ctime>
+#include <cmath>
+#include <dlfcn.h>
+#include <android/thermal.h>
 #include <sched.h>
 #include <sys/resource.h>
 #include <unistd.h>
@@ -109,6 +112,56 @@ int64_t ThreadCpuNs(pid_t tid)
 
 std::atomic<pid_t> g_guestMainTid{0};
 
+// Read-only diagnostics. Resolve API 30/31 entry points at runtime so the
+// minimum Android API stays unchanged. No affinity, quality or clock policy.
+struct ThermalStats
+{
+    void* library = nullptr;
+    AThermalManager* manager = nullptr;
+    using Release = void (*)(AThermalManager*);
+    using Status = AThermalStatus (*)(AThermalManager*);
+    using Headroom = float (*)(AThermalManager*, int);
+    Release release = nullptr;
+    Status status = nullptr;
+    Headroom headroom = nullptr;
+    std::chrono::steady_clock::time_point next{};
+
+    ThermalStats()
+    {
+        const char* env = getenv("LO_THERMAL_STATS");
+        if (!env || std::strcmp(env, "1") != 0) return;
+        library = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+        if (library) {
+            using Acquire = AThermalManager* (*)();
+            auto acquire = reinterpret_cast<Acquire>(dlsym(library, "AThermal_acquireManager"));
+            release = reinterpret_cast<Release>(dlsym(library, "AThermal_releaseManager"));
+            status = reinterpret_cast<Status>(dlsym(library, "AThermal_getCurrentThermalStatus"));
+            headroom = reinterpret_cast<Headroom>(dlsym(library, "AThermal_getThermalHeadroom"));
+            if (acquire && release && status) manager = acquire();
+        }
+        if (!manager) LOG_WARNING("thermal stats: Android thermal API unavailable");
+    }
+    ~ThermalStats()
+    {
+        if (manager) release(manager);
+        if (library) dlclose(library);
+    }
+    void Frame()
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (now < next) return;
+        next = now + std::chrono::seconds(10);
+        const auto current = status(manager);
+        const float value = headroom ? headroom(manager, 0) : NAN;
+        // Status is an OS assessment, not a measured CPU/GPU frequency cap.
+        // NaN (common on unsupported OEMs) is reported, never used as policy.
+        if (std::isfinite(value))
+            LOG_INFO("thermal stats: status={} headroom={:.3f} forecast_seconds=0", int(current), value);
+        else
+            LOG_INFO("thermal stats: status={} headroom=unavailable", int(current));
+    }
+};
+
 // LO_FRAME_STATS=<seconds> (1 means 10): frame interval percentiles and the
 // render and guest main threads' CPU time per frame, without LO_RENDER_TIMING.
 struct FrameStats
@@ -175,6 +228,9 @@ void OnRenderFrame()
     static FrameStats stats;
     if (stats.seconds > 0)
         stats.Frame();
+    static ThermalStats thermal;
+    if (thermal.manager)
+        thermal.Frame();
 }
 
 void RaiseAudioThreadPriority()
