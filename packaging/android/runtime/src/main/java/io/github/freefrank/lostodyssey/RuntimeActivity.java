@@ -10,6 +10,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.InputDevice;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.RelativeLayout;
@@ -22,11 +25,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.libsdl.app.SDLActivity;
+import org.libsdl.app.SDLSurface;
 
 /** Game runtime. User-supplied discs live in app-owned storage. */
 public final class RuntimeActivity extends SDLActivity {
     /** Matches the SDL_SendAndroidMessage command in settings/menu.cpp. */
     private static final int COMMAND_OPEN_GAME_FOLDER = 0x8000;
+    private static final int COMMAND_OPEN_TV_SETTINGS = 0x8001;
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";
     /** Files and folders picked in the system file picker, which the importer scans at once. */
@@ -35,6 +40,8 @@ public final class RuntimeActivity extends SDLActivity {
     private static final long BOOT_SETTLED_MS = 15000;
 
     private TouchControlsView touchControls;
+    private TvDisplayDiagnostics tvDiagnostics;
+    private TvOutputController tvOutput;
     /** Why the renderer could not start with the selected driver; set from native code. */
     private volatile String graphicsFailure;
     private final Handler bootHandler = new Handler(Looper.getMainLooper());
@@ -46,6 +53,28 @@ public final class RuntimeActivity extends SDLActivity {
     static native void nativeSetTouchInput(int buttons, int leftTrigger, int rightTrigger,
                                            int leftX, int leftY, int rightX, int rightY);
     static native boolean nativeHasConnectedController();
+    static native void nativeSetTvOutput(boolean external, int height);
+
+    /** SDLSurface caches its display. Refresh it after migration to the TV. */
+    private final class RuntimeSurface extends SDLSurface {
+        RuntimeSurface(Context context) { super(context); }
+        @Override protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            if (getDisplay() != null) mDisplay = getDisplay();
+        }
+        @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+            if (getDisplay() != null) mDisplay = getDisplay();
+            super.surfaceChanged(holder, format, width, height);
+            if (tvDiagnostics != null) tvDiagnostics.surface("changed", holder, width, height, getDisplay());
+            if (tvOutput != null) tvOutput.surfaceReady();
+        }
+        @Override public void surfaceDestroyed(SurfaceHolder holder) {
+            if (tvDiagnostics != null) tvDiagnostics.surface("destroyed", holder, 0, 0, getDisplay());
+            super.surfaceDestroyed(holder);
+        }
+    }
+
+    @Override protected SDLSurface createSDLSurface(Context context) { return new RuntimeSurface(context); }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +94,8 @@ public final class RuntimeActivity extends SDLActivity {
             return insets;
         });
         GameStorage.prepare(this);
+        tvDiagnostics = new TvDisplayDiagnostics(this, PlayerLogs.directory(this));
+        tvDiagnostics.start();
         GpuDriverStore.markBootPending(this);
         if (mLayout != null && !mBrokenLibraries) {
             touchControls = new TouchControlsView(this);
@@ -72,6 +103,17 @@ public final class RuntimeActivity extends SDLActivity {
                 RelativeLayout.LayoutParams.MATCH_PARENT,
                 RelativeLayout.LayoutParams.MATCH_PARENT));
             nativeSetTouchInput(0, 0, 0, 0, 0, 0, 0);
+            if (!getIntent().getBooleanExtra(EXTRA_IMPORT, false)) {
+                tvOutput = new TvOutputController(this, mLayout, mSurface, tvDiagnostics, (external, height) -> {
+                    nativeSetTvOutput(external, height);
+                    if (touchControls != null) touchControls.setTvControlsHidden(external && tvOutput.hideTouch());
+                    if (external) {
+                        mLayout.setFocusableInTouchMode(true);
+                        mLayout.requestFocus();
+                    }
+                });
+                tvOutput.start();
+            }
         }
     }
 
@@ -86,10 +128,27 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        InputDevice device = event.getDevice();
+        if (tvOutput != null && tvOutput.active() && device != null
+                && (device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK))
+                && SDLActivity.handleKeyEvent(mSurface, event.getKeyCode(), event, null)) return true;
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP
                 && !event.isCanceled() && touchControls != null) touchControls.revealCtrl();
         // Keep SDL's existing Back mapping/consumption, including gesture-generated keys.
         return super.dispatchKeyEvent(event);
+    }
+
+    @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if (tvOutput != null && tvOutput.active() && event.isFromSource(InputDevice.SOURCE_JOYSTICK)
+                && mSurface.dispatchGenericMotionEvent(event)) return true;
+        return super.dispatchGenericMotionEvent(event);
+    }
+
+    void openTvSettings() {
+        if (tvOutput != null) {
+            tvOutput.wakePhone();
+            TvSettingsDialog.show(this, tvOutput, tvDiagnostics);
+        }
     }
 
     @Override
@@ -108,6 +167,10 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     protected boolean onUnhandledMessage(int command, Object param) {
+        if (command == COMMAND_OPEN_TV_SETTINGS) {
+            openTvSettings();
+            return true;
+        }
         if (command == COMMAND_OPEN_GAME_FOLDER) {
             openGameFolderPage();
             return true;
@@ -131,6 +194,8 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        if (tvOutput != null) tvOutput.pause();
+        if (tvDiagnostics != null) tvDiagnostics.event("runtime pause");
         if (touchControls != null) touchControls.onHostPause();
         // Leaving the game is when a player connects USB to fetch the log.
         PlayerLogs.publish(this);
@@ -185,6 +250,8 @@ public final class RuntimeActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (tvOutput != null) tvOutput.resume();
+        if (tvDiagnostics != null) tvDiagnostics.snapshot("runtime-resume");
         hideSystemBars();
         if (touchControls != null) touchControls.onHostResume();
         bootHandler.removeCallbacks(bootSettled);
@@ -201,6 +268,8 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (tvOutput != null) tvOutput.stop();
+        if (tvDiagnostics != null) tvDiagnostics.stop();
         if (touchControls != null) touchControls.clearTouches();
         bootHandler.removeCallbacks(bootSettled);
         bootHandler.removeCallbacks(hideSystemBarsRunnable);

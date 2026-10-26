@@ -5,6 +5,7 @@
 #endif
 #include "video.h"
 #include "frame_plan.h"
+#include "android_tv.h"
 #if defined(LO_GPU_PLUME) || defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "backend_device.h"
 #include "vulkan_submission_state.h"
@@ -3215,7 +3216,7 @@ namespace gpu::video
         g_androidAppliedSurfaceChangeSerial = surfaceSerial;
         g_presentProgress.SwapchainChanged();
         g_androidSurfaceRebuildFailureLogged = false;
-        if (g_androidPlannedWidth && g_androidPlannedHeight)
+        if (g_androidPlannedWidth && g_androidPlannedHeight && !android_tv::Snapshot().height)
             g_androidResumePlanHold = {true, false, g_androidPlannedWidth, g_androidPlannedHeight, 0, 0,
                 std::chrono::steady_clock::now()};
         g_presentationDisplay.nativeVsyncInitialized = false;
@@ -3633,7 +3634,8 @@ namespace gpu::video
             // (the pause is handled in WatchAndroidLifecycle).
             if (windowEvent && event.window.windowID == SDL_GetWindowID(g_window) &&
                 (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_RESTORED ||
-                 event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_FOCUS_GAINED)) {
+                 event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
+                 event.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED)) {
                 const auto nativeWindow = CurrentAndroidNativeWindow();
                 if (nativeWindow) {
                     const auto previous = g_androidNativeWindowIdentity.exchange(nativeWindow);
@@ -4394,6 +4396,14 @@ namespace gpu::video
     {
 #if defined(__ANDROID__)
         auto& hold = g_androidResumePlanHold;
+        // A dock/undock is an intentional size change. Do not keep the phone's
+        // old aspect/targets for the resume debounce interval on the TV.
+        static uint32_t tvGeneration = 0;
+        const auto tv = android_tv::Snapshot();
+        if (tv.generation != tvGeneration) {
+            tvGeneration = tv.generation;
+            hold.active = false;
+        }
         if (hold.active) {
             const auto now = std::chrono::steady_clock::now();
             if (width != hold.surfaceWidth || height != hold.surfaceHeight) {

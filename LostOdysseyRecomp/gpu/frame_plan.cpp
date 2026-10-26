@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "gpu/frame_plan.h"
+#include "gpu/android_tv.h"
 #include "gpu/cinematic_bars.h"
 #include "gpu/guest_writes.h"
 #include "gpu/dlss_status_log.h"
@@ -8,6 +9,15 @@
 #include "settings/config.h"
 #include "kernel/memory.h"
 #include "cpu/ppc_context.h"
+
+#if defined(__ANDROID__)
+#include <jni.h>
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_freefrank_lostodyssey_RuntimeActivity_nativeSetTvOutput(JNIEnv*, jclass, jboolean external, jint height)
+{
+    gpu::android_tv::SetOutput(external == JNI_TRUE, height);
+}
+#endif
 
 extern "C" PPC_FUNC(__imp__sub_82290AB8);
 extern "C" PPC_FUNC(__imp__sub_827B6E48);
@@ -104,15 +114,29 @@ namespace gpu::frame_plan
 
     upscaling::OutputRegion PlannedOutputRegion(resolution::Size drawableSize, const settings::Config& config)
     {
+#if LO_PLATFORM_ANDROID
+        const auto tv = android_tv::Snapshot();
+        const auto output = upscaling::ResolveOutputRegion(drawableSize, android_tv::Aspect(tv, config.aspectRatio));
+        const auto internal = tv.height ? tv.height : PlannedInternalResolution(config);
+#else
         const auto output = upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio);
+        const auto internal = PlannedInternalResolution(config);
+#endif
         return config.upscaler == upscaling::Upscaler::Off ? output :
-            upscaling::SupersampledOutputRegion(output, PlannedInternalResolution(config));
+            upscaling::SupersampledOutputRegion(output, internal);
     }
 
     void BeginCpuFrame()
     {
         const uint64_t extent = drawable.load(std::memory_order_acquire);
         auto config = settings::GetConfig();
+#if LO_PLATFORM_ANDROID
+        const auto tv = android_tv::Snapshot();
+        if (tv.height) {
+            config.aspectRatio = aspect_ratio::Mode::Wide;
+            config.internalResolution = int(tv.height);
+        }
+#endif
         static const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
         static const bool dlssInputProbe = [] { const char* value = getenv("LO_DLSS_INPUT_PROBE"); return value && std::string_view(value) == "1"; }();
         const resolution::Size drawableSize{uint32_t(extent >> 32), uint32_t(extent)};

@@ -26,19 +26,27 @@ public class PlayerLogsTest {
         File logs = temporary.newFolder("logs");
         for (String name : new String[] { "runtime-1700000000000000.log", "shader-1700000000000000.jsonl",
                 "native-stderr.log", "native-stderr.previous.log", "java-crash-1700000000000.txt", "README.txt",
-                "runtime-.log", "notes.txt", "runtime-12.log.tmp" })
+                "tv-display.log", "runtime-.log", "notes.txt", "runtime-12.log.tmp" })
             assertTrue(new File(logs, name).createNewFile());
         assertTrue(new File(logs, "runtime-5.log").mkdir());
 
         assertEquals(Arrays.asList("README.txt", "java-crash-1700000000000.txt",
                 "native-stderr.log", "native-stderr.previous.log", "runtime-1700000000000000.log",
-                "shader-1700000000000000.jsonl"),
+                "shader-1700000000000000.jsonl", "tv-display.log"),
             names(PlayerLogs.scannable(logs)));
     }
 
     @Test
     public void scannableOfMissingFolderIsEmpty() {
         assertTrue(PlayerLogs.scannable(new File(temporary.getRoot(), "absent")).isEmpty());
+    }
+
+    @Test
+    public void tvDiagnosticsAreIncludedInPlayerExports() throws IOException {
+        File logs = temporary.newFolder("tv-export");
+        assertTrue(new File(logs, "tv-display.log").createNewFile());
+        assertTrue(new File(logs, "notes.txt").createNewFile());
+        assertEquals(Arrays.asList("tv-display.log"), names(PlayerLogs.exportable(logs)));
     }
 
     @Test

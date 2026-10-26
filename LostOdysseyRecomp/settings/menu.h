@@ -152,8 +152,9 @@ inline constexpr int SystemImportRow = 8;
 inline constexpr int SystemAddToSteamRow = 9; // desktop shortcut with library artwork
 inline constexpr int SystemShaderBundleRow = 10; // downloads the shader bundle again on the next start
 inline constexpr int SystemShaderPreparationRow = 11; // requests startup pipeline preparation
-inline constexpr int SystemSaveRow = 12;
-inline constexpr int SystemRowCount = 13;
+inline constexpr int SystemTvOutputRow = 12;
+inline constexpr int SystemSaveRow = 13;
+inline constexpr int SystemRowCount = 14;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
