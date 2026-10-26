@@ -3,9 +3,12 @@
 #include "display_gamma.h"
 #include "shader/dxc_compiler.h"
 #include "shader/target_format.h"
+#include "shader/sgsr1_source.h"
 #include <os/logger.h>
 #include <stdafx.h>
 #include <cmath>
+#include <cstdlib>
+#include <string_view>
 #ifdef LO_GPU_PLUME
 #include <plume_render_interface.h>
 #include <plume_render_interface_builders.h>
@@ -18,6 +21,7 @@ struct Presentation::Impl
     RenderDevice *device = nullptr;
     bool initialized = false;
     bool vulkan = false;
+    bool sgsr1 = false;
     RenderFormat swapchainFormat = RenderFormat::R8G8B8A8_UNORM;
     hdr::OutputTransform output;
     // Index 1 serves an HDR scene. The scene processor records an SDR and an
@@ -191,6 +195,9 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool
     p.initialized = false;
     p.device = device;
     p.vulkan = gpu::shader::UsesSpirv(device);
+    const char *sgsr1 = std::getenv("LO_SGSR1");
+    p.sgsr1 = device->getCapabilities().shaderFormat == RenderShaderFormat::SPIRV &&
+        sgsr1 && std::string_view(sgsr1) == "1";
     p.swapchainFormat = swapchainFormat;
     p.uiPresentPipeline.reset();
     p.uiPipeline.reset();
@@ -205,7 +212,7 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool
     p.computeLayout.reset();
     const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
     const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
-    const char *source = R"(
+    const std::string sourcePrefix = R"(
 Texture2D<float4> frame : register(t0);
 #ifdef __spirv__
 [[vk::binding(2,0)]]
@@ -278,6 +285,8 @@ float3 sampleFrame(float2 pixel) {
     uint w,h; frame.GetDimensions(w,h);
     return frame.SampleLevel(linearClamp, clamp(pixel,0.5,imageSize-0.5)/float2(w,h),0).rgb;
 }
+)";
+    const std::string sourceSuffix = R"(
 // Catmull-Rom interpolating cubic (B=0,C=1/2), separable 4x4 support.
 float cubic(float x) {
     x=abs(x);
@@ -304,6 +313,9 @@ float3 resample(float2 pixel) {
         return sum/max(total,0.000001);
     }
     if(!filter) return sampleFrame(pixel);
+#ifdef LO_PRESENT_SGSR1
+    if(filter==2) return sampleSgsr1(pixel);
+#endif
     float2 base=floor(pixel-0.5)+0.5;
     float3 sum=0;
     [unroll] for(int y=-1;y<=2;++y) [unroll] for(int x=-1;x<=2;++x) {
@@ -450,9 +462,18 @@ float4 gainPixel(float4 position : SV_Position) : SV_Target {
     float weight = smoothstep(0.8, 1.0, max(sdr.r, max(sdr.g, sdr.b)));
     return float4(sdr * lerp(1.0.xxx, gain, weight), 1);
 })";
+    std::string source = sourcePrefix + (p.sgsr1 ? shader::kSgsr1Source : "") + sourceSuffix;
     auto vs = xenos::CompileCachedHlsl(source, "vertex", "vs_6_0", binaryFormat);
     auto ps = xenos::CompileCachedHlsl(source, "pixel", "ps_6_0", binaryFormat);
     auto gainPs = xenos::CompileCachedHlsl(source, "gainPixel", "ps_6_0", binaryFormat);
+    if (p.sgsr1 && (!vs.ok || !ps.ok || !gainPs.ok)) {
+        LOG_WARNING("presentation SGSR1 unavailable: {} {} {}; using the configured filter", vs.errors, ps.errors, gainPs.errors);
+        p.sgsr1 = false;
+        source = sourcePrefix + sourceSuffix;
+        vs = xenos::CompileCachedHlsl(source, "vertex", "vs_6_0", binaryFormat);
+        ps = xenos::CompileCachedHlsl(source, "pixel", "ps_6_0", binaryFormat);
+        gainPs = xenos::CompileCachedHlsl(source, "gainPixel", "ps_6_0", binaryFormat);
+    }
     if (!vs.ok || !ps.ok || !gainPs.ok)
     {
         LOG_WARNING("presentation shaders: {} {} {}", vs.errors, ps.errors, gainPs.errors);
@@ -517,7 +538,9 @@ float4 gainPixel(float4 position : SV_Position) : SV_Target {
     // Optional: without it the fragment pass serves every target.
     if (p.initialized && storageSwapchain && device->getCapabilities().shaderFormat == RenderShaderFormat::SPIRV &&
         swapchainFormat == RenderFormat::R8G8B8A8_UNORM)
-        p.InitCompute(source);
+        p.InitCompute(source.c_str());
+    if (p.initialized && p.sgsr1)
+        LOG_INFO("presentation: experimental SGSR1 for SDR high-quality upscaling (LO_SGSR1=1)");
     return p.initialized;
 }
 // The final pass as a compute pass into a storage swap chain image: each
@@ -917,6 +940,11 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
     RenderTexture *original = source;
     const float scale = std::min(float(ow) / sw, float(oh) / sh);
     const float width = sw * scale, height = sh * scale;
+    // SGSR1 assumes display-encoded SDR. Do not clamp extended highlights,
+    // sharpen a native/temporally upscaled image or alter the reduction path.
+    const uint32_t scalingFilter = p.sgsr1 && !options.hdrScene && !p.output.active &&
+        !options.hdrCalibration && !options.brightnessPreview && scale > 1.0f &&
+        options.scalingFilter == ScalingFilter::Bicubic ? 2u : uint32_t(options.scalingFilter);
     // At native size, an odd number of spare pixels belongs to one black bar;
     // placing content on a half pixel would soften an otherwise exact copy.
     const float x = scale == 1.0f ? std::floor((ow-width)*0.5f) : (ow-width)*0.5f;
@@ -1033,7 +1061,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
     const bool covers=x<=0.0f && y<=0.0f && x+width>=float(ow) && y+height>=float(oh);
     const bool wholeBars=std::floor(x)==x && std::floor(y)==y && std::floor(x+width)==x+width && std::floor(y+height)==y+height;
     if(p.computePipeline && toSwapchain && options.storageTarget && !hdrScene &&
-       options.scalingFilter==ScalingFilter::Bicubic && scale>=1.001f &&
+       (scalingFilter==uint32_t(ScalingFilter::Bicubic) || scalingFilter==2u) && scale>=1.001f &&
        !options.hdrCalibration && !options.brightnessPreview && (covers || wholeBars)) {
         auto &set=*p.computeDescriptors;
         set.setBuffer(3,ramp,Impl::kRampBytes);
@@ -1042,7 +1070,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         set.setTexture(4,target,RenderTextureLayout::GENERAL);
         commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(source,RenderTextureLayout::SHADER_READ));
         commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(target,RenderTextureLayout::GENERAL));
-        const auto constants=parameters(x,y,width,height,sw,sh,0,uint32_t(options.scalingFilter),
+        const auto constants=parameters(x,y,width,height,sw,sh,0,scalingFilter,
             options.expandRgbRange ? 1u : 0u,true,p.output.linear);
         commands->setComputePipelineLayout(p.computeLayout.get());
         commands->setPipeline(p.computePipeline.get());
@@ -1052,7 +1080,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
         return;
     }
-    render(source,target,sw,sh,ow,oh,x,y,width,height,0,uint32_t(options.scalingFilter),
+    render(source,target,sw,sh,ow,oh,x,y,width,height,0,scalingFilter,
            options.expandRgbRange ? 1u : 0u,true,
            toSwapchain ? p.presentPipeline.get() : intermediatePipeline);
     commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));

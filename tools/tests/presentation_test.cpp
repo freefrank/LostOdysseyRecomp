@@ -273,6 +273,21 @@ static int TestHdrCalibration(plume::RenderDevice* device)
 int main(int argc, char** argv)
 {
     using namespace plume;
+#if !LO_PLATFORM_MACOS
+    // Run the existing native identity, padding, AA-order, bounds and HDR
+    // readbacks against the optional Vulkan presentation filter.
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) != "--sgsr1") continue;
+#ifdef _WIN32
+        _putenv_s("LO_SGSR1", "1");
+#else
+        setenv("LO_SGSR1", "1", 1);
+#endif
+        for (int j = i; j + 1 < argc; ++j) argv[j] = argv[j + 1];
+        --argc;
+        break;
+    }
+#endif
 #if LO_PLATFORM_MACOS
     auto api = CreateMetalInterface();
     const char* backend = "Metal";

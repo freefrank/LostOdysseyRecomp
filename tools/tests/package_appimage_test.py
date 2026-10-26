@@ -469,6 +469,7 @@ class PackageAppImageTests(unittest.TestCase):
             gtao_license = fake_root / 'thirdparty/licenses/XeGTAO.txt'
             gtao_license.parent.mkdir(parents=True, exist_ok=True)
             gtao_license.write_text('mock XeGTAO license', encoding='utf-8')
+            (gtao_license.parent / 'SnapdragonGSR.txt').write_text('mock SGSR license', encoding='utf-8')
             for relative in ('LICENSE.txt', 'signalsmith-linear/LICENSE.txt'):
                 audio_license = fake_root / 'thirdparty/signalsmith-stretch' / relative
                 audio_license.parent.mkdir(parents=True, exist_ok=True)

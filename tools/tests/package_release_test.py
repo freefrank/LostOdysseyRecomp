@@ -29,7 +29,8 @@ class PackageReleaseTests(unittest.TestCase):
             (runtime / 'source-version.txt').write_text('1.0.6', encoding='utf-8')
             sources = (
                 'docs/INSTALLING.md', 'LICENSE', 'thirdparty/miniz-UNLICENSE.txt',
-                'thirdparty/licenses/XeGTAO.txt', 'thirdparty/signalsmith-stretch/LICENSE.txt',
+                'thirdparty/licenses/XeGTAO.txt', 'thirdparty/licenses/SnapdragonGSR.txt',
+                'thirdparty/signalsmith-stretch/LICENSE.txt',
                 'thirdparty/signalsmith-stretch/signalsmith-linear/LICENSE.txt',
                 'thirdparty/nlohmann-json-LICENSE.txt', 'thirdparty/lzokay/LICENSE',
                 'LostOdysseyRecomp/install/FONT-PROVENANCE.md',

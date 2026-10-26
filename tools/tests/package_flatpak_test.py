@@ -50,7 +50,7 @@ class PackageFlatpakTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unexpected payload path"):
                 flatpak.inspect_payload_tree(files)
             (files / "bin/shaders/portable_vk.lospv").unlink()
-            for license_name in ("zstd-LICENSE.txt", "XeGTAO.txt", "Signalsmith-Stretch.txt", "Signalsmith-Linear.txt"):
+            for license_name in ("zstd-LICENSE.txt", "XeGTAO.txt", "SnapdragonGSR.txt", "Signalsmith-Stretch.txt", "Signalsmith-Linear.txt"):
                 license_path = files / "share/licenses/lost-odyssey-recomp" / license_name
                 license_path.unlink()
                 with self.assertRaisesRegex(ValueError, "Missing required"):
