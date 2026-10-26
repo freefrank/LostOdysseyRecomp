@@ -147,6 +147,7 @@ if(UNIX)
     if(LO_REVIEW_SANITIZE)
         set(sanitizer_flags --sanitize)
     endif()
+    lo_review_python(edram_partial_clear edram_partial_clear_test.py --out --cxx ${sanitizer_flags})
     lo_review_python(file_io file_io_regression.py --out --cxx ${sanitizer_flags})
     # The allocator fixture always uses ASan/UBSan.
     lo_review_python(page_allocator page_allocator_test.py --output --compiler)

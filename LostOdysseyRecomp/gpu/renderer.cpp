@@ -3045,16 +3045,26 @@ namespace gpu::renderer
                     return;
                 const uint32_t w = dst.ScaleX(std::min(src.guestWidth, dst.guestWidth));
                 const uint32_t h = dst.ScaleY(std::min(src.guestHeight, dst.guestHeight));
-                // A source that still owes one whole colour clear holds one value
-                // everywhere, so the transfer would write one value too: owe that as
-                // a clear of the destination region instead of drawing. The source
-                // keeps its own clear.
+                // A source that still owes one colour clear over every sampled
+                // texel makes the transfer constant: owe that value as a clear of
+                // the destination region instead of drawing. Keep the source clear.
                 if (src.pendingClear.Size() == 1 && src.format == RenderFormat::R16G16B16A16_FLOAT &&
                     dst.format == RenderFormat::R16G16B16A16_FLOAT)
                 {
                     const pending_clear::Op& owed = src.pendingClear.Ops()[0];
+                    // With matching scales the shader loads int2(pos.xy), so its
+                    // source footprint is exactly [0,w) x [0,h). A partial clear
+                    // must contain that footprint in ONE rectangle; do not infer
+                    // coverage from a bounding box, or across different scales.
+                    const bool cleared = owed.Whole() ||
+                        (src.resolutionSize == dst.resolutionSize && w && h &&
+                         w <= src.width && h <= src.height && w <= INT32_MAX && h <= INT32_MAX &&
+                         owed.rects.size() <= 32 &&
+                         std::any_of(owed.rects.begin(), owed.rects.end(), [&](const pending_clear::Rect& r) {
+                             return r.left <= 0 && r.top <= 0 && r.right >= int32_t(w) && r.bottom >= int32_t(h);
+                         }));
                     float value[4];
-                    if (owed.aspects == pending_clear::Color && owed.Whole() &&
+                    if (owed.aspects == pending_clear::Color && cleared &&
                         edram_transfer::ConstantTransfer(owed.color, srcClass, dstClass, value))
                     {
                         std::vector<pending_clear::Rect> rects;

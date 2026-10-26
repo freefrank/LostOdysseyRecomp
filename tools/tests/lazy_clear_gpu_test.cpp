@@ -9,8 +9,9 @@
 // transfer shader (gpu/edram_transfer.h) draws from cleared source texels, and
 // edram_transfer::ConstantTransfer's results are cleared into a second target;
 // every texel it accepts must read back the same bytes.
-// Usage: LoLazyClearGpuTest [--vulkan] [seeds] [--mutate]
+// Usage: LoLazyClearGpuTest [--vulkan] [seeds] [--mutate] [--mutate-partial]
 // (--mutate alters some constant-transfer results by one FP16 step; the run must then fail.)
+// (--mutate-partial leaves one sampled column uncleared; the run must then fail.)
 #include <gpu/edram_transfer.h>
 #include <gpu/pending_clear.h>
 #include <gpu/shader/dxc_compiler.h>
@@ -430,7 +431,7 @@ struct TransferCheck {
     std::unique_ptr<RenderPipelineLayout> layout;
     std::unique_ptr<RenderPipeline> pipeline;
     size_t checked = 0, accepted = 0, total = 0, renderer = 0, rendererAccepted = 0;
-    bool mutate = false;
+    bool mutate = false, mutatePartial = false;
 
     TransferCheck(RenderDevice& d, RenderCommandQueue& q, RenderShader* vertex, bool vulkan) : device(d), queue(q), vs(vertex)
     {
@@ -480,6 +481,7 @@ struct TransferCheck {
         };
         auto src = texture(W, H), a = texture(W, H), b = texture(W, H);
         auto smallSrc = texture(kSmall, kSmall), smallA = texture(kSmall, kSmall), smallB = texture(kSmall, kSmall);
+        auto partialSrc = texture(kSmall + 3, kSmall + 2);
         std::vector<std::unique_ptr<RenderFramebuffer>> framebuffers;
         auto framebuffer = [&](RenderTexture* t) {
             const RenderTexture* colors[] = {t};
@@ -489,6 +491,7 @@ struct TransferCheck {
         };
         RenderFramebuffer *srcFb = framebuffer(src.get()), *aFb = framebuffer(a.get()), *bFb = framebuffer(b.get());
         RenderFramebuffer *smallSrcFb = framebuffer(smallSrc.get()), *smallAFb = framebuffer(smallA.get()), *smallBFb = framebuffer(smallB.get());
+        RenderFramebuffer* partialSrcFb = framebuffer(partialSrc.get());
 
         const uint32_t transfer[4] = {srcClass, dstClass, std::bit_cast<uint32_t>(1.0f), std::bit_cast<uint32_t>(1.0f)};
         auto cbuffer = device.createBuffer(RenderBufferDesc::UploadBuffer(256, RenderBufferFlag::CONSTANT));
@@ -500,6 +503,8 @@ struct TransferCheck {
         auto srcSet = textures.create(&device), smallSrcSet = textures.create(&device);
         srcSet->setTexture(0, src.get(), RenderTextureLayout::SHADER_READ);
         smallSrcSet->setTexture(0, smallSrc.get(), RenderTextureLayout::SHADER_READ);
+        auto partialSrcSet = textures.create(&device);
+        partialSrcSet->setTexture(0, partialSrc.get(), RenderTextureLayout::SHADER_READ);
 
         std::vector<Rgba> expected(n);
         std::vector<bool> ok(n);
@@ -556,7 +561,7 @@ struct TransferCheck {
         for (uint32_t i = 0; i < n && whole.size() < kWhole; i += 7) if (ok[i]) whole.push_back(i);
         // Row pitches are multiples of 256 bytes (D3D12 placed footprints).
         const uint32_t pitch = W * 8, smallPitch = 256, mainBytes = pitch * H, smallBytes = smallPitch * kSmall;
-        auto readback = device.createBuffer(RenderBufferDesc::ReadbackBuffer(2ull * mainBytes + 2ull * smallBytes * whole.size()));
+        auto readback = device.createBuffer(RenderBufferDesc::ReadbackBuffer(2ull * mainBytes + 4ull * smallBytes * whole.size()));
         if (!readback) throw std::runtime_error("readback");
         auto copy = [&](RenderTexture* t, uint32_t w, uint32_t h, uint32_t rowPitch, uint64_t offset) {
             barrier(t, RenderTextureLayout::COPY_SOURCE);
@@ -565,16 +570,24 @@ struct TransferCheck {
         };
         copy(a.get(), W, H, pitch, 0);
         copy(b.get(), W, H, pitch, mainBytes);
-        for (size_t k = 0; k < whole.size(); ++k) {
-            barrier(smallSrc.get(), RenderTextureLayout::COLOR_WRITE);
-            commands->setFramebuffer(smallSrcFb);
-            commands->clearColor(0, color(values[whole[k]]));
-            barrier(smallSrc.get(), RenderTextureLayout::SHADER_READ);
+        for (size_t k = 0; k < 2 * whole.size(); ++k) {
+            const bool partial = (k & 1) != 0;
+            RenderTexture* source = partial ? partialSrc.get() : smallSrc.get();
+            barrier(source, RenderTextureLayout::COLOR_WRITE);
+            commands->setFramebuffer(partial ? partialSrcFb : smallSrcFb);
+            if (partial) {
+                // The sampled prefix is uniform, but the surrounding allocation is not.
+                commands->clearColor(0, RenderColor(0.8125f, 0.625f, 0.375f, 0.875f));
+                const RenderRect r{0, 0, int32_t(kSmall) - int32_t(mutatePartial), int32_t(kSmall)};
+                commands->clearColor(0, color(values[whole[k / 2]]), &r, 1);
+            } else
+                commands->clearColor(0, color(values[whole[k / 2]]));
+            barrier(source, RenderTextureLayout::SHADER_READ);
             barrier(smallA.get(), RenderTextureLayout::COLOR_WRITE);
-            draw(smallAFb, smallSrcSet.get(), kSmall, kSmall);
+            draw(smallAFb, partial ? partialSrcSet.get() : smallSrcSet.get(), kSmall, kSmall);
             barrier(smallB.get(), RenderTextureLayout::COLOR_WRITE);
             commands->setFramebuffer(smallBFb);
-            commands->clearColor(0, color(expected[whole[k]]));
+            commands->clearColor(0, color(expected[whole[k / 2]]));
             copy(smallA.get(), kSmall, kSmall, smallPitch, 2ull * mainBytes + 2ull * smallBytes * k);
             copy(smallB.get(), kSmall, kSmall, smallPitch, 2ull * mainBytes + 2ull * smallBytes * k + smallBytes);
         }
@@ -599,11 +612,15 @@ struct TransferCheck {
             ++checked;
             if (std::memcmp(bytes + at, bytes + mainBytes + at, 8) != 0) { report(i, bytes + at, bytes + mainBytes + at, "rectangle clears"); pass = false; }
         }
-        for (size_t k = 0; k < whole.size() && pass; ++k) {
+        for (size_t k = 0; k < 2 * whole.size() && pass; ++k) {
             const uint8_t* got = bytes + 2ull * mainBytes + 2ull * smallBytes * k;
             for (uint32_t y = 0; y < kSmall && pass; ++y)
                 if (std::memcmp(got + y * smallPitch, got + smallBytes + y * smallPitch, kSmall * 8) != 0) {
-                    report(whole[k], got + y * smallPitch, got + smallBytes + y * smallPitch, "whole clears");
+                    uint32_t x = 0;
+                    while (x < kSmall && std::memcmp(got + y * smallPitch + x * 8,
+                        got + smallBytes + y * smallPitch + x * 8, 8) == 0) ++x;
+                    report(whole[k / 2], got + y * smallPitch + x * 8, got + smallBytes + y * smallPitch + x * 8,
+                        (k & 1) ? "partial source clear" : "whole clears");
                     pass = false;
                 }
             checked += kSmall * kSmall;
@@ -674,6 +691,7 @@ int main(int argc, char** argv)
 
         TransferCheck transfers(*device, *queue, shaders.vs.get(), vulkan);
         for (int i = 1; i < argc; ++i) transfers.mutate |= std::string(argv[i]) == "--mutate";
+        for (int i = 1; i < argc; ++i) transfers.mutatePartial |= std::string(argv[i]) == "--mutate-partial";
         for (uint32_t srcClass = 0; srcClass <= et::kLastClass; ++srcClass) {
             std::mt19937 rng(1234 + srcClass);
             const auto values = SourceValues(srcClass, rng);
