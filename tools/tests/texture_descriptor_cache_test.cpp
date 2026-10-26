@@ -11,6 +11,33 @@ void Check(bool condition) {
 }
 }
 int main() {
+    // Exhaust every old/new eight-slot combination, including active bindings
+    // that currently hold the dummy. The sparse and full paths must issue the
+    // same writes and leave exactly the same complete immutable descriptor key.
+    {
+        using namespace gpu::texture_descriptors;
+        int dummy{}, texture{};
+        for (uint32_t old = 0; old < 256; ++old) {
+            for (uint32_t active = 0; active < 256; ++active) {
+                std::array<int*, 8> key, full, sparse;
+                for (uint32_t slot = 0; slot < 8; ++slot) {
+                    key[slot] = (active & (1u << slot)) && slot % 3 ? &texture : &dummy;
+                    full[slot] = sparse[slot] = old & (1u << slot) ? &texture : &dummy;
+                }
+                uint32_t fullWrites = 0, sparseWrites = 0;
+                const auto fullMask = RewriteBindings(old, key, &dummy,
+                    [&](uint32_t slot, int* value) { full[slot] = value; fullWrites |= 1u << slot; });
+                const auto sparseMask = RewriteBindings(old, key, &dummy,
+                    [&](uint32_t slot, int* value) { sparse[slot] = value; sparseWrites |= 1u << slot; }, active);
+                Check(fullMask == sparseMask && fullWrites == sparseWrites && full == key && sparse == key);
+            }
+        }
+        std::array<int*, 32> key;
+        key.fill(&dummy);
+        key[31] = &texture;
+        Check(NonDummyBindings(key, &dummy, 1u << 31) == (1u << 31));
+        Check(NonDummyBindings(key, &dummy, ~0u) == (1u << 31));
+    }
     using Cache = gpu::texture_descriptors::BatchCache<int, int, 32>;
     Cache cache, otherBank;
     int textures[4]{}, sets[16]{};

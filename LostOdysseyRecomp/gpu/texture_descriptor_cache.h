@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -15,10 +16,25 @@ namespace gpu::texture_descriptors {
 constexpr uint32_t kUnknownBindings = ~uint32_t(0);
 
 template<class Texture, size_t Slots>
-uint32_t NonDummyBindings(const std::array<Texture*, Slots>& key, const Texture* dummy)
+uint32_t NonDummyBindings(const std::array<Texture*, Slots>& key, const Texture* dummy,
+    uint32_t candidates = kUnknownBindings)
 {
     static_assert(Slots <= 32);
     uint32_t mask = 0;
+    if (candidates != kUnknownBindings) {
+        // The draw already knows which bindings its shaders can populate.
+        // Inactive slots must still name the dummy, as in the non-cache path.
+#ifndef NDEBUG
+        for (size_t slot = 0; slot < Slots; ++slot)
+            assert(((candidates >> slot) & 1) || key[slot] == dummy);
+#endif
+        if constexpr (Slots < 32) candidates &= (uint32_t(1) << Slots) - 1;
+        for (; candidates; candidates &= candidates - 1) {
+            const uint32_t slot = uint32_t(std::countr_zero(candidates));
+            if (key[slot] != dummy) mask |= uint32_t(1) << slot;
+        }
+        return mask;
+    }
     for (size_t slot = 0; slot < Slots; ++slot)
         if (key[slot] != dummy) mask |= uint32_t(1) << slot;
     return mask;
@@ -29,9 +45,9 @@ uint32_t NonDummyBindings(const std::array<Texture*, Slots>& key, const Texture*
 // binding already holds the dummy the key names. Returns the set's new mask.
 template<class Texture, size_t Slots, class Write>
 uint32_t RewriteBindings(uint32_t previous, const std::array<Texture*, Slots>& key,
-    const Texture* dummy, Write&& write)
+    const Texture* dummy, Write&& write, uint32_t candidates = kUnknownBindings)
 {
-    const uint32_t next = NonDummyBindings(key, dummy);
+    const uint32_t next = NonDummyBindings(key, dummy, candidates);
     uint32_t pending = previous | next;
     if constexpr (Slots < 32) pending &= (uint32_t(1) << Slots) - 1;
     for (; pending; pending &= pending - 1) {
