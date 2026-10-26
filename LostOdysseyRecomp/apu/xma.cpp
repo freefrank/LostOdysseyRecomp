@@ -537,11 +537,18 @@ namespace apu::xma
             {
                 ProcessPacket(ctx, data);
                 Consume(ctx, data, ring);
-                if ((!data.anyInputValid() && !ctx.remainingSubframes) || data.errorStatus() == 4)
+                // ProcessPacket cannot advance while the selected input is
+                // waiting for a refill, even if the other buffer is valid.
+                // Release g_mutex instead of retrying the same state 4096
+                // times and delaying guest lock/kick commands and other voices.
+                if ((!data.inputValid(data.currentBuffer()) && !ctx.remainingSubframes) || data.errorStatus() == 4)
                     break;
             }
             data.setOutputWriteOffset(ring.write / kOutputBytesPerBlock);
-            if (ring.read == ring.write)
+            // Equal cursors may also mean an empty ring with no PCM written
+            // while the selected input waits for a refill. Keep it writable
+            // in that case; still retire an exhausted voice with no inputs.
+            if (ring.read == ring.write && (!ctx.freeBlocks || !data.anyInputValid()))
                 data.setOutputValid(false);
             if (g_traceContextWrites)
             {
