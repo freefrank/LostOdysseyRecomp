@@ -71,6 +71,7 @@ lo_review_test(LoShaderPreparationRequestTest shader_preparation_request_test.cp
 lo_review_test(LoShadowResolutionTest shadow_resolution_test.cpp)
 # Deferred EDRAM clears: queue rules, execution points, same pixels as clearing at once.
 lo_review_test(LoPendingClearTest pending_clear_test.cpp)
+lo_review_test(LoPendingClearCoverageTest pending_clear_coverage_test.cpp)
 # Startup shader-pack download: index, selection, asset URLs, decline record.
 lo_review_test(LoShaderPackIndexTest shader_pack_index_test.cpp "${LO_RUNTIME}/updater/shader_pack_index.cpp")
 # GPU-stopped dialog: AMD driver-upscaling hint and the DirectX 12 offer at boot.

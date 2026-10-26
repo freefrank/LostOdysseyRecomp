@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <bit>
 #include <cstdint>
 #include <vector>
@@ -12,6 +13,12 @@
 namespace gpu::pending_clear {
 
 struct Rect { int32_t left = 0, top = 0, right = 0, bottom = 0; };
+
+inline bool Contains(const Rect& outer, const Rect& inner)
+{
+    return outer.left <= inner.left && outer.top <= inner.top &&
+        outer.right >= inner.right && outer.bottom >= inner.bottom;
+}
 
 enum Aspect : uint8_t { Color = 1, Depth = 2, Stencil = 4 };
 
@@ -71,9 +78,16 @@ public:
         if (op.rects.size() == 1 && op.rects[0].left <= 0 && op.rects[0].top <= 0 &&
             op.rects[0].right >= int32_t(width) && op.rects[0].bottom >= int32_t(height))
             op.rects.clear();
-        if (op.Whole()) {
-            // Earlier clears of the covered aspects can no longer be seen.
-            for (auto& old : ops_) old.aspects &= uint8_t(~op.aspects);
+        if (op.Whole() || op.rects.size() == 1) {
+            // A newer rectangular clear also kills older clears wholly inside
+            // it, independently for color/depth/stencil. Do not approximate the
+            // union of rectangles or split a partially covered aspect.
+            for (auto& old : ops_) {
+                const bool covered = op.Whole() || (!old.Whole() && old.rects.size() <= kCoverageRects &&
+                    std::all_of(old.rects.begin(), old.rects.end(),
+                        [&](const Rect& r) { return Contains(op.rects[0], r); }));
+                if (covered) old.aspects &= uint8_t(~op.aspects);
+            }
             std::erase_if(ops_, [](const Op& old) { return old.aspects == 0; });
         }
         if (!ops_.empty() && ops_.back().SameValue(op)) {
@@ -81,6 +95,17 @@ public:
             // A whole last clear already covers these pixels with this value.
             if (!last.Whole()) {
                 if (op.Whole()) last.rects.clear();
+                else if (op.rects.size() == 1 && last.rects.size() <= kCoverageRects) {
+                    const Rect& incoming = op.rects[0];
+                    // Equal-value rectangles that are already covered need no
+                    // replay. Replacing contained rectangles also avoids
+                    // repeatedly clearing their overlap on the GPU.
+                    if (!std::any_of(last.rects.begin(), last.rects.end(),
+                        [&](const Rect& r) { return Contains(r, incoming); })) {
+                        std::erase_if(last.rects, [&](const Rect& r) { return Contains(incoming, r); });
+                        last.rects.push_back(incoming);
+                    }
+                }
                 else last.rects.insert(last.rects.end(), op.rects.begin(), op.rects.end());
             }
             Keep(op.rects);
@@ -136,6 +161,9 @@ public:
     }
 
 private:
+    // Bound the added CPU work even when equal disjoint clears accumulate.
+    static constexpr size_t kCoverageRects = 32;
+
     void Keep(std::vector<Rect>& rects)
     {
         if (rects.capacity() && spareRects_.size() < kMaxOps) {
