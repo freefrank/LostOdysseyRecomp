@@ -4,16 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
-## Unreleased
+## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
 ### English
+
 - Android: the CTRL menu follows the game's language.
 - Settings shows button names as the game's own button icons, including PlayStation prompts, stick clicks and the D-pad on the Controls page, so these lines keep the game font instead of switching to the small pixel font. The title menu's Back key uses the same icon (#667).
 - Settings uses the same HD font pages as the game when a font mod replaces them, and Latin menus use the European game's font with its accented letters (#668).
 - Settings can be shown in Spanish, French, German or Italian (System → Settings language); the menu uses the game's own font for them (#669).
 - Button prompts adds Switch, Steam Deck and Keyboard icons, in game, in Settings and on the title screen. Auto picks them for Nintendo pads, the Steam Deck and after a key press; keyboard icons show the bound keys. The artwork is Xelu's free CC0 prompts (#670).
 - Settings opened in a game keeps the game's own header (gold, play time, location) and looks closer to the game's menus: retail text proportions with a black outline, the game's cursor plate and list arrow, and translated Menu and Help labels (#671).
-
 - Linux: fixed imports to game folders below the system `/home` → `/var/home` link used by Bazzite and Fedora Atomic (#665).
 - Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 - Settings → Graphics → Scene fades: Off replaces the short crossfade between scenes with a clean cut (#666).
@@ -21,13 +21,13 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Split-screen shots in cutscenes no longer shake while DLSS, FSR or XeSS pause for them (#702).
 
 ### 简体中文
+
 - Android：CTRL 菜单现在跟随游戏的界面语言。
 - 设置菜单中的按键名称改用游戏自带的按键图标（包括 PlayStation 提示、按键设定页的摇杆按下与方向键），这些文字不再切换为像素字体；标题菜单的 Back 键也使用同一图标（#667）。
 - 字体 Mod 替换字体页面后，设置菜单也使用与游戏相同的高清字体页面；拉丁语系菜单使用欧版游戏带重音字母的字体（#668）。
 - 设置菜单新增西班牙语、法语、德语和意大利语（系统 → 设置界面语言），并使用游戏自带字体显示（#669）。
 - 按键提示新增 Switch、Steam Deck 与键盘图标，游戏内、设置菜单和标题画面均适用。“自动”会在使用任天堂手柄、Steam Deck 或按下键盘时切换；键盘图标显示当前绑定的按键。图标来自 Xelu 的免费 CC0 素材（#670）。
 - 在游戏中打开设置时保留游戏自带的页眉（金钱、游戏时间、地点），外观也更接近游戏菜单：原版文字比例与黑色描边、游戏的光标底板与列表箭头，并翻译 Menu 与 Help 标签（#671）。
-
 - Linux：修复向 Bazzite 和 Fedora Atomic 的系统 `/home` → `/var/home` 链接下的游戏目录导入失败的问题（#665）。
 - Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 - “设置 → 图像 → 场景淡入淡出”设为关闭后，场景之间的短暂交叉淡化改为直接切换（#666）。
