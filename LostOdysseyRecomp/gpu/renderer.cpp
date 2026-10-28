@@ -816,7 +816,12 @@ namespace gpu::renderer
             // Rect lists expand in the vertex stage on every backend; LO_RECT_LIST_GS
             // keeps the geometry shader path where the device supports one.
             bool rectListExpansion = true;
+            const bool rectListReuseCorners = [] {
+                const char* value = getenv("LO_RECT_LIST_REUSE_CORNERS");
+                return !value || std::string_view(value) != "0";
+            }();
             uint32_t rectListSkipped = 0;
+            uint64_t rectListPreparedDraws = 0, rectListPreparedRectangles = 0; // LO_RENDER_TIMING, index-expansion candidates
 
             std::unordered_map<uint64_t, Shader> shaders[2];
             // GetShader's last valid hit per stage; ClearShaders() forgets them.
@@ -2923,6 +2928,7 @@ namespace gpu::renderer
                 }
 
                 rectListExpansion = !(getenv("LO_RECT_LIST_GS") && device->getCapabilities().geometryShader);
+                LOG_INFO("renderer: rect-list vertex expansion={} corner reuse={}", rectListExpansion, rectListReuseCorners);
                 if (!rectListExpansion) CompileRectListGs();
                 CompileBlitShaders();
                 CompileSceneCopyPromotionShaders();
@@ -11434,7 +11440,11 @@ void main()
                 {
                     if (!rectListExpansion) break;
                     const uint32_t skipped = xenos::rect_list::ExpandIndices(converted, primitiveScratch, useIndices,
-                        info.indexCount, Reg(REG_VGT_INDX_OFFSET));
+                        info.indexCount, Reg(REG_VGT_INDX_OFFSET), rectListReuseCorners);
+                    if (render_timing::Enabled() && !converted.empty()) {
+                        ++rectListPreparedDraws;
+                        rectListPreparedRectangles += converted.size() / xenos::rect_list::kVerticesPerRect;
+                    }
                     if (skipped && rectListSkipped++ < 8)
                         LOG_WARNING("renderer: rect list skipped {} rectangle(s) (non-consecutive indices or vertex range)", skipped);
                     break;
@@ -15212,6 +15222,11 @@ void main()
                 }
                 r.mvTrackCpuMs = 0; r.mvScratchBytes = 0;
             }
+            if (render_timing::Enabled())
+                LOG_INFO("renderer rect-list frame={} prepared_draws={} prepared_rectangles={} corner_ids_per_rect={} reuse={} scope=index_expansion_candidates_includes_later_drops_not_gpu_invocations",
+                    g_renderer->frame, g_renderer->rectListPreparedDraws, g_renderer->rectListPreparedRectangles,
+                    g_renderer->rectListReuseCorners ? 4 : 6, g_renderer->rectListReuseCorners);
+            g_renderer->rectListPreparedDraws = g_renderer->rectListPreparedRectangles = 0;
             if ((stats || render_timing::Enabled()) && (render_timing::Enabled() || g_renderer->frame % 60 == 0))
                 LOG_INFO("renderer resolve copies frame={} recorded={} skipped={} reuse={} scope=current_frame_consecutive_color_resolves",
                     g_renderer->frame, g_renderer->resolveCopiesRecorded, g_renderer->resolveCopiesSkipped, g_renderer->resolveCopyReuse);
