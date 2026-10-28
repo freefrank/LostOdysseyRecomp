@@ -32,6 +32,7 @@ PPC_FUNC(__imp__NtDuplicateObject);
 PPC_FUNC(__imp__NtWaitForSingleObjectEx);
 PPC_FUNC(__imp__NtQueryDirectoryFile);
 PPC_FUNC(__imp__NtFlushBuffersFile);
+PPC_FUNC(__imp__NtSetInformationFile);
 PPC_FUNC(__imp__XamSwapDisc);
 
 static void Check(bool condition, const char* message)
@@ -1104,6 +1105,131 @@ static void CheckSlotRecovery()
     std::puts("PASS: save slots listed from their save data under their folder names");
 }
 
+static void SetTestEnvironment(const char* name, const char* value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) setenv(name, value, 1);
+    else unsetenv(name);
+#endif
+}
+
+static void CheckPrivateSave()
+{
+    const auto save = FileSystem::GetSaveRoot() / "user00";
+    std::filesystem::create_directories(save);
+    const auto path = save / "save.bin";
+    XamRootCreate("private", FileSystem::PathUtf8(save).c_str());
+    auto* name = static_cast<char*>(g_userHeap.Alloc(64));
+    strcpy(name, "private:\\save.bin");
+    auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+    ansi->Buffer = name; ansi->Length = uint16_t(strlen(name)); ansi->MaximumLength = 64;
+    auto* attrs = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+    *attrs = {}; attrs->Name = ansi;
+    auto* handle = g_userHeap.Alloc<be<uint32_t>>();
+    auto* second = g_userHeap.Alloc<be<uint32_t>>();
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    auto* bytes = static_cast<char*>(g_userHeap.Alloc(64));
+    auto* offset = g_userHeap.Alloc<be<uint64_t>>();
+    auto read = [&] {
+        std::ifstream input(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(input), {});
+    };
+    auto write = [&](uint32_t h, const char* value, uint64_t position) {
+        strcpy(bytes, value); *offset = position;
+        return Call(__imp__NtWriteFile, {h,0,0,0,Addr(iosb),Addr(bytes),uint32_t(strlen(value)),Addr(offset)});
+    };
+    for (const char* flag : std::array<const char*, 4>{nullptr, "0", "true", "01"})
+    {
+        SetTestEnvironment("LO_SAVE_SHARED", flag);
+        FileSystem::Init(std::filesystem::absolute("game"));
+        // The mode is fixed at startup, not changed by a later environment update.
+        SetTestEnvironment("LO_SAVE_SHARED", "1");
+        std::ofstream(path, std::ios::binary) << "original";
+        Check(Call(__imp__NtCreateFile, {Addr(handle),0x40000000u,Addr(attrs),Addr(iosb),0,0,0,4,0}) == 0 && read().empty(),
+            "private overwrite opens the visible save directly");
+        Check(!std::filesystem::exists(save / ".save.bin.lo-working"), "private save must not create a working copy");
+        Check(write(*handle, "first", 0) == 0 && read() == "first", "private write flushes directly to the visible save");
+        Check(Call(__imp__NtCreateFile, {Addr(second),0x40000000u,Addr(attrs),Addr(iosb),0,0,0,1,0}) == 0,
+            "private storage keeps independent writer semantics");
+        Check(write(*second, "X", 1) == 0 && read() == "fXrst", "private writers share the visible file");
+        Check(Call(__imp__NtClose, {*second}) == 0 && Call(__imp__NtClose, {*handle}) == 0 && read() == "fXrst",
+            "private close retains the directly written save");
+        Check(!std::filesystem::exists(save / ".save.bin.lo-working") && !std::filesystem::exists(save / "save.bin.tmp"),
+            "private save never creates publication files");
+    }
+    std::puts("PASS: private saves use direct writes and independent writers for unset and non-1 shared flags");
+}
+
+static void CheckAtomicSave()
+{
+    Check(FileSystem::GetSaveRoot() == std::filesystem::absolute("shared-game/save"), "runtime uses the selected save root");
+    Check(FileSystem::GetCacheRoot() == std::filesystem::absolute("cache"), "save override leaves the cache root unchanged");
+    const auto save = FileSystem::GetSaveRoot() / "user00";
+    std::filesystem::create_directories(save);
+    const auto path = save / "save.bin";
+    std::ofstream(path, std::ios::binary) << "original";
+    XamRootCreate("atomic", FileSystem::PathUtf8(save).c_str());
+    auto* name = static_cast<char*>(g_userHeap.Alloc(64));
+    strcpy(name, "atomic:\\save.bin");
+    auto* ansi = g_userHeap.Alloc<XANSI_STRING>();
+    ansi->Buffer = name; ansi->Length = uint16_t(strlen(name)); ansi->MaximumLength = 64;
+    auto* attrs = g_userHeap.Alloc<XOBJECT_ATTRIBUTES>();
+    *attrs = {}; attrs->Name = ansi;
+    auto* handle = g_userHeap.Alloc<be<uint32_t>>();
+    auto* second = g_userHeap.Alloc<be<uint32_t>>();
+    auto* iosb = static_cast<XIO_STATUS_BLOCK*>(g_userHeap.Alloc(sizeof(XIO_STATUS_BLOCK)));
+    auto* bytes = static_cast<char*>(g_userHeap.Alloc(64));
+    auto* offset = g_userHeap.Alloc<be<uint64_t>>();
+    auto read = [&] {
+        std::ifstream input(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(input), {});
+    };
+    auto open = [&](uint32_t disposition) {
+        return Call(__imp__NtCreateFile, {Addr(handle),0x40000000u,Addr(attrs),Addr(iosb),0,0,0,disposition,0});
+    };
+    auto write = [&](uint32_t h, const char* value, uint64_t position) {
+        strcpy(bytes, value); *offset = position;
+        return Call(__imp__NtWriteFile, {h,0,0,0,Addr(iosb),Addr(bytes),uint32_t(strlen(value)),Addr(offset)});
+    };
+    Check(open(4) == 0 && read() == "original", "opening an overwrite must preserve the published save");
+    Check(Call(__imp__NtFlushBuffersFile, {*handle,Addr(iosb)}) == 0 && read() == "original",
+        "flushing an untouched overwrite must preserve the published save");
+    Check(Call(__imp__NtClose, {*handle}) == 0 && read() == "original",
+        "closing an untouched overwrite must preserve the published save");
+    Check(open(4) == 0, "reopen save for overwrite");
+    Check(Call(__imp__NtCreateFile, {Addr(second),0x40000000u,Addr(attrs),Addr(iosb),0,0,0,1,0}) == 0xC0000043u,
+        "independent save writer must be rejected");
+    Check(write(*handle, "first", 0) == 0 && read() == "first", "successful write publishes complete save");
+    Check(Call(__imp__NtDuplicateObject, {*handle,Addr(second),0}) == 0, "duplicate save handle");
+    Check(Call(__imp__NtClose, {*handle}) == 0, "close original save handle");
+    Check(write(*second, "!", UINT64_MAX) == 0 && read() == "first!", "duplicate shares staging and append position");
+    Check(write(*second, "X", 1) == 0 && read() == "fXrst!", "offset write preserves the remaining bytes");
+    *offset = 3;
+    Check(Call(__imp__NtSetInformationFile, {*second,Addr(iosb),Addr(offset),8,20}) == 0 && read() == "fXr",
+        "save resize publishes the shortened complete file");
+    Check(Call(__imp__NtFlushBuffersFile, {*second,Addr(iosb)}) == 0, "flush published save");
+    Check(Call(__imp__NtClose, {*second}) == 0, "close duplicate save handle");
+    Check(!std::filesystem::exists(save / ".save.bin.lo-working") && !std::filesystem::exists(save / "save.bin.tmp"),
+        "successful close removes save working files");
+
+    // A rename failure after copying must retain the last published bytes;
+    // restoring writability before close must not publish the failed attempt.
+    Check(open(1) == 0, "reopen save after writer reservation released");
+    const auto baseline = save / "last-good.bin";
+    std::filesystem::rename(path, baseline);
+    std::filesystem::create_directory(path);
+    Check(write(*handle, "failed", 0) != 0, "failed publication reports IO failure");
+    std::filesystem::remove(path);
+    std::filesystem::rename(baseline, path);
+    Check(Call(__imp__NtFlushBuffersFile, {*handle,Addr(iosb)}) != 0, "failed write cannot be published by flush");
+    Check(Call(__imp__NtClose, {*handle}) == 0 && read() == "fXr", "close cannot publish bytes from a failed save");
+    Check(!std::filesystem::exists(save / ".save.bin.lo-working") && !std::filesystem::exists(save / "save.bin.tmp"),
+        "failed close removes disposable working files");
+    std::puts("PASS: atomic save publication, duplicate/independent writers, offset/append/resize and failed-publication retention");
+}
+
 int main(int argc, char** argv)
 {
     try
@@ -1128,9 +1254,21 @@ int main(int argc, char** argv)
         if (std::string_view(argv[1]) == "io-invalid-handle") { CheckInvalidIoHandle(); return 0; }
         if (std::string_view(argv[1]) == "dlc" || std::string_view(argv[1]) == "dlc-restart")
         { Check(argc == 4, "dlc requires parser-imported game root"); CheckDlc(argv[3], std::string_view(argv[1]) == "dlc-restart"); return 0; }
+        if (std::string_view(argv[1]) == "atomic-save")
+        {
+            const auto sharedSave = std::filesystem::absolute("shared-game/save");
+            SetTestEnvironment("LO_SAVE_DIR", sharedSave.string().c_str());
+            SetTestEnvironment("LO_SAVE_SHARED", "1");
+        }
         FileSystem::Init(std::filesystem::absolute("game"));
         XamInit();
         const std::string_view mode(argv[1]);
+        if (mode == "atomic-save")
+        {
+            SetTestEnvironment("LO_SAVE_SHARED", "0");
+            CheckAtomicSave(); return 0;
+        }
+        if (mode == "private-save") { CheckPrivateSave(); return 0; }
         if (mode == "slot-recovery") { CheckSlotRecovery(); return 0; }
         Check(mode == "write" || mode == "overwrite" || mode == "read" || mode == "read-overwritten", "invalid test mode");
         const bool overwrite = mode == "overwrite" || mode == "read-overwritten";

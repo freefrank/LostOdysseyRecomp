@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include <movie/movie_player.h>
 #include "cheats.h"
 #include "fast_forward.h"
 #include "menu_overlay.h"
@@ -103,8 +104,16 @@ void PollHostControls() {
         !(SDL_GetWindowFlags(focus) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) &&
         !backgroundRun && !host_ui::IsStopping() &&
         !host_ui::IsGamePaused() && !IsOverlayVisible() && !settings::IsOpen() &&
-        !edit.editorRequested && !edit.editorApplied;
-    uint8_t lt = 0, rt = 0;
+        !edit.editorRequested && !edit.editorApplied
+#if LO_PLATFORM_SWITCH
+        // With the game's own WMV decoder (LO_NATIVE_MOVIES=0), cutscene
+        // movies freeze on the Switch, and fast-forward makes it certain:
+        // keep it off during them. The native decoder handles both.
+        && (movie::NativeMoviesEnabled() || !movie::GuestPlaying())
+#endif
+        ;
+    const auto binding = fast_forward::GetStatus().button;
+    fast_forward::Buttons buttons;
     bool connected = false;
     uint64_t devices = 14695981039346656037ull;
     static uint64_t previousDevices = 0;
@@ -120,22 +129,31 @@ void PollHostControls() {
             auto trigger = [&](SDL_GamepadAxis axis) {
                 return uint8_t(std::max(0, int(SDL_GetGamepadAxis(controller, axis))) >> 7);
             };
-            lt = std::max(lt, trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-            rt = std::max(rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+            auto button = [&](SDL_GamepadButton input) {
+                return uint8_t(SDL_GetGamepadButton(controller, input) ? 255 : 0);
+            };
+            buttons.lt = std::max(buttons.lt, trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+            buttons.rt = std::max(buttons.rt, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+            buttons.lb = std::max(buttons.lb, button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
+            buttons.rb = std::max(buttons.rb, button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
         }
         SDL_free(ids);
     }
 #if LO_PLATFORM_ANDROID
-    // The on-screen LT/RT count as a controller, as they do for the game (#194).
+    // On-screen inputs count as a controller, as they do for the game (#194).
     if (allowed) {
         const auto touch = hid::android_touch::Snapshot();
-        lt = std::max(lt, touch.leftTrigger);
-        rt = std::max(rt, touch.rightTrigger);
+        auto button = [&](uint16_t mask) { return uint8_t((touch.buttons & mask) ? 255 : 0); };
+        buttons.lt = std::max(buttons.lt, touch.leftTrigger);
+        buttons.rt = std::max(buttons.rt, touch.rightTrigger);
+        buttons.lb = std::max(buttons.lb, button(XAMINPUT_GAMEPAD_LEFT_SHOULDER));
+        buttons.rb = std::max(buttons.rb, button(XAMINPUT_GAMEPAD_RIGHT_SHOULDER));
         connected = true;
     }
 #endif
-    // A newly connected controller must not inherit a prior device's armed LT.
+    // A newly connected controller must not inherit a prior device's armed press.
     if (devices != previousDevices) { fast_forward::Release(); previousDevices = devices; }
-    fast_forward::Sample(lt, rt, allowed && connected);
+    const auto input = fast_forward::SelectButton(binding, buttons);
+    fast_forward::Sample(input.button, input.pair, allowed && connected);
 }
 } // namespace debug_menu::cheats

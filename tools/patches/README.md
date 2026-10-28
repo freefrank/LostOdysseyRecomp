@@ -121,9 +121,9 @@ each chain in this order on the pinned submodule commit:
 | Submodule | Chain | Switch patch contents |
 |---|---|---|
 | `tools/XenonRecomp` | `XenonRecomp-lostodyssey.patch`, `XenonRecomp-switch.patch` | GCC replacements for the Clang builtins in `ppc_context.h`, `cntpct_el0` timer on Horizon, GCC-compatible `XXOVERLAPPED`/`XDBFTitleID` |
-| `thirdparty/plume` | `plume-lostodyssey.patch`, `plume-sdl3.patch`, `plume-switch.patch`, `plume-switch-perf.patch` | `VK_NN_vi_surface` on the libnx `NWindow`, Vulkan entry points from the statically linked Mesa NVK ICD, libnx window size, no present-wait extensions, 625/384 ns GPU timestamp period (NVK reports 1 ns); Switch Vulkan varying/point-size trimming and packed 32-bit render formats |
+| `thirdparty/plume` | `plume-lostodyssey.patch`, `plume-sdl3.patch`, `plume-switch.patch`, `plume-switch-perf.patch` | `VK_NN_vi_surface` on the libnx `NWindow`, Vulkan entry points from the statically linked Mesa NVK ICD, libnx window size, no present-wait extensions, 625/384 ns GPU timestamp period (NVK reports 1 ns). `plume-switch-perf.patch`: `RenderFormat::R11G11B10_FLOAT` (D3D12/Vulkan mappings, used only by the Switch's `LO_RT32`) and `plume_spirv_trim.h`, which removes vertex outputs the paired fragment shader never reads (`LO_TRIM_VARYINGS`) |
 | `thirdparty/plume/contrib/volk` | `volk-switch.patch` | no `dlopen` on Horizon (from UnleashedRecomp-NX) |
-| `thirdparty/SDL-switch` | `sdl-switch-no-egl.patch` | devkitPro's SDL 3.4 Switch video driver without EGL (rendering is Vulkan) |
+| `thirdparty/SDL-switch` | `sdl-switch-no-egl.patch`, `sdl-switch-audio-priority.patch` | devkitPro's SDL 3.4 Switch video driver without EGL (rendering is Vulkan); audio thread priority |
 
 The script resets a submodule to its pinned commit before applying a chain unless
 the chain's last patch is already in place.

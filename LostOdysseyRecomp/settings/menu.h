@@ -90,8 +90,9 @@ void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
-//   frame rate, HDR), 3 System (interface and game language, updates, debug log,
-//   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle, Save).
+//   frame rate, HDR), 3 System (interface and game language, updates, Discord status, debug log,
+//   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
+//   Prepare shaders again, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -99,13 +100,13 @@ void PointerDrag(float x, float y, bool held);
 //   Controls page, opened from Gameplay's Controls row; not on Audio.
 // - Actions come last on their tab: Controls / Restore / Quit to Main Menu on
 //   Gameplay, Brightness / Save on Graphics, Mods / Import / Shader bundle /
-//   Save on System.
-// - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
-//   scroll; only Graphics scrolls. The pages opened from a row (Mods,
+//   Prepare shaders again / Save on System.
+// - Gameplay, Audio and System fit the visible rows and never scroll. System
+//   uses 12 compact rows; other tabs use 11. Only Graphics scrolls. Pages (Mods,
 //   Controls, Achievements) may scroll.
 // - Graphics order: display -> graphics preset -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
-//   frame generation -> effects -> frame rate (VSync, performance overlay) ->
+//   frame generation -> effects -> frame rate (loading pace, VSync, performance overlay) ->
 //   HDR and brightness -> Save. A divider opens each group after the first
 //   (menu_render.cpp).
 // - Rows that only apply to one choice (DLSS model, HDR levels) are hidden
@@ -142,14 +143,17 @@ inline constexpr int AudioRowCount = 6;
 inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
-inline constexpr int SystemDebugLogRow = 3;
-inline constexpr int SystemAchievementsRow = 4; // opens the Achievements page
-inline constexpr int SystemCollectionRow = 5;
-inline constexpr int SystemModsRow = 6; // opens the Mods page
-inline constexpr int SystemImportRow = 7;
-inline constexpr int SystemShaderBundleRow = 8; // downloads the shader bundle again on the next start
-inline constexpr int SystemSaveRow = 9;
-inline constexpr int SystemRowCount = 10;
+inline constexpr int SystemDiscordStatusRow = 3; // hidden on platforms without Discord IPC
+inline constexpr int SystemDebugLogRow = 4;
+inline constexpr int SystemAchievementsRow = 5; // opens the Achievements page
+inline constexpr int SystemCollectionRow = 6;
+inline constexpr int SystemModsRow = 7; // opens the Mods page
+inline constexpr int SystemImportRow = 8;
+inline constexpr int SystemAddToSteamRow = 9; // desktop shortcut with library artwork
+inline constexpr int SystemShaderBundleRow = 10; // downloads the shader bundle again on the next start
+inline constexpr int SystemShaderPreparationRow = 11; // requests startup pipeline preparation
+inline constexpr int SystemSaveRow = 12;
+inline constexpr int SystemRowCount = 13;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
@@ -183,15 +187,16 @@ enum class GraphicsRow : int
     ScalingQuality = 24,
     RgbRange = 25,
     FrameRate = 26,
-    VariableRefreshRate = 27,
-    PerformanceOverlay = 28,
-    Hdr = 29,
-    HdrPaperWhite = 30, // shown with HDR on
-    HdrPeak = 31, // shown with HDR on
-    HdrCalibration = 32, // opens the HDR peak page; shown with HDR on
-    Brightness = 33, // opens the brightness page
-    Save = 34,
-    Count = 35,
+    LoadingTransitions = 27,
+    VariableRefreshRate = 28,
+    PerformanceOverlay = 29,
+    Hdr = 30,
+    HdrPaperWhite = 31, // shown with HDR on
+    HdrPeak = 32, // shown with HDR on
+    HdrCalibration = 33, // opens the HDR peak page; shown with HDR on
+    Brightness = 34, // opens the brightness page
+    Save = 35,
+    Count = 36,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail
@@ -230,13 +235,21 @@ bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY, uint16_t defau
 bool CaptureKey(uint32_t scancode, bool repeat);
 // Snapshot rendered on the presentation thread, never accessing guest memory.
 bool DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width = 1280, uint32_t height = 720);
+// Straight-alpha title confirmation, composited over the live title picture.
+// Stays drawable through its closing fade; revision also tracks fade frames.
+bool DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height);
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
+bool IsTitleQuitOpen();
 // Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
 // before a game is loaded. The title tick reports whether its menu is idle and
 // takes a fresh press made there, if any.
 inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
+inline constexpr uint16_t TitleQuitButton = 0x0020; // XINPUT_GAMEPAD_BACK (keyboard Backspace)
 bool ConsumeTitleShortcut(bool titleMenuIdle);
+// Tick the host Yes/No dialog before the title's input handler. True while it
+// owns input, including its dismissal tick. The retail Settings task stays idle.
+bool UpdateTitleQuit(uint8_t* base, bool titleMenuIdle);
 // The retail Settings task was just opened from the title menu. Until that task
 // is idle again, the per-save options are hidden (Gameplay's retail rows,
 // Restore game defaults and Quit to Main Menu; Audio's Voice language, Music and

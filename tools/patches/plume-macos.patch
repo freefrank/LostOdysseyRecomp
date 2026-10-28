@@ -659,7 +659,23 @@ index 373c87e..437938f 100644
          } else {
              assert(dstTexture != nullptr);
              assert(srcTexture != nullptr);
-@@ -3460,6 +3753,12 @@ namespace plume {
+@@ -3079,8 +3372,10 @@ namespace plume {
+         checkActiveBlitEncoder();
+         activeType = EncoderType::Blit;
+-
+-        const MetalTexture *dst = static_cast<const MetalTexture *>(dstTexture);
+-        const MetalTexture *src = static_cast<const MetalTexture *>(srcTexture);
+-
+-        activeBlitEncoder->copyFromTexture(src->mtl, dst->mtl);
++
++        // Swap-chain images are MetalDrawable, not MetalTexture. Both expose
++        // their native texture through ExtendedRenderTexture.
++        const ExtendedRenderTexture *dst = static_cast<const ExtendedRenderTexture *>(dstTexture);
++        const ExtendedRenderTexture *src = static_cast<const ExtendedRenderTexture *>(srcTexture);
++
++        activeBlitEncoder->copyFromTexture(src->getTexture(), dst->getTexture());
+     }
+@@ -3460,6 +3755,12 @@ namespace plume {
              dirtyGraphicsState.depthBias = 0;
          }
  
@@ -672,7 +688,7 @@ index 373c87e..437938f 100644
          // Viewports
          if (dirtyGraphicsState.viewports) {
              if (!viewportVector.empty() && viewportVector != stateCache.lastViewports) {
-@@ -3818,6 +4117,10 @@ namespace plume {
+@@ -3818,6 +4119,10 @@ namespace plume {
          // TODO: Support Raytracing.
          // capabilities.raytracing = mtl->supportsRaytracing();
          capabilities.maxTextureSize = mtl->supportsFamily(MTL::GPUFamilyApple3) ? 16384 : 8192;
@@ -683,7 +699,7 @@ index 373c87e..437938f 100644
          capabilities.sampleLocations = mtl->programmableSamplePositionsSupported();
          capabilities.resolveRegion = true;
          capabilities.resolveModes = false;
-@@ -3856,6 +4159,19 @@ namespace plume {
+@@ -3856,6 +4161,19 @@ namespace plume {
  
      MetalDevice::~MetalDevice() {
          MetalAutoreleasePool releasePool;
@@ -703,7 +719,7 @@ index 373c87e..437938f 100644
          if (timestampCounterSet != nullptr) {
              timestampCounterSet->release();
          }
-@@ -3885,7 +4201,13 @@ namespace plume {
+@@ -3885,7 +4203,13 @@ namespace plume {
      }
  
      std::unique_ptr<RenderShader> MetalDevice::createShader(const void *data, uint64_t size, const char *entryPointName, RenderShaderFormat format) {
@@ -718,7 +734,7 @@ index 373c87e..437938f 100644
      }
  
      std::unique_ptr<RenderSampler> MetalDevice::createSampler(const RenderSamplerDesc &desc) {
-@@ -3981,6 +4303,97 @@ namespace plume {
+@@ -3981,6 +4305,97 @@ namespace plume {
          mtl->release();
      }
  
@@ -816,7 +832,7 @@ index 373c87e..437938f 100644
      bool MetalDevice::isValid() const {
          return mtl != nullptr;
      }
-@@ -4222,6 +4635,212 @@ namespace plume {
+@@ -4222,6 +4637,212 @@ namespace plume {
  
      // Global creation function.
  

@@ -28,6 +28,24 @@ int main()
         Require(ForAspect(aspect).IsIdentity(), "invalid aspect preserves native layout");
     Require(ForAspect(NativeAspect).IsIdentity(), "16:9 is an identity transform");
 
+    struct PresentedCase { uint32_t sw, sh, ow, oh; PixelRect expected; };
+    for (const auto& c : std::array<PresentedCase, 8>{{
+        {960, 720, 960, 720, {0, 90, 960, 630}},
+        {2560, 1080, 2560, 1080, {320, 0, 2240, 1080}},
+        {960, 720, 1280, 720, {160, 90, 1120, 630}},
+        {2560, 1080, 1920, 1080, {240, 135, 1680, 945}},
+        {1280, 720, 1920, 1080, {0, 0, 1920, 1080}},
+        {1280, 720, 1281, 721, {0, 0, 1281, 721}},
+        {1280, 720, 1280, 721, {0, 0, 1280, 720}},
+        {0, 720, 960, 720, {0, 0, 960, 720}}
+    }})
+    {
+        const auto actual = PresentedSafeRect(c.sw, c.sh, c.ow, c.oh);
+        Require(actual.left == c.expected.left && actual.top == c.expected.top &&
+                actual.right == c.expected.right && actual.bottom == c.expected.bottom,
+                "presented safe area accounts for source fit, both aspect axes and odd output sizes");
+    }
+
     struct Output { float width, height, x, y; };
     for (const auto output : std::array<Output, 5>{{
         {1600, 1200, 1, 0.75f}, {1800, 1200, 1, 0.84375f},

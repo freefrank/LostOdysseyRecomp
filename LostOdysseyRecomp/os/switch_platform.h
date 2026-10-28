@@ -48,6 +48,17 @@ namespace os::switch_platform
     uint32_t CurrentThreadHandle();
     uint32_t SetThreadIdealCore(uint32_t handle, int core);
 
+    // Appends to a file in the app folder through a file system session of this module's own, opened
+    // in Initialize: no newlib, no allocation and none of libnx's shared file system sessions, so it
+    // still works when the rest of the process's file access is stuck (crash handler, hang watchdog).
+    // False if the session is not available or a request failed.
+    bool RawAppend(const char* fileName, const char* data, size_t size);
+
+    // Kernel handle of the calling thread, and its ideal core (0-2; allowed
+    // cores stay 0-2). handle 0 means the calling thread.
+    uint32_t CurrentThreadHandle();
+    uint32_t SetThreadIdealCore(uint32_t handle, int core);
+
     // Raises the CPU clock while loading (applet CPU boost), off when false.
     void SetLoadingBoost(bool enabled);
 
@@ -57,5 +68,9 @@ namespace os::switch_platform
     // holds the exit; call this right before the process ends. Horizon kills
     // the game anyway 15 s after the request.
     void AllowExit();
+    // Ends the process at once after writing the logs (no newlib/libnx exit
+    // teardown): quitting through std::_Exit unmounted the SD card while game
+    // threads were still reading it, and one faulted in lseek.
+    [[noreturn]] void ExitNow();
 }
 #endif

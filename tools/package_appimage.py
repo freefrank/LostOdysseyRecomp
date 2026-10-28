@@ -1,7 +1,9 @@
 """Package the Linux runtime as an AppImage using linuxdeploy."""
 import argparse
 import filecmp
+import hashlib
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -17,6 +19,27 @@ LINUX_PACKAGING = ROOT / "packaging/linux"
 # signature no longer matches, so it stays in a subfolder linuxdeploy skips.
 NGX_SNIPPET = "libnvidia-ngx-dlss.so.310.9.1"
 NGX_DIRECTORY = "usr/bin/ngx"
+APPIMAGE_RUNTIME = ROOT / "out/tools/appimage-runtime/runtime-x86_64"
+
+
+def validate_image_runtime(image, runtime):
+    # appimagetool fills only this 16-byte format field for an unsigned image.
+    # Locate it in the selected runtime; still compare the ELF section table,
+    # code and every other byte to detect a plugin ignoring --runtime-file.
+    expected = bytearray(runtime.read_bytes())
+    sections = subprocess.check_output(['readelf', '--wide', '--sections', str(runtime)], text=True)
+    digest = re.search(r'\.digest_md5\s+\S+\s+[0-9a-fA-F]+\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)', sections)
+    if not digest or int(digest[2], 16) != 16:
+        raise SystemExit("Selected runtime has no 16-byte AppImage digest field")
+    offset = int(digest[1], 16)
+    if offset + 16 > len(expected):
+        raise SystemExit("Selected runtime has an invalid AppImage digest field")
+    with image.open('rb') as actual:
+        prefix = bytearray(actual.read(len(expected)))
+    if len(prefix) == len(expected):
+        prefix[offset:offset + 16] = expected[offset:offset + 16]
+    if prefix != expected:
+        raise SystemExit("AppImage does not contain the selected runtime byte for byte")
 
 
 def git(*args):
@@ -69,6 +92,8 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "out/releases")
     parser.add_argument("--version", default="")
     parser.add_argument("--linuxdeploy", default="linuxdeploy")
+    parser.add_argument("--runtime-file", type=Path, default=APPIMAGE_RUNTIME,
+                        help="Pinned runtime built by tools/release/build_appimage_runtime.sh")
     parser.add_argument("--cxx-compiler", default=os.environ.get("CXX", "clang++"),
                         help="Build compiler used to locate the bundled GCC runtimes")
     parser.add_argument("--appdir", type=Path, help="Persist the final deployed AppDir at this new path")
@@ -133,6 +158,10 @@ def main():
         stage_shader_pack_license(appdir / "usr/share/licenses/lost-odyssey-recomp")
         shutil.copy2(ROOT / "thirdparty/licenses/XeGTAO.txt",
                      appdir / "usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt")
+        for source, license_name in (("LICENSE.txt", "Signalsmith-Stretch.txt"),
+                             ("signalsmith-linear/LICENSE.txt", "Signalsmith-Linear.txt")):
+            shutil.copy2(ROOT / "thirdparty/signalsmith-stretch" / source,
+                         appdir / "usr/share/licenses/lost-odyssey-recomp" / license_name)
         desktop = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.desktop"
         icon = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.png"
         metainfo = LINUX_PACKAGING / "io.github.freefrank.LostOdysseyRecomp.metainfo.xml"
@@ -145,6 +174,10 @@ def main():
         shutil.copy2(desktop, applications / desktop.name)
         shutil.copy2(icon, icons / icon.name)
         shutil.copy2(metainfo, metainfo_dir / metainfo.name)
+        steam_artwork = appdir / "usr/share/lost-odyssey-recomp/steam"
+        steam_artwork.mkdir(parents=True)
+        for filename in ("portrait.png", "header.png", "hero.png", "logo.png", "icon.png"):
+            shutil.copy2(ROOT / "assets/steam" / filename, steam_artwork / filename)
         if args.dry_layout:
             print(f"AppDir: {appdir}")
             for path in sorted(appdir.rglob("*")):
@@ -159,6 +192,19 @@ def main():
         # before linuxdeploy runs with cwd=temporary, or CI's
         # out/tools/linuxdeploy/linuxdeploy is looked up in the temp dir.
         deploy = str(Path(deploy).resolve())
+        runtime_file = args.runtime_file.resolve()
+        if not runtime_file.is_file():
+            raise SystemExit(f"Missing AppImage runtime: {runtime_file}; run tools/release/build_appimage_runtime.sh")
+        # LDAI_RUNTIME_FILE is the output plugin's documented --runtime-file
+        # forwarding option. Override ambient values instead of trusting them.
+        image_env = dict(os.environ, LDAI_RUNTIME_FILE=str(runtime_file))
+        runtime_licenses = runtime_file.parent / "licenses"
+        # The runtime itself wraps SquashFS outside usr. Keep its notices and
+        # relink materials outside usr too: Flatpak reuses usr, not this wrapper.
+        license_destination = appdir / "AppImage-runtime"
+        shutil.copytree(runtime_licenses, license_destination)
+        for filename in ("runtime-relink.tar.gz", "build-packages.txt", "runtime.sha256", "patch.sha256"):
+            shutil.copy2(runtime_file.parent / filename, license_destination / filename)
         command = [deploy, "--appdir", str(appdir),
                    "--desktop-file", str(desktop), "--icon-file", str(icon),
                    "--exclude-library", "libwayland*"]
@@ -172,7 +218,7 @@ def main():
         validate_apprun(appdir)
         validate_appdir_links(appdir)
         validate_abi(appdir)
-        subprocess.run([*command, "--output", "appimage"], cwd=temporary, check=True)
+        subprocess.run([*command, "--output", "appimage"], cwd=temporary, env=image_env, check=True)
         validate_apprun(appdir)
         validate_appdir_links(appdir)
         produced = next(Path(temporary).glob("*.AppImage"), None)
@@ -180,6 +226,8 @@ def main():
             raise SystemExit("linuxdeploy did not produce an AppImage")
         if not produced.stat().st_size:
             raise SystemExit("linuxdeploy produced an empty AppImage")
+        validate_image_runtime(produced, runtime_file)
+        print(f"AppImage runtime SHA-256: {hashlib.sha256(runtime_file.read_bytes()).hexdigest()}")
         # Test the final image, not just the pre-compression staging directory.
         # Extraction does not require FUSE, and ldd does not initialize the GPU.
         extracted = Path(temporary) / "verify"

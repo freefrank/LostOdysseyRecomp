@@ -1,4 +1,5 @@
 #include "presentation.h"
+#include "aspect_layout.h"
 #include "display_gamma.h"
 #include "shader/dxc_compiler.h"
 #include "shader/target_format.h"
@@ -147,6 +148,29 @@ RenderFramebuffer *Presentation::Impl::FramebufferFor(const RenderTexture *textu
 void Presentation::ForgetTargets()
 {
     impl->targetFramebuffers.clear();
+}
+void Presentation::DrawContentBars(RenderCommandList *commands, RenderTexture *target,
+                                   uint32_t sw, uint32_t sh, uint32_t ow, uint32_t oh)
+{
+    if (!commands || !target || !sw || !sh || !ow || !oh ||
+        aspect_layout::ForAspect(float(sw) / sh).IsIdentity()) return;
+    const auto safe = aspect_layout::PresentedSafeRect(sw, sh, ow, oh);
+    std::array<RenderRect, 4> bars{};
+    uint32_t count = 0;
+    const auto add = [&](uint32_t l, uint32_t t, uint32_t r, uint32_t b) {
+        if (r > l && b > t) bars[count++] = {int32_t(l), int32_t(t), int32_t(r), int32_t(b)};
+    };
+    add(0, 0, ow, safe.top);
+    add(0, safe.bottom, ow, oh);
+    add(0, safe.top, safe.left, safe.bottom);
+    add(safe.right, safe.top, ow, safe.bottom);
+    // A zero rectangle count means a full-target clear in Plume.
+    if (!count) return;
+    auto* framebuffer = impl->FramebufferFor(target, ow, oh);
+    if (!framebuffer) return;
+    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE));
+    commands->setFramebuffer(framebuffer);
+    commands->clearColor(0, RenderColor(0, 0, 0, 1), bars.data(), count);
 }
 struct Presentation::UiCompositionLease
 {
@@ -1097,6 +1121,8 @@ Presentation::Presentation() = default;
 Presentation::~Presentation() = default;
 void Presentation::SetOutputTransform(const hdr::OutputTransform&) {}
 void Presentation::ForgetTargets() {}
+void Presentation::DrawContentBars(plume::RenderCommandList *, plume::RenderTexture *,
+                                   uint32_t, uint32_t, uint32_t, uint32_t) {}
 bool Presentation::Init(plume::RenderDevice *)
 {
     return false;

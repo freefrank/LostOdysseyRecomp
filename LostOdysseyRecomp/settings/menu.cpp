@@ -1,4 +1,7 @@
 #include <os/log_collection.h>
+#if !defined(__SWITCH__)
+#include <os/steam_shortcut.h>
+#endif
 #include "menu.h"
 #include "menu_render.h"
 #include "menu_assets.h"
@@ -10,11 +13,13 @@
 #include "translations.h"
 #include "achievements_page.h"
 #include "mods_page.h"
+#include "quit_action_hook.h"
 #include <patches/mod_hot_reload.h>
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_generation_settings.h>
+#include <gpu/shader_preparation_request.h>
 #include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
@@ -22,6 +27,12 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+#include <discord/presence.h>
+#endif
+#if LO_PLATFORM_ANDROID
+#include <SDL3/SDL_system.h>
+#endif
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
@@ -42,6 +53,8 @@ std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
 // a fresh Y there, and the opened task hides what a game would replace.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
+std::atomic<bool> titleQuitShortcut{false}, titleQuitOpen{false}, titleQuitEscape{false};
+int titleQuitChoice = 1; // No until the player explicitly chooses Yes.
 // With no game loaded, the retail options (Gameplay, and Voice language, Music and
 // Sound effects on Audio) and their Restore would be replaced by the next save or by
 // New Game's defaults (828710A0), and there is no game to quit.
@@ -101,11 +114,12 @@ uint64_t displayMovesBefore = 0;
 std::chrono::steady_clock::time_point displayConfirmDeadline;
 std::atomic<bool> displayConfirmOpen{false}, displayConfirmEscape{false};
 std::chrono::steady_clock::duration menuClockOffset{}; // Tests advance the menu clock.
+std::optional<std::chrono::steady_clock::time_point> menuClockFixed; // Tests hold exact animation frames.
 // Saved display choice the menu last saw; the window thread changes it when the
 // player moves the window (Win+Shift+arrow).
 std::string syncedDisplayName;
 uint32_t syncedDisplayIndex = 0;
-std::chrono::steady_clock::time_point MenuNow() { return std::chrono::steady_clock::now() + menuClockOffset; }
+std::chrono::steady_clock::time_point MenuNow() { return menuClockFixed.value_or(std::chrono::steady_clock::now()) + menuClockOffset; }
 bool collectionPrompt = false;
 int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
@@ -119,6 +133,8 @@ int importChoice = 1;
 bool importLaunchPending = false;
 bool shaderBundlePrompt = false;
 int shaderBundleChoice = 1;
+bool shaderPreparationPrompt = false;
+int shaderPreparationChoice = 1;
 // Mods page (System → Mods). The mods are listed when it opens; the order and
 // switches stay unsaved until Save. modsSaved is the order saved in this run,
 // applied at the next start; reopening the page shows it.
@@ -380,6 +396,28 @@ const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
 }
+#if !LO_PLATFORM_SWITCH
+const wchar_t *SteamShortcutMessage(steam_shortcut::Status result)
+{
+    switch (result)
+    {
+    case steam_shortcut::Status::Added:
+        return Tr(L"Added to Steam. Restart Steam to see it.", L"已加入 Steam。請重新啟動 Steam 以查看。");
+    case steam_shortcut::Status::AddedFromFlatpak:
+        return Tr(L"Restart Steam to see it; if Steam was open, close it and add again.",
+                  L"請重新啟動 Steam 以查看；若 Steam 當時開啟，請關閉後再次加入。");
+    case steam_shortcut::Status::SteamRunning:
+        return Tr(L"Close Steam, then try again.", L"請關閉 Steam 後再試。");
+    case steam_shortcut::Status::SteamNotFound:
+        return Tr(L"Steam was not found. Install and open Steam first.", L"找不到 Steam。請先安裝並開啟 Steam。");
+    case steam_shortcut::Status::UserNotFound:
+        return Tr(L"No Steam user found. Sign in to Steam, close it, then try again.",
+                  L"找不到 Steam 使用者。請登入 Steam，關閉後再試。");
+    default:
+        return Tr(L"Could not add to Steam. Check the log for details.", L"無法加入 Steam。詳情請查看日誌。");
+    }
+}
+#endif
 // Adapter and display names arrive as UTF-8.
 std::wstring Widen(std::string_view text)
 {
@@ -1109,6 +1147,14 @@ std::wstring DlssNotice()
         AppendSentence(text, BackendPendingSentence(running.device.backend));
     return text;
 }
+bool SystemRowHidden(int r)
+{
+#if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+    return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
+#else
+    return false;
+#endif
+}
 bool GraphicsRowHidden(int r)
 {
     // A page entry row shows with the setting it belongs to.
@@ -1207,8 +1253,8 @@ std::wstring FgNotice()
     return text;
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
-// Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
-static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuVisibleRows);
+// Gameplay and Audio fit their visible rows; Graphics and System can scroll.
+static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows);
 // Moves graphics focus off a hidden row to the next visible one.
 void SkipHiddenGraphicsRow()
 {
@@ -1462,7 +1508,8 @@ void Publish(uint8_t *base, uint32_t config)
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
-        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
+                   {Tr(L"On", L"開"), Tr(L"Low", L"低"), Tr(L"Off", L"關")}, graphics_menu::DynamicShadowsChoice(edit)));
 #if LO_PLATFORM_MACOS
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
@@ -1540,6 +1587,8 @@ void Publish(uint8_t *base, uint32_t config)
             frameRates.push_back(std::to_wstring(fps) + L" FPS");
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
+        placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading speed", L"載入速度",
+                   {Tr(L"Original", L"原版"), Tr(L"Fast", L"快速")}, edit.loadingTransitions == 0 ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
             L"自適應同步（ProMotion）", onOff(), edit.variableRefreshRate ? 0 : 1));
@@ -1605,6 +1654,8 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages),
                    GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
+        addChoices(L"Discord status", L"Discord 狀態", onOff(), edit.discordStatus ? 0 : 1);
+        next.rows.back().hidden = SystemRowHidden(SystemDiscordStatusRow);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
         if (achievementSummary.empty()) RefreshAchievementSummary();
         addAction(L"Achievements", L"成就", achievementSummary.c_str());
@@ -1616,7 +1667,10 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
         next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
+        addAction(L"Add to Steam", L"加入 Steam", Tr(L"Add", L"加入"));
+        next.rows.back().hidden = SystemRowHidden(SystemAddToSteamRow);
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
+        addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -1632,9 +1686,10 @@ void Publish(uint8_t *base, uint32_t config)
             ++visibleCount;
         }
         int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
-        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
+        const int visibleRows = VisibleRowCount(tab, !next.pageTitle.empty());
+        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - visibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
-        if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
+        if (visibleFocus >= scroll + visibleRows) scroll = visibleFocus - visibleRows + 1;
         next.scroll = scroll;
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: confirm     B: back",
@@ -1652,9 +1707,12 @@ void Publish(uint8_t *base, uint32_t config)
                  L"來自 mods 資料夾的語言包。語音等其餘內容沿用其基礎語言。重新啟動後生效。")
             : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                  L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+    if (tab == 3 && row == SystemDiscordStatusRow)
+        next.help = Tr(L"Shows your location and activity on Discord. Applies and saves immediately.",
+                       L"在 Discord 顯示目前地點與活動。立即套用並儲存。");
     if (tab == 3 && row == SystemDebugLogRow)
-        next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
-                       L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
+        next.help = Tr(L"Writes detailed logs in logs/ to help diagnose problems. On by default. Applies when saved.",
+                       L"在 logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
     if (tab == 3 && row == SystemAchievementsRow)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");
@@ -1664,9 +1722,15 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 3 && row == SystemAddToSteamRow && status.empty())
+        next.help = Tr(L"Adds the game to your Steam library with artwork. Close Steam first. Add it again if you move the game.",
+                       L"將遊戲與圖片加入 Steam 收藏庫。請先關閉 Steam。移動遊戲後請再次加入。");
     if (tab == 3 && row == SystemShaderBundleRow)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
+    if (tab == 3 && row == SystemShaderPreparationRow)
+        next.help = Tr(L"Prepares shaders before play at the next start. Reuses the bundle and cache.",
+                       L"下次啟動時在遊玩前準備著色器，並重用著色器包與快取。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
         next.help = Tr(L"Cutscene dialogue volume. Voices in battle follow Sound effects. Applies from the next scene.",
                        L"過場動畫中的對白音量。戰鬥中的語音跟隨音效音量。從下一個場景起套用。");
@@ -1745,8 +1809,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
             break;
         case GraphicsRow::DynamicShadows:
-            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
-                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
+            next.help = Tr(L"Character and object shadows. Low keeps only the largest few; Off removes them. Both can raise the frame rate. Applies after saving.",
+                           L"角色與物件的陰影。「低」只保留畫面上最大的幾個，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
 #if LO_PLATFORM_ANDROID
@@ -1851,6 +1915,10 @@ void Publish(uint8_t *base, uint32_t config)
                      L"90/120 FPS 渲染真實遊戲影格，無需額外開關。請確認遊戲速度、音訊與戰鬥時序。")
                 : Tr(L"Native game-frame target, independent of frame generation. Applies after saving.",
                      L"原生遊戲影格率，獨立於影格生成。儲存後套用。");
+            break;
+        case GraphicsRow::LoadingTransitions:
+            next.help = Tr(L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                           L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。");
             break;
         case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
@@ -2018,6 +2086,14 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = shaderBundleChoice;
     }
+    if (shaderPreparationPrompt)
+    {
+        next.dialogTitle = Tr(L"Prepare shaders again", L"重新準備著色器");
+        next.dialogMessage = Tr(L"Run shader preparation before playing at the next start?",
+                                L"下次啟動時在遊玩前執行著色器準備嗎？");
+        next.dialogChoices = {Tr(L"Prepare again", L"重新準備"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = shaderPreparationChoice;
+    }
     if (modsDiscardPrompt || controlsDiscardPrompt)
     {
         next.dialogTitle = Tr(L"Unsaved changes", L"尚未儲存的變更");
@@ -2150,6 +2226,11 @@ HdrCalibration GetHdrCalibration()
 }
 bool CalibrationKey(uint32_t key)
 {
+    if (key == 27 && titleQuitOpen.load())
+    {
+        titleQuitEscape = true;
+        return true;
+    }
     // Escape has no controller mapping; it answers Revert on the display prompt.
     if (key == 27 && displayConfirmOpen.load())
     {
@@ -2230,19 +2311,21 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
         return false;
     }
     {
-        // Y pressed on the idle title menu. A button already held when the
+        // Shortcuts pressed on the idle title menu. A button already held when the
         // menu became idle is not a press.
         static uint16_t titlePrevious = 0xFFFF;
         if (titleMenuIdle.load())
         {
             if ((buttons & TitleSettingsButton) && !(titlePrevious & TitleSettingsButton))
                 titleShortcut = true;
+            if ((buttons & TitleQuitButton) && !(titlePrevious & TitleQuitButton))
+                titleQuitShortcut = true;
             titlePrevious = buttons;
         }
         else
             titlePrevious = 0xFFFF;
     }
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return false;
     // The Controls page runs on the default layouts. Switching between the
     // two waits for a release, so a held button is not a fresh press.
@@ -2290,7 +2373,7 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
 }
 void PointerClick(float x, float y, bool reverse)
 {
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return;
     std::lock_guard lock(snapshotMutex);
     if (snapshot.neuralRendering.open)
@@ -2353,11 +2436,12 @@ void PointerClick(float x, float y, bool reverse)
         if (!listPage) mouseTab = int(x - 386) / MenuTabWidth;
         return;
     }
-    constexpr int height = 43;
+    const int height = MenuRowHeight(snapshot.tab, listPage);
     constexpr int top = 150;
     const int slot = int(y - top) / height;
     const int right = snapshot.reorder ? ModsMoveLeft + 2 * ModsMoveWidth + ModsMoveGap : 1026;
-    if (x < 38 || x >= right || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
+    if (x < 38 || x >= right || y < top || slot < 0 || slot >= VisibleRowCount(snapshot.tab, listPage) ||
+        (top + (slot + 1) * height) > 640)
         return;
     // Translate the clicked slot through hidden rows and the scroll window
     // back to a logical row index.
@@ -2544,6 +2628,7 @@ PPC_FUNC(sub_822F19B0)
         importPrompt = false;
         importLaunchPending = false;
         shaderBundlePrompt = false;
+        shaderPreparationPrompt = false;
         modsOpen = false;
         modsDiscardPrompt = false;
         restartForMods = false;
@@ -2825,6 +2910,25 @@ PPC_FUNC(sub_822F19B0)
 #endif
                 }
             }
+        }
+        Publish(base, config);
+        return;
+    }
+    if (shaderPreparationPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            shaderPreparationChoice = std::min(selected, 1);
+        if (input & 3) shaderPreparationChoice = 1 - shaderPreparationChoice;
+        if (input & 0x2000) shaderPreparationChoice = 1;
+        if (input & 0x3000)
+        {
+            shaderPreparationPrompt = false;
+            if (shaderPreparationChoice == 0)
+                status = gpu::shader_preparation::RequestNextStart()
+                    ? Tr(L"Full shader preparation will run at the next start.",
+                         L"下次啟動時會完整準備著色器。")
+                    : Tr(L"Could not schedule preparation. Check the settings folder.",
+                         L"無法安排著色器準備。請確認設定目錄可寫入。");
         }
         Publish(base, config);
         return;
@@ -3455,7 +3559,7 @@ PPC_FUNC(sub_822F19B0)
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return (tab == 2 && GraphicsRowHidden(r)) || TitleModeHidden(tab, r);
+        return (tab == 2 && GraphicsRowHidden(r)) || (tab == 3 && SystemRowHidden(r)) || TitleModeHidden(tab, r);
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -3642,7 +3746,8 @@ PPC_FUNC(sub_822F19B0)
                     cycle(graphics_menu::ShadowResolutionChoice(edit), uint32_t(std::size(graphics_menu::ShadowResolutions)))];
                 break;
             case GraphicsRow::DynamicShadows:
-                edit.dynamicShadows = !edit.dynamicShadows;
+                edit.dynamicShadows = graphics_menu::DynamicShadowsValues[
+                    cycle(graphics_menu::DynamicShadowsChoice(edit), uint32_t(std::size(graphics_menu::DynamicShadowsValues)))];
                 break;
             case GraphicsRow::AntiAliasing:
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
@@ -3703,6 +3808,9 @@ PPC_FUNC(sub_822F19B0)
                 edit.frameRate = gpu::frame_rate::FromMenuIndex(cycle(index, gpu::frame_rate::kCount));
                 break;
             }
+            case GraphicsRow::LoadingTransitions:
+                edit.loadingTransitions = edit.loadingTransitions == 0 ? 2 : 0;
+                break;
             case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
                 edit.variableRefreshRate = !edit.variableRefreshRate;
@@ -3775,6 +3883,19 @@ PPC_FUNC(sub_822F19B0)
             }
             if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+            if (row == SystemDiscordStatusRow)
+            {
+                Config saved = GetConfig();
+                saved.discordStatus = !edit.discordStatus;
+                if (SaveConfig(saved))
+                {
+                    edit.discordStatus = saved.discordStatus;
+                    discord_rpc::SetEnabled(edit.discordStatus);
+                }
+                else status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            }
+#endif
             if (row == SystemDebugLogRow)
                 edit.debugLog = !edit.debugLog;
         }
@@ -3807,14 +3928,43 @@ PPC_FUNC(sub_822F19B0)
     }
     if ((input & 0x1000) && tab == 3 && row == SystemImportRow)
     {
+#if LO_PLATFORM_ANDROID
+        // RuntimeActivity handles this on the UI thread and keeps the game
+        // alive until the player confirms an import in GameFolderActivity.
+        // 0x8000 is RuntimeActivity.COMMAND_OPEN_GAME_FOLDER.
+        if (!SDL_SendAndroidMessage(0x8000, 0))
+        {
+            importLaunchPending = true;
+            restart::ReportLaunchFailure();
+        }
+#else
         importPrompt = true;
         importChoice = 1;
+#endif
         status.clear();
     }
+#if !LO_PLATFORM_SWITCH
+    if ((input & 0x1000) && tab == 3 && row == SystemAddToSteamRow && !SystemRowHidden(row))
+    {
+        const auto result = steam_shortcut::AddToSteam(FileSystem::GetGameRoot());
+        status = SteamShortcutMessage(result.status);
+        if (!result.detail.empty())
+        {
+            if (result.ok()) LOG_NOTICE("Add to Steam: {}", result.detail);
+            else LOG_WARNING("Add to Steam: {}", result.detail);
+        }
+    }
+#endif
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
     {
         shaderBundlePrompt = true;
         shaderBundleChoice = 1;
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemShaderPreparationRow)
+    {
+        shaderPreparationPrompt = true;
+        shaderPreparationChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 &&
@@ -3852,6 +4002,7 @@ PPC_FUNC(sub_822F19B0)
             graphics.gameLanguage = edit.gameLanguage;
             graphics.gameLanguagePack = edit.gameLanguagePack;
             graphics.automaticUpdates = edit.automaticUpdates;
+            graphics.discordStatus = edit.discordStatus;
             graphics.debugLog = edit.debugLog;
             edit = graphics;
             if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
@@ -3874,6 +4025,7 @@ PPC_FUNC(sub_822F19B0)
         languages.gameLanguage = edit.gameLanguage;
         languages.gameLanguagePack = edit.gameLanguagePack;
         languages.automaticUpdates = edit.automaticUpdates;
+        languages.discordStatus = edit.discordStatus;
         languages.debugLog = edit.debugLog;
         const Config before = GetConfig();
         if (restart::Required(before, languages))
@@ -3942,7 +4094,99 @@ PPC_FUNC(sub_822F19B0)
 
 bool settings::IsOpen()
 {
-    return active.load();
+    return active.load() || titleQuitOpen.load();
+}
+
+bool settings::IsTitleQuitOpen()
+{
+    return titleQuitOpen.load();
+}
+
+bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
+{
+    const auto close = [] {
+        titleQuitOpen = false;
+        titleQuitShortcut = titleShortcut = false;
+        titleQuitEscape = false;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        // The release poll is consumed too: B must never cancel the title
+        // menu after dismissing this dialog, nor Back immediately reopen it.
+        releaseToParent = true;
+    };
+    if (!idle || active.load())
+    {
+        titleQuitShortcut = false;
+        if (titleQuitOpen.load())
+        {
+            close();
+            LOG_INFO("settings: title Quit confirmation closed outside the idle menu");
+        }
+        return false;
+    }
+    const bool opening = !titleQuitOpen.load();
+    if (opening)
+    {
+        if (!titleQuitShortcut.exchange(false))
+            return false;
+        titleQuitChoice = 1;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        titleQuitEscape = false;
+        waitForRelease = true;
+        const auto config = ConfigAddress(base);
+        swapConfirm = config && (PPC_LOAD_U32(config + 4) & 0x02000000) != 0;
+    }
+    else
+    {
+        uint16_t input = pending.exchange(0) | mouseAction.exchange(0);
+        if (const int selected = mouseDialog.exchange(-1); selected >= 0)
+            titleQuitChoice = std::min(selected, 1);
+        if (input & 3)
+            titleQuitChoice = 1 - titleQuitChoice;
+        const bool cancel = titleQuitEscape.exchange(false) || (input & (0x2000 | TitleQuitButton));
+        if (cancel || (input & 0x1010)) // A or keyboard Enter / Start answers.
+        {
+            if (cancel || titleQuitChoice == 1)
+                LOG_INFO("settings: title Quit confirmation No; returning to title menu");
+            else
+            {
+                LOG_INFO("settings: title Quit confirmation Yes");
+                // Exactly the native System Quit path. A rejected SDL event
+                // leaves the title running and another fresh press can retry.
+                if (!quit_action::PushQuit())
+                    LOG_WARNING("settings: title Quit failed; staying on title menu");
+            }
+            close();
+            return true;
+        }
+    }
+    MenuSnapshot next;
+    next.dialogOnly = true;
+    next.language = GetConfig().uiLanguage;
+    next.confirmB = swapConfirm.load();
+    next.dialogTitle = Translate(next.language, L"Quit game", L"退出遊戲");
+    next.dialogMessage = Translate(next.language, L"Quit the game?", L"退出遊戲嗎？");
+    next.dialogChoices = {Translate(next.language, L"Yes", L"是"), Translate(next.language, L"No", L"否")};
+    next.dialogSelection = titleQuitChoice;
+    {
+        std::lock_guard lock(snapshotMutex);
+        if (!snapshot.dialogOnly || next.language != snapshot.language || next.dialogSelection != snapshot.dialogSelection ||
+            next.confirmB != snapshot.confirmB)
+        {
+            next.revision = snapshot.revision + 1;
+            snapshot = std::move(next);
+        }
+    }
+    // Presentation and input see an open dialog only after its full snapshot.
+    if (opening)
+    {
+        titleQuitOpen = true;
+        LOG_INFO("settings: title Quit confirmation opened (No selected)");
+    }
+    return true;
 }
 
 bool settings::ConsumeTitleShortcut(bool idle)
@@ -3959,6 +4203,100 @@ bool settings::ConsumeTitleShortcut(bool idle)
 void settings::MarkTitleEntry()
 {
     titleEntry = true;
+}
+
+bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
+{
+    // This overlay has its own cache and motion. DrawMenu is a full-screen
+    // replacement for the retail Settings task; the title must stay underneath.
+    static uint64_t cachedRevision = ~uint64_t{}, outputRevision = 0;
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    static bool cachedPlayStation = false, shown = false, closing = false;
+    static std::shared_ptr<const menu_assets::Assets> cachedAssets;
+    static MenuTransition motion;
+    static std::vector<uint32_t> raster;
+    static MenuTransition::Clock::time_point lastFrame{};
+    const auto advance = [&](MenuTransition::Clock::time_point now) {
+        if (motion.Running() && now != lastFrame)
+        {
+            motion.Advance(pixels, now);
+            ++outputRevision; // Includes the final frame, when Advance returns false.
+        }
+        lastFrame = now;
+        revision = outputRevision;
+    };
+    const auto reset = [&] {
+        shown = closing = false;
+        cachedAssets.reset();
+        motion.Reset();
+        std::vector<uint32_t>().swap(raster);
+    };
+    const bool compatible = cachedWidth == width && cachedHeight == height &&
+                            pixels.size() == size_t(width) * height && !pixels.empty();
+    if (!titleQuitOpen.load())
+    {
+        if (!shown)
+            return false;
+        if (!compatible)
+        {
+            reset();
+            return false;
+        }
+        const auto now = MenuNow();
+        if (!closing)
+        {
+            advance(now);
+            raster = pixels;
+            // Preserve straight RGB: fading RGB as well as alpha would darken
+            // the dialog twice when the overlay is composited over the title.
+            for (auto &pixel : raster)
+                pixel &= 0x00ffffffu;
+            closing = motion.Start(pixels, raster, width, now, menu_motion::DialogFade);
+        }
+        advance(now);
+        if (closing && motion.Running())
+            return true;
+        reset();
+        return false;
+    }
+    MenuSnapshot current;
+    {
+        std::lock_guard lock(snapshotMutex);
+        current = snapshot;
+    }
+    current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
+    const bool opened = !shown;
+    if (opened || closing || !compatible || cachedRevision != current.revision ||
+        cachedPlayStation != current.playStationPrompts || cachedAssets != current.assets)
+    {
+        if (!RasterizeMenu(current, width, height, raster))
+            return false;
+        const auto now = MenuNow();
+        if (opened || !compatible)
+        {
+            pixels = raster;
+            for (auto &pixel : pixels)
+                pixel &= 0x00ffffffu;
+        }
+        else
+            advance(now);
+        if (!motion.Start(pixels, raster, width, now, menu_motion::DialogFade))
+            return false;
+        lastFrame = now;
+        shown = true;
+        closing = false;
+        cachedRevision = current.revision;
+        cachedWidth = width;
+        cachedHeight = height;
+        cachedPlayStation = current.playStationPrompts;
+        cachedAssets = current.assets;
+        revision = ++outputRevision;
+        return true;
+    }
+    // A stable snapshot still needs a new fade frame on the presentation thread.
+    advance(MenuNow());
+    return true;
 }
 
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
@@ -4009,6 +4347,15 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         DrawMenuArrow(pixels, width, height, x, y);
         arrowDrawn = MenuArrowBounds(width, height, x, y);
     };
+    if (titleQuitOpen.load())
+    {
+        // A title confirmation is a translucent overlay, never a replacement
+        // menu frame. DrawTitleQuit owns its raster and fade independently.
+        shown = closing = arrowPlaced = false;
+        arrowDrawn = markerDrawn = {};
+        motion.Reset();
+        return false;
+    }
     if (!active.load())
     {
         // Closing: the content fades off the panels before the game's own exit
@@ -4089,7 +4436,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         panels.assets = current.assets;
         panels.backdropOnly = true;
         eased = RasterizeMenu(panels, width, height, pixels) &&
-                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height));
+                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height, current.tab, !current.pageTitle.empty()));
     }
     else if (!opened && cachedWidth == width && cachedHeight == height &&
              cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)

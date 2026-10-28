@@ -1,0 +1,119 @@
+name: Android APK
+
+# Builds, lints and tests the arm64 development APK with the same host code
+# generation and Android build script as the release workflow. Dependency
+# caches are shared with release builds; a green run is packaging validation.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - .github/workflows/android-apk.yml
+      - packaging/android/**
+      - thirdparty/libadrenotools/**
+      - thirdparty/signalsmith*/**
+      - LostOdysseyRecomp/apu/**
+      - tools/android/**
+permissions:
+  contents: read
+jobs:
+  apk:
+    name: Android arm64 APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      LO_BUILD_JOBS: 4
+      CCACHE_MAXSIZE: 2G
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host toolchain for the recompiler tools
+        run: bash tools/release/install_appimage_toolchain.sh
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build file unzip wget ccache openjdk-17-jdk-headless
+          # Jammy's distribution CMake predates the project's 3.28 minimum.
+          python -m pip install 'cmake==3.31.6'
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+      - name: Configure Android cache directories
+        run: echo "LO_ANDROID_CI_CACHE=$RUNNER_TEMP/lo-android-ci" >> "$GITHUB_ENV"
+      - name: Cache Android SDK and NDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/android-sdk
+          key: android-sdk-${{ runner.os }}-cmdline11076708-api35-build35-ndk28.2.13676358-cmake3.22.1-v1
+      - name: Cache Android DXC
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/android-dxc
+          key: android-dxc-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/build-dxc.sh', 'tools/android/ci_build.sh') }}
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.LO_ANDROID_CI_CACHE }}/gradle/caches
+            ${{ env.LO_ANDROID_CI_CACHE }}/gradle/wrapper
+          key: android-gradle-${{ runner.os }}-${{ hashFiles('packaging/android/**/*.gradle', 'packaging/android/**/*.gradle.kts', 'packaging/android/gradle.properties', 'packaging/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: android-gradle-${{ runner.os }}-
+      - name: Cache Android compiler objects
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LO_ANDROID_CI_CACHE }}/ccache
+          key: android-ccache-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/*.sh', 'CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
+          restore-keys: |
+            android-ccache-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/*.sh', 'CMakeLists.txt', 'cmake/**') }}-
+            android-ccache-${{ runner.os }}-ndk28.2.13676358-
+      - name: Retrieve private build input
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
+          repository: freefrank/LostOdysseyRecomp-build-inputs
+          ref: 2ba529b72c68ae2ee01903d24f7eac55cbb900df
+          path: out/build-input
+          sparse-checkout: |
+            /default.xex
+            /android/libdxcompiler.so
+            /android/debug.keystore
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify private build input
+        env:
+          LO_BUILD_XEX_PATH: out/build-input/default.xex
+        run: python tools/release/fetch_build_input.py
+      - name: Apply dependency patches
+        run: |
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+      - name: Build recompiler tools
+        run: |
+          cmake -S tools/xexdump -B out/build/tools -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18
+          cmake --build out/build/tools --target XenonRecomp XenonAnalyse xexdump
+      - name: Generate game code
+        run: |
+          out/build/tools/xexdump LostOdysseyRecompLib/private/disc1/default.xex LostOdysseyRecompLib/private/image_disc1.bin
+          python tools/ppc_codegen.py generate --executable out/build/tools/XenonRecomp/XenonRecomp/XenonRecomp
+      - name: Build the APK
+        run: bash tools/android/ci_build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdysseyRecomp-android-arm64-debug
+          path: out/apk/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            packaging/android/runtime/build/reports/**
+            packaging/android/runtime/build/test-results/**
+          retention-days: 7

@@ -12,7 +12,7 @@ platform support. This implementation builds on that port.
 |---|---|
 | DLSS FG, Windows Vulkan | Implemented persisted settings and fixed 2×–6× requests, limited by the actual Streamline capability. Existing proxy retained for live Off/On and multiplier changes. On an RTX 5080, 2×, 4× and 6× generate frames, including scaled 1080p input and after window resize/minimize/restore. |
 | FSR 3.1.4 FG, Windows Vulkan | Implemented the FidelityFX 1.1.4 adapter, exclusive queue reservations, opt-in logical-device extensions/features, replacement WSI, depth conversion, Prepare/Generate, host-fence input retirement, resize and settings. Fixed 2×, immediate presentation. On an RTX 5080 it generates every prepared frame, including scaled input and after window lifecycle changes. Source builds only. |
-| MetalFX FG, macOS Metal | Implemented `MTLFXFrameInterpolator` and generated-then-real presentation on the existing Metal backend. Requires macOS 26 and `supportsDevice:`. Fixed 2×, live Off/On. Experimental; not run on Mac hardware. |
+| MetalFX FG, macOS Metal | Implemented `MTLFXFrameInterpolator` and generated-then-real presentation on the existing Metal backend. Requires macOS 26 and `supportsDevice:`. Fixed 2×, live Off/On. Experimental; no Mac hardware run at the 2026-10-01 review. See the #651 follow-up below. |
 | DLSS dynamic MFG, Vulkan | Explicitly rejected: Streamline 2.14.1 documents dynamic MFG as D3D12-only. |
 | DLSS FG, native Linux Vulkan | The pinned Streamline release has no native Linux FG runtime. No Linux provider advertised. |
 | FSR FG, native Linux Vulkan | Algorithm sources exist, but the pinned SDK presenter depends on Win32 threads/events/timing. A native presenter port is still required; existing Linux FSR SR is unaffected. |
@@ -261,7 +261,8 @@ external LSFG route does not change the native FSR/FSR 4 support claims above.
 
 `LO_ENABLE_METALFX_FG` defaults On for macOS builds. The provider appears in the
 graphics menu, whose help marks it experimental; `LO_FG_PROVIDER=metalfx` also
-selects it. It supports fixed 2×. It has not been run on Mac hardware.
+selects it. It supports fixed 2×. No Mac hardware run had been completed at the
+2026-10-01 review; the #651 follow-up below records later testing.
 Older SDKs compile an unavailable path; macOS 26 availability and the actual
 Metal device's `supportsDevice:` are both checked before input capture begins.
 The integration uses regular `MTLCommandBuffer`, not Metal 4 command buffers.
@@ -516,6 +517,40 @@ PR [#274](https://github.com/freefrank/LostOdysseyRecomp/pull/274) (merged
 exclusive fullscreen; the display modes are Windowed and Fullscreen (borderless).
 This note records no separate acceptance run for frame generation in Fullscreen
 (borderless).
+
+### macOS New Game crash (#651), 2026-10-18
+
+The Mac hardware limits above describe the October 1 review. Investigation
+[#651](https://github.com/freefrank/LostOdysseyRecomp/issues/651) later used an
+M1 Max with 32 GiB on macOS 26.6.2 (25G83). The verified published v1.0.5 binary
+crashed after closing the New Game settings with FG on: SIGSEGV at 29.4 seconds
+in the foreground and 28.9 seconds with `LO_BACKGROUND=1`. Both crash reports
+identify the full-texture copy in `plume::MetalCommandList::copyTexture` before
+MetalFX SDK encoding.
+
+That copy cast every `RenderTexture` to `MetalTexture` and read its `mtl`
+member. Swapchain images are `MetalDrawable`, whose native member layout
+differs; the invalid read passed a C++ vtable pointer to Objective-C as a Metal
+texture. The macOS Plume patch now obtains both native textures through
+`ExtendedRenderTexture::getTexture()`.
+
+The new Apple GPU test, `metal_texture_copy`, copies a patterned ordinary
+texture to a real drawable and back to another texture, checking both readbacks
+pixel for pixel. On this Mac the old implementation segfaulted in 0.64 seconds;
+the patched implementation passed in 0.40 seconds. Separate offscreen MetalFX
+descriptor/encode probes also passed, but do not test drawable copies or frame
+presentation.
+
+A full RelWithDebInfo build of `26257de9` plus this fix, with freshly generated
+guest code, then passed the 87.4-second `fixed-front-battle` scenario. With FG
+on and the window confirmed active, New Game passed the settings transition and
+reached the Wohl Highlands opening battle; the screenshot shows Kaim's battle
+menu. The run recorded `max_draws=1973`, no error/guest-bug/shader-failure
+entries and no new crash reports, and exited cleanly at the scenario cutoff.
+Between 56.394 and 84.679 seconds, `generated_then_real_pairs` advanced to 960
+with `scope=host_not_display`. This counts successful host presentation API
+pairs; it does not establish physical-panel scanout, image quality or pacing.
+The reporter's base M1 remains untested. The fix has not been released.
 
 ## Primary sources
 

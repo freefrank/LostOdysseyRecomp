@@ -17,6 +17,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -87,6 +88,7 @@ final class TouchControlsView extends View {
         long now = SystemClock.uptimeMillis();
         ctrl.reset(now);
         ctrl.setEnabled(preferences.getBoolean("ctrl_auto_hide", true), now);
+        ctrl.setHideAll(preferences.getBoolean("hide_all", false), now);
         setClickable(true);
         setContentDescription("Touch controller settings");
     }
@@ -156,6 +158,18 @@ final class TouchControlsView extends View {
         cancelCtrlWake();
         clearTouches();
     }
+
+    /** System bars and Android Back restore only CTRL, never the hidden gamepad. */
+    void revealCtrl() {
+        ctrl.activity(SystemClock.uptimeMillis());
+        invalidate();
+    }
+
+    private boolean controlsVisible() {
+        return !ctrl.hideAll() && visibility.visible();
+    }
+
+    boolean hidesAllControls() { return ctrl.hideAll(); }
 
     private static float bounded(float value, float minimum, float maximum,
                                  float fallback) {
@@ -294,7 +308,7 @@ final class TouchControlsView extends View {
     private void publish() {
         int buttons = 0, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0;
         boolean leftAssigned = false, rightAssigned = false;
-        if (visibility.visible() && !editing && layout != null && baseUnit > 0f) {
+        if (controlsVisible() && !editing && layout != null && baseUnit > 0f) {
             float unit = unit();
             for (int i = 0; i < pointers.size(); ++i) {
                 Pointer pointer = pointers.valueAt(i);
@@ -364,9 +378,11 @@ final class TouchControlsView extends View {
     }
 
     private void applySettings(boolean show, int sizePercent, int opacityPercent,
-                               boolean ctrlAutoHide) {
+                               boolean ctrlAutoHide, boolean hideAll) {
         clearTouches();
         ctrl.setEnabled(ctrlAutoHide, SystemClock.uptimeMillis());
+        ctrl.setHideAll(hideAll, SystemClock.uptimeMillis());
+        activity.updateSystemBarsBehavior();
         float size = sizePercent / 100f;
         if (!customLayout) layout = TouchControlLayout.defaults(
             getWidth(), getHeight(), baseUnit * size);
@@ -375,7 +391,8 @@ final class TouchControlsView extends View {
         layout.clampAll(getWidth(), getHeight(), baseUnit * layout.size, 0f);
         preferences.edit().putFloat("size", layout.size)
             .putFloat("opacity", layout.opacity)
-            .putBoolean("ctrl_auto_hide", ctrlAutoHide).apply();
+            .putBoolean("ctrl_auto_hide", ctrlAutoHide)
+            .putBoolean("hide_all", hideAll).apply();
         setControlsEnabled(show);
     }
 
@@ -426,6 +443,15 @@ final class TouchControlsView extends View {
         ctrlAutoHide.setChecked(ctrl.enabled());
         content.addView(ctrlAutoHide);
 
+        Context strings = SaveLocationStrings.context(activity);
+        CheckBox hideAll = new CheckBox(activity);
+        hideAll.setText(strings.getString(R.string.touch_hide_all));
+        hideAll.setChecked(ctrl.hideAll());
+        content.addView(hideAll);
+        TextView hideAllHelp = new TextView(activity);
+        hideAllHelp.setText(strings.getString(R.string.touch_hide_all_help));
+        content.addView(hideAllHelp);
+
         // Qualcomm and Mali devices: open the GPU driver page (download / switch Turnip or PanVK).
         Button driverButton = null;
         if (GpuDriverStore.supported()) {
@@ -445,15 +471,17 @@ final class TouchControlsView extends View {
         folderButton.setAllCaps(false);
         content.addView(folderButton);
 
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(content);
         AlertDialog settingsDialog = new AlertDialog.Builder(activity)
             .setTitle("Controller settings")
-            .setView(content)
+            .setView(scroll)
             .setPositiveButton("Apply", (dialog, which) ->
                 applySettings(toggle.isChecked(), size.getProgress() + 60,
-                              opacity.getProgress() + 25, ctrlAutoHide.isChecked()))
+                              opacity.getProgress() + 25, ctrlAutoHide.isChecked(), hideAll.isChecked()))
             .setNeutralButton("Edit layout", (dialog, which) -> {
                 applySettings(toggle.isChecked(), size.getProgress() + 60,
-                              opacity.getProgress() + 25, ctrlAutoHide.isChecked());
+                              opacity.getProgress() + 25, ctrlAutoHide.isChecked(), hideAll.isChecked());
                 enterEditor();
             })
             .setNegativeButton("Cancel", null)
@@ -639,7 +667,7 @@ final class TouchControlsView extends View {
             long now = SystemClock.uptimeMillis();
             layoutCtrl(now);
             boolean onTab = ctrl.retracted() && ctrl.hitTab(x, y);
-            if (settingsPointer == -1 && (onTab
+            if (ctrl.visible(now) && settingsPointer == -1 && (onTab
                     || (!ctrl.retracted() && onCtrl(x, y)))) {
                 // A touch on the retracted tab only brings CTRL back.
                 settingsPointer = id;
@@ -648,7 +676,7 @@ final class TouchControlsView extends View {
                 syncCtrlPin();
                 return true;
             }
-            if (!visibility.visible()) return action == MotionEvent.ACTION_POINTER_DOWN;
+            if (!controlsVisible()) return action == MotionEvent.ACTION_POINTER_DOWN;
             int element = elementAt(x, y, false);
             if (element < 0) return action == MotionEvent.ACTION_POINTER_DOWN;
             pointers.put(id, new Pointer(element, x, y));
@@ -846,7 +874,7 @@ final class TouchControlsView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (baseUnit <= 0f || activeLayout() == null) return;
-        if (visibility.visible() || editing) {
+        if (controlsVisible() || editing) {
             for (int id = 0; id < TouchControlLayout.COUNT; ++id) drawElement(canvas, id);
         }
         if (editing) {
@@ -871,6 +899,7 @@ final class TouchControlsView extends View {
 
     private void drawCtrl(Canvas canvas) {
         long now = SystemClock.uptimeMillis();
+        if (!ctrl.visible(now)) return;
         float progress = layoutCtrl(now);
         float radius = settingRadius();
         // Follows the layout's opacity slider (#253), fainter as a retracted tab.

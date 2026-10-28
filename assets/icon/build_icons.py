@@ -5,6 +5,7 @@ through WSL (`wsl rsvg-convert`). Writes:
   assets/lost-odyssey-recomp.png   1024 px: README logo and the macOS .icns source
   assets/lost-odyssey-recomp.ico   16-48 px from icon-small.svg, 64-256 px from icon.svg
   packaging/linux/io.github.freefrank.LostOdysseyRecomp.png   256 px
+  assets/steam/icon.png   256 px, opaque square with the medallion on navy
   packaging/android/runtime/src/main/res/mipmap-*/ic_launcher{,_foreground,_background,_monochrome}.png
 """
 import io
@@ -44,9 +45,20 @@ def desktop(size):
     return render(HERE / ("icon-small.svg" if size <= SMALL_MAX else "icon.svg"), size)
 
 
+def steam():
+    # The master's visible rim fills about 91% of its canvas. A 248 px canvas
+    # gives a centered 225 px medallion (88% of the 256 px square).
+    medallion = render(HERE / "icon.svg", 1024)
+    medallion = medallion.convert("RGBa").resize((248, 248), Image.Resampling.LANCZOS).convert("RGBA")
+    square = Image.new("RGBA", (256, 256), "#08111f")
+    square.alpha_composite(medallion, (4, 4))
+    return square.convert("RGB")
+
+
 def main():
     desktop(1024).save(ROOT / "assets/lost-odyssey-recomp.png", optimize=True)
     desktop(256).save(ROOT / "packaging/linux/io.github.freefrank.LostOdysseyRecomp.png", optimize=True)
+    steam().save(ROOT / "assets/steam/icon.png", optimize=True)
 
     sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
     frames = [desktop(size) for size in sizes]

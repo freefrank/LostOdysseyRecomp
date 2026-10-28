@@ -56,6 +56,8 @@
 | macOS arm64 | `LostOdysseyRecomp-macos-arm64-<版本>.dmg` | 把 `LostOdysseyRecomp.app` 拖到“应用程序”。需要 macOS 15 或更高版本的 Apple Silicon Mac。 |
 | Android arm64 | `LostOdysseyRecomp-android-arm64-<版本>.apk` | 安装 APK 后先打开一次。需要支持 Vulkan 的 64 位 Android 8.0 及以上设备。 |
 
+Steam Deck 上，两个 Linux 安装包都可通过 **设置 → 系统 → 添加到 Steam** 把游戏及库封面加入 Steam（[操作步骤](docs/INSTALLING.zh-CN.md#steam-deck)）。库封面从你的游戏文件生成，失败时使用随包的备用美术。
+
 1. **导入游戏数据。** 找不到游戏时会打开导入器。选择已提取的游戏文件夹、`default.xex`、ISO 或 GOD 数据。
 2. **准备着色器。** 首次启动时游戏会询问是否下载所选渲染器的预编译着色器；选择跳过则在本机编译一次。
 3. **追加其他光盘和 DLC：** 设置中的 **System → Import discs & DLC（系统 → 导入光盘与 DLC）**。四张光盘都导入后，游戏会自动换盘。
@@ -71,16 +73,16 @@
 - **游戏数据：** 打开应用会建好 `Android/data/io.github.freefrank.lostodyssey/files/game/`。用 USB 把解出的 `disc1`–`disc4` 复制进去，或者用 **Game folder → Import disc images…** 导入光盘镜像。**CTRL → Game folder** 可以改用其他文件夹或 SD 卡。
 - **高通设备：** 首次启动前会打开 **GPU driver** 页面，在那里下载 Turnip 驱动。
 - **Mali 设备：** 同样会先打开 **GPU driver** 页面，在那里下载推荐的 PanVK 驱动；需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU。
-- **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。
+- **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。开启“隐藏所有触控控件”后，呼出系统栏或使用 Android 返回可显示 CTRL 4 秒。
 - **更新：** 新 APK 直接覆盖安装，存档保留。
-- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。
+- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。其中 **Keep saves in the game folder（将存档保存在游戏文件夹中）** 选项可把存档放到 `<游戏文件夹>/save/`，方便与电脑同步；默认关闭，下次启动应用时生效。
 - **日志：** **CTRL → Saves and logs → Export logs** 可以把日志导出成 ZIP，用于反馈问题（[详见](docs/INSTALLING.zh-CN.md#android-logs)）。
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
 
-### Nintendo Switch（实验性）
+### Nintendo Switch
 
-自制程序版本，需要运行 Atmosphère 的主机，画面与 Xbox 360 版相同（掌机默认 540p、底座默认 720p，不带 PC 版新增的图像选项）。目前还很早期，运行较慢。构建方法、SD 卡目录和所需的着色器文件见 [Switch 说明](docs/SWITCH.md)（英文）。
+Ad0ky 维护一个实验性的 Switch 自制版本，需要运行自定义固件的主机。它不在本项目的发布里，请到 [Ad0ky 的发布页](https://github.com/Ad0ky/LostOdysseyRecomp/releases)下载，安装步骤也在那里。
 
 ### HDR
 
@@ -92,17 +94,19 @@
 | :--- | :--- |
 | 导入 | 支持文件夹、XEX、ISO、GOD、DLC 和替换光盘。原始文件保持不变。 |
 | 语言 | 菜单提供英语、日语、韩语、繁体中文和简体中文。游戏语言取决于你的版本。 |
-| 显示 | 窗口或全屏，可选显示器和 GPU，16:9 和 21:9 分辨率（16:10 等更高的屏幕会被画面铺满），[HDR](#hdr) 和**亮度 / Gamma**。 |
+| 显示 | 窗口或全屏，可选显示器和 GPU，16:9 和 21:9 分辨率（16:10 等更高的屏幕会被画面铺满），[HDR](#hdr) 和**亮度 / Gamma**。过场动画和暂停画面使用居中的 16:9 区域。 |
 | 抗锯齿与超分 | FXAA、SMAA、TAA、DLSS、FSR 3.1、XeSS（Windows Direct3D 12）和 MetalFX（macOS）。 |
 | 图像选项 | 阴影分辨率 1×／2×／4×、SSAO／GTAO、各向异性过滤、景深和泛光。 |
 | 帧率 | 30／60／90／120 FPS；垂直同步可选关、开或 FreeSync／G-SYNC Compatible VRR。**性能信息**可显示帧率，或显示包含超分、插帧、CPU 和 GPU 负载的信息栏。 |
-| 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。 |
+| 加载速度 | “图形 → 加载速度”：原版保持 Xbox 360 的加载节奏；快速（默认）以更高帧率加载。两种设置下过场效果都保持正常速度。 |
+| 插帧 | Windows Direct3D 12 上可用 DLSS、FSR 或 XeSS；Windows Vulkan 上可用 DLSS。显示过场黑边时暂停插帧，回到游戏后恢复。 |
 | DLSS 5 神经渲染 | Windows 上开启 DLSS 的 RTX 显卡可用。需要 `nvngx_dlssnr.dll`，游戏不附带该文件：请把自备的副本（测试版本 310.8.0.0）放在 `LostOdysseyRecomp.exe` 旁并重启。 |
 | 着色器 | 首次启动下载预编译着色器，或在本机编译一次并缓存。 |
 | 声音 | 立体声、5.1 环绕声，或交给 AV 功放还原的矩阵环绕声。过场对白有单独的音量。 |
 | 输入 | 手柄、键盘和震动；Android 上有触摸按键。 |
 | Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包（可补充游戏字体缺少的字母），以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。现成的 Mod（例如 4x 高清纹理包）在 [Discord](https://discord.gg/z2yPct6z2w) 的 **#mods** 论坛里分享。 |
 | 成就 | 游戏的 36 个 Xbox 360 成就，解锁时显示 Xbox 360 风格的通知并播放提示音。**设置 → 系统 → 成就**列出全部成就和解锁日期，也可以把通知设为开启、静音或关闭。在 `settings.ini` 旁边放一个 `achievement.wav` 可以替换提示音。 |
+| Discord 状态 | Windows、Linux 和 macOS：在 Discord 中显示当前地点、光盘和活动。**设置 → 系统 → Discord 状态**默认开启，修改后立即生效。状态未显示时，可在运行日志中查看连接和活动诊断信息。 |
 | 调试菜单 | 渲染捕获、随时存档、遇敌开关、传送、快进和修改。见[调试菜单](#调试菜单)。 |
 
 ## 操作按键
@@ -116,9 +120,13 @@
 | 十字键／左摇杆 | 方向键／I、J、K、L |
 | 左／右肩键 | Q／W |
 | 左／右扳机 | E／R |
+| 标题菜单：设置（Y） | S |
+| 标题菜单：退出游戏（Back／View） | Backspace |
 | 调试菜单 | F1 |
 
 以上是默认按键。**设置 → 游戏 → 按键设置**可以更改键盘按键和手柄按键，也可以设置按键提示和震动强度。
+
+从标题菜单退出游戏前会询问确认，默认选中“否”。
 
 按 **Back** 切换小地图缩放，按住约半秒可隐藏小地图。Ring 操作用手柄**右扳机**或键盘 **R**。
 
@@ -138,11 +146,11 @@
 
 ### Overview：捕获与游戏操作
 
-**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**No Random Encounters（不遇敌）**、**Encounter Every Step（一步一遇敌）**，以及直接赢下当前战斗的操作。
+**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Return to title（返回标题，仅限战斗外）**，以及直接赢下当前战斗的操作。
 
 - **Capture render state：** 确认后关闭菜单。归档保存在 `captures/`，内含截图、渲染数据和日志，分享前请检查内容。
 - **Save Anywhere** 会开放原作的 **System → Save（系统 → 存档）**。
-- **No Random Encounters** 停止场景中的随机战斗，剧情战斗照常发生。**Encounter Every Step** 让每走一步都遇敌。
+- **Return to title** 会在确认后返回标题画面，未保存的进度将丢失。从开始切入战斗、胜利及结算画面，直到恢复场景或世界地图控制前均不可用。请先关闭存档/读档画面，并等待保存或读取完成后再使用。
 
 ### Teleport：当前地图内移动
 
@@ -154,14 +162,20 @@
 
 | 类别 | 功能 |
 | :--- | :--- |
-| **Quick tools** | 快进、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
+| **Quick tools** | 快进、**Encounter rate（遇敌率）**、**Battle EXP ×2（战斗经验 ×2）**、菜单动画速度、**Allow memory edits（允许内存修改）**、金币和 HP／MP。 |
 | **Characters** | HP／MP、EXP（0–99，不是等级）和技能。 |
 | **Inventory** | 把物品和素材设为 1、10、50 或 99，或填满整类。在游戏背包里整理一次即可刷新显示。 |
 | **Equipment** | 修改武器、指环和饰品。 |
 | **Party** | 修改队伍成员、前后排和场景角色。 |
 | **Developer** | 原版 **EDIT MENU** 入口：开启后关闭 F1，按 **LT+RT**。 |
 
-**快进**倍率 2×–8×，按住 **LT**（**Hold**）或按一下切换（**Toggle**）。
+**Menu animations（菜单动画）**可把营地菜单打开、关闭和子菜单切换动画设为**正常（1×）**、**快速（2×）**或**更快（4×）**。选择会保存，默认正常。游戏运行和音频保持原速。
+
+**快进**倍率为 2×–8×，可按住所选按键（**Hold**）或按一下切换（**Toggle**）。在**辅助 / 修改**→**变速按键**（位于**变速模式**旁）选择 LT（默认）或 LB。选择 LT 时，同时按住 RT 会阻止快进；选择 LB 时，同时按住 RB 会阻止快进。**变速音频**默认**保持音调**，也可选择**随速度升调**。选择会保存。
+
+**遇敌率**可选**正常**、**减半**、**关闭**或**一步一遇敌**。减半会跳过每隔一次的随机遇敌；一步一遇敌仅在有随机遇敌的区域生效。剧情战斗和 Boss 不受影响。一步一遇敌用于临时测试，重启后恢复最后选择的正常／减半／关闭。**战斗经验 ×2** 可单独开启并保存，使战斗获胜所得的经验加倍。
+
+经验按游戏原有的等级差规则计算后再翻倍，保留原有的单场上限。SP 和金币保持原样。
 
 **内存修改**默认关闭。先备份存档，开启 **Allow memory edits**，选择操作并确认 **Yes**，关闭 F1 后生效。
 
@@ -175,7 +189,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | Linux AppImage | `~/.config/lost-odyssey-recomp/` | `~/.local/share/lost-odyssey-recomp/` | `~/.local/state/lost-odyssey-recomp/` |
 | Linux Flatpak | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/config/lost-odyssey-recomp/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/data/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/.local/state/lost-odyssey-recomp/` |
 | macOS 应用 | `~/Library/Application Support/LostOdysseyRecomp/` | 同左 | `~/Library/Logs/LostOdysseyRecomp/` |
-| Android | 应用内部 | 应用内部；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
+| Android | 应用内部 | 存档默认在应用内部，可改为 `<游戏文件夹>/save/`；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` 或所选文件夹 | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
 
 | 内容 | 位置 | 说明 |
 | :--- | :--- | :--- |
@@ -197,6 +211,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏文件夹（含 `default.xex` 或 `disc1/`）或 `default.xex` 文件，跳过导入器。 |
 | `--install` | 即使已经设置好游戏也打开导入器。 |
+| `--add-to-steam` | 把游戏及库封面加入 Steam，然后返回状态码并退出。请先关闭 Steam；移动游戏后需重新添加。 |
 | `--setup` | Windows：打开设置页面，然后进入游戏。 |
 | `--prepare-shaders-only` | 预先准备全部着色器，然后不启动游戏直接退出。 |
 
@@ -210,6 +225,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | Windows 上为 `d3d12` 或 `vulkan`。 |
 | `LO_FPS` | 帧率上限；`0` 表示不限制。 |
+| `LO_FAST_LOADING=0/1` | 覆盖“加载速度”设置：`0` 使用原版节奏，`1` 使用快速加载。未设置时，由 `settings.ini` 的 `loading_transitions=0/2` 保存原版/快速选择。快速加载时，Android 和检测到电池的设备最多使用所选上限的 4 倍，最高 240 FPS；所选帧率不限制时也使用 240 FPS。 |
 | `LO_NO_UPDATE=1` | 跳过更新检查。 |
 | `LO_MODS=0` | 关闭 Mod。 |
 | `LO_AUDIO_MUTE=1` | 静音。 |
@@ -218,11 +234,11 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## 反馈问题
 
-[提交 issue](https://github.com/freefrank/LostOdysseyRecomp/issues) 时请写明版本、操作系统、图形后端、GPU 和驱动、游戏版本和光盘，以及出现问题的步骤或场景，并附上最新的 `logs/runtime-<timestamp>.log`。需要完整日志时，先在**设置 → 系统**打开“调试日志”并保存，再重现一次问题后附上。
+[提交 issue](https://github.com/freefrank/LostOdysseyRecomp/issues) 时请写明版本、操作系统、图形后端、GPU 和驱动、游戏版本和光盘，以及出现问题的步骤或场景，并附上最新的 `logs/runtime-<timestamp>.log`。**设置 → 系统 → 调试日志**默认开启。如果之前关闭过，请重新开启、保存并重启游戏，再重现一次问题。
 
 画面问题请在问题出现时做一次[渲染捕获](#overview捕获与游戏操作)。不要附上游戏文件、存档或个人数据。
 
-可选诊断默认关闭，见[隐私说明](PRIVACY.zh-CN.md)。
+可选的日志收集默认关闭，见[隐私说明](PRIVACY.zh-CN.md)。
 
 ## 实机画面
 
@@ -238,11 +254,11 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## 赞助者
 
-感谢 **Frenzy Fresh**、**José Antonio Martínez Godoy**、**C_BAR**、**Arakon**、**Efren V**、**Torresmo**、**doc_haz**、**Whitesun** 和 **Cristian** 在 [Ko-fi](https://ko-fi.com/dotslash) 上支持本项目。
+感谢 **CarlosVonSexron**、**Atlas**、**stratosG**、**iambRad**、**Frenzy Fresh**、**José Antonio Martínez Godoy**、**C_BAR**、**Arakon**、**Efren V**、**Torresmo**、**doc_haz**、**Whitesun** 和 **Cristian** 在 [Ko-fi](https://ko-fi.com/dotslash) 上，以及 **Norghat**、**Morgan** 和一位匿名支持者在 [Buy Me a Coffee](https://buymeacoffee.com/dotslash) 上支持本项目。
 
 ## 致谢与游戏数据
 
-感谢所有提交过 PR 和补丁的人：[MikeRavenelle](https://github.com/MikeRavenelle)、[dj5927](https://github.com/dj5927)、[Xarishark](https://github.com/Xarishark)、[navjack](https://github.com/navjack)、[frankzzz](https://github.com/frankzzz) 和 [cngjd](https://github.com/cngjd)。macOS 版本最初来自 MikeRavenelle 在 Apple Silicon 上的工作。
+感谢所有提交过 PR 和补丁的人：[MikeRavenelle](https://github.com/MikeRavenelle)、[dj5927](https://github.com/dj5927)、[Xarishark](https://github.com/Xarishark)、[navjack](https://github.com/navjack)、[frankzzz](https://github.com/frankzzz)、[cngjd](https://github.com/cngjd)、[faisalkindi](https://github.com/faisalkindi) 和 [Ad0ky](https://github.com/Ad0ky)。macOS 版本最初来自 MikeRavenelle 在 Apple Silicon 上的工作；Ad0ky 在 `LostOdysseyNX` 分支上把游戏移植到了 Nintendo Switch。
 
 本项目参考 [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp)、[re:Blue](https://github.com/zolaware/reblue)、[XenonRecomp](https://github.com/hedge-dev/XenonRecomp)、[XenosRecomp](https://github.com/hedge-dev/XenosRecomp)、[plume](https://github.com/renderbag/plume) 和 [Xenia](https://github.com/xenia-project/xenia)。音频采用 [Xenia FFmpeg 分支](https://github.com/xenia-project/FFmpeg)（[许可证](thirdparty/ffmpeg-LICENSE.txt)）。Android 上的 Turnip GPU 驱动来自 [Eden](https://git.eden-emu.dev/eden-emu/eden) 模拟器的驱动列表，通过 [libadrenotools](https://github.com/bylaws/libadrenotools) 加载；Mali 上的 PanVK 驱动来自 [panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android)。
 

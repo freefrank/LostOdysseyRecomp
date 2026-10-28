@@ -27,6 +27,7 @@ namespace debug_menu
 
     // UI requests are consumed on the guest game thread.
     TeleportSnapshot GetTeleportSnapshot();
+    bool TeleportRequestPending();
     bool RequestTeleport(Position position);
     bool RequestTeleportOffset(Position offset);
     bool RequestSavePosition();

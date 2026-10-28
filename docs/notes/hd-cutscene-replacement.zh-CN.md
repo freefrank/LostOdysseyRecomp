@@ -1,5 +1,7 @@
 # 高分辨率 / 高帧率 CG 替换：可行性研究
 
+[English](hd-cutscene-replacement.md)
+
 2026-10-09。来源：对重编译代码的静态逆向（未运行游戏）、FMV 资源导出（`asset-inventory-20261002/fmv`）、外部资料调研。相关 Issue：#265（玩家希望有 1080p/4K CG），#40（Mod 支持）。
 
 ## 结论

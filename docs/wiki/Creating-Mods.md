@@ -145,7 +145,8 @@ Models and animations are exported as glTF binaries (`.glb`). Blender opens them
    LostOdysseyRecomp.exe --export-assets my-selection --export-kinds models,animations --export-select selected.txt
    ```
 
-Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `text/index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. The Thousand Years of Dreams stories and place names in `name_data.xmb` are not exported yet.
+Text covers the menus, item and skill names and descriptions, battle messages, field dialogue, cutscene subtitles, the credits and the engine's own messages, for every language on your discs. Each game file becomes one UTF-8 JSON file with its own path plus `.json`, for example `text/bin/xenon/scr/mes/int/u3b_0_scrw.jmd.json`. Codes that are not text appear as tokens such as `{E001}` (a line break in dialogue) or `{E10D:0500}` (a code with its value); keep them where they are. `source` in `text/index.csv` is `base`, or the DLC whose version the game uses instead of the disc's (`lodlc002`, `lodlc003`). `round_trip` is `ok` when the file was rebuilt from its exported text byte for byte; only those files can take translations. Place, shop, action and treasure names come from `name_data.xmb` (keys `<record>.<attribute>`). The Thousand Years of Dreams stories (`bin/xenon/event/1000/<language>/dr_##_<language>.xxx`) are exported piece by piece: each key `<track>#<n>` is one piece of a page, shown in its own box. A translation can also move and size that box with `<track>#<n>.x`, `.y`, `.w` (width), `.h` and `.scale` (both font scales); these keys are not exported, only read. Right-to-left packs (`direction=rtl`) store a piece's lines joined by `
+`: each line then ends at the box's right edge (`x + w`) and the piece appears from the right.
 
 ## Replace a cutscene video
 
@@ -325,6 +326,8 @@ The log shows `mods: language pack pt-br (Português (Brasil), base int)` at sta
 
 The game runs as the base language underneath: voices, artwork with words in it and everything you have not translated stay in that language (English for `int`). While the pack is selected, its files replace the same files from other text mods. Players who pick another language do not see the pack.
 
+The achievement notification and **Settings → System → Achievements** take their texts from the game's title data, which has no new languages. A pack can give its own in an `achievements.ini` next to `language.ini` (UTF-8, `key=value`, `#` and `;` start comments): `heading=` for the notification's "Achievement unlocked" line, and `<id>.name=`, `<id>.unlocked=` and `<id>.locked=` for an achievement's name and its texts once earned and before. Achievement ids are 1 to 36, in the order of the Achievements page. Anything the file leaves out keeps the base language's text. Write right-to-left text in reading order: the game joins and orders the letters itself. `language-clean` copies the file as it is.
+
 ### Add letters the fonts lack
 
 The game draws text with bitmap fonts: each letter is a small picture on a texture page, white with a dark outline, at one fixed size. A language that needs letters those fonts do not have, such as Polish, Russian or Arabic, can add them to a language pack: `lo_mod.py font-glyphs` draws every letter the pack's text uses and the fonts lack from a TrueType or OpenType font, at each game font's size and in its style, and the game adds them to its fonts while the pack is selected.
@@ -343,7 +346,7 @@ The game draws text with bitmap fonts: each letter is a small picture on a textu
 
 `language-clean` copies the pack's `fonts/` folder with the text. A letter the game's font already has keeps the game's own glyph unless `fonts/` draws it again.
 
-The game draws every line from left to right and does not join letters. Arabic, Persian and other right-to-left scripts work when the text in the pack is already shaped and in display order: each letter as its presentation form (U+FB50–U+FEFF, which `font-glyphs` draws by shaping the letter with its neighbours) and each line reversed, with codes such as `{E001}` kept in place. Lines the game wraps on its own, such as long subtitles, wrap from the wrong end; break them by hand.
+The game draws every line from left to right and does not join letters. Arabic, Persian and other right-to-left scripts work when the text in the pack is already shaped and in display order: each letter as its presentation form (U+FB50–U+FEFF, which `font-glyphs` draws by shaping the letter with its neighbours) and each line reversed, with codes such as `{E001}` kept in place. With `direction=rtl` in `language.ini`, the recomp then right-aligns text that has these forms; the layout itself is not mirrored, and packs without it are drawn as the game draws them. A block of lines ends where its widest line ends, three or more rows of a list end together, menus and boxes whose edge is known end at that edge (a text wider than the room keeps its start), text the game types in letter by letter appears whole, and the title and pause screens draw it without letter spacing. Lines the game wraps on its own, such as long subtitles, wrap from the wrong end; break them by hand.
 
 ### Change a language the game already has
 
@@ -354,7 +357,7 @@ The game draws every line from left to right and does not join letters. Arabic, 
 
 ### For both
 
-Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. Use only characters the game's font has (see [Modding API](Modding-API.md#text-language-packs)); a language pack can [add the letters it lacks](#add-letters-the-fonts-lack). The Thousand Years of Dreams stories and the place names in `name_data.xmb` are not exported yet.
+Translated text can be longer than the original. Menus and message boxes do not grow, so long lines may need a manual break. Use only characters the game's font has (see [Modding API](Modding-API.md#text-language-packs)); a language pack can [add the letters it lacks](#add-letters-the-fonts-lack).
 
 ## Settings-menu artwork
 

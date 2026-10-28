@@ -1,5 +1,6 @@
 #include <stdafx.h>
 #include "command_processor.h"
+#include <cpu/render_fence.h>
 #include "movie_clear.h"
 #include "movie_replace.h"
 #include "frame_plan.h"
@@ -7,6 +8,7 @@
 #include "video.h"
 #include "renderer.h"
 #include "frame_pacer.h"
+#include "loading_pacing.h"
 #include "deadline_wait.h"
 #include "register_snapshot.h"
 #include "render_timing.h"
@@ -440,8 +442,10 @@ namespace gpu
         }
         if (index >= frame_plan::wire::PlanBase && index < frame_plan::wire::PlanBase + frame_plan::wire::PlanWordCount)
         {
-            if (const auto plan = m_framePlan.Write(index, value))
+            if (const auto plan = m_framePlan.Write(index, value)) {
+                m_cinematicBars = plan->cinematicBars;
                 renderer::SelectFramePlan(*plan);
+            }
             return;
         }
         if (index >= movie_clear::RegisterBase && index <= movie_clear::Commit)
@@ -775,7 +779,11 @@ namespace gpu
         {
             // Drop overdue wall-clock deadlines rather than deliver a burst
             // of synthetic catch-up interrupts after a host scheduling stall.
-            std::this_thread::sleep_until(pacer.Schedule(std::chrono::steady_clock::now(), frame_rate::kGuestRefreshHz));
+            // Load boost: faster vblanks while the game thread waits on the
+            // rendering thread, so each loading-screen frame (presented at
+            // the guest's vblank interval) stops holding back the load.
+            const uint32_t vblankHz = render_fence::LoadBoost() ? render_fence::LoadBoostVblankHz() : frame_rate::kGuestRefreshHz;
+            std::this_thread::sleep_until(pacer.Schedule(std::chrono::steady_clock::now(), vblankHz));
             ++m_counter;
 
             // Watchdog: no swap for 5 seconds -> dump what every guest thread waits on.
@@ -1097,8 +1105,18 @@ namespace gpu
             const auto timingFlush = std::chrono::steady_clock::now();
             renderer::PreparePresent(frontbuffer);
             renderer::Flush();
+#if LO_PLATFORM_SWITCH
+            os::switch_cpu_profiler::Heartbeat();
+#endif
             const auto timingPace = std::chrono::steady_clock::now();
-            const auto fpsCap = video::GetFramePacingTarget(GetFrameRateTarget());
+            // Load boost (cpu/render_fence.h, LO_LOAD_BOOST=1): loading-screen
+            // frames are not paced; vblanks come faster (VsyncMain) and only
+            // about 30 of them a second reach the display (below). Otherwise
+            // loading frames follow the loading pace (gpu/loading_pacing.h).
+            const bool loadBoost = render_fence::LoadBoost();
+            const auto fpsCap = loadBoost ? video::GetFramePacingTarget(0)
+                : loading::Active() ? loading::Target(GetFrameRateTarget())
+                : video::GetFramePacingTarget(GetFrameRateTarget());
             const bool timingEnabled = frame_timing::Enabled();
             frame_timing::PacingSample pacing;
             {
@@ -1107,7 +1125,8 @@ namespace gpu
                 static DeadlineWait pacingWait;
                 // Preserve the original schedule anchor; sleep without millisecond rounding.
                 const auto nativeDeadline = pacer.Schedule(timingPace, fpsCap);
-                const auto output = video::GetDynamicFgOutputPacing(GetFrameRateTarget());
+                const auto output = loading::Active() ? video::DynamicFgOutputPacing{}
+                    : video::GetDynamicFgOutputPacing(GetFrameRateTarget());
                 const auto outputDeadline = outputPacer.Schedule(timingPace, output.outputFps, output.actualPresents);
                 const auto deadline = std::max(nativeDeadline, outputDeadline);
                 const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;
@@ -1132,8 +1151,14 @@ namespace gpu
             }
             g_workerStage.store("frontbuffer present", std::memory_order_relaxed);
             const auto presentsBefore = video::CompletedPresentCount();
-            video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B),
-                captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr);
+            static auto s_lastHostPresent = std::chrono::steady_clock::time_point{};
+            if (!loadBoost || captureTicket.active || timingPresent - s_lastHostPresent >= std::chrono::milliseconds(30))
+            {
+                s_lastHostPresent = timingPresent;
+                video::PresentFrontbuffer(frontbuffer, width, height, ReadRegister(0x231B),
+                    captureTicket.active ? &captureTicket : nullptr, captureTicket.active ? &captureResult : nullptr,
+                    m_cinematicBars);
+            }
             renderer::CompleteDebugCaptureFrame(captureResult);
             renderer::PollDebugCapture();
             pacing.presentAccepted = video::CompletedPresentCount() > presentsBefore;

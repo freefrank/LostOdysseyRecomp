@@ -10,8 +10,8 @@
 #include "../debug/map_info.h"
 #include "../debug/map_poi.h"
 #include "../debug/save_anywhere.h"
-#include "../debug/no_encounters.h"
 #include "../debug/battle_menu.h"
+#include "soft_reset.h"
 #include "../debug/translations.h"
 #include "../gpu/renderer.h"
 #include "../settings/config.h"
@@ -29,6 +29,8 @@ namespace debug_menu
         int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats
         int selectedRow = 0;
         bool chinese = false;
+        bool resetConfirmation = false;
+        bool resetYes = false;
         cheat_overlay::Model cheatsPage;
 
         // Teleport edit state
@@ -70,13 +72,17 @@ namespace debug_menu
             opening = !g_overlayState.visible;
         }
 
-        const bool chinese = settings::GetConfig().debugLanguage == 1;
+        const auto config = settings::GetConfig();
+        const bool chinese = config.debugLanguage == 1;
         const auto snapshot = opening ? debug_menu::GetTeleportSnapshot() : TeleportSnapshot{};
         {
             std::lock_guard lock(g_overlayStateMutex);
             g_overlayState.visible = opening;
             g_overlayState.chinese = chinese;
+            g_overlayState.cheatsPage.menuAnimationRate = config.menuAnimationRate;
             g_overlayState.cheatsPage.Dismiss();
+            g_overlayState.resetConfirmation = false;
+            g_overlayState.resetYes = false;
             if (opening && snapshot.available)
             {
                 g_overlayState.editCoordinates[0] = snapshot.current.x;
@@ -91,6 +97,24 @@ namespace debug_menu
     {
         std::lock_guard actionLock(g_overlayActionMutex);
         ToggleOverlayLocked();
+    }
+
+    void PollResetNotice()
+    {
+        const wchar_t* refusal = soft_reset::TakeRefusal();
+        if (!refusal) return;
+        std::lock_guard actionLock(g_overlayActionMutex);
+        if (!IsOverlayVisible())
+            ToggleOverlayLocked();
+        {
+            std::lock_guard lock(g_overlayStateMutex);
+            g_overlayState.activeTab = 0;
+            g_overlayState.selectedRow = 4;
+            g_overlayState.resetConfirmation = false;
+            g_overlayState.resetYes = false;
+            g_overlayState.cheatsPage.Dismiss();
+        }
+        SetOverlayStatus(refusal);
     }
 
     bool IsOverlayVisible()
@@ -133,6 +157,27 @@ namespace debug_menu
         std::unique_lock stateLock(g_overlayStateMutex);
         if (!g_overlayState.visible) return;
 
+        if (g_overlayState.resetConfirmation)
+        {
+            if (action == InputAction::Cancel)
+                g_overlayState.resetConfirmation = false;
+            else if (action == InputAction::Left || action == InputAction::Right)
+                g_overlayState.resetYes = !g_overlayState.resetYes;
+            else if (action == InputAction::Confirm)
+            {
+                g_overlayState.resetConfirmation = false;
+                if (g_overlayState.resetYes)
+                {
+                    stateLock.unlock();
+                    if (soft_reset::Request())
+                        ToggleOverlayLocked();
+                    else
+                        SetOverlayStatus(soft_reset::Status());
+                }
+            }
+            return;
+        }
+
         if (g_overlayState.activeTab == 2)
         {
             std::optional<cheat_overlay::Nav> nav;
@@ -151,6 +196,7 @@ namespace debug_menu
             if (nav)
             {
                 const auto before = fast_forward::GetStatus();
+                const unsigned beforeMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
                 if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
                 {
                     stateLock.unlock();
@@ -159,15 +205,30 @@ namespace debug_menu
                 }
                 // Keep the player's fast-forward rows across restarts (#104).
                 const auto after = fast_forward::GetStatus();
-                if (after.enabled != before.enabled || after.mode != before.mode || after.multiplier != before.multiplier)
+                const unsigned afterMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
+                if (after.enabled != before.enabled || after.mode != before.mode || after.button != before.button || after.multiplier != before.multiplier ||
+                    after.keepAudioPitch != before.keepAudioPitch)
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
                     if (!settings::SaveFastForward(after.enabled, after.mode == fast_forward::Mode::Toggle ? 1 : 0,
-                                                   after.multiplier))
+                                                   after.multiplier, after.keepAudioPitch, uint32_t(after.button)))
                     {
+                        fast_forward::SetKeepAudioPitch(before.keepAudioPitch);
+                        fast_forward::SetButton(before.button);
                         std::lock_guard lock(g_overlayStateMutex);
                         g_overlayState.cheatsPage.notice = zh ? L"保存变速设置失败" : L"Failed to save fast-forward setting";
+                    }
+                }
+                else if (afterMenuRate != beforeMenuRate)
+                {
+                    const bool zh = g_overlayState.chinese;
+                    stateLock.unlock();
+                    if (!settings::SaveMenuAnimationRate(afterMenuRate))
+                    {
+                        std::lock_guard lock(g_overlayStateMutex);
+                        g_overlayState.cheatsPage.menuAnimationRate = beforeMenuRate;
+                        g_overlayState.cheatsPage.notice = zh ? L"保存菜单动画设置失败" : L"Failed to save menu animation setting";
                     }
                 }
                 return;
@@ -195,8 +256,8 @@ namespace debug_menu
                 g_overlayState.selectedRow--;
             return;
         case InputAction::Down:
-            // Overview ends at row 7; Teleport ends at row 8 (Debug Event Room).
-            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 7 : 8))
+            // Overview ends at row 6; Teleport ends at row 8 (Debug Event Room).
+            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 : 8))
                 g_overlayState.selectedRow++;
             return;
         default:
@@ -210,10 +271,9 @@ namespace debug_menu
             // 1: Render Capture
             // 2: Save Anywhere
             // 3: Force RB party switch
-            // 4: No Random Encounters
-            // 5: Encounter Every Step (beside No Random Encounters)
-            // 6: Win Battle
-            // 7: Cancel Battle Request
+            // 4: Return to title
+            // 5: Win Battle
+            // 6: Cancel Battle Request
             if (action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right)
             {
                 switch (g_overlayState.selectedRow)
@@ -246,14 +306,13 @@ namespace debug_menu
                     return;
                 }
                 case 4:
-                    stateLock.unlock();
-                    debug_menu::SetNoEncountersEnabled(!debug_menu::NoEncountersEnabled());
+                    if (action == InputAction::Confirm)
+                    {
+                        g_overlayState.resetConfirmation = true;
+                        g_overlayState.resetYes = false;
+                    }
                     return;
                 case 5:
-                    stateLock.unlock();
-                    debug_menu::SetEncounterEveryStepEnabled(!debug_menu::EncounterEveryStepEnabled());
-                    return;
-                case 6:
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
@@ -263,7 +322,7 @@ namespace debug_menu
                         : (zh ? L"无法请求判胜（当前无活跃战斗）" : L"Cannot request victory (no active battle)"));
                     return;
                 }
-                case 7:
+                case 6:
                 {
                     const bool zh = g_overlayState.chinese;
                     stateLock.unlock();
@@ -455,10 +514,12 @@ namespace debug_menu
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
         r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
-        const wchar_t* nav = zh ? L"方向键/摇杆: 导航" : L"D-Pad/Stick: Nav";
+        const wchar_t* nav = state.resetConfirmation
+            ? (zh ? L"左/右: 选择" : L"Left/Right: Choose")
+            : (zh ? L"方向键/摇杆: 导航" : L"D-Pad/Stick: Nav");
         const wchar_t* accept = zh ? L"/Enter: 确定" : (state.activeTab == 2 ? L"/Enter: OK" : L"/Enter: Confirm");
         const wchar_t* back = zh ? L"/Esc: 返回" : L"/Esc: Back";
-        const std::wstring tabs = controller_hint::ShoulderLabels(
+        const std::wstring tabs = state.resetConfirmation ? L"" : controller_hint::ShoulderLabels(
             zh ? (state.activeTab == 2 ? L"LB/RB: 切页  LT/RT: 类别" : L"LB/RB: 切页")
                : (state.activeTab == 2 ? L"LB/RB: Tab  LT/RT: Category" : L"LB/RB: Tab"), playStation);
         constexpr int gap = 13;
@@ -508,15 +569,9 @@ namespace debug_menu
             host_ui::DrawButton(r, btnX + saveBtnW + saveGap, contentY + 2 * rowH + 8, saveBtnW, 30,
                 zh ? L"强制开启 RB 换人" : L"Force RB Party Switch", state.selectedRow == 3);
 
-            // 4: No Random Encounters (below Save Anywhere) & 5: Encounter Every Step (beside it)
-            const bool noEncounters = debug_menu::NoEncountersEnabled();
-            std::wstring encounterText = zh ? (noEncounters ? L"不遇敌: 开启" : L"不遇敌: 关闭")
-                                            : (noEncounters ? L"No Random Encounters: ON" : L"No Random Encounters: OFF");
-            host_ui::DrawButton(r, btnX, contentY + 3 * rowH + 12, saveBtnW, 30, encounterText, state.selectedRow == 4);
-            const bool everyStep = debug_menu::EncounterEveryStepEnabled();
-            std::wstring everyStepText = zh ? (everyStep ? L"一步一遇敌: 开启" : L"一步一遇敌: 关闭")
-                                            : (everyStep ? L"Encounter Every Step: ON" : L"Encounter Every Step: OFF");
-            host_ui::DrawButton(r, btnX + saveBtnW + saveGap, contentY + 3 * rowH + 12, saveBtnW, 30, everyStepText, state.selectedRow == 5);
+            // 4: Return to title
+            host_ui::DrawButton(r, btnX, contentY + 3 * rowH + 12, btnW, 30,
+                translations::Text(L"Return to title", zh), state.selectedRow == 4);
 
             // Map info display (Centered)
             auto mapInfo = debug_menu::GetMapInfo();
@@ -532,14 +587,14 @@ namespace debug_menu
             int mapTextW = r.MeasureWString(mapText);
             r.DrawWString(panelX + (panelW - mapTextW) / 2, contentY + 4 * rowH + 16, mapText, host_ui::MakeColor(255, 180, 210, 240));
 
-            // 6: Win Battle & 7: Cancel Victory (Side by side, centered total 520px)
+            // 5: Win Battle & 6: Cancel Victory (Side by side, centered total 520px)
             int battleGap = 16;
             int battleBtnW = (btnW - battleGap) / 2; // 252
             std::wstring winText = zh ? L"当前战斗判胜" : L"Win Current Battle";
-            host_ui::DrawButton(r, btnX, contentY + 5 * rowH + 16, battleBtnW, 30, winText, state.selectedRow == 6);
+            host_ui::DrawButton(r, btnX, contentY + 5 * rowH + 16, battleBtnW, 30, winText, state.selectedRow == 5);
 
             std::wstring cancelWinText = zh ? L"取消判胜请求" : L"Cancel Victory Request";
-            host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 5 * rowH + 16, battleBtnW, 30, cancelWinText, state.selectedRow == 7);
+            host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 5 * rowH + 16, battleBtnW, 30, cancelWinText, state.selectedRow == 6);
 
             const wchar_t* rawBStat = debug_menu::Status();
             if (rawBStat && *rawBStat)
@@ -550,7 +605,17 @@ namespace debug_menu
             }
 
             // Issue #74: party-switch permission is runtime-only and is not restored by a load.
-            if (saveOn)
+            if (state.selectedRow == 4)
+            {
+                const wchar_t* help[] = {
+                    translations::Text(L"Return to title after confirmation; unavailable in battle.", zh),
+                    translations::Text(L"Unsaved progress will be lost", zh),
+                };
+                for (int line = 0; line < 2; ++line)
+                    r.DrawWString(panelX + (panelW - r.MeasureWString(help[line])) / 2,
+                        contentY + 7 * rowH + 30 + line * 22, help[line], host_ui::MakeColor(255, 240, 190, 90));
+            }
+            else if (saveOn)
             {
                 const wchar_t* warning[] = {
                     zh ? L"随时存档可在原作不允许存档的时刻保存。" : L"Save Anywhere also saves where the game normally forbids it.",
@@ -663,6 +728,25 @@ namespace debug_menu
             std::wstring dispMsg = debug_menu::translations::Text(state.statusMessage.c_str(), zh);
             int msgW = r.MeasureWString(dispMsg);
             r.DrawWString(panelX + (panelW - msgW) / 2, footerY - 26, dispMsg, host_ui::MakeColor(255, 120, 220, 150));
+        }
+
+        if (state.resetConfirmation)
+        {
+            r.FillRect(panelX + 2, contentY - 3, panelW - 4, footerY - contentY - 6,
+                host_ui::MakeColor(190, 10, 12, 16));
+            constexpr int width = 560, height = 200;
+            const int x = panelX + (panelW - width) / 2, y = contentY + 65;
+            host_ui::DrawPanel(r, x, y, width, height, host_ui::MakeColor(255, 24, 31, 42));
+            host_ui::DrawHeader(r, x, y, width, 36, translations::Text(L"Return to title", zh));
+            const wchar_t* warning = translations::Text(L"Unsaved progress will be lost", zh);
+            r.DrawWString(x + (width - r.MeasureWString(warning)) / 2, y + 66,
+                warning, host_ui::MakeColor(255, 240, 190, 90));
+            constexpr int buttonWidth = 220, gap = 24;
+            const int buttonX = x + (width - 2 * buttonWidth - gap) / 2;
+            host_ui::DrawButton(r, buttonX, y + 122, buttonWidth, 38,
+                zh ? L"否" : L"No", !state.resetYes);
+            host_ui::DrawButton(r, buttonX + buttonWidth + gap, y + 122, buttonWidth, 38,
+                zh ? L"是" : L"Yes", state.resetYes);
         }
     }
 }

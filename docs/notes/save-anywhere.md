@@ -1,63 +1,65 @@
-# 随时存档：菜单权限与验证
+# Save anywhere: menu permissions and validation
 
-> **专题参考。** 下文实现和测量只适用于各自注明的版本与范围；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+[简体中文](save-anywhere.zh-CN.md)
 
-2026-09-05，亚洲版当前构建。功能已加入，运行时构建通过；新构建开关、保存及重启位置读回通过，普通存档点及进入营地前后的权限恢复回归通过；桌面复选框实际点击与布局尚未验证。
+> **Topic reference.** The implementation and measurements below apply only to the version and scope noted for each item. For current delivery and acceptance status, see [project status](../STATUS.md) and [roadmap](../ROADMAP.md).
 
-**后续限制（2026-09-29）：** [Issue #74 分队存档调查](issue-74-save-anywhere-party-split.md)证实，在原作禁用保存的分队剧情中开启随时存档并读回，会丢失只存在于运行时的 RB 换人权限。`main` 的[后续提交 `2e1c547`](https://github.com/freefrank/LostOdysseyRecomp/commit/2e1c5477447b5d3df361867a2c4395d03e99cdb4)在 F1 菜单加入警告；此提交晚于 v0.7.20 发布。下面的营地和普通存档点验证不证明所有剧情节点都能安全保存，Issue #74 仍开放。
+2026-09-05, current Asian-version build. The feature was added and the runtime build passed. The new build switch, save and reload position readback passed. Regression of ordinary save points and permission recovery before and after entering camp passed. Real clicks on the desktop checkbox and its layout are not yet verified.
 
-## 已确认的路径
+**Later limitation (2026-09-29):** [Issue #74 party split investigation](issue-74-save-anywhere-party-split.md) confirmed that turning on save anywhere in a party-split story segment, where the original game disables saving, and then reloading loses the RB party-switch permission, which exists only at runtime. `main` [follow-up commit `2e1c547`](https://github.com/freefrank/LostOdysseyRecomp/commit/2e1c5477447b5d3df361867a2c4395d03e99cdb4) adds a warning in the F1 menu. This commit came after the v0.7.20 release. The camp and ordinary save point validation below does not prove that every story node can be saved safely. Issue #74 is still open.
 
-- System 菜单 Save 项 ID=34 (0x22)，菜单表首项位于 0x8326D690，条目长 0x1c。
-- 0x80000000 是可见位，0x40000000 是启用位。82877110 查询这两位，82876EA8 设置可见/启用参数。
-- 82878CB8 构建 System 列表，widget 为主菜单对象+0x238d4，828B6968 从表创建条目。
-- 822E0E10 中 822E7EA4 判断选中项34，822E7FF8 调用8287C8F8，后者调用82860008进入原有存档界面。
-- EasySave native828F1A68→rpPlayData虚表+0x220→82906E18 是内存状态复制，不是菜单允许保存判断。EasySaveFlag反射为字段+0x3c，mask0x40000000；未修改该字段。
-- CheckSavePoint 会激活存档点，不应伪造该调用或存档点指针。
+## Confirmed paths
 
-## 后台原型验证
+- System menu Save item ID=34 (0x22). The first menu table entry is at 0x8326D690, and each entry is 0x1c long.
+- 0x80000000 is the visible bit and 0x40000000 is the enabled bit. 82877110 queries these two bits, and 82876EA8 sets the visible/enabled parameters.
+- 82878CB8 builds the System list. The widget is main menu object +0x238d4, and 828B6968 creates entries from the table.
+- In 822E0E10, 822E7EA4 checks whether item 34 is selected. 822E7FF8 calls 8287C8F8, which calls 82860008 to enter the existing save screen.
+- EasySave native 828F1A68 → rpPlayData vtable +0x220 → 82906E18 is a memory-state copy. It is not the menu check for whether saving is allowed. EasySaveFlag maps to field +0x3c, mask 0x40000000. That field was not modified.
+- CheckSavePoint activates a save point. Do not fake this call or a save point pointer.
 
-独立副本 out/critical-section-camp-01 PID33632，临界区修复构建；未操作桌面或原始用户save/profile。
-营地开箱后 System 的 Save 灰色；fcController_0=0x03a43c00，mp_SavePoint(+0x86c)=0。
-只将表首项0x80000000改为0xc0000000，退回再进入System：shot47183恢复可选，shot48111进入存档检查，shot48478列出槽位。
-选择空槽02：shot49648保存中，shot50635显示槽02完成，时间00:46，675G，Kaim Lv10。副本生成第二份206000字节save.bin。
-这证明正常流程能从非存档点写入；尚未证明重启恢复的位置/剧情状态完整。
-原型进程保留在保存列表；input最后25，shots最后22；测试改过的表启用位目前仍开启。
+## Background prototype validation
 
-## 新实现与待验证
+Separate copy out/critical-section-camp-01, PID33632, a build with the critical-section fix. The desktop and the original user save/profile were not touched.
+After opening the camp chest, System's Save is grey. fcController_0=0x03a43c00, mp_SavePoint(+0x86c)=0.
+Changing only the first table entry from 0x80000000 to 0xc0000000, then backing out and re-entering System: shot47183 shows it selectable, shot48111 enters the save check, and shot48478 lists the slots.
+Selecting empty slot 02: shot49648 shows saving, and shot50635 shows slot 02 complete, time 00:46, 675G, Kaim Lv10. The copy generated a second save.bin of 206000 bytes.
+This shows that the normal flow can write from a non-save point. It does not yet prove that the position and story state are fully intact after a restart.
+The prototype process stays on the save list. Input: last 25; shots: last 22. The enabled bit of the table entry changed by the test is still on.
 
-新增 debug/save_anywhere.cpp/.h；menu_window.cpp 底部复选框。默认关闭，不持久化，不自动发起保存。
-UI仅更新atomic请求；822E0E10 guest菜单线程应用启用位，82876EA8记录游戏原生权限，关闭时恢复原生启用位；保留原可见性和其它位。
-测试入口 LO_SAVE_ANYWHERE_REQUEST 指定文本文件，内容为非零serial与0/1，例如 `1 1`；每250ms读取，新序号执行一次，与UI调用同一setter。
-构建日志 out/save-anywhere-build.log = BUILD OK。新EXE已在后台独立副本运行，见下方回归。
-下一步：复制新构建与camp副本save/profile到新后台目录，从槽02加载，验证营地位置、行走、物品与剧情；新构建测试OFF→ON→保存→OFF，验证关掉后离开存档点仍灰，在存档点仍可保存。需验证菜单表重置和地图切换时原生权限跟踪。
-所有反编译输出仅在out/save-*.txt，未加入公开源码。
+## New implementation and pending validation
 
-## 新构建后台回归
+Added debug/save_anywhere.cpp/.h. A checkbox at the bottom of menu_window.cpp. Off by default, not persisted, and never starts a save automatically.
+The UI only updates an atomic request. The guest menu thread in 822E0E10 applies the enabled bit. 82876EA8 records the original game permission. When turned off, the original enabled bit is restored. The original visibility and other bits are kept.
+The test entry LO_SAVE_ANYWHERE_REQUEST points to a text file whose content is a non-zero serial and 0/1, for example `1 1`. It is read every 250 ms. A new serial runs once and uses the same setter as the UI call.
+Build log out/save-anywhere-build.log = BUILD OK. The new EXE was run in an independent background copy; see the regression below.
+Next step: copy the new build and the camp copy's save/profile to a new background directory, load from slot 02, and verify the camp position, walking, items and story. For the new build, test OFF → ON → save → OFF, verify that after turning it off, leaving the save point still greys out Save, and that saving at a save point still works. Also verify that menu table resets and map changes track the native permission.
+All decompilation output is only in out/save-*.txt and is not in the public source.
 
-out/save-anywhere-01/SaveTest.exe PID24516：复制camp副本save/profile，默认关闭，Continue读最新槽02。
-- shot1009：返回营地左侧开过的箱子旁；shot1756菜单保留Lv10/675G/00:46。
-- shot2554：默认OFF，Save灰色。
-- save-request `1 1` 后重新进入System，shot3208：Save启用。
-- 正常Save到空槽03，shot5098显示00:48/675G/Lv10，实际生成第三份save.bin。
-- save-request `2 0` 后退回再入System，shot5781：Save恢复灰色。
-- 返回场景后摇杆24000持续90 polls，坐标由(2397.9229,214.01355,147.1508)变为(2675.8682,701.6195,147.1508)，读档后的行走可用。12000输入未产生移动，不作为失败证据。
+## New build background regression
 
-out/save-anywhere-reload-01/SaveReload.exe PID4428：再次新进程，复制上述三个槽和profile，默认OFF的Continue读取最新槽03。shot942重新回到开箱处；status序号1核对保存位置。没有使用传送移动角色。
-仅后台文件请求驱动，与UI共用SetSaveAnywhereEnabled；本轮没有打开桌面debug窗口，复选框布局及实际点击未视觉验证。
-剩余：原生存档点开关后仍可保存、地图切换的权限更新、更多剧情状态/物品检查。不得用本轮局部回归宣称所有地点和所有剧情都可安全保存。
-当前PID4428保留供下一步回归，input未请求、shots1、teleport1，save-request未创建。PID24516已核对路径后停止；独立副本留存。新构建SHA256：037229025402B00D12AF821AF9E4CC1A779EA75405598FABC33FB49E3CEA5BFB。
+out/save-anywhere-01/SaveTest.exe PID24516: copy the camp save/profile, default off, Continue reads the latest slot 02.
+- shot1009: back at the chest opened earlier on the left side of camp. shot1756 menu keeps Lv10/675G/00:46.
+- shot2554: default OFF, Save grey.
+- save-request `1 1`, then re-enter System. shot3208: Save enabled.
+- Normal Save to empty slot 03. shot5098 shows 00:48/675G/Lv10, and a third save.bin was actually generated.
+- save-request `2 0`, then back out and re-enter System. shot5781: Save is grey again.
+- After returning to the scene, stick 24000 held for 90 polls. The coordinates changed from (2397.9229,214.01355,147.1508) to (2675.8682,701.6195,147.1508), so walking works after loading. 12000 input produced no movement and is not counted as failure evidence.
 
-## 普通存档点与进入营地的权限回归
+out/save-anywhere-reload-01/SaveReload.exe PID4428: a new process again. The three slots and profile were copied, and the default OFF Continue read the latest slot 03. shot942 returns to the chest opened. status sequence 1 confirms the saved position. No teleport was used to move the character.
+Driven only by background file requests, sharing SetSaveAnywhereEnabled with the UI. This round did not open the desktop debug window, so the checkbox layout and real clicks were not checked visually.
+Remaining: saving still works after the native save point switch, permission updates on map change, and more story state and item checks. This local regression must not be used to claim that every location and every story point is safe to save in.
+PID4428 is kept for the next regression round. input was not requested, shots 1, teleport 1, and save-request was not created. PID24516 was stopped after the path check; the independent copy is kept. New build SHA256: 037229025402B00D12AF821AF9E4CC1A779EA75405598FABC33FB49E3CEA5BFB.
 
-2026-09-05，out/save-point-regression-01/SavePointTest.exe PID35012，使用同一03722902构建与third-map-repro-01独立save/profile。
-- shot967位于Gorge原生存档点，有A Save交互提示。
-- shot1737默认OFF时System Save可用；ON→OFF再进入System，shot2428仍可用。
-- 正常保存空槽02，shot3746确认00:20新存档完成。开关没有误禁用原生保存。
-- 向右走先撞墙，shot5016仍有A Save，不能算离开存档点；随后向前走至拾取Healing Medicine位置，shot6615。
-- 重新打开System，shot7332 Save灰色，证实权限会随离开存档点而更新。
-- 再打开开关，普通步行触发士兵演出，shot8381演出、11150回到营地；没有传送。shot11958新菜单Save可用，关闭后重新进入，shot12606恢复灰色。
-- 本轮没有重建运行时或改游戏代码，只补真实回归及专项文档索引。全部结果对应实际菜单截图，不以日志继续输出代替。
+## Ordinary save point and camp entry permission regression
 
-当前PID35012保留在营地System菜单，input30、shots13、save-request4=OFF；PID4428仍在营地开过的箱子旁。未提交推送。
-后续转回渲染。随时存档主要后台回归已覆盖；UI实际点击/布局及后续地图流程继续纳入总体测试，不能推断游戏任意事件中途保存都安全。
+2026-09-05, out/save-point-regression-01/SavePointTest.exe PID35012, using the same 03722902 build and an independent save/profile from third-map-repro-01.
+- shot967 is at the native Gorge save point, with the A Save prompt.
+- shot1737: with the default OFF, System Save is available. ON → OFF, then re-enter System: shot2428 still available.
+- Normal save to empty slot 02. shot3746 confirms the new save at 00:20 completed. The switch did not wrongly disable the native save.
+- Walking right hit a wall first. shot5016 still shows A Save, so this does not count as leaving the save point. Then walking forward to the position where Healing Medicine is picked up, shot6615.
+- Re-opening System: shot7332 Save is grey. This confirms that the permission updates when the character leaves the save point.
+- Turning the switch on again. Ordinary walking triggered a soldier sequence: shot8381 the sequence, and shot11150 back at camp. No teleport. shot11958: the new menu Save is available. After turning it off and re-entering, shot12606 shows it grey again.
+- This round did not rebuild the runtime or change game code. It only added the real regression and the index entries for this topic. All results match actual menu screenshots and are not replaced by log output.
+
+PID35012 is kept in the camp System menu, with input 30, shots 13, save-request 4 = OFF. PID4428 is still by the chest opened at camp. Not committed or pushed.
+Work returns to rendering next. The main save-anywhere background regression is covered. UI real clicks/layout and later map flows remain part of the overall testing. It cannot be inferred that saving in the middle of any game event is safe.

@@ -9,7 +9,7 @@ if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS LO_MINIMUM_MACOS)
     message(STATUS "Raising CMAKE_OSX_DEPLOYMENT_TARGET from ${CMAKE_OSX_DEPLOYMENT_TARGET} to ${LO_MINIMUM_MACOS}")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "${LO_MINIMUM_MACOS}" CACHE STRING "Minimum macOS deployment target" FORCE)
 endif()
-project(LostOdysseyRecomp VERSION 0.9.57 LANGUAGES C CXX)
+project(LostOdysseyRecomp VERSION 1.0.6 LANGUAGES C CXX)
 include(GNUInstallDirs)
 # Source version, not a release/commit or clean-checkout assertion.
 # Capture before nested projects can replace PROJECT_VERSION in their scope.
@@ -65,7 +65,19 @@ option(LO_BUILD_TOOLS "Build XenonRecomp / XenosRecomp (use tools/build_tools.ba
 option(LO_BUILD_RECOMP_LIB "Build the recompiled game code library from LostOdysseyRecompLib/ppc" ON)
 option(LO_BUILD_RUNTIME "Build the LostOdysseyRecomp runtime executable" ON)
 option(LO_BUILD_GPU "Build the plume-based GPU backend" ON)
+option(LO_BUILD_AUDIO_TESTS "Build the game-free fast-forward audio fixture" ON)
 option(LO_BUILD_ANDROID_RUNTIME "Enable the Android game runtime shared library" OFF)
+
+if(LO_BUILD_AUDIO_TESTS AND NOT CMAKE_CROSSCOMPILING)
+    enable_testing()
+    add_subdirectory(tools/tests/fast_forward_audio)
+endif()
+
+option(LO_BUILD_VOICE_VOLUME_TESTS "Build the game-free production voice-volume fixture" OFF)
+if(LO_BUILD_VOICE_VOLUME_TESTS)
+    enable_testing()
+    add_subdirectory(tools/tests/voice_volume)
+endif()
 
 if(LO_TARGET_PLATFORM STREQUAL "switch")
     if(LO_BUILD_TOOLS)
@@ -139,6 +151,12 @@ endif()
 
 # No private game data, generated PPC library, GPU or third-party dependency.
 option(LO_BUILD_MOD_TESTS "Build standalone mod API and image contract tests" OFF)
+option(LO_BUILD_STEAM_TESTS "Build standalone Steam shortcut tests" OFF)
+if(LO_BUILD_STEAM_TESTS)
+    enable_testing()
+    add_subdirectory(tools/tests/steam_shortcut)
+    add_subdirectory(tools/tests/steam_artwork)
+endif()
 if(LO_BUILD_MOD_TESTS)
     enable_testing()
     find_package(Threads REQUIRED)
@@ -218,4 +236,7 @@ if(UNIX AND NOT ANDROID AND LO_BUILD_RUNTIME AND NOT LO_TARGET_PLATFORM STREQUAL
     install(FILES
         packaging/linux/io.github.freefrank.LostOdysseyRecomp.metainfo.xml
         DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+    install(DIRECTORY assets/steam
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/lost-odyssey-recomp
+        FILES_MATCHING PATTERN "*.png")
 endif()

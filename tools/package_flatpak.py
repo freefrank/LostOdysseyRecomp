@@ -27,9 +27,16 @@ REQUIRED = {
     "share/licenses/lost-odyssey-recomp/LICENSE-FidelityFX.txt",
     "share/licenses/lost-odyssey-recomp/zstd-LICENSE.txt",
     "share/licenses/lost-odyssey-recomp/XeGTAO.txt",
+    "share/licenses/lost-odyssey-recomp/Signalsmith-Stretch.txt",
+    "share/licenses/lost-odyssey-recomp/Signalsmith-Linear.txt",
     f"share/applications/{APP_ID}.desktop",
     f"share/icons/hicolor/256x256/apps/{APP_ID}.png",
     f"share/metainfo/{APP_ID}.metainfo.xml",
+    "share/lost-odyssey-recomp/steam/portrait.png",
+    "share/lost-odyssey-recomp/steam/header.png",
+    "share/lost-odyssey-recomp/steam/hero.png",
+    "share/lost-odyssey-recomp/steam/logo.png",
+    "share/lost-odyssey-recomp/steam/icon.png",
 }
 
 # Run inside the selected Platform before export. This does not launch the game

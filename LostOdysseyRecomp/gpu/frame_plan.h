@@ -38,6 +38,8 @@ namespace gpu::frame_plan
         bool failed = false;
         upscaling::FsrQuality fsrQuality = upscaling::FsrQuality::Quality;
         upscaling::FrameGeneration frameGeneration = upscaling::FrameGeneration::Off;
+        // Display metadata frozen at command enqueue; not a sizing/epoch input.
+        bool cinematicBars = false;
         bool operator==(const FramePlan&) const = default;
     };
     enum class SurfaceRole : uint32_t { Unknown = 0, Scene = 1, Fixed = 2, Shadow = 3 };
@@ -639,9 +641,9 @@ namespace gpu::frame_plan
         // Keep both older packet layouts readable at this same register base.
         constexpr uint32_t Magic = 0x4C4F4650; // "LOFP"
         constexpr uint32_t PlanMagic = 0x4C4F4632; // "LOF2"
-        // v3 added the third consumer bit and FSR quality; v4 adds the third
-        // provider bit (XeSS). Older versions stay readable.
-        constexpr uint32_t Version = 4;
+        // v3 added the third consumer bit and FSR quality; v4 added the third
+        // provider bit (XeSS); v5 adds frame-aligned cinematic bars.
+        constexpr uint32_t Version = 5;
         constexpr uint32_t PlanWordCount = 24;
         constexpr uint32_t PlanWordCapacity = CatalogBase - PlanBase;
         static_assert(PlanWordCount <= PlanWordCapacity);
@@ -656,12 +658,14 @@ namespace gpu::frame_plan
                 (uint32_t(plan.failed) << 20) |
                 ((uint32_t(plan.consumer) & 4u) << 19) |
                 (uint32_t(plan.fsrQuality) << 22) | (uint32_t(plan.frameGeneration) << 24) |
-                ((uint32_t(plan.requestedUpscaler) & 4u) << 23);
+                ((uint32_t(plan.requestedUpscaler) & 4u) << 23) |
+                (uint32_t(plan.cinematicBars) << 26);
         }
         constexpr bool UnpackFlags(FramePlan& plan, uint32_t flags, uint32_t version)
         {
             if (version < 2 || version > Version) return false;
-            if (flags & (version == 2 ? ~0x1FFFFFu : version == 3 ? ~0x1FFFFFFu : ~0x3FFFFFFu)) return false;
+            if (flags & (version == 2 ? ~0x1FFFFFu : version == 3 ? ~0x1FFFFFFu :
+                version == 4 ? ~0x3FFFFFFu : ~0x7FFFFFFu)) return false;
             plan.requestedUpscaler = upscaling::Upscaler((flags & 0x3u) | (version >= 4 ? ((flags >> 23) & 4u) : 0u));
             plan.dlssQuality = upscaling::DlssQuality((flags >> 2) & 0x3u);
             plan.consumer = upscaling::TemporalConsumer(((flags >> 4) & 0x3u) |
@@ -672,6 +676,7 @@ namespace gpu::frame_plan
             plan.requiresReadback = (flags & (1u << 18)) != 0;
             plan.inputProbe = (flags & (1u << 19)) != 0;
             plan.failed = (flags & (1u << 20)) != 0;
+            plan.cinematicBars = version >= 5 && (flags & (1u << 26)) != 0;
             if (version >= 3) {
                 plan.fsrQuality = upscaling::FsrQuality((flags >> 22) & 0x3u);
                 plan.frameGeneration = upscaling::FrameGeneration((flags >> 24) & 1u);

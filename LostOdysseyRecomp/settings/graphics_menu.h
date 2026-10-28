@@ -95,7 +95,7 @@ inline void ApplyPreset(Config& config, Preset preset)
     config.internalResolution = 720;
 #endif
     config.frameRate = 30;
-    config.dynamicShadows = !low;
+    config.dynamicShadows = low ? 0 : 1;
     config.motionBlur = !low;
     config.depthOfFieldPercent = low ? 0 : 100;
     config.bloom = !low;
@@ -111,6 +111,14 @@ inline Preset PresetOf(const Config& config)
     }
     return Preset::Custom;
 }
+// Dynamic shadows row: On, Low, Off (settings values 1, 2, 0).
+inline constexpr uint32_t DynamicShadowsValues[] = {1, 2, 0};
+inline uint32_t DynamicShadowsChoice(const Config& config)
+{
+    for (uint32_t i = 0; i < std::size(DynamicShadowsValues); ++i)
+        if (DynamicShadowsValues[i] == config.dynamicShadows) return i;
+    return 0;
+}
 inline constexpr uint32_t ShadowResolutions[] = {1, 2, 4};
 inline uint32_t ShadowResolutionChoice(const Config& config)
 {
@@ -123,7 +131,8 @@ inline bool IsAction(int tab, int row)
     return (tab == 0 && (row == GameControlsRow || row == GameRestoreRow || row == GameMainMenuRow)) ||
            (tab == 2 && (row == int(GraphicsRow::NeuralRenderingTuning) || row == int(GraphicsRow::HdrCalibration) ||
                          row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
-           (tab == 3 && (row == SystemAchievementsRow || row == SystemModsRow || row == SystemImportRow || row == SystemShaderBundleRow ||
+           (tab == 3 && (row == SystemAchievementsRow || row == SystemModsRow || row == SystemImportRow || row == SystemAddToSteamRow || row == SystemShaderBundleRow ||
+                         row == SystemShaderPreparationRow ||
                          row == SystemSaveRow));
 }
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::DlssModel));
@@ -141,7 +150,8 @@ static_assert(int(GraphicsRow::NeuralRenderingTuning) + 1 == int(GraphicsRow::Fr
 static_assert(int(GraphicsRow::FrameGeneration) + 1 == int(GraphicsRow::FrameGenerationMultiplier));
 static_assert(int(GraphicsRow::FrameGenerationMultiplier) + 1 == int(GraphicsRow::AmbientOcclusion));
 static_assert(int(GraphicsRow::AmbientOcclusion) + 1 == int(GraphicsRow::AnisotropicFiltering));
-static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::VariableRefreshRate));
+static_assert(int(GraphicsRow::FrameRate) + 1 == int(GraphicsRow::LoadingTransitions));
+static_assert(int(GraphicsRow::LoadingTransitions) + 1 == int(GraphicsRow::VariableRefreshRate));
 static_assert(int(GraphicsRow::VariableRefreshRate) + 1 == int(GraphicsRow::PerformanceOverlay));
 // Each sub-page entry sits right under its setting.
 static_assert(int(GraphicsRow::HdrPeak) + 1 == int(GraphicsRow::HdrCalibration));

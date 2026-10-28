@@ -55,11 +55,31 @@ int main()
     setenv("XDG_STATE_HOME", (root / "xdg/state").c_str(), 1);
     unsetenv("FLATPAK_ID");
     unsetenv("LO_PROFILE_DIR");
+    unsetenv("APPIMAGE");
+    unsetenv("LO_SAVE_DIR");
     Check(os::user_paths::ConfigDir() == root / "xdg/config/lost-odyssey-recomp", "XDG config path mismatch");
     Check(os::user_paths::DataDir() == root / "xdg/data/lost-odyssey-recomp", "XDG data path mismatch");
     Check(os::user_paths::StateDir() == root / "xdg/state/lost-odyssey-recomp", "XDG state path mismatch");
     os::user_paths::Initialize(root);
     Check(os::user_paths::ProfileDir() == "profile", "portable profile path changed");
+    const auto extractedExecutable = root / "extracted/usr/bin";
+    fs::create_directories(extractedExecutable);
+    const auto appImage = root / fs::path(std::u8string(u8"游戏 folder/Lost Odyssey.AppImage"));
+    setenv("APPIMAGE", appImage.c_str(), 1);
+    os::user_paths::Initialize(extractedExecutable);
+    Check(!os::user_paths::UsePortableLayout(), "writable extracted AppImage selected portable layout");
+    Check(os::user_paths::ExecutableDir() == extractedExecutable,
+          "AppImage changed the executable directory needed for runtime libraries");
+    Check(os::user_paths::SettingsPath() == root / "xdg/config/lost-odyssey-recomp/settings.ini",
+          "extracted AppImage settings are not in XDG config");
+    Check(os::user_paths::ProfileDir() == root / "xdg/data/lost-odyssey-recomp/profile",
+          "extracted AppImage profile is not in XDG data");
+    Check(os::user_paths::SaveDir() == root / "xdg/data/lost-odyssey-recomp/save",
+          "extracted AppImage saves are not in XDG data");
+    setenv("APPIMAGE", "", 1);
+    os::user_paths::Initialize(extractedExecutable);
+    Check(os::user_paths::UsePortableLayout(), "empty APPIMAGE changed writable portable layout");
+    unsetenv("APPIMAGE");
     // A missing executable directory selects the same non-portable branch as
     // an AppImage's read-only mount, without relying on root permission checks.
     os::user_paths::Initialize(root / "missing");
@@ -81,5 +101,26 @@ int main()
     Check(!os::user_paths::IsExecutableDirWritable(root / "missing"), "missing directory reported writable");
     fs::remove_all(root, error);
 #endif
+    // An explicit shared save root is independent of profile/config paths.
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", "");
+#else
+    unsetenv("LO_SAVE_DIR");
+#endif
+    const auto defaultSave = (os::user_paths::UsePortableLayout() ? fs::current_path() : os::user_paths::DataDir()) / "save";
+    Check(os::user_paths::SaveDir() == defaultSave, "default save path changed");
+    const auto sharedSave = fs::temp_directory_path() / "lo-shared-save";
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", sharedSave.string().c_str());
+#else
+    setenv("LO_SAVE_DIR", sharedSave.c_str(), 1);
+#endif
+    Check(os::user_paths::SaveDir() == sharedSave, "save override ignored");
+#ifdef _WIN32
+    _putenv_s("LO_SAVE_DIR", "");
+#else
+    setenv("LO_SAVE_DIR", "", 1);
+#endif
+    Check(os::user_paths::SaveDir() == defaultSave, "empty save override did not use the default");
     std::cout << "PASS: user paths fixture\n";
 }

@@ -35,7 +35,17 @@ endif()
 # NRO metadata shown in the Homebrew Menu.
 set(LO_SWITCH_APP_TITLE "Lost Odyssey Recomp" CACHE STRING "NRO title")
 set(LO_SWITCH_APP_AUTHOR "LostOdysseyRecomp contributors" CACHE STRING "NRO author")
-set(LO_SWITCH_APP_VERSION "${LO_SOURCE_VERSION}" CACHE STRING "NRO version")
+# The NRO version follows the project version (CMakeLists.txt project()) on
+# every configure. It used to be a cache entry, which kept the value of the
+# first configure (0.9.0) after main moved on. LO_SWITCH_APP_VERSION_OVERRIDE
+# replaces it when set.
+set(LO_SWITCH_APP_VERSION_OVERRIDE "" CACHE STRING "NRO version (empty: the project version)")
+unset(LO_SWITCH_APP_VERSION CACHE)
+if(LO_SWITCH_APP_VERSION_OVERRIDE)
+    set(LO_SWITCH_APP_VERSION "${LO_SWITCH_APP_VERSION_OVERRIDE}")
+else()
+    set(LO_SWITCH_APP_VERSION "${LO_SOURCE_VERSION}")
+endif()
 set(LO_SWITCH_APP_ICON "${CMAKE_SOURCE_DIR}/packaging/switch/icon.jpg" CACHE FILEPATH "256x256 JPEG NRO icon")
 
 # Game data and user files on the SD card. The game folder holds disc1..disc4

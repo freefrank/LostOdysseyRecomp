@@ -86,8 +86,8 @@ def main():
                         help='Destination directory for DLSS SDK')
     parser.add_argument('--remote', default=DEFAULT_REMOTE, help='Git remote URL')
     parser.add_argument('--commit', default=DEFAULT_COMMIT, help='Target Git commit SHA')
-    parser.add_argument('--cache-root', type=Path, default=os.environ.get('LO_CI_CACHE') or None,
-                        help='Persistent runner cache directory (default: LO_CI_CACHE); '
+    parser.add_argument('--cache-root', type=Path,
+                        help='Optional local cache directory; CI caches --dest with actions/cache; '
                              'the verified checkout is kept in <root>/nvidia-dlss-<commit>')
     args = parser.parse_args()
 

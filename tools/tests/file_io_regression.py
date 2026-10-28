@@ -37,6 +37,7 @@ COMMON = r'''
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -528,6 +529,8 @@ def main() -> int:
     helpers = between(source, "    constexpr uint32_t kStatusInfoLengthMismatch", "    std::filesystem::path g_gameRoot;")
     schemas = between(source, "    // Guest structures (big-endian in guest memory).", "    uint64_t ToFileTime(")
     handle = between(source, "struct FileHandle : KernelObject", "void FileSystem::TraceHandleClose(")
+    handle += between(source, "static std::FILE* OpenHostFile(", "bool FileSystem::SyncFile(")
+    handle += between(source, "bool FileHandle::PublishSave()", "static bool StartsWithNoCase(")
     lock = between(source, "class FileIoLock\n", "// Semantics follow Xenia")
     queue_apc = between(source, "static void QueueIoApc(", "namespace\n{")
     reads = between(source, "// Reads a handle that has language-pack or model ranges", "uint32_t NtReadFile(")

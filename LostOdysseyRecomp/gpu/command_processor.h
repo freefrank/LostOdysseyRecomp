@@ -187,6 +187,7 @@ namespace gpu
             uint32_t x = 0, y = 0, width = 0, height = 0, session = 0, timeLow = 0, timeHigh = 0;
         } m_movieReplace;
         gpu::frame_plan::wire::PlanStage m_framePlan;
+        bool m_cinematicBars = false; // Last fully committed plan, not the staged packet.
         gpu::frame_plan::wire::CatalogStage m_catalog;
         uint32_t m_primaryBufferPhysical = 0;
         uint32_t m_primaryBufferSize = 0;

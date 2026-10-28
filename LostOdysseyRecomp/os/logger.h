@@ -10,6 +10,10 @@
 #include <string>
 #include <thread>
 #include <os/netlog.h>
+#if defined(__SWITCH__)
+#include <os/switch_platform.h>
+#include <os/switch_cpu_profiler.h>
+#endif
 #ifdef __ANDROID__
 #include <android/log.h>
 #endif
@@ -111,6 +115,11 @@ namespace os::logger
         g_writerStarted = true;
         // Never joined or detached: libnx has no pthread_detach.
         (void)new std::thread([] {
+            // Above the game's threads (pthreads get 0x3B, the game's own run
+            // at 0x2C and up), so a freeze that keeps the cores busy still
+            // gets its last lines to the card. It sleeps between writes.
+            os::switch_platform::SetCurrentThreadPriority(0x2A);
+            os::switch_cpu_profiler::RegisterCurrentThread("Log Writer"); // listed in hang.log
             for (;;)
             {
                 {

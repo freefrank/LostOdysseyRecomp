@@ -6,10 +6,15 @@
 #include <optional>
 #include <vector>
 #include <gpu/pipeline_cache.h>
+#include <gpu/loading_pacing.h>
 #include "battle_menu.h"
+#include "loading_state.h"
 #include "map_info.h"
 
 extern "C" PPC_FUNC(__imp__sub_82A0D648);
+extern "C" PPC_FUNC(__imp__sub_8231F010);
+extern "C" PPC_FUNC(__imp__sub_82829050);
+extern "C" PPC_FUNC(__imp__sub_82826F40);
 namespace {
 std::mutex mutex;
 std::map<std::wstring, uint32_t> definitions;
@@ -74,6 +79,64 @@ std::wstring ObjectName(uint8_t* base, uint32_t object) {
     const auto entry = PPC_LOAD_U32(names + index * 4);
     return Address(entry) ? Key(Text(base, entry + 16)) : std::wstring{};
 }
+
+constexpr uint32_t Loader = 0x832631F0;
+// This is deliberately separate from pendingScene, which identifies a pipeline
+// prewarm scene and keeps a battle tag throughout the fight. Only native loader
+// acceptance and package completion determine the temporary pacing change.
+bool loading = false;
+uint64_t loadNumber = 0, loaderTicks = 0, firstLoadTick = 0;
+std::chrono::steady_clock::time_point loadStart;
+
+void PublishLoading(uint8_t* base, const char* reason, bool activating = false) {
+    const uint8_t stage = PPC_LOAD_U8(Loader);
+    const uint8_t slot = PPC_LOAD_U8(Loader + 1);
+    const uint32_t request = slot < 6 ? Loader + 3168 + 88 * slot : 0;
+    const int32_t phase = request ? static_cast<int32_t>(PPC_LOAD_U32(request)) : 0;
+    const bool active = !activating && debug_menu::loading_state::Loading(stage, slot, phase);
+    if (active == loading) return;
+    const auto now = std::chrono::steady_clock::now();
+    loading = active;
+    gpu::loading::SetLoading(active);
+    if (active) {
+        loadStart = now;
+        firstLoadTick = loaderTicks;
+        ++loadNumber;
+        const auto name = std::filesystem::path(Text(base, PPC_LOAD_U32(request + 4), 64)).u8string();
+        LOG_NOTICE("fast loading begin n={} reason={} slot={} phase={} stage={} id={} name={}",
+            loadNumber, reason, slot, phase, stage, PPC_LOAD_U32(request + 16),
+            reinterpret_cast<const char*>(name.c_str()));
+    } else {
+        LOG_NOTICE("fast loading end n={} reason={} slot={} phase={} stage={} ms={:.3f} ticks={}",
+            loadNumber, reason, slot, phase, stage,
+            std::chrono::duration<double, std::milli>(now - loadStart).count(), loaderTicks - firstLoadTick);
+    }
+}
+}
+
+// Every engine tick dispatches this manager, including title -> field and
+// battle -> field. Observe acceptance after the native pick; never accelerate
+// merely queued requests (encounter_defer can hold one for a field event).
+PPC_FUNC(sub_8231F010) {
+    const bool manager = ctx.r3.u32 == Loader;
+    if (manager) { ++loaderTicks; PublishLoading(base, "tick"); }
+    __imp__sub_8231F010(ctx, base);
+    if (manager) PublishLoading(base, "tick");
+}
+
+// F5E0 publishes stage 4 once package work settles; FBF8 immediately calls
+// this activation dispatcher, which starts the map/battle presentation. Restore
+// pacing before it runs, without waiting for world visibility or battle ticks.
+PPC_FUNC(sub_82829050) {
+    if (PPC_LOAD_U8(Loader) == 4) PublishLoading(base, "activate", true);
+    __imp__sub_82829050(ctx, base);
+}
+
+// Cancellation and reset are also used outside the ordinary tick dispatcher.
+PPC_FUNC(sub_82826F40) {
+    const bool manager = ctx.r3.u32 == Loader;
+    __imp__sub_82826F40(ctx, base);
+    if (manager) PublishLoading(base, "reset");
 }
 
 PPC_FUNC(sub_82A0D648) {
@@ -167,6 +230,13 @@ debug_menu::MapInfo debug_menu::GetMapInfo() {
     std::lock_guard lock(mutex);
     if (std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2)) return {};
     return snapshot;
+}
+
+bool debug_menu::TryGetMapInfo(MapInfo& out) {
+    std::unique_lock lock(mutex, std::try_to_lock);
+    if (!lock.owns_lock()) return false;
+    out = std::chrono::steady_clock::now() - lastUpdate > std::chrono::seconds(2) ? MapInfo{} : snapshot;
+    return true;
 }
 
 void debug_menu::PollSceneLoads(uint8_t* base) {

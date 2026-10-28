@@ -56,6 +56,8 @@ Download the package for your platform from the [latest release](https://github.
 | macOS arm64 | `LostOdysseyRecomp-macos-arm64-<version>.dmg` | Drag `LostOdysseyRecomp.app` to Applications. Needs an Apple Silicon Mac with macOS 15 or later. |
 | Android arm64 | `LostOdysseyRecomp-android-arm64-<version>.apk` | Install the APK and open it once. Needs a 64-bit Android 8.0+ device with Vulkan. |
 
+On Steam Deck, use **Settings → System → Add to Steam** with either Linux package to add the game and its library artwork ([steps](docs/INSTALLING.md#steam-deck)). Artwork is generated from your game files; if that fails, the game uses bundled fallback artwork.
+
 1. **Import your game data.** The importer opens when no game is found. Select an extracted game folder, `default.xex`, an ISO or GOD data.
 2. **Get the shaders.** On the first start the game offers precompiled shaders for your renderer; if you skip, it compiles them once.
 3. **Add the other discs and DLC** in Settings → **System → Import discs & DLC**. With all four discs imported, the game changes discs on its own.
@@ -71,16 +73,16 @@ The app is not notarized, so macOS blocks the first launch: try to open it once,
 - **Game data:** opening the app creates `Android/data/io.github.freefrank.lostodyssey/files/game/`. Copy your extracted `disc1`–`disc4` into it over USB, or import disc images with **Game folder → Import disc images…**. **CTRL → Game folder** can point the game at another folder or an SD card.
 - **Qualcomm devices:** the **GPU driver** page opens before the first start. Download a Turnip driver there.
 - **Mali devices:** the **GPU driver** page also opens first. Download the recommended PanVK driver there; it needs a Mali-G57, G68, G77, G78 or Mali-G610 and newer GPU.
-- **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout.
+- **Controls:** the touch controls hide when a controller is connected. **CTRL** sets their size, opacity and layout. **Hide all touch controls** hides them completely; reveal the system bars or use Android Back to show CTRL for 4 seconds.
 - **Updates:** a new APK installs over the old one and keeps your saves.
-- **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter.
+- **Saves:** **CTRL → Saves and logs** exports saves to a ZIP and imports ZIPs from a PC, Xenia or the RGH save converter. Its **Keep saves in the game folder** option uses `<game folder>/save/` for syncing with a PC; it is off by default and applies at the next app start.
 - **Logs:** **CTRL → Saves and logs → Export logs** saves them to a ZIP for a bug report ([details](docs/INSTALLING.md#android-logs)).
 
 [Step-by-step guide](docs/INSTALLING.md#android).
 
-### Nintendo Switch (experimental)
+### Nintendo Switch
 
-A homebrew build for consoles running Atmosphère, with the Xbox 360 image (540p handheld or 720p docked by default, no PC graphics extras). It is early and slow. Building it, the SD card layout and the shader files it needs are in the [Switch guide](docs/SWITCH.md).
+Ad0ky maintains an experimental homebrew build for Switch consoles running custom firmware. It is not part of the releases here: download it from [Ad0ky's releases](https://github.com/Ad0ky/LostOdysseyRecomp/releases), which also have the install steps.
 
 ### HDR
 
@@ -92,17 +94,19 @@ Turn on **HDR** in Graphics and save. **HDR peak brightness** opens a calibratio
 | :--- | :--- |
 | Import | Folder, XEX, ISO and GOD sources, DLC and disc replacement. Your original files are not changed. |
 | Languages | Menus in English, Japanese, Korean, Traditional Chinese and Simplified Chinese. Game languages depend on your edition. |
-| Display | Windowed or fullscreen, monitor and GPU choice, 16:9 and 21:9 resolutions (taller screens such as 16:10 are filled), [HDR](#hdr) and **Brightness / Gamma**. |
+| Display | Windowed or fullscreen, monitor and GPU choice, 16:9 and 21:9 resolutions (taller screens such as 16:10 are filled), [HDR](#hdr) and **Brightness / Gamma**. Cutscenes and the pause overlay use a centred 16:9 area. |
 | Anti-aliasing and upscaling | FXAA, SMAA, TAA, DLSS, FSR 3.1, XeSS (Windows Direct3D 12) and MetalFX (macOS). |
 | Graphics options | Shadow resolution 1×/2×/4×, SSAO/GTAO, anisotropic filtering, depth of field and bloom. |
 | Frame rate | 30/60/90/120 FPS; VSync Off, On or FreeSync / G-SYNC Compatible VRR. **Performance overlay** shows the frame rate, or a bar with the upscaler, frame generation, CPU and GPU load. |
-| Frame generation | DLSS, FSR or XeSS on Windows Direct3D 12; DLSS on Windows Vulkan. |
+| Loading speed | Graphics → **Loading speed**: Original keeps the Xbox 360 loading pace; Fast (default) loads at a higher frame rate. Effects play at normal speed either way. |
+| Frame generation | DLSS, FSR or XeSS on Windows Direct3D 12; DLSS on Windows Vulkan. It pauses while cinematic black bars are shown and resumes in gameplay. |
 | DLSS 5 neural rendering | Windows with DLSS on an RTX GPU. It needs `nvngx_dlssnr.dll`, which the game does not include: put your own copy (tested with 310.8.0.0) next to `LostOdysseyRecomp.exe` and restart. |
 | Shaders | Precompiled shaders downloaded on the first start, or compiled once and cached. |
 | Audio | Stereo, 5.1 surround, or matrix surround for an AV receiver. Cutscene dialogue has its own volume. |
 | Input | Controllers, keyboard and rumble; touch controls on Android. |
 | Mods | Windows only: texture, model, menu and font replacements, cutscene videos, text translations and language packs (which can add letters the game's fonts lack), and PlayStation button prompts, installed by hand or with Mod Organizer 2 (its plugins are in the Windows ZIP). Other platforms may load mods but are not supported. See the [modding guide](docs/wiki/Modding.md). Ready-made mods, such as the 4x HD texture pack, are shared in the **#mods** forum on [Discord](https://discord.gg/z2yPct6z2w). |
 | Achievements | The game's 36 Xbox 360 achievements, with an Xbox 360-style notification and sound when you unlock one. **Settings → System → Achievements** lists them with your unlock dates and turns the notification on, silent or off. An `achievement.wav` next to `settings.ini` replaces the sound. |
+| Discord status | Windows, Linux and macOS: Discord Rich Presence shows your location, disc and activity. **Settings → System → Discord status** is on by default; changes take effect immediately. If status is missing, check the runtime log for connection and activity diagnostics. |
 | Debug menu | Render captures, Save Anywhere, encounter switches, teleport, fast-forward and cheats. See [Debug menu](#debug-menu). |
 
 ## Controls
@@ -116,9 +120,13 @@ Controllers and the keyboard work together for player 1. If your controller is n
 | D-pad / left stick | Arrow keys / I, J, K, L |
 | Left / right shoulder | Q / W |
 | Left / right trigger | E / R |
+| Title menu: Settings (Y) | S |
+| Title menu: Quit game (Back / View) | Backspace |
 | Debug Menu | F1 |
 
 These are the default keys. **Settings → Gameplay → Controls** changes the keys and the controller buttons, and sets the button prompts and the vibration strength.
+
+Quitting from the title menu asks for confirmation, with **No** selected by default.
 
 Press **Back** to zoom the minimap; hold it for about half a second to hide the minimap. For Ring actions, use the controller's **right trigger** or **R**.
 
@@ -138,11 +146,11 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 ### Overview: captures and game actions
 
-**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **No Random Encounters**, **Encounter Every Step** and an action that wins the current battle.
+**Overview** shows the current map and has the menu language, **Capture render state**, **Save Anywhere**, **Return to title** (outside battles) and an action that wins the current battle.
 
 - **Capture render state:** confirm it, then close the menu. The archive is saved in `captures/` with screenshots, rendering data and logs; look through it before sharing.
 - **Save Anywhere** turns on the game's own **System → Save**.
-- **No Random Encounters** stops random battles in the field; story battles still happen. **Encounter Every Step** starts a random battle on every step.
+- **Return to title** asks for confirmation before returning to the title screen. Unsaved progress will be lost. It is unavailable from the battle transition through the victory/results screens until control returns to the field or world map. Close the save/load screen and wait for saving or loading to finish before using it.
 
 ### Teleport: positions within the current map
 
@@ -154,14 +162,20 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 
 | Category | What it does |
 | :--- | :--- |
-| **Quick tools** | Fast-forward, **Allow memory edits**, gold and HP/MP. |
+| **Quick tools** | Fast-forward, **Encounter rate**, **Battle EXP ×2**, menu animation speed, **Allow memory edits**, gold and HP/MP. |
 | **Characters** | HP/MP, EXP (0–99, not the level) and skills. |
 | **Inventory** | Set items and materials to 1, 10, 50 or 99, or fill whole categories. Sort the in-game inventory to refresh it. |
 | **Equipment** | Weapon, ring and accessory changes. |
 | **Party** | Party members, rows and field character. |
 | **Developer** | The original **EDIT MENU**: enable it, close F1, press **LT+RT**. |
 
-**Fast-forward** runs at 2×–8× while you hold **LT** (**Hold**) or after you press it (**Toggle**).
+**Menu animations** sets camp menu opening, closing and submenu transitions to **Normal (1×)**, **Fast (2×)** or **Faster (4×)**. The choice is saved; **Normal** is the default. Gameplay and audio keep their usual speed.
+
+**Fast-forward** runs at 2×–8× while you hold the selected button (**Hold**) or after you press it (**Toggle**). Set it in **Cheats** → **Fast-forward button** (next to **Speed mode**); choose LT (default) or LB. With LT selected, holding RT at the same time blocks fast-forward; with LB selected, RB does. **Fast-forward audio** defaults to **Keep pitch**; choose **Speed up** to raise the pitch with the speed. The choices are saved.
+
+**Encounter rate** offers **Normal**, **Half**, **None** and **Every step**. Half skips every other random encounter; Every step starts a battle on each step in areas with random encounters. Story battles and bosses are unaffected. Every step is a temporary testing aid: restarting restores your last Normal/Half/None choice. **Battle EXP ×2** is a separate, saved switch for experience earned from won battles.
+
+The EXP bonus applies after the game's level-based calculation and keeps its normal per-battle cap. SP and gold stay the same.
 
 **Memory edits** are off by default. Back up your save, turn on **Allow memory edits**, choose an action, confirm **Yes** and close F1 to apply it.
 
@@ -175,7 +189,7 @@ The Windows ZIP is **portable**: everything stays in the folder you extracted it
 | Linux AppImage | `~/.config/lost-odyssey-recomp/` | `~/.local/share/lost-odyssey-recomp/` | `~/.local/state/lost-odyssey-recomp/` |
 | Linux Flatpak | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/config/lost-odyssey-recomp/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/data/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/.local/state/lost-odyssey-recomp/` |
 | macOS app | `~/Library/Application Support/LostOdysseyRecomp/` | same | `~/Library/Logs/LostOdysseyRecomp/` |
-| Android | inside the app | inside the app; game data in `Android/data/io.github.freefrank.lostodyssey/files/game/` | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
+| Android | inside the app | saves inside the app by default, optionally `<game folder>/save/`; game data in `Android/data/io.github.freefrank.lostodyssey/files/game/` or the chosen folder | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
 
 | What | Where | Notes |
 | :--- | :--- | :--- |
@@ -197,6 +211,7 @@ More detail is in [file locations](docs/INSTALLING.md#file-locations).
 | :--- | :--- |
 | `--game <path>` | Use this game folder (with `default.xex` or `disc1/`) or `default.xex` file, skipping the importer. |
 | `--install` | Open the importer even when a game is already set up. |
+| `--add-to-steam` | Add the game to Steam with library artwork, then exit with a status code. Close Steam first; add it again if you move the game. |
 | `--setup` | Windows: open the setup page, then start the game. |
 | `--prepare-shaders-only` | Prepare all shaders, then exit without starting the game. |
 
@@ -210,6 +225,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 | :--- | :--- |
 | `LO_GRAPHICS_API` | `d3d12` or `vulkan` on Windows. |
 | `LO_FPS` | Frame-rate cap; `0` means uncapped. |
+| `LO_FAST_LOADING=0/1` | Override Loading speed: `0` selects Original pacing; `1` selects Fast. Without the override, `loading_transitions=0/2` in `settings.ini` stores Original/Fast. Fast loading on Android and devices with a detected battery is capped at 4× the selected limit, up to 240 FPS (240 FPS if uncapped). |
 | `LO_NO_UPDATE=1` | Skip the update check. |
 | `LO_MODS=0` | Disable mods. |
 | `LO_AUDIO_MUTE=1` | Mute audio. |
@@ -218,11 +234,11 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## Reporting a problem
 
-[Open an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) with the version, operating system, graphics backend, GPU and driver, game edition and disc, and the steps or scene that show the problem. Attach the newest `logs/runtime-<timestamp>.log`. For a full log, turn on **Settings → System → Debug log**, save, and show the problem again before you attach it.
+[Open an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) with the version, operating system, graphics backend, GPU and driver, game edition and disc, and the steps or scene that show the problem. Attach the newest `logs/runtime-<timestamp>.log`. **Settings → System → Debug log** is on by default. If you turned it off, turn it back on, save and restart before showing the problem again.
 
 For a visual problem, make a [render capture](#overview-captures-and-game-actions) while it is on screen. Do not attach game files, saves or personal data.
 
-Optional diagnostics are off by default; see [Privacy](PRIVACY.md).
+Optional log collection is off by default; see [Privacy](PRIVACY.md).
 
 ## Screenshots
 
@@ -238,11 +254,11 @@ See [Building](docs/BUILDING.md), [Developer tools](tools/README.md), the [roadm
 
 ## Sponsors
 
-Thank you to **Frenzy Fresh**, **José Antonio Martínez Godoy**, **C_BAR**, **Arakon**, **Efren V**, **Torresmo**, **doc_haz**, **Whitesun** and **Cristian** for supporting the project on [Ko-fi](https://ko-fi.com/dotslash).
+Thank you to **CarlosVonSexron**, **Atlas**, **stratosG**, **iambRad**, **Frenzy Fresh**, **José Antonio Martínez Godoy**, **C_BAR**, **Arakon**, **Efren V**, **Torresmo**, **doc_haz**, **Whitesun** and **Cristian** on [Ko-fi](https://ko-fi.com/dotslash), and to **Norghat**, **Morgan** and one anonymous supporter on [Buy Me a Coffee](https://buymeacoffee.com/dotslash), for supporting the project.
 
 ## Credits and game data
 
-Thanks to everyone who sent pull requests and patches: [MikeRavenelle](https://github.com/MikeRavenelle), [dj5927](https://github.com/dj5927), [Xarishark](https://github.com/Xarishark), [navjack](https://github.com/navjack), [frankzzz](https://github.com/frankzzz) and [cngjd](https://github.com/cngjd). The macOS port started from MikeRavenelle's Apple Silicon work.
+Thanks to everyone who sent pull requests and patches: [MikeRavenelle](https://github.com/MikeRavenelle), [dj5927](https://github.com/dj5927), [Xarishark](https://github.com/Xarishark), [navjack](https://github.com/navjack), [frankzzz](https://github.com/frankzzz), [cngjd](https://github.com/cngjd), [faisalkindi](https://github.com/faisalkindi) and [Ad0ky](https://github.com/Ad0ky). The macOS port started from MikeRavenelle's Apple Silicon work, and Ad0ky ported the game to the Nintendo Switch on the `LostOdysseyNX` branch.
 
 With research and tools from [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp), [re:Blue](https://github.com/zolaware/reblue), [XenonRecomp](https://github.com/hedge-dev/XenonRecomp), [XenosRecomp](https://github.com/hedge-dev/XenosRecomp), [plume](https://github.com/renderbag/plume) and [Xenia](https://github.com/xenia-project/xenia). Audio uses the [Xenia FFmpeg fork](https://github.com/xenia-project/FFmpeg) ([license](thirdparty/ffmpeg-LICENSE.txt)). The Android Turnip GPU drivers come from the driver list of the [Eden](https://git.eden-emu.dev/eden-emu/eden) emulator and load through [libadrenotools](https://github.com/bylaws/libadrenotools); the Mali PanVK driver comes from [panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android).
 

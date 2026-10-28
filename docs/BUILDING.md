@@ -129,7 +129,7 @@ Building the native Linux ELF works on Linux distributions (such as Ubuntu or Ma
 SDL 3.4.18 itself is vendored in the repository tree. Its CMake stops when X11
 is found without the extension headers it uses, so install the X11, Wayland and
 audio development packages from [SDL's Linux build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies);
-the Linux job in `.gitea/workflows/release.yml` lists the Ubuntu set.
+the Linux job in `.github/workflows/release.yml` lists the Ubuntu set.
 
 ### Linux PowerPC source generation
 
@@ -249,7 +249,7 @@ Standalone bundles installed directly from `.flatpak` files do not configure an 
 
 ## Building on macOS
 
-Experimental, Apple Silicon only (arm64). The runtime renders through plume's Metal backend; shaders are compiled to SPIR-V by DXC as on Vulkan and translated to MSL at runtime with SPIRV-Cross (`thirdparty/SPIRV-Cross`). CMake rejects the DLSS, FSR and Streamline options (`LO_ENABLE_DLSS`, `LO_ENABLE_FSR`, `LO_ENABLE_STREAMLINE_FG`) and the Windows-only DLSS and FSR frame-generation adapters at configure time on macOS. MetalFX frame generation (fixed 2×) is built by default (`LO_ENABLE_METALFX_FG`): its MetalFX calls compile only with the macOS 26 SDK, it needs macOS 26 and a supported GPU at run time, and it is experimental and has not been run on Mac hardware ([technical note](notes/vulkan-fg-fsr4-metalfx.md#metalfx-fg-on-the-existing-macos-port)). v0.7.35 is the first release with a macOS package, followed by v0.8.0 and v0.8.5: an ad-hoc signed disk image that is not notarized and is built on a Mac ([macOS releases](MACOS_RELEASE.md)). CI cannot link the complete runtime without private game data.
+Experimental, Apple Silicon only (arm64). The runtime renders through plume's Metal backend; shaders are compiled to SPIR-V by DXC as on Vulkan and translated to MSL at runtime with SPIRV-Cross (`thirdparty/SPIRV-Cross`). CMake rejects the DLSS, FSR and Streamline options (`LO_ENABLE_DLSS`, `LO_ENABLE_FSR`, `LO_ENABLE_STREAMLINE_FG`) and the Windows-only DLSS and FSR frame-generation adapters at configure time on macOS. MetalFX frame generation (fixed 2×) is built by default (`LO_ENABLE_METALFX_FG`): its MetalFX calls compile only with the macOS 26 SDK, it needs macOS 26 and a supported GPU at run time, and it is experimental and has not been run on Mac hardware ([technical note](notes/vulkan-fg-fsr4-metalfx.md#metalfx-fg-on-the-existing-macos-port)). macOS releases use an ad-hoc signed disk image that is not notarized. The `release-macos` job in GitHub Actions builds the complete runtime and DMG on a hosted Apple Silicon runner using pinned private build inputs ([macOS releases](MACOS_RELEASE.md)).
 
 ### Prerequisites
 
@@ -305,7 +305,7 @@ python3 -B tools/package_macos.py --dmg   # the same name ending in .dmg
 
 `--dmg` writes a compressed disk image that holds `LostOdysseyRecomp.app` and a link to `/Applications`, instead of the ZIP. Without `--identity` the `.app` is ad-hoc signed and runs on the building Mac. macOS blocks the first launch of a downloaded app that is not notarized until the player approves it ([steps](INSTALLING.md#macos)); a Developer ID signature with notarization would remove that step ([signed release workflow](MACOS_RELEASE.md#signed-release-workflow)).
 
-v0.7.35, v0.8.0 and v0.8.5 ship an ad-hoc signed, not notarized disk image. It is built on a Mac and uploaded to the release by hand, because CI cannot link the runtime without game data; the release workflow's publish step accepts it as one optional asset next to the packages built by CI (Windows ZIP, AppImage, Flatpak and, from v0.8.5, the Android APK). [macOS releases](MACOS_RELEASE.md#disk-image-v085) has the release command, the asset name the in-game updater looks for and the validation boundary.
+The release workflow builds, verifies and uploads the macOS DMG automatically; publication requires it alongside the Windows ZIP, AppImage, Flatpak and Android APK. [macOS releases](MACOS_RELEASE.md#github-actions-disk-image) describes the release command, the asset name the updater selects and the validation boundary. The commands above remain available for local development packages.
 
 ## Launch with a consistent working directory
 
@@ -345,7 +345,7 @@ Generated baseline mappings, branch targets, import listings and Ghidra exports 
 
 ## Verification
 
-Use `tools\test.bat --list` to select checks, then run only the relevant suites, for example `tools\test.bat shaders pipeline`. Runtime suites use an existing CMake build root (`--build-dir out/build/release` by default), with their target built explicitly; the runner does not implicitly build the game. See the [test guide](../tools/tests/README.md) for per-suite build commands, prerequisites and CI separation. The FG contract (including the reusable FG core), FG game integration compile and review-regression pull request checks run on Gitea Actions; see [Pull request checks and releases on Gitea](notes/ci-gitea.md).
+Use `tools\test.bat --list` to select checks, then run only the relevant suites, for example `tools\test.bat shaders pipeline`. Runtime suites use an existing CMake build root (`--build-dir out/build/release` by default), with their target built explicitly; the runner does not implicitly build the game. See the [test guide](../tools/tests/README.md) for per-suite build commands, prerequisites and CI separation. The FG contract (including the reusable FG core), FG game integration compile, review-regression and Android APK workflows run on GitHub-hosted runners; see [GitHub Actions checks and releases](notes/ci.md) for their triggers.
 
 [Rendering tests](notes/rendering-validation.md) cover memory aliases, shader ALU, stencil and texture layout. [Audio notes](notes/audio-output.md) cover `LoXmaLoopTest`; [storage notes](archive/notes/save-storage.md) describe `LoStorageTest`. Some investigation targets and input hooks remain local changes; consult [status](STATUS.md) before expecting them in a clean checkout.
 

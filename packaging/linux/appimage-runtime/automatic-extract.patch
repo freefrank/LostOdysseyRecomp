@@ -1,0 +1,197 @@
+--- a/src/runtime/runtime.c
++++ b/src/runtime/runtime.c
+@@ -588,6 +588,14 @@
+
+ static pid_t fuse_pid;
+ static int keepalive_pipe[2];
++static volatile sig_atomic_t extract_child;
++
++static void forward_extract_signal(int signal_number) {
++    int saved_errno = errno;
++    if (extract_child > 0)
++        kill(extract_child, signal_number);
++    errno = saved_errno;
++}
+
+ static void*
+ write_pipe_thread(void* arg) {
+@@ -970,7 +978,7 @@
+     // FTW_MOUNT: prevent deletion of files on other mounted filesystems
+     // FTW_PHYS: do not follow symlinks, but report symlinks as such; this way, the symlink targets, which might point
+     //           to locations outside path will not be deleted accidentally (attackers might abuse this)
+-    int rv = nftw(path, &rm_recursive_callback, 0, FTW_DEPTH | FTW_MOUNT | FTW_PHYS);
++    int rv = nftw(path, &rm_recursive_callback, 64, FTW_DEPTH | FTW_MOUNT | FTW_PHYS);
+
+     return rv == 0;
+ }
+@@ -1578,40 +1586,26 @@
+     }
+
+     if (getenv("APPIMAGE_EXTRACT_AND_RUN") != NULL || (arg && strcmp(arg, "appimage-extract-and-run") == 0)) {
+-        char* hexlified_digest = NULL;
+-
+-        // calculate MD5 hash of file, and use it to make extracted directory name "content-aware"
+-        // see https://github.com/AppImage/AppImageKit/issues/841 for more information
+-        {
+-            FILE* f = fopen(appimage_path, "rb");
+-            if (f == NULL) {
+-                perror("Failed to open AppImage file");
+-                exit(EXIT_EXECERROR);
+-            }
+-
+-            Md5Context ctx;
+-            Md5Initialise(&ctx);
+-
+-            char buf[4096];
+-            size_t bytes_read;
+-            while ((bytes_read = fread(buf, sizeof(char), sizeof(buf), f)) > 0) {
+-                Md5Update(&ctx, buf, (uint32_t) bytes_read);
+-            }
+-
+-            MD5_HASH digest;
+-            Md5Finalise(&ctx, &digest);
+-
+-            hexlified_digest = appimage_hexlify((const char*)digest.bytes, sizeof(digest.bytes));
+-        }
+-
+-        char* prefix = malloc(strlen(temp_base) + 20 + strlen(hexlified_digest) + 2);
+-        strcpy(prefix, temp_base);
+-        strcat(prefix, "/appimage_extracted_");
+-        strcat(prefix, hexlified_digest);
+-        free(hexlified_digest);
++extract_and_run:
++        ;
++        // Keep the supervisor alive to clean up after Steam Stop / terminal signals.
++        sigset_t signals, previous_mask;
++        sigemptyset(&signals);
++        sigaddset(&signals, SIGINT);
++        sigaddset(&signals, SIGTERM);
++        sigaddset(&signals, SIGHUP);
++        sigprocmask(SIG_BLOCK, &signals, &previous_mask);
++        // Each launch owns its extraction tree, including simultaneous launches.
++        char prefix[PATH_MAX];
++        if (snprintf(prefix, sizeof(prefix), "%s/appimage_extracted_XXXXXX", temp_base) >= sizeof(prefix) ||
++            mkdtemp(prefix) == NULL) {
++            perror("create extraction dir error");
++            exit(EXIT_EXECERROR);
++        }
+
+         if (!extract_appimage(appimage_path, prefix, NULL, false, verbose)) {
+             fprintf(stderr, "Failed to extract AppImage\n");
++            rm_recursive(prefix);
+             exit(EXIT_EXECERROR);
+         }
+
+@@ -1619,8 +1613,10 @@
+         if ((pid = fork()) == -1) {
+             int error = errno;
+             fprintf(stderr, "fork() failed: %s\n", strerror(error));
++            rm_recursive(prefix);
+             exit(EXIT_EXECERROR);
+         } else if (pid == 0) {
++            sigprocmask(SIG_SETMASK, &previous_mask, NULL);
+             const char apprun_fname[] = "AppRun";
+             char* apprun_path = malloc(strlen(prefix) + 1 + strlen(apprun_fname) + 1);
+             strcpy(apprun_path, prefix);
+@@ -1628,7 +1624,7 @@
+             strcat(apprun_path, apprun_fname);
+
+             // create copy of argument list without the --appimage-extract-and-run parameter
+-            char* new_argv[argc];
++            char* new_argv[argc + 1];
+             int new_argc = 0;
+             new_argv[new_argc++] = strdup(apprun_path);
+             for (int i = 1; i < argc; ++i) {
+@@ -1644,6 +1640,11 @@
+             setenv("APPDIR", prefix, 1);
+
+             set_portable_home_and_config(fullpath);
++            char* cwd = getcwd(NULL, 0);
++            if (cwd != NULL) {
++                setenv("OWD", cwd, 1);
++                free(cwd);
++            }
+
+             execv(apprun_path, new_argv);
+
+@@ -1654,9 +1655,22 @@
+             exit(EXIT_EXECERROR);
+         }
+
++        extract_child = pid;
++        struct sigaction action = {0};
++        action.sa_handler = forward_extract_signal;
++        sigemptyset(&action.sa_mask);
++        sigaction(SIGINT, &action, NULL);
++        sigaction(SIGTERM, &action, NULL);
++        sigaction(SIGHUP, &action, NULL);
++        sigprocmask(SIG_SETMASK, &previous_mask, NULL);
+         int status = 0;
+-        int rv = waitpid(pid, &status, 0);
+-        status = rv > 0 && WIFEXITED (status) ? WEXITSTATUS (status) : EXIT_EXECERROR;
++        int rv;
++        do {
++            rv = waitpid(pid, &status, 0);
++        } while (rv < 0 && errno == EINTR);
++        extract_child = 0;
++        status = rv < 0 ? EXIT_EXECERROR : WIFEXITED(status) ? WEXITSTATUS(status) :
++            WIFSIGNALED(status) ? 128 + WTERMSIG(status) : EXIT_EXECERROR;
+
+         if (getenv("NO_CLEANUP") == NULL) {
+             if (!rm_recursive(prefix)) {
+@@ -1665,9 +1679,6 @@
+                     status = EXIT_EXECERROR;
+             }
+         }
+-
+-        // template == prefix, must be freed only once
+-        free(prefix);
+
+         exit(status);
+     }
+@@ -1767,17 +1778,9 @@
+         child_argv[3] = dir;
+         child_argv[4] = mount_dir;
+
+-        if (0 != fusefs_main(5, child_argv, fuse_mounted)) {
+-            char* title;
+-            char* body;
+-            title = "Cannot mount AppImage, please check your FUSE setup.";
+-            body = "You might still be able to extract the contents of this AppImage \n"
+-                   "if you run it with the --appimage-extract option. \n"
+-                   "See https://github.com/AppImage/AppImageKit/wiki/FUSE \n"
+-                   "for more information";
+-            printf("\n%s\n", title);
+-            printf("%s\n", body);
+-        };
++        // Only the parent decides whether an ordinary launch should fall back.
++        int result = fusefs_main(5, child_argv, fuse_mounted);
++        _exit(result == 0 ? 0 : EXIT_EXECERROR);
+     } else {
+         /* in parent, child is $pid */
+         int c;
+@@ -1786,10 +1789,22 @@
+         close(keepalive_pipe[1]);
+
+         /* Pause until mounted */
+-        read(keepalive_pipe[0], &c, 1);
++        ssize_t ready;
++        do {
++            ready = read(keepalive_pipe[0], &c, 1);
++        } while (ready < 0 && errno == EINTR);
+
+         /* Fuse process has now daemonized, reap our child */
+-        waitpid(pid, NULL, 0);
++        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
++        if (ready != 1) {
++            close(keepalive_pipe[0]);
++            rmdir(mount_dir);
++            // --appimage-mount promises a mountpoint; extraction cannot satisfy it.
++            if (arg && strcmp(arg, "appimage-mount") == 0)
++                exit(EXIT_EXECERROR);
++            fprintf(stderr, "FUSE mount unavailable; extracting and running AppImage.\n");
++            goto extract_and_run;
++        }
+
+         dir_fd = open(mount_dir, O_RDONLY);
+         if (dir_fd == -1) {

@@ -16,8 +16,10 @@
 //   sub_82CE9248 / sub_82CE9FD8(pl)  pause / resume
 //   sub_82CF8140(pl)       the player's video pump thread (player vtable +144,
 //                          thread player+268): runs the guest WMV decoder
-// Set LO_NATIVE_MOVIES=1 to opt into this experimental decoder.
+// On by default on the Switch, where the guest decoder freezes cutscenes
+// (LO_NATIVE_MOVIES=0 turns it off); elsewhere LO_NATIVE_MOVIES=1 opts in.
 #include <stdafx.h>
+#include "movie_player.h"
 
 #if LO_HAS_WMV3_DECODER
 
@@ -58,7 +60,9 @@ bool Enabled()
 {
     static const bool enabled = [] {
         const char* value = std::getenv("LO_NATIVE_MOVIES");
-        return value && std::strcmp(value, "1") == 0;
+        if (!value || !value[0])
+            return bool(LO_PLATFORM_SWITCH);
+        return std::strcmp(value, "1") == 0;
     }();
     return enabled;
 }
@@ -448,6 +452,18 @@ PPC_FUNC(sub_82CF8140)
     (void)lower;
 #endif
     __imp__sub_82CF8140(ctx, base);
+}
+
+bool movie::NativeMoviesEnabled()
+{
+    return Enabled();
+}
+
+#else
+
+bool movie::NativeMoviesEnabled()
+{
+    return false;
 }
 
 #endif

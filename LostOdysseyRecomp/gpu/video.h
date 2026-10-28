@@ -33,6 +33,8 @@ namespace gpu::video
     // SPIR-V shaders and the Vulkan descriptor layout: Vulkan, and Metal (whose
     // plume backend translates SPIR-V to MSL).
     bool UsesSpirv();
+    // The Switch's deko3d back end (LO_SWITCH_BACKEND=deko3d): SPIR-V, translated to deko3d's GLSL per pipeline layout.
+    bool IsDeko3d();
     // The game window's height in points (logical pixels), or 0 when no window
     // exists. On Retina displays the drawable is larger than this.
     uint32_t LogicalOutputHeight();
@@ -136,7 +138,12 @@ namespace gpu::video
     // Untiles the guest frontbuffer (a tiled 32bpp texture written by the
     // GPU resolve) into an upload buffer and presents it.
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo,
-        const present_capture::Ticket *capture = nullptr, present_capture::Result *captureResult = nullptr);
+        const present_capture::Ticket *capture = nullptr, present_capture::Result *captureResult = nullptr,
+        bool cinematicBars = false);
+    // Guest menu activation, before it queues the backdrop blur. Any thread;
+    // the GPU owner consumes the opening request before the next guest draw.
+    void SetCalibrationGameMenuOpen(bool open);
+    void CaptureCalibrationSceneBeforeDraw();
 #if defined(LO_GPU_PLUME)
     // Observation for the capture fixture. Production frames leave these at zero
     // unless an explicit ticket queued a readback.

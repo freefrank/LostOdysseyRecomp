@@ -40,7 +40,13 @@ lo_review_test(LoAsfDemuxTest asf_demux_test.cpp "${LO_RUNTIME}/movie/asf_demux.
 lo_review_test(LoGuestClockOriginTest guest_clock_origin_test.cpp)
 lo_review_test(LoCpxDecodeTest cpx_decode_test.cpp)
 lo_review_test(LoModelSlotTest model_slot_test.cpp)
+lo_review_test(LoMenuAnimationsTest menu_animations_test.cpp)
+lo_review_test(LoDebugOverlayTest debug_overlay_test.cpp "${LO_RUNTIME}/debug/menu_overlay.cpp")
+lo_review_test(LoDebugMenuInteractionTest debug_menu_interaction_test.cpp "${LO_RUNTIME}/debug/menu_overlay.cpp")
+lo_review_test(LoSoftResetTest soft_reset_test.cpp)
 lo_review_test(LoAudioCallbackTest audio_callback_test.cpp)
+lo_review_test(LoFramePacerTest frame_pacer_test.cpp)
+lo_review_test(LoLoadingStateTest loading_state_test.cpp)
 lo_review_test(LoSettingsPathTest settings_path_test.cpp "${LO_RUNTIME}/updater/update.cpp")
 lo_review_test(LoUserPathsTest user_paths_test.cpp)
 lo_review_test(LoRuntimeLibrariesTest runtime_libraries_test.cpp)
@@ -50,6 +56,7 @@ lo_review_test(LoOcclusionQueriesTest occlusion_queries_test.cpp)
 lo_review_test(LoTemporalJitterTest temporal_jitter_test.cpp)
 # One-file local shader store: keys, recovery, integrity, locking, compaction.
 lo_review_test(LoShaderStoreTest shader_store_test.cpp)
+lo_review_test(LoShaderPreparationRequestTest shader_preparation_request_test.cpp)
 lo_review_test(LoShadowResolutionTest shadow_resolution_test.cpp)
 # Deferred EDRAM clears: queue rules, execution points, same pixels as clearing at once.
 lo_review_test(LoPendingClearTest pending_clear_test.cpp)
@@ -148,7 +155,14 @@ endif()
 
 # AppImage and Flatpak packaging scripts, with linuxdeploy, flatpak and the
 # compiler, readelf and ldd checks replaced by stand-ins.
-foreach(name package_appimage package_flatpak)
+foreach(name package_appimage package_flatpak package_release)
     add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}" -B "${LO_TESTS}/${name}_test.py")
     set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endforeach()
+
+# Steam shortcuts and discovery run entirely in temporary fixture trees.
+add_subdirectory("${LO_TESTS}/steam_shortcut" "${CMAKE_CURRENT_BINARY_DIR}/steam_shortcut")
+add_subdirectory("${LO_TESTS}/steam_artwork" "${CMAKE_CURRENT_BINARY_DIR}/steam_artwork")
+
+# Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
+add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")

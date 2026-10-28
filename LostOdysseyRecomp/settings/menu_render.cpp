@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <cwchar>
+#include <cwctype>
 
 #ifdef LO_MENU_RENDER_TRACE
 // Only the direct raster fixture enables this observer; no runtime tracing.
@@ -48,8 +49,24 @@ namespace
     // The title menu's Settings legend: key, then label, in this layout box
     // with a margin for the outline.
     constexpr int kHintX = 1036, kHintY = 646, kHintKey = 22, kHintWidth = 180, kHintHeight = 28;
+    // A second row grows down, away from the toast. Its wider key box fits
+    // Backspace without narrowing the translated label or changing the credit.
+    constexpr int kQuitHintX = 934, kQuitHintY = 676, kQuitHintKey = 104, kQuitHintGap = 8;
     constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
-                  kHintBottom = kHintY + kHintHeight + 4;
+                  kHintBottom = kQuitHintY + kHintHeight + 4;
+    // Share the legend's centred canvas and safe margin, leaving a gap before
+    // its key. Both lines also clear the achievement toast's shadow above.
+    constexpr int kCreditX = 64, kCreditY = 654, kCreditWidth = 948, kCreditLineHeight = 20;
+    int FooterOffset(const Canvas &output)
+    {
+        return output.scale > 0 ? int(std::floor(output.offsetY / output.scale)) : 0;
+    }
+    int CreditTop(const Canvas &output)
+    {
+        // On a tall output the centred 16:9 canvas ends above the window's
+        // bottom. Keep the credit below the output-anchored toast there too.
+        return kCreditY + FooterOffset(output);
+    }
 
     // The help box under the list: one line at 20 pt, or the help over the
     // notice at 16 pt each.
@@ -95,16 +112,106 @@ namespace
         return value;
     }
 
+    // Arabic text (a language pack's name) in drawing order: letters joined
+    // into presentation forms (Unifont has them), marks dropped, and the line
+    // reversed when its first letter is Arabic, with Latin and digit runs and
+    // brackets kept readable. Other text is returned unchanged.
+    std::wstring ArabicVisual(const std::wstring &value)
+    {
+        // U+0621..U+064A: isolated presentation form and form count (1 none,
+        // 2 joins only to the previous letter, 4 joins both ways); 0 none.
+        static constexpr uint16_t kForms[][2] = {
+            {0xFE80, 1}, {0xFE81, 2}, {0xFE83, 2}, {0xFE85, 2}, {0xFE87, 2}, {0xFE89, 4}, {0xFE8D, 2},
+            {0xFE8F, 4}, {0xFE93, 2}, {0xFE95, 4}, {0xFE99, 4}, {0xFE9D, 4}, {0xFEA1, 4}, {0xFEA5, 4},
+            {0xFEA9, 2}, {0xFEAB, 2}, {0xFEAD, 2}, {0xFEAF, 2}, {0xFEB1, 4}, {0xFEB5, 4}, {0xFEB9, 4},
+            {0xFEBD, 4}, {0xFEC1, 4}, {0xFEC5, 4}, {0xFEC9, 4}, {0xFECD, 4}, {0, 0}, {0, 0}, {0, 0},
+            {0, 0}, {0, 0}, {0, 0}, {0xFED1, 4}, {0xFED5, 4}, {0xFED9, 4}, {0xFEDD, 4}, {0xFEE1, 4},
+            {0xFEE5, 4}, {0xFEE9, 4}, {0xFEED, 2}, {0xFEEF, 2}, {0xFEF1, 4}};
+        const auto forms = [](wchar_t c) {
+            if (c == 0x0640) return 4; // tatweel joins both ways
+            return c >= 0x0621 && c <= 0x064A ? int(kForms[c - 0x0621][1]) : 0;
+        };
+        const auto arabic = [](wchar_t c) { return (c >= 0x0600 && c <= 0x06FF) || (c >= 0xFE70 && c <= 0xFEFF); };
+        if (std::none_of(value.begin(), value.end(), arabic)) return value;
+
+        std::wstring letters;
+        for (const auto c : value)
+            if (!(c >= 0x064B && c <= 0x065F) && c != 0x0670) letters += c;
+        std::wstring shaped;
+        for (size_t i = 0; i < letters.size(); ++i)
+        {
+            const wchar_t c = letters[i];
+            const int n = forms(c);
+            if (!n || c == 0x0640) { shaped += c; continue; }
+            const bool joinsPrevious = n > 1 && i > 0 && forms(letters[i - 1]) == 4;
+            const wchar_t next = i + 1 < letters.size() ? letters[i + 1] : 0;
+            // Lam with alef: one ligature.
+            if (c == 0x0644 && (next == 0x0622 || next == 0x0623 || next == 0x0625 || next == 0x0627))
+            {
+                const wchar_t base = next == 0x0622 ? 0xFEF5 : next == 0x0623 ? 0xFEF7 : next == 0x0625 ? 0xFEF9 : 0xFEFB;
+                shaped += wchar_t(base + (joinsPrevious ? 1 : 0));
+                ++i;
+                continue;
+            }
+            const bool joinsNext = n == 4 && forms(next) > 1;
+            const int form = joinsPrevious ? (joinsNext ? 3 : 1) : (joinsNext ? 2 : 0);
+            shaped += wchar_t(kForms[c - 0x0621][0] + form);
+        }
+
+        // Digits (Western and Arabic-Indic) read left to right but do not set the line's direction.
+        const auto digit = [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= 0x0660 && c <= 0x0669) || (c >= 0x06F0 && c <= 0x06F9); };
+        const auto latin = [](wchar_t c) { return (c < 0x0600 && std::iswalpha(c)) || (c > 0x06FF && c < 0xFB50); };
+        const auto letter = [&](wchar_t c) { return arabic(c) && !digit(c); };
+        const auto ltr = [&](wchar_t c) { return latin(c) || digit(c); };
+        const auto first = std::find_if(shaped.begin(), shaped.end(), [&](wchar_t c) { return letter(c) || latin(c); });
+        const bool rtl = first != shaped.end() && letter(*first);
+        const auto reverseRuns = [&](std::wstring &text, auto inRun) {
+            for (size_t i = 0; i < text.size();)
+            {
+                if (!inRun(text[i])) { ++i; continue; }
+                size_t end = i;
+                for (size_t j = i; j < text.size(); ++j)
+                {
+                    if (inRun(text[j])) end = j + 1;
+                    else if (text[j] != L' ' && text[j] != L'.' && text[j] != L'-') break;
+                }
+                std::reverse(text.begin() + i, text.begin() + end);
+                i = end;
+            }
+        };
+        if (!rtl)
+        {
+            reverseRuns(shaped, letter);
+            return shaped;
+        }
+        std::reverse(shaped.begin(), shaped.end());
+        for (auto &c : shaped)
+        {
+            switch (c) {
+            case L'(': c = L')'; break;
+            case L')': c = L'('; break;
+            case L'[': c = L']'; break;
+            case L']': c = L'['; break;
+            case L'<': c = L'>'; break;
+            case L'>': c = L'<'; break;
+            case L'«': c = L'»'; break;
+            case L'»': c = L'«'; break;
+            }
+        }
+        reverseRuns(shaped, ltr);
+        return shaped;
+    }
+
     // The game face that draws a whole string: the title face from 32 pt, else
     // the body face, or the Abc face when only it has every character. Null:
     // the host font draws it.
     const settings::menu_assets::Font *GameFace(const settings::menu_assets::Assets *assets,
-                                                const std::wstring &value, int size)
+                                                const std::wstring &value, int size, bool creditSeparators = false)
     {
         if (!assets || value.empty()) return nullptr;
         const auto covers = [&](const settings::menu_assets::Font &font) {
             return font.height && std::all_of(value.begin(), value.end(), [&](wchar_t c) {
-                return c == L' ' || font.glyphs.contains(uint32_t(c));
+                return c == L' ' || (creditSeparators && c == L'·') || font.glyphs.contains(uint32_t(c));
             });
         };
         const auto *face = size >= 32 && !assets->title.glyphs.empty() ? &assets->title : &assets->body;
@@ -113,33 +220,37 @@ namespace
     }
 
     // Unscaled width of a string in a game face, spaces as drawn.
-    double FaceAdvance(const settings::menu_assets::Font &font, const std::wstring &value)
+    double FaceAdvance(const settings::menu_assets::Font &font, const std::wstring &value, bool creditSeparators = false)
     {
         double advance = 0;
         for (const auto c : value)
-            advance += c == L' ' ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
+            advance += c == L' ' || (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+                           ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
         return advance;
     }
 
     // Glyph scale of a game face: the size asked for, limited by the box
     // height (`fitted` false) and also by its width (`fitted` true).
     double FaceRatio(const settings::menu_assets::Font &font, const std::wstring &value, int w, int h, int size,
-                     bool fitted)
+                     bool fitted, bool creditSeparators = false)
     {
         const double desired = size >= 32 ? size * 1.25 : size * 1.30;
         const double unconstrained = std::min(desired / font.height, double(h) / font.height);
         if (!fitted) return unconstrained;
-        return std::min(unconstrained, std::max(1.0, double(w - 8)) / std::max(1.0, FaceAdvance(font, value)));
+        return std::min(unconstrained, std::max(1.0, double(w - 8)) / std::max(1.0, FaceAdvance(font, value, creditSeparators)));
     }
 
     // Output width of a string in the host font at a glyph scale.
+    // Arabic presentation forms and the tatweel join their neighbours: no pixel between them.
+    bool JoinedForm(wchar_t c) { return c == 0x0640 || (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFC); }
+
     int HostAdvance(const std::wstring &value, float fontScale)
     {
         int width = 0;
         for (wchar_t c : value)
         {
             auto g = host_ui::font::GetGlyph(uint32_t(c));
-            width += int(((c >= 0xe100 && c <= 0xe103) ? 17 : (g.width + 1)) * fontScale);
+            width += int(((c >= 0xe100 && c <= 0xe103) ? 17 : JoinedForm(c) ? g.width : (g.width + 1)) * fontScale);
         }
         return width;
     }
@@ -324,6 +435,10 @@ namespace
     }
 }
 
+std::wstring settings::ArabicDrawOrder(const std::wstring &value) { return ArabicVisual(value); }
+
+bool settings::ArabicJoinedForm(wchar_t c) { return JoinedForm(c); }
+
 void settings::DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y)
 {
     if (!width || !height || pixels.size() != size_t(width) * height)
@@ -335,11 +450,15 @@ settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
 {
     // Rounded like RasterizeMenu's own rectangles.
     const Canvas c(nullptr, width, height);
+    const int creditY = CreditTop(c);
+    const int footerOffset = FooterOffset(c);
     const auto edge = [](double value, uint32_t limit) {
         return size_t(std::clamp(int(std::lround(value)), 0, int(limit)));
     };
-    return {edge(c.offsetX + kHintLeft * c.scale, width), edge(c.offsetY + kHintTop * c.scale, height),
-            edge(c.offsetX + kHintRight * c.scale, width), edge(c.offsetY + kHintBottom * c.scale, height)};
+    return {edge(c.offsetX + (kCreditX - 8) * c.scale, width),
+            edge(c.offsetY + std::min(kHintTop + footerOffset, creditY - 4) * c.scale, height),
+            edge(c.offsetX + kHintRight * c.scale, width),
+            edge(c.offsetY + std::max(kHintBottom + footerOffset, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
 }
 
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
@@ -399,7 +518,7 @@ namespace
     settings::TextFit Fit(const settings::MenuSnapshot &s, std::wstring source, int w, int h, int size)
     {
         settings::TextFit fit{std::move(source)};
-        const std::wstring value = PromptText(fit.text, s.playStationPrompts);
+        const std::wstring value = ArabicVisual(PromptText(fit.text, s.playStationPrompts));
         if (value.empty()) return fit;
         if (const auto *font = GameFace(s.assets.get(), value, size))
         {
@@ -450,7 +569,7 @@ namespace
 settings::HelpFit settings::MeasureHelp(const MenuSnapshot &s)
 {
     HelpFit fit;
-    if (s.titleHint) return fit;
+    if (s.titleHint || s.dialogOnly) return fit;
     if (s.neuralRendering.open)
     {
         fit.help = Fit(s, NrHelp(s.language, s.neuralRendering.focus), kNrHelpWidth, kNrHelpHeight, kNrHelpSize);
@@ -495,7 +614,7 @@ double settings::menu_motion::RowFade(double t)
     return value >= 0.99 ? 1 : value;
 }
 
-settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height)
+settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height, int tab, bool listPage)
 {
     MenuCascade cascade;
     if (!width || !height)
@@ -504,8 +623,9 @@ settings::MenuCascade settings::MenuOpenCascade(uint32_t width, uint32_t height)
     const auto row = [&](int y) { return size_t(std::clamp(std::lround(c.offsetY + y * c.scale), 0l, long(height))); };
     cascade.split = size_t(std::clamp(std::lround(c.offsetX + ListColumnRight * c.scale), 0l, long(width)));
     // The "Menu" heading above the first row comes in with it.
-    for (int slot = 0; slot < kMenuVisibleRows; ++slot)
-        cascade.bands.emplace_back(row(slot ? ListTop + slot * ListRowHeight : 104), row(ListTop + (slot + 1) * ListRowHeight));
+    const int rowHeight = MenuRowHeight(tab, listPage);
+    for (int slot = 0; slot < VisibleRowCount(tab, listPage); ++slot)
+        cascade.bands.emplace_back(row(slot ? ListTop + slot * rowHeight : 104), row(ListTop + (slot + 1) * rowHeight));
     return cascade;
 }
 
@@ -682,9 +802,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 
     auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
-                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true) {
-        const std::wstring value = prompts ? PromptText(source, current.playStationPrompts) : source;
-        if (const auto *selectedFont = GameFace(current.assets.get(), value, size))
+                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true,
+                     bool creditSeparators = false) {
+        const std::wstring value = ArabicVisual(prompts ? PromptText(source, current.playStationPrompts) : source);
+        if (const auto *selectedFont = GameFace(current.assets.get(), value, size, creditSeparators))
         {
             const auto &font = *selectedFont;
 #ifdef LO_MENU_RENDER_TRACE
@@ -692,8 +813,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 #endif
             // Measure spaces the way they are drawn below, or right-aligned
             // and centered text with spaces runs past its box.
-            const double advance = FaceAdvance(font, value);
-            const double ratio = FaceRatio(font, value, w, h, size, true);
+            const double advance = FaceAdvance(font, value, creditSeparators);
+            const double ratio = FaceRatio(font, value, w, h, size, true, creditSeparators);
             double left = x;
             if (alignment == 1) left += (w - advance * ratio) * .5;
             else if (alignment == 2) left += w - advance * ratio;
@@ -701,6 +822,18 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             for (const auto c : value)
             {
                 if (c == L' ') { left += (font.height * 0.3) * ratio; continue; }
+                if (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+                {
+                    // INT's menu faces lack U+00B7. Draw only that separator
+                    // here so the fixed credit retains the menu font throughout.
+                    const double step = font.height * 0.3 * ratio;
+                    const double cx = left + step / 2, cy = top + font.height * ratio / 2;
+                    const double radius = font.height * ratio * 0.055;
+                    if (edge) Ellipse(canvas, cx, cy, radius + 0.6, radius + 0.6, 0, edge);
+                    Ellipse(canvas, cx, cy, radius, radius, 0, color);
+                    left += step;
+                    continue;
+                }
                 const auto &g = font.glyphs.at(uint32_t(c));
                 sprite(font.pages[g.page], int(g.x), int(g.y), int(g.width), int(g.height),
                        left, top, g.width * ratio, g.height * ratio, 255, false, color, edge);
@@ -754,6 +887,11 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                                            std::max(1, int(fontScale)), std::max(1, int(fontScale)), inkColor);
                         });
                     cx += int(17 * fontScale);
+                }
+                else if (JoinedForm(c) && host_ui::font::GetGlyph(uint32_t(c)).bitmap)
+                {
+                    r.DrawChar(cx, top + dy, uint32_t(c), inkColor, fontScale);
+                    cx += int(host_ui::font::GetGlyph(uint32_t(c)).width * fontScale);
                 }
                 else cx += r.DrawChar(cx, top + dy, uint32_t(c), inkColor, fontScale);
             }
@@ -809,33 +947,123 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         else text(x, y, 24, 24, std::wstring(1, letter), 15, ink, true, 1, outline, 12);
     };
 
+    // Shared by Settings prompts and the title-menu confirmation.
+    const auto dialog = [&] {
+        brushedCell(280, 208, 720, 306, MakeColor(255, 73, 76, 76));
+        line(280, 208, 1000, 208, MakeColor(255, 231, 232, 228), 2);
+        line(280, 208, 280, 514, MakeColor(255, 194, 196, 193), 2);
+        line(280, 513, 1000, 513, MakeColor(255, 35, 36, 36), 3);
+        line(999, 208, 999, 514, MakeColor(255, 39, 40, 40), 3);
+        text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, 1);
+
+        std::vector<std::wstring> messageLines;
+        std::wstring remaining = current.dialogMessage;
+        while (!remaining.empty()) {
+            size_t cut = 0, space = std::wstring::npos; unsigned units = 0;
+            while (cut < remaining.size() && units + (remaining[cut] >= 0x2e80 ? 2 : 1) <= 70) {
+                if (remaining[cut] == L' ') space = cut;
+                units += remaining[cut] >= 0x2e80 ? 2 : 1; ++cut;
+            }
+            if (cut < remaining.size() && space != std::wstring::npos && space > cut / 2) cut = space;
+            messageLines.push_back(remaining.substr(0, cut)); remaining.erase(0, cut);
+            while (!remaining.empty() && remaining.front() == L' ') remaining.erase(0, 1);
+        }
+        const int lineHeight = std::min(22, 85 / int(std::max<size_t>(1, messageLines.size())));
+        for (size_t i = 0; i < messageLines.size(); ++i)
+            text(330, 267 + int(i) * lineHeight, 620, lineHeight, messageLines[i], 16, ink, false, 1, outline, 13);
+        for (size_t i = 0; i < current.dialogChoices.size(); ++i)
+        {
+            const int y = 360 + int(i) * 43;
+            const bool focused = int(i) == current.dialogSelection;
+            cell(390, y, 500, 37, focused);
+            if (focused) arrow(354, y + 8);
+            text(405, y, 470, 37, current.dialogChoices[i], 20,
+                 focused ? selectedInk : ink, false, 1,
+                 focused ? MakeColor(255, 222, 223, 219) : outline, 13);
+        }
+    };
+
+    if (current.dialogOnly)
+    {
+        // Match the Settings page dim while leaving the game visible behind it.
+        std::fill(pixels.begin(), pixels.end(), MakeColor(61, 0, 0, 0));
+        if (!current.dialogChoices.empty()) dialog();
+        return true;
+    }
+
     if (current.titleHint)
     {
         // The key on its own, so a PlayStation face does not move the label off
         // the menu font. Drawn over black and over white: the difference is
         // the coverage, so the legend keeps the font's outline in straight alpha.
         const uint32_t face = MakeColor(255, 196, 197, 194);
-        const auto legend = [&] {
-            text(kHintX, kHintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
-            text(kHintX + kHintKey, kHintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
+        const int creditY = CreditTop(output);
+        const int hintY = kHintY + FooterOffset(output), quitY = kQuitHintY + FooterOffset(output);
+        const std::wstring refund = Translate(current.language, L"If you paid for this, ask for a refund.",
+                                              L"本移植免費開源。如果你是花錢買到的，請申請退款。");
+        const auto legend = [&](bool credit) {
+            if (credit)
+            {
+                text(kCreditX, creditY, kCreditWidth, kCreditLineHeight,
+                     L"Lost Odyssey Recomp · Free & open source · github.com/freefrank/LostOdysseyRecomp",
+                     14, face, false, 0, outline, 12, false, true);
+                text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
+                     14, face, false, 0, outline, 12, false);
+                return;
+            }
+            text(kHintX, hintY, kHintKey, kHintHeight, current.help.substr(0, 1), 18, face, false, 1, outline, 12);
+            text(kHintX + kHintKey, hintY, kHintWidth - kHintKey, kHintHeight, current.help.substr(1), 18, face,
                  false, 0, outline, 12);
+            if (!current.titleQuitKey.empty() && !current.titleQuitLabel.empty())
+            {
+                if (current.playStationPrompts && current.titleQuitKey == L"Back")
+                {
+                    // The same three-node Share/Create mark as the guest
+                    // controller atlas: Back is not the PlayStation touchpad.
+                    const int x = kQuitHintX + kQuitHintKey - 25, y = quitY + 4;
+                    const auto share = [&](uint32_t color, int thickness, double radius) {
+                        line(x + 6, y + 9, x + 15, y + 3, color, thickness);
+                        line(x + 6, y + 11, x + 15, y + 17, color, thickness);
+                        for (const auto &node : std::array<std::array<int, 2>, 3>{{{3, 10}, {18, 0}, {18, 20}}})
+                            Ellipse(canvas, x + node[0], y + node[1], radius, radius, 0, color);
+                    };
+                    share(outline, 4, 3.5);
+                    share(face, 2, 2.5);
+                }
+                else
+                    text(kQuitHintX, quitY, kQuitHintKey, kHintHeight, current.titleQuitKey,
+                         current.titleQuitKey == L"Backspace" ? 16 : 18, face, false, 2, outline, 12, false);
+                constexpr int labelX = kQuitHintX + kQuitHintKey + kQuitHintGap;
+                text(labelX, quitY, kHintRight - 8 - labelX, kHintHeight,
+                     L": " + current.titleQuitLabel, 18, face, false, 0, outline, 12, false);
+            }
         };
-        legend();
-        const std::vector<uint32_t> overBlack = pixels;
-        std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
-        legend();
+        // Keep the credit's lower opacity independent of the two shortcuts:
+        // the wider Backspace key can extend left of the credit box's edge.
+        const auto alphaLayer = [&](bool credit, int opacity) {
+            std::fill(pixels.begin(), pixels.end(), 0xFF000000u);
+            legend(credit);
+            const std::vector<uint32_t> overBlack = pixels;
+            std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
+            legend(credit);
+            for (size_t i = 0; i < pixels.size(); ++i)
+            {
+                auto &p = pixels[i];
+                const uint32_t b = overBlack[i];
+                int spread = 0;
+                for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
+                const int alpha = std::clamp(255 - spread / 3, 0, 255);
+                const auto channel = [&](int c) {
+                    return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
+                };
+                p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
+            }
+        };
+        alphaLayer(true, 184);
+        const std::vector<uint32_t> credit = pixels;
+        alphaLayer(false, 255);
         for (size_t i = 0; i < pixels.size(); ++i)
-        {
-            auto &p = pixels[i];
-            const uint32_t b = overBlack[i];
-            int spread = 0;
-            for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
-            const int alpha = std::clamp(255 - spread / 3, 0, 255);
-            const auto channel = [&](int c) {
-                return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
-            };
-            p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha));
-        }
+            pixels[i] = ColorBlend(credit[i], pixels[i]);
         return true;
     }
 
@@ -1153,7 +1381,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     }
 
     constexpr int rowTop = ListTop;
-    constexpr int rowHeight = ListRowHeight;
+    const int rowHeight = MenuRowHeight(current.tab, !current.pageTitle.empty());
+    const int visibleRows = VisibleRowCount(current.tab, !current.pageTitle.empty());
     constexpr int labelLeft = 65;
     constexpr int labelWidth = 299;
     constexpr int choiceLeft = 386;
@@ -1168,7 +1397,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         if (slot < 0)
             continue;
         const int y = rowTop + slot * rowHeight;
-        if (y + rowHeight > 640) break;
+        if (slot >= visibleRows || y + rowHeight > 640) break;
         const bool focused = int(index) == current.row;
         if (row.header)
         {
@@ -1203,7 +1432,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         if (pictured)
         {
             // Achievement entry: the picture, then the name.
-            constexpr int iconSize = rowHeight - 6, iconLeft = labelLeft + 6;
+            const int iconSize = rowHeight - 6, iconLeft = labelLeft + 6;
             if (row.icon && !row.icon->pixels.empty())
                 sprite(*row.icon, 0, 0, int(row.icon->width), int(row.icon->height), iconLeft, y + 2, iconSize, iconSize);
             else
@@ -1389,7 +1618,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     // Understated overflow indicators when rows exceed the visible viewport.
     if (current.scroll > 0)
         text( choiceLeft + choiceWidth - 40, rowTop - 24, 40, 20, L"▲", 13, muted, false, 1);
-    if (visible - current.scroll > kMenuVisibleRows)
+    if (visible - current.scroll > visibleRows)
         text( choiceLeft + choiceWidth - 40, 622, 40, 20, L"▼", 13, muted, false, 1);
 
     text(65, 652, 52, 43, L"Help", 20, ink, false);
@@ -1416,38 +1645,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             const uint32_t g = ((pixel & 0x0000ff00u) * menu_motion::DialogDim >> 8) & 0x0000ff00u;
             pixel = (pixel & 0xff000000u) | rb | g;
         }
-        brushedCell(280, 208, 720, 306, MakeColor(255, 73, 76, 76));
-        line(280, 208, 1000, 208, MakeColor(255, 231, 232, 228), 2);
-        line(280, 208, 280, 514, MakeColor(255, 194, 196, 193), 2);
-        line(280, 513, 1000, 513, MakeColor(255, 35, 36, 36), 3);
-        line(999, 208, 999, 514, MakeColor(255, 39, 40, 40), 3);
-        text(325, 226, 630, 48, current.dialogTitle, 27, ink, false, 1);
-
-        std::vector<std::wstring> messageLines;
-        std::wstring remaining = current.dialogMessage;
-        while (!remaining.empty()) {
-            size_t cut = 0, space = std::wstring::npos; unsigned units = 0;
-            while (cut < remaining.size() && units + (remaining[cut] >= 0x2e80 ? 2 : 1) <= 70) {
-                if (remaining[cut] == L' ') space = cut;
-                units += remaining[cut] >= 0x2e80 ? 2 : 1; ++cut;
-            }
-            if (cut < remaining.size() && space != std::wstring::npos && space > cut / 2) cut = space;
-            messageLines.push_back(remaining.substr(0, cut)); remaining.erase(0, cut);
-            while (!remaining.empty() && remaining.front() == L' ') remaining.erase(0, 1);
-        }
-        const int lineHeight = std::min(22, 85 / int(std::max<size_t>(1, messageLines.size())));
-        for (size_t i = 0; i < messageLines.size(); ++i)
-            text(330, 267 + int(i) * lineHeight, 620, lineHeight, messageLines[i], 16, ink, false, 1, outline, 13);
-        for (size_t i = 0; i < current.dialogChoices.size(); ++i)
-        {
-            const int y = 360 + int(i) * 43;
-            const bool focused = int(i) == current.dialogSelection;
-            cell(390, y, 500, 37, focused);
-            if (focused) arrow(354, y + 8);
-            text(405, y, 470, 37, current.dialogChoices[i], 20,
-                 focused ? selectedInk : ink, false, 1,
-                 focused ? MakeColor(255, 222, 223, 219) : outline, 13);
-        }
+        dialog();
     }
 
     return true;

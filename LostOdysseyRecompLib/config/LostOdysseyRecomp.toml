@@ -199,3 +199,54 @@ name = "FramePlanDirectCanvas"
 address = 0x823E98E0
 registers = ["r1", "r30"]
 after_instruction = false
+
+# Publish storage requests and their busy status under the worker's existing
+# critical section. Boundaries exclude synchronous content/file I/O and sit
+# outside both atomic-store retry loops (manager remains in r31).
+[[midasm_hook]]
+name = "SaveWorkerRequestBegin"
+address = 0x82DCC0A0
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestEnd"
+address = 0x82DCC0DC
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestBegin"
+address = 0x82DCC138
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestEnd"
+address = 0x82DCC178
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestBegin"
+address = 0x82DCC1E0
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestEnd"
+address = 0x82DCC21C
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestBegin"
+address = 0x82DCC51C
+registers = ["r31"]
+after_instruction = false
+
+[[midasm_hook]]
+name = "SaveWorkerRequestEnd"
+address = 0x82DCC55C
+registers = ["r31"]
+after_instruction = false

@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include <os/logger.h>
 #include "save_anywhere.h"
+#include "menu_animations.h"
 #include <settings/config.h>
 #include <fstream>
 
@@ -119,5 +120,6 @@ PPC_FUNC(sub_822E0E10)
 {
     PollRequest();
     Apply(base);
+    const debug_menu::menu_animations::ScopedCampUpdate animations(ctx.r3.u32);
     __imp__sub_822E0E10(ctx, base);
 }

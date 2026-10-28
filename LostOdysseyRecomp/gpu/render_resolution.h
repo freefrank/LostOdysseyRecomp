@@ -59,6 +59,8 @@ inline constexpr Size ResolveInternalSize(uint32_t mode, uint32_t outputWidth, u
     // 540: below the Xbox 360 native 720p, for the Switch (LO_SWITCH_RENDER_HEIGHT).
     case 540: case 720: case 1080: case 1440: case 2160: return forMode(mode);
     default:
+        // A dynamic resolution height (gpu/dynamic_resolution.h): 360 to 1071 rows, a multiple of 9.
+        if (mode >= 360 && mode < 1080 && mode % 9 == 0) return forMode(mode);
         if (!hasOutput) return {};
         // Follow the output, capping the 16:9 area at 2160 rows.
         if (tall) return forWidth((std::clamp)(outputWidth, 1u, 3840u));

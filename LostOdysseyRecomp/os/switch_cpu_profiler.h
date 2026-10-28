@@ -44,6 +44,17 @@ namespace os::switch_cpu_profiler
     // thread list is locked at the moment (the crash handler cannot wait for it).
     bool TryGetCurrentThreadName(char* out, size_t size);
 
+    // Called once per presented frame. With the sampler on, a watchdog writes every registered
+    // thread's position to hang.log in the app folder after 4 s without a frame (then 15 s and 40 s).
+    void Heartbeat();
+
+    // Every registered thread's position except the caller's (pc, lr, wait, frames, return addresses on
+    // the stack) and the malloc lock owner, as text in a static buffer. Never allocates and never waits
+    // long for a lock. For the crash handler and the hang watchdog; not reentrant. With a sink (a file
+    // name for os::switch_platform::RawAppend), each thread is appended there as it is dumped and the
+    // returned text is only what is left.
+    const char* DumpThreads(const char* title, size_t& size, const char* sink = nullptr);
+
     // Start and size of the executable's code: the offsets every report prints are relative to it.
     uint64_t ModuleBase();
     uint64_t ModuleSize();

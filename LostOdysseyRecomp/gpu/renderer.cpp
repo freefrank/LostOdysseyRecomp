@@ -79,6 +79,7 @@
 #include "shader/portable_shader_pack.h"
 #include "shader/portable_shader_contract.h"
 #include "shader/portable_shader_pack_location.h"
+#include "shader_preparation_request.h"
 #include "shader/resource_scan.h"
 #include "shader/source_store.h"
 #include "shader/resource_xex.h"
@@ -93,6 +94,9 @@
 #include <os/thread_name.h>
 #include "color_qualification.h"
 #include "render_timing.h"
+#if defined(LO_SWITCH_DEKO3D)
+#include <plume_deko3d_api.h>
+#endif
 #include "gpu_busy.h"
 #include "render_batch_policy.h"
 #include "render_arena_policy.h"
@@ -165,6 +169,19 @@ namespace gpu::renderer
 {
     namespace binding = gpu::taa_collection::binding;
     namespace {
+#ifdef LO_GPU_PLUME
+    // R11G11B10_FLOAT comes from tools/patches/plume-switch-perf.patch, which
+    // only the Switch build applies (LO_RT32).
+    constexpr bool IsR11G11B10(plume::RenderFormat format)
+    {
+#if LO_PLATFORM_SWITCH
+        return format == plume::RenderFormat::R11G11B10_FLOAT;
+#else
+        (void)format;
+        return false;
+#endif
+    }
+#endif
         std::atomic<bool> hdrSceneEnabled{false};
         // Scene tags of maps and battles that started loading (game thread),
         // consumed by the renderer's scene prefetch once a frame.
@@ -576,7 +593,7 @@ namespace gpu::renderer
             // Vulkan types, which Metal must never reach.
             bool vulkan = false;
             bool nativeVulkan = false;
-            const char* BackendLabel() const { return nativeVulkan ? "Vulkan" : vulkan ? "Metal" : "D3D12"; }
+            const char* BackendLabel() const { return nativeVulkan ? "Vulkan" : video::IsDeko3d() ? "deko3d" : vulkan ? "Metal" : "D3D12"; }
             xenos::ShaderBinaryFormat binaryFormat = xenos::ShaderBinaryFormat::Dxil;
             RenderShaderFormat renderFormat = RenderShaderFormat::DXIL;
             float pointSizeLimit = 1.0e9f;
@@ -885,6 +902,7 @@ namespace gpu::renderer
             std::unordered_set<PipelineKey, PipelineKeyHash> preparedPipelineKeys, usedPreparedPipelineKeys;
             std::future<gpu::pipeline_cache::WriteResult> pipelineWrite;
             bool pipelineCacheEnabled = false, pipelineRecipesDirty = false;
+            bool reprepareRequested = false;
             uint64_t preparedPipelineHits = 0, runtimePipelineCreates = 0;
             std::mutex pipelineRecipeMutex;
             // Scene being drawn (debug_menu::CurrentSceneTag), checked once a frame.
@@ -997,7 +1015,7 @@ namespace gpu::renderer
             // parts instead of compiling the whole pipeline. A background thread builds
             // the parts for the shaders of known recipes (libraryPrecompile below).
             bool fastLinkPipelines = false;
-            // Texture-info specialization (Vulkan; LO_TEXINFO_SPEC=0 turns it off).
+            // Texture-info specialization (Vulkan and deko3d; LO_TEXINFO_SPEC=0 turns it off).
             bool texInfoSpecialization = false;
             struct SpecStats {
                 uint64_t textured = 0, specialised = 0; // draws since the last log
@@ -2675,7 +2693,8 @@ namespace gpu::renderer
                 queue = video::GetQueue();
                 vulkan = video::UsesSpirv();
                 nativeVulkan = video::IsVulkan();
-                texInfoSpecialization = nativeVulkan && !(getenv("LO_TEXINFO_SPEC") && std::string_view(getenv("LO_TEXINFO_SPEC")) == "0");
+                // deko3d too (2026-10-27): its generic shaders decode every fetch from the uniform words at run time.
+                texInfoSpecialization = (nativeVulkan || video::IsDeko3d()) && !(getenv("LO_TEXINFO_SPEC") && std::string_view(getenv("LO_TEXINFO_SPEC")) == "0");
 #if defined(LO_GPU_PLUME)
                 dlssController = video::GetDlssController();
 #if !defined(LO_RENDERER_P2_EMBEDDED_TEST)
@@ -2879,9 +2898,11 @@ namespace gpu::renderer
 
                 staticSet0 = setBuilders[0].create(device);
                 if (!staticSet0) return InitFailure("vertex_fetch_set.create");
+                // deko3d: the shaders read the arena through this binding (their
+                // buffer_reference loads become storage buffer reads from its start).
                 for (uint32_t i = 0; i < (vulkan?1:kVertexFetchSlots); i++)
                     staticSet0->setBuffer(vfetchDescriptorBase + i, vertexArena.get(),
-                        vulkan ? 16 : gpu::render_arena::kVertexArenaSize);
+                        vulkan && !video::IsDeko3d() ? 16 : gpu::render_arena::kVertexArenaSize);
                 // SPIR-V shaders fetch vertices by device address; the slot's
                 // only reader is the occlusion counting shader.
                 if (occlusionCounting)
@@ -4931,7 +4952,19 @@ void main()
                         motionReplay->ReleaseDepthAfterGpuCompletion(texture->texture.get());
                     motionReplay->ReleaseCompletedThrough(s.motionSerial);
                 }
+                auto eraseAttachmentFramebuffers = [&](const RenderTexture* attachment) {
+                    if (!attachment) return;
+                    lastFramebuffer = nullptr;
+                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
+                        if (fb->first.first == attachment || fb->first.second == attachment)
+                            fb = framebuffers.erase(fb);
+                        else
+                            ++fb;
+                };
                 for (const auto& texture : s.retiredTextures) {
+                    // The child dies with its parent even when the parent's image is pooled.
+                    if (texture->hdrSidecar)
+                        eraseAttachmentFramebuffers(texture->hdrSidecar->texture.get());
                     // A pooled image keeps its framebuffers for the next use.
                     if (ReturnPromotionImage(*texture)) continue;
                     if (nativeVulkan && texture && texture->texture && vk_object_trace::Permit()) {
@@ -4940,12 +4973,7 @@ void main()
                             i, vk_object_trace::Id(texture->allocationSerial), vk_object_trace::Id(image.vk),
                             vk_object_trace::Id(image.imageView), vk_object_trace::Id(s.temporalSerial), vk_object_trace::Id(s.srSubmissionSerial));
                     }
-                    lastFramebuffer = nullptr;
-                    for (auto fb = framebuffers.begin(); fb != framebuffers.end();)
-                        if (fb->first.first == texture->texture.get() || fb->first.second == texture->texture.get())
-                            fb = framebuffers.erase(fb);
-                        else
-                            ++fb;
+                    eraseAttachmentFramebuffers(texture->texture.get());
                 }
                 for (auto& cache : s.textureSetCache) cache.Clear();
                 s.retiredTextures.clear();
@@ -5742,6 +5770,50 @@ void main()
                 return nullptr;
             }
 
+            // Experiment (Switch, LO_EXPERIMENT_NO_ALPHA_KILL=1): every translated pixel
+            // shader ends with the alpha test's dynamic `discard`, so the driver marks
+            // all of them as killing pixels and the GPU tests depth only after shading
+            // (no early-Z). This turns a pixel shader's only OpKill into OpReturn so the
+            // GPU time can be compared with early-Z. Alpha-tested objects (foliage,
+            // hair) then draw without their cut-outs: for measuring only. Shaders with
+            // more than one kill (the game's own clip()) are left alone.
+            static bool ExperimentNoAlphaKill()
+            {
+#if LO_PLATFORM_SWITCH
+                static const bool enabled = [] {
+                    const char* value = getenv("LO_EXPERIMENT_NO_ALPHA_KILL");
+                    return value && value[0] == '1';
+                }();
+                return enabled;
+#else
+                return false;
+#endif
+            }
+            static inline std::atomic<uint32_t> experimentKillsStripped{0};
+            // An empty result means: use the original binary.
+            static std::vector<uint8_t> StripSoleKill(bool pixel, const std::vector<uint8_t>& binary)
+            {
+                if (!pixel || !ExperimentNoAlphaKill() || binary.size() < 20 || binary.size() % 4 != 0) return {};
+                std::vector<uint8_t> out = binary;
+                const size_t words = out.size() / 4;
+                auto word = [&](size_t i) { uint32_t w; std::memcpy(&w, out.data() + i * 4, 4); return w; };
+                if (word(0) != 0x07230203u) return {};
+                size_t kills = 0, at = 0;
+                for (size_t i = 5; i < words;) {
+                    const uint32_t w = word(i);
+                    const uint32_t count = w >> 16, opcode = w & 0xFFFFu;
+                    if (count == 0) return {};
+                    if (opcode == 252u /*OpKill*/ || opcode == 4416u /*OpTerminateInvocation*/) { ++kills; at = i; }
+                    i += count;
+                }
+                if (kills != 1) return {};
+                const uint32_t ret = (1u << 16) | 253u; // OpReturn
+                std::memcpy(out.data() + at * 4, &ret, 4);
+                const uint32_t n = experimentKillsStripped.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (n == 1 || n % 100 == 0) LOG_NOTICE("renderer: experiment: alpha-test kill removed from {} pixel shaders", n);
+                return out;
+            }
+
             // Startup: makes pack shader modules on worker threads (MSL compilation on
             // Metal is the slow part) and publishes them in the shader maps.
             void LoadPackShaders(std::vector<std::pair<bool, uint64_t>> wanted)
@@ -5759,7 +5831,9 @@ void main()
                     for (size_t i; (i = next.fetch_add(1)) < wanted.size();) {
                         try {
                             if (auto record = reader.Get(wanted[i].first, wanted[i].second)) {
-                                loads[i].module = device->createShader(record->binary.data(), record->binary.size(), "main", renderFormat);
+                                const auto stripped = StripSoleKill(wanted[i].first, record->binary);
+                                const auto& binary = stripped.empty() ? record->binary : stripped;
+                                loads[i].module = device->createShader(binary.data(), binary.size(), "main", renderFormat);
                                 loads[i].info = std::move(record->info);
                             }
                         } catch (const std::exception& e) {
@@ -5827,7 +5901,20 @@ void main()
                 scenePrefetchEnabled = !getenv("LO_NO_PIPELINE_PREFETCH");
                 // Learning remains enabled when eager creation is skipped.
                 if (getenv("LO_NO_PIPELINE_PREPARE") || getenv("LO_NO_SHADER_PREPARE") ||
-                    settings::GetConfig().skipShaderPrebuild || video::ShaderPreparationSkipped()) return;
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested) ||
+                    video::ShaderPreparationSkipped()) return;
+                if (reprepareRequested) {
+                    reprepareRequested = gpu::shader_preparation::ConsumeNextStart();
+                    if (reprepareRequested) {
+                        // The installed shader pack or startup bundle already holds the
+                        // compiled binaries. Warm every known recipe with those inputs.
+                        synchronousPreparation = true;
+                        LOG_INFO("renderer: full known pipeline preparation requested from Settings");
+                    } else {
+                        LOG_WARNING("renderer: shader preparation request could not be consumed; using normal startup policy");
+                        if (settings::GetConfig().skipShaderPrebuild) return;
+                    }
+                }
                 if (!synchronousPreparation) {
                     QueueStartupPipelines(driverCache);
                     return;
@@ -5840,7 +5927,7 @@ void main()
                     std::vector<PipelineKey> wanted;
                     std::vector<std::pair<bool, uint64_t>> load;
                     for (const auto& [key, entry] : knownRecipes) {
-                        if (!PrebuildAtStartup(entry)) { ++deferred; continue; }
+                        if (!reprepareRequested && !PrebuildAtStartup(entry)) { ++deferred; continue; }
                         Shader* vs = nullptr;
                         Shader* ps = nullptr;
                         if (FindRecipeShaders(key, vs, ps, &load) == RecipeShaderState::Unavailable) { ++missingShaders; continue; }
@@ -6088,6 +6175,13 @@ void main()
             {
                 namespace dpc = gpu::driver_pipeline_cache;
                 const size_t previous = driverCacheBytes;
+#if LO_PLATFORM_SWITCH
+                // NVK's cache reaches about 200 MB with every pipeline built. Saving it
+                // again needs two more copies of that from a heap that is nearly full in
+                // late dungeons (bad_alloc in the disc 2 Grand Staff, 2026-10-27), and
+                // the exit save took 5 s. Once a cache file loaded or was written, keep it.
+                if (previous) return {};
+#endif
                 if (const size_t size = device->getPipelineCacheSize(); size && size <= previous) return {};
                 std::vector<uint8_t> data;
                 if (!device->getPipelineCacheData(data) || data.size() <= previous) return {};
@@ -6528,7 +6622,9 @@ void main()
             {
                 try {
                     if (auto record = (reader ? *reader : *job.pack).Get(job.pixel, job.hash)) {
-                        job.module = device->createShader(record->binary.data(), record->binary.size(), "main", renderFormat);
+                        const auto stripped = StripSoleKill(job.pixel, record->binary);
+                        const auto& binary = stripped.empty() ? record->binary : stripped;
+                        job.module = device->createShader(binary.data(), binary.size(), "main", renderFormat);
                         job.raw = job.module.get();
                         job.info = std::move(record->info);
                     }
@@ -6788,6 +6884,7 @@ void main()
 
             void PrepareKnownShaders()
             {
+                reprepareRequested = gpu::shader_preparation::PendingNextStart();
                 video::ResetShaderPreparationSkip();
                 // A process killed while writing a startup bundle leaves its temporary file.
                 if (!shaderCacheDir.empty())
@@ -6809,7 +6906,8 @@ void main()
                     ResetTimers();
                     return;
                 }
-                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") || settings::GetConfig().skipShaderPrebuild) {
+                if (shaderCacheDir.empty() || getenv("LO_NO_SHADER_PREPARE") ||
+                    (settings::GetConfig().skipShaderPrebuild && !reprepareRequested)) {
                     LOG_INFO("renderer: shader preparation skipped by configuration or environment");
                     return;
                 }
@@ -8863,7 +8961,8 @@ void main()
                 if (dred::Enabled()) tex->texture->setName(fmt::format("guest {:08x}", tex->guestAddress));
 
                 texBytes += upload.size();
-                uint64_t offset = Upload(upload.data(), upload.size(), 512);
+                const size_t keepFree = upload.size() + kUploadHeadroom <= kUploadRingSize ? kUploadHeadroom : 0;
+                uint64_t offset = Upload(upload.data(), upload.size(), 512, keepFree);
                 if (offset == UINT64_MAX)
                     return nullptr;
                 Transition(*tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
@@ -11353,6 +11452,7 @@ void main()
                     set2 = AcquireTextureSet(2, textureBindings[1], activeTextureSlots[1], textureSwapSlots);
                     set3 = AcquireTextureSet(3, textureBindings[2], activeTextureSlots[2], textureSwapSlots);
                 }
+                const uint64_t drawUploadGeneration = Gpu().uploadGeneration;
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
@@ -11532,6 +11632,15 @@ void main()
                         }
                     }
                     preparedIndexBuffer = uploadRing; // the ring of the slot now holding the data
+                }
+
+                // A rare large upload can change slots after acquiring this draw's sets.
+                if (Gpu().uploadGeneration != drawUploadGeneration) {
+                    ++drops.upload;
+                    static bool warned = false;
+                    if (!std::exchange(warned, true))
+                        LOG_WARNING("renderer: draw dropped after uploads changed GPU slots; descriptor sets belong to the previous slot");
+                    return;
                 }
 
                 // Record.
@@ -14808,8 +14917,12 @@ void main()
 
     void Draw(const DrawInfo& info)
     {
-        if (g_renderer)
+        if (g_renderer) {
+            // Includes resolve packets (RB_MODECONTROL == 6), so a native menu
+            // cannot overwrite the frontbuffer before the opening snapshot.
+            video::CaptureCalibrationSceneBeforeDraw();
             g_renderer->Draw(info);
+        }
     }
 
     bool OcclusionQueryEvent(uint32_t physicalAddress)
@@ -15297,6 +15410,35 @@ void main()
                     r.tShaderLookup, r.tPipelineLookup, r.tSceneCopy};
                 render_timing::LogFrame(r.frame, cpu, r.gpuTiming, !r.debugCaptureDir.empty(),
                     r.resolveTraceRemaining || r.psTraceRemaining || GetHotCaptureEnvironment().geometryCaptureEnabled);
+#if defined(LO_SWITCH_DEKO3D)
+                if (video::IsDeko3d() && render_timing::Enabled())
+                {
+                    // The back end's work per frame, averaged over 150 frames: draws, binds, barriers by what they
+                    // wait for, and copy/2D-engine work (each of those fenced by full barriers).
+                    static plume::Deko3DCounters before{};
+                    static uint64_t beforeFrame = 0;
+                    if (r.frame >= beforeFrame + 150)
+                    {
+                        const plume::Deko3DCounters now = plume::Deko3DReadCounters();
+                        const double n = double(r.frame - beforeFrame);
+                        const auto per = [n](uint64_t a, uint64_t b) { return double(a - b) / n; };
+                        if (beforeFrame)
+                            LOG_INFO("deko3d frame work frame={} frames={:.0f} draws={:.1f} pipeline_binds={:.1f} state_binds={:.1f} "
+                                "descriptor_writes={:.1f} barriers_primitives={:.1f} barriers_fragments={:.1f} barriers_full={:.1f} "
+                                "image_invalidates={:.1f} copy_buffer={:.1f} copy_upload={:.1f} copy_readback={:.1f} copy_image={:.1f} "
+                                "copy_resolve={:.1f} copy_blit={:.1f}",
+                                r.frame, n, per(now.draws, before.draws), per(now.pipelineBinds, before.pipelineBinds),
+                                per(now.stateBinds, before.stateBinds), per(now.descriptorWrites, before.descriptorWrites),
+                                per(now.barriersPrimitives, before.barriersPrimitives), per(now.barriersFragments, before.barriersFragments),
+                                per(now.barriersFull, before.barriersFull), per(now.barriersImageInvalidate, before.barriersImageInvalidate),
+                                per(now.copyBuffer, before.copyBuffer), per(now.copyUpload, before.copyUpload),
+                                per(now.copyReadback, before.copyReadback), per(now.copyImage, before.copyImage),
+                                per(now.copyResolve, before.copyResolve), per(now.copyBlit, before.copyBlit));
+                        before = now;
+                        beforeFrame = r.frame;
+                    }
+                }
+#endif
                 r.gpuTiming.Reset();
                 if (!stats) r.ResetTimers();
             }

@@ -13,41 +13,43 @@ extern "C" PPC_FUNC(__imp__sub_829E3268);
 
 namespace
 {
-    std::atomic<bool>& Requested()
+    std::atomic<settings::EncounterRate>& Requested()
     {
-        static std::atomic<bool> requested{settings::GetConfig().noRandomEncounters};
+        static std::atomic<settings::EncounterRate> requested{settings::GetConfig().encounterRate};
         return requested;
     }
 
+    std::atomic<uint32_t> halfDraws{0};
+
     // Not persisted: a player must not reboot into a battle on every step.
     // LO_DEBUG_ENCOUNTER_EVERY_STEP=1 turns it on at startup for harnesses and
-    // turns No Random Encounters off for this session (settings.ini untouched).
+    // leaves the last persisted Normal/Half/None preference untouched.
     std::atomic<bool>& EveryStep()
     {
         static std::atomic<bool> everyStep{[] {
             const char* env = std::getenv("LO_DEBUG_ENCOUNTER_EVERY_STEP");
             const bool on = env && std::strcmp(env, "1") == 0;
-            if (on)
-                Requested().store(false, std::memory_order_relaxed);
             return on;
         }()};
         return everyStep;
     }
 }
 
-bool debug_menu::NoEncountersEnabled()
+settings::EncounterRate debug_menu::GetEncounterRate()
 {
-    EveryStep(); // apply the env override before the first read
     return Requested().load(std::memory_order_relaxed);
 }
 
-void debug_menu::SetNoEncountersEnabled(bool enabled)
+void debug_menu::SetEncounterRate(settings::EncounterRate rate)
 {
-    Requested().store(enabled, std::memory_order_relaxed);
-    if (!settings::SaveNoRandomEncounters(enabled))
-        LOG_WARNING("debug menu: failed to persist no random encounters setting");
-    LOG_INFO("debug menu: no random encounters {}", enabled);
-    if (enabled && EveryStep().exchange(false, std::memory_order_relaxed))
+    const bool wasEveryStep = EveryStep().exchange(false, std::memory_order_relaxed);
+    rate = settings::ValidEncounterRate(rate);
+    if (Requested().exchange(rate, std::memory_order_relaxed) != rate || wasEveryStep)
+        halfDraws.store(0, std::memory_order_relaxed);
+    if (!settings::SaveEncounterRate(rate))
+        LOG_WARNING("debug menu: failed to persist encounter rate setting");
+    LOG_INFO("debug menu: encounter rate {}", uint32_t(rate));
+    if (wasEveryStep)
         LOG_INFO("debug menu: encounter every step false");
 }
 
@@ -60,8 +62,6 @@ void debug_menu::SetEncounterEveryStepEnabled(bool enabled)
 {
     EveryStep().store(enabled, std::memory_order_relaxed);
     LOG_INFO("debug menu: encounter every step {}", enabled);
-    if (enabled && NoEncountersEnabled())
-        SetNoEncountersEnabled(false);
 }
 
 // The walking encounter update sub_829E3048 accumulates the distance walked
@@ -87,7 +87,14 @@ PPC_FUNC(sub_829E3268)
         LOG_INFO("battle tour: formation {} drawn", formation);
         return;
     }
-    if (ctx.r3.u32 == 1 && Requested().load(std::memory_order_relaxed) && !EveryStep().load(std::memory_order_relaxed))
+    if (ctx.r3.u32 != 1 || EveryStep().load(std::memory_order_relaxed))
+        return;
+    const auto rate = Requested().load(std::memory_order_relaxed);
+    // The original draw has already reset its distance and threshold. Count
+    // only successful walking draws: skip the first, allow the second, repeat.
+    // A tour draw and Encounter Every Step bypass this counter entirely.
+    if (rate == settings::EncounterRate::None ||
+        (rate == settings::EncounterRate::Half && (halfDraws.fetch_add(1, std::memory_order_relaxed) & 1) == 0))
         ctx.r3.u64 = 0;
 }
 
