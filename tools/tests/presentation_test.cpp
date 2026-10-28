@@ -3,6 +3,7 @@
 #include <stdafx.h>
 #include <cmath>
 #include "presentation_capture.h"
+#include "hdr_transfer/gpu_test.h"
 namespace plume
 {
 #if LO_PLATFORM_MACOS
@@ -181,7 +182,7 @@ static int TestHdr(plume::RenderDevice* device)
         if (!pixels) return 1;
         for (uint32_t x = 0; x < outputWidth; ++x) {
             const float encoded = gpu::hdr::DecodeHalf(downsample ? uint16_t(0x4000) : samples[x]);
-            const float linear = std::pow(encoded, 2.2f);
+            const float linear = float(hdr_reference::Decode(encoded,true));
             const float expected = gpu::hdr::MapLinear({linear, linear, linear}, transform.peakRatio)[0] * transform.scale;
             const float actual = gpu::hdr::DecodeHalf(pixels[x * 4]);
             pass &= std::abs(actual - expected) <= std::max(0.005f, expected * 0.002f);
@@ -189,6 +190,9 @@ static int TestHdr(plume::RenderDevice* device)
             printf("HDR mode=%u sample=%u actual=%f expected=%f\n", mode, x, actual, expected);
         }
         readback->unmap();
+        // These short-lived test targets may reuse the same CPU address on the
+        // next iteration. Retire their framebuffer before destroying the image.
+        presentation.ForgetTargets();
     }
     printf("HDR FP16 output, EDR normalization, SDR fallback and downsampling: %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
@@ -252,11 +256,11 @@ static int TestHdrCalibration(plume::RenderDevice* device)
         if (!data) return 1;
         const unsigned xs[]={20,scenePreview?40u:30u,60,scenePreview?80u:70u,5};
         const unsigned ys[]={scenePreview?20u:10u,20,scenePreview?20u:10u,20,20};
-        const float dark=std::pow(0.5f,2.2f)*200;
+        const float dark=float(hdr_reference::Srgb(0.5))*200;
         const float light=std::pow(2.0f,2.2f);
         const float mapped=gpu::hdr::MapLinear({light,light,light},peak/200)[0]*200;
         const float expected[]={scenePreview?dark:200,scenePreview?200.0f:180.0f,
-            scenePreview?dark:1000,scenePreview?mapped:900,std::pow(128.0f/255.0f,2.2f)*200};
+            scenePreview?dark:1000,scenePreview?mapped:900,float(hdr_reference::Srgb(128.0/255))*200};
         for (unsigned i=0;i<5;++i) {
             float nits;
             if (pq) nits=gpu::hdr::DecodePq10(reinterpret_cast<const uint32_t*>(data+ys[i]*targetPitch)[xs[i]])[0];
@@ -291,6 +295,7 @@ int main(int argc, char** argv)
         return TestHdrSwapchain(device.get(),vulkan);
 #endif
     if (argc == 2 && std::string(argv[1]) == "--hdr-only") return TestHdr(device.get());
+    if (argc == 2 && std::string(argv[1]) == "--hdr-transfer-only") return hdr_transfer_fixture::Test(device.get());
     if (argc == 2 && std::string(argv[1]) == "--hdr-calibration-only") return TestHdrCalibration(device.get());
     if (argc == 2 && std::string(argv[1]) == "--separated-ui-only")
         return TestSeparatedUi(device.get());

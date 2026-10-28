@@ -18,7 +18,8 @@ struct PresentationOptions
     Antialiasing antialiasing = Antialiasing::Off;
     ScalingFilter scalingFilter = ScalingFilter::Bilinear;
     bool expandRgbRange = false;
-    // Extended gamma-2.2 scene including the original UI/fade suffix.
+    // Extended gamma-2.2 source including the original UI/fade suffix. After
+    // the display ramp, diffuse output follows the same sRGB response as SDR.
     bool hdrScene = false;
     // Normalized rectangle in the complete source image. Calibration bypasses
     // the scene highlight shoulder and writes known HDR levels at the final pass.
