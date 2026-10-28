@@ -31,6 +31,7 @@
 #endif
 #if LO_PLATFORM_ANDROID
 #include <SDL3/SDL_system.h>
+#include <diagnostics/android_tester.h>
 #endif
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
@@ -148,6 +149,11 @@ bool restartForMods = false;
 // Achievements page (System → Achievements). The list is read when it opens.
 // achievementSummary is the System row's value, read when the menu opens.
 std::atomic<bool> achievementsOpen{false};
+#if LO_PLATFORM_ANDROID
+std::atomic<bool> testerOpen{false};
+int testerFocus = 0;
+enum TesterRow { TesterEnabled, TesterProfile, TesterAutomatic, TesterThermal, TesterRecording, TesterExport, TesterRowCount };
+#endif
 std::vector<achievements_page::Item> achievementItems;
 std::vector<std::shared_ptr<const menu_assets::Image>> achievementIcons;
 int achievementsFocus = 0;
@@ -1168,9 +1174,13 @@ std::wstring DlssNotice()
 bool SystemRowHidden(int r)
 {
 #if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
-    return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
+    return r == SystemDiscordStatusRow || r == SystemAddToSteamRow
+#if !LO_PLATFORM_ANDROID
+        || r == SystemAndroidDiagnosticsRow
+#endif
+        ;
 #else
-    return false;
+    return r == SystemAndroidDiagnosticsRow;
 #endif
 }
 bool GraphicsRowHidden(int r)
@@ -1283,6 +1293,9 @@ void Publish(uint8_t *base, uint32_t config)
     Snapshot next;
     next.tab = tab;
     next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus : row;
+#if LO_PLATFORM_ANDROID
+    if (testerOpen) next.row = testerFocus;
+#endif
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -1312,6 +1325,26 @@ void Publish(uint8_t *base, uint32_t config)
         return std::vector<std::wstring>{Tr(L"On", L"開"), Tr(L"Off", L"關")};
     };
     const auto modsRows = mods_page::Layout(modsEntries, mods_page::CanOpenFolder);
+#if LO_PLATFORM_ANDROID
+    if (testerOpen)
+    {
+        auto &d = ::diagnostics::android_tester::g_recorder;
+        const bool recording = d.recording.load();
+        next.pageTitle = Tr(L"Android diagnostics", L"Android 診斷");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"D-pad: select / change     B: confirm     A: back", L"方向鍵：選擇 / 調整     B：確認     A：返回")
+            : Tr(L"D-pad: select / change     A: confirm     B: back", L"方向鍵：選擇 / 調整     A：確認     B：返回");
+        addChoices(L"Tester mode", L"測試模式", onOff(), d.enabled.load() ? 0 : 1);
+        addChoices(L"Profile", L"設定檔", {Tr(L"Standard", L"標準"), Tr(L"Advanced", L"進階"), Tr(L"Intensive", L"密集")}, d.profile.load(), !recording);
+        addChoices(L"Detect slow frames", L"偵測慢影格", onOff(), d.automatic.load() ? 0 : 1, !recording);
+        addChoices(L"Thermal monitoring", L"溫度監測", onOff(), d.thermal.load() ? 0 : 1, !recording);
+        const auto seconds = d.Duration(::diagnostics::android_tester::NowNs()) / 1000000000ull;
+        const std::wstring duration = std::to_wstring(seconds / 60) + L":" + (seconds % 60 < 10 ? L"0" : L"") + std::to_wstring(seconds % 60);
+        next.rows.push_back({Tr(L"Recording", L"記錄"), (recording ? Tr(L"Stop", L"停止") : Tr(L"Start", L"開始")) + std::wstring(L"  ") + duration, d.enabled.load(), {}, 0});
+        addAction(L"Export diagnostics", L"匯出診斷", Tr(L"Export", L"匯出"));
+    }
+    else
+#endif
     if (modsOpen)
     {
         next.pageTitle = Tr(L"Mods", L"Mod");
@@ -1676,6 +1709,9 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().hidden = SystemRowHidden(SystemAddToSteamRow);
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
+        addAction(L"Android diagnostics", L"Android 診斷", Tr(L"Open", L"開啟"));
+        next.rows.back().pageEntry = true;
+        next.rows.back().hidden = SystemRowHidden(SystemAndroidDiagnosticsRow);
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -1683,6 +1719,9 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab >= 0 && tab < MenuTabCount)
     {
         static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0;
+#if LO_PLATFORM_ANDROID
+        static int testerScroll = 0;
+#endif
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
@@ -1691,11 +1730,16 @@ void Publish(uint8_t *base, uint32_t config)
             ++visibleCount;
         }
         int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
+#if LO_PLATFORM_ANDROID
+        int &pageScroll = testerOpen ? testerScroll : scroll;
+#else
+        int &pageScroll = scroll;
+#endif
         const int visibleRows = VisibleRowCount(tab, !next.pageTitle.empty());
-        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - visibleRows));
-        if (visibleFocus < scroll) scroll = visibleFocus;
-        if (visibleFocus >= scroll + visibleRows) scroll = visibleFocus - visibleRows + 1;
-        next.scroll = scroll;
+        pageScroll = std::clamp(pageScroll, 0, std::max(0, visibleCount - visibleRows));
+        if (visibleFocus < pageScroll) pageScroll = visibleFocus;
+        if (visibleFocus >= pageScroll + visibleRows) pageScroll = visibleFocus - visibleRows + 1;
+        next.scroll = pageScroll;
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: confirm     B: back",
                                     L"LB / RB：分類     方向鍵：選擇 / 調整     A：確認     B：返回")
@@ -1703,6 +1747,10 @@ void Publish(uint8_t *base, uint32_t config)
     if (status.empty() && (flags & 0x02000000))
         next.help = Tr(L"LB / RB: category     D-pad: select / change     B: confirm     A: back",
                        L"LB / RB：分類     方向鍵：選擇 / 調整     B：確認     A：返回");
+#if LO_PLATFORM_ANDROID
+    if (testerOpen)
+        next.help = status.empty() ? Tr(L"Intensive mode can affect performance and stops after 2 minutes.", L"密集模式可能影響效能，並在兩分鐘後停止。") : status;
+#endif
     if (tab == 0 && row == GameControlsRow)
         next.help = Tr(L"Button prompts, vibration, and the controller and keyboard buttons.",
                        L"按鍵提示、震動，以及控制器與鍵盤的按鍵配置。");
@@ -2249,7 +2297,11 @@ bool CalibrationKey(uint32_t key)
     // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
     // On the Controls page Enter confirms like A, so it starts a capture.
     const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load() || controlsOpen.load()) && (key == 13 || key == 27)) ||
-                               ((modsOpen.load() || achievementsOpen.load()) && key == 27);
+                               ((modsOpen.load() || achievementsOpen.load()
+#if LO_PLATFORM_ANDROID
+                                 || testerOpen.load()
+#endif
+                                ) && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -2479,6 +2531,12 @@ void PointerClick(float x, float y, bool reverse)
     }
     mouseRow = int(hit);
     if (listPage) {
+#if LO_PLATFORM_ANDROID
+        if (testerOpen.load() && hit <= size_t(TesterThermal)) {
+            if (x >= 386) mouseAction = reverse ? 4 : 8;
+        }
+        else
+#endif
         // Controls: Button prompts and Vibration step like on a tab.
         if (controlsOpen.load() && (hit == size_t(ControlsPromptRow) || hit == size_t(ControlsVibrationRow))) {
             if (x >= 386) mouseAction = reverse ? 4 : 8;
@@ -2639,6 +2697,9 @@ PPC_FUNC(sub_822F19B0)
         shaderBundlePrompt = false;
         shaderPreparationPrompt = false;
         modsOpen = false;
+#if LO_PLATFORM_ANDROID
+        testerOpen = false;
+#endif
         modsDiscardPrompt = false;
         restartForMods = false;
         modsEntries.clear();
@@ -2691,6 +2752,9 @@ PPC_FUNC(sub_822F19B0)
     {
         if (modsOpen) modsFocus = selected;
         else if (achievementsOpen) achievementsFocus = selected;
+#if LO_PLATFORM_ANDROID
+        else if (testerOpen) testerFocus = selected;
+#endif
         else if (controlsOpen)
         {
             // A capture keeps its row; a section title is never focused.
@@ -2715,6 +2779,9 @@ PPC_FUNC(sub_822F19B0)
         brightnessOpen = false;
         nrOpen = false;
         modsOpen = false;
+#if LO_PLATFORM_ANDROID
+        testerOpen = false;
+#endif
         achievementsOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
@@ -3284,6 +3351,54 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_ANDROID
+    if (testerOpen.load())
+    {
+        auto &d = ::diagnostics::android_tester::g_recorder;
+        std::vector<uint32_t> keys;
+        { std::lock_guard lock(calibrationKeyMutex); keys.swap(calibrationKeys); }
+        const bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        if (input & 0x331f) status.clear();
+        if (input & 1) testerFocus = (testerFocus + TesterRowCount - 1) % TesterRowCount;
+        if (input & 2) testerFocus = (testerFocus + 1) % TesterRowCount;
+        if (back) { testerOpen = false; status.clear(); }
+        else if (input & 0x100c)
+        {
+            const bool recording = d.recording.load();
+            if (testerFocus == TesterEnabled) {
+                const bool enable = !d.enabled.load();
+                d.enabled.store(enable);
+                if (!enable && recording) {
+                    d.Stop(::diagnostics::android_tester::NowNs());
+                    SDL_SendAndroidMessage(0x8002, 0);
+                }
+            } else if (testerFocus == TesterProfile && !recording) {
+                const int delta = (input & 4) ? -1 : 1;
+                d.profile.store(uint32_t((int(d.profile.load()) + 3 + delta) % 3));
+            } else if (testerFocus == TesterAutomatic && !recording) d.automatic.store(!d.automatic.load());
+            else if (testerFocus == TesterThermal && !recording) d.thermal.store(!d.thermal.load());
+            else if (testerFocus == TesterRecording && (input & 0x1000) && d.enabled.load()) {
+                if (recording) {
+                    d.Stop(::diagnostics::android_tester::NowNs());
+                    if (!SDL_SendAndroidMessage(0x8002, 0)) status = Tr(L"Could not stop collector.", L"無法停止收集器。");
+                } else if (d.Start(::diagnostics::android_tester::NowNs(), GetConfig().frameRate)) {
+                    if (!SDL_SendAndroidMessage(0x8001, 0)) {
+                        d.Stop(::diagnostics::android_tester::NowNs());
+                        d.ReleaseBuffer();
+                        d.collectorIdle.store(true);
+                        status = Tr(L"Could not start collector.", L"無法啟動收集器。");
+                    }
+                } else status = d.collectorIdle.load()
+                    ? Tr(L"Could not start collector.", L"無法啟動收集器。")
+                    : Tr(L"Finishing the previous recording. Try again.", L"正在完成上一段記錄，請稍後再試。");
+            } else if (testerFocus == TesterExport && (input & 0x1000)) {
+                if (!SDL_SendAndroidMessage(0x8003, 0)) status = Tr(L"Could not open export.", L"無法開啟匯出。");
+            }
+        }
+        Publish(base, config);
+        return;
+    }
+#endif
     if (modsOpen.load())
     {
         std::vector<uint32_t> keys;
@@ -4074,6 +4189,16 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_ANDROID
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemAndroidDiagnosticsRow)
+    {
+        testerFocus = 0;
+        testerOpen = true;
+        status.clear();
+        Publish(base, config);
+        return;
+    }
+#endif
     if ((input & 0x1000) && !(input & 0x2000) && tab == 0 && row == GameControlsRow)
     {
         OpenControlsPage();

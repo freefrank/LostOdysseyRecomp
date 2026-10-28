@@ -92,7 +92,7 @@ void PointerDrag(float x, float y, bool held);
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, Discord status, debug log,
 //   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
-//   Prepare shaders again, Save).
+//   Prepare shaders again, Android diagnostics on Android, Save).
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -152,8 +152,9 @@ inline constexpr int SystemImportRow = 8;
 inline constexpr int SystemAddToSteamRow = 9; // desktop shortcut with library artwork
 inline constexpr int SystemShaderBundleRow = 10; // downloads the shader bundle again on the next start
 inline constexpr int SystemShaderPreparationRow = 11; // requests startup pipeline preparation
-inline constexpr int SystemSaveRow = 12;
-inline constexpr int SystemRowCount = 13;
+inline constexpr int SystemAndroidDiagnosticsRow = 12; // Android-only page
+inline constexpr int SystemSaveRow = 13;
+inline constexpr int SystemRowCount = 14;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.

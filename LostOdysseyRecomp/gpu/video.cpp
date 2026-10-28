@@ -73,6 +73,9 @@
 #include <debug/battle_menu.h>
 #include <debug/menu_overlay.h>
 #include "gpu_busy.h"
+#if defined(__ANDROID__)
+#include <time.h>
+#endif
 #include <host_ui/host_ui.h>
 #include <host_ui/rasterizer.h>
 
@@ -666,6 +669,7 @@ namespace gpu::video
         // Timestamps around the presentation list (BeginPresentTiming).
         struct PresentTiming {
             std::unique_ptr<plume::RenderQueryPool> pool;
+            uint64_t previousEnd = 0;
             bool recording = false, pending = false, unavailable = false;
         } g_presentTiming;
         // The background pipeline preparation bar (DrawPreparationBar).
@@ -2035,6 +2039,9 @@ namespace gpu::video
     static std::mutex g_gpuNamesMutex;
     static std::vector<std::string> g_gpuDeviceNames;
     static std::string g_activeGpuDeviceName;
+#if defined(__ANDROID__)
+    static std::string g_activeGpuDriverVersion;
+#endif
     std::vector<std::string> GpuDeviceNames() {
         std::lock_guard lock(g_gpuNamesMutex);
         return g_gpuDeviceNames;
@@ -2043,6 +2050,12 @@ namespace gpu::video
         std::lock_guard lock(g_gpuNamesMutex);
         return g_activeGpuDeviceName;
     }
+#if defined(__ANDROID__)
+    std::string ActiveGpuDriverVersion() {
+        std::lock_guard lock(g_gpuNamesMutex);
+        return g_activeGpuDriverVersion;
+    }
+#endif
     // Window thread liveness for the startup hang watch (#282), in ms of steady time.
     static std::atomic<int64_t> g_windowPumpBeat{0};
     static int64_t SteadyMilliseconds() {
@@ -2713,6 +2726,9 @@ namespace gpu::video
                 std::lock_guard lock(g_gpuNamesMutex);
                 g_gpuDeviceNames = std::move(names);
                 g_activeGpuDeviceName = g_device ? g_device->getDescription().name : std::string{};
+#if defined(__ANDROID__)
+                g_activeGpuDriverVersion = g_device ? fmt::format("{}", g_device->getDescription().driverVersion) : std::string{};
+#endif
             }
             g_textureCompressionBC.store(capabilities.textureCompressionBC, std::memory_order_relaxed);
             if (g_device && candidate == backend::Backend::Vulkan)
@@ -4697,7 +4713,7 @@ namespace gpu::video
         if (t.pending) {
             t.pending = false;
             t.pool->queryResults();
-            if (const auto* results = t.pool->getResults()) gpu_busy::AddBatch(results[0], results[1]);
+            if (const auto* results = t.pool->getResults()) gpu_busy::AddBatch(results[0], results[1], t.previousEnd);
         }
         t.recording = false;
         if (!gpu_busy::Requested()) return;
@@ -4911,6 +4927,23 @@ namespace gpu::video
     static bool PresentSwapchainImage(uint32_t imageIndex, plume::RenderCommandSemaphore** waits, uint32_t waitCount)
     {
         PresentScope progress(g_presentProgress, PresentStage::QueuePresent);
+#if defined(__ANDROID__)
+        auto& tester = ::diagnostics::android_tester::g_recorder;
+        if (tester.recording.load(std::memory_order_relaxed)) {
+            const auto threadTime = []() -> uint64_t {
+                timespec t{};
+                return clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t) == 0
+                    ? uint64_t(t.tv_sec) * 1000000000ull + uint64_t(t.tv_nsec) : 0;
+            };
+            const uint64_t wallBefore = ::diagnostics::android_tester::NowNs(), cpuBefore = threadTime();
+            const bool ok = g_swapChain->present(imageIndex, waits, waitCount);
+            const uint64_t wallAfter = ::diagnostics::android_tester::NowNs(), cpuAfter = threadTime();
+            tester.Add(wallAfter, wallAfter - wallBefore,
+                cpuBefore && cpuAfter >= cpuBefore ? cpuAfter - cpuBefore : 0,
+                ok, gpu_busy::Total(), gpu_busy::Batches());
+            return ok;
+        }
+#endif
         return g_swapChain->present(imageIndex, waits, waitCount);
     }
 
@@ -5412,7 +5445,8 @@ namespace gpu::video
                 if (!BeginGpuCommands(g_commandList.get())) return;
                 // Settings → Graphics → Performance overlay; Off costs this test.
                 const bool performanceOverlay = presentationConfig.performanceOverlay || g_performanceOverlay.active;
-                if (performanceOverlay) BeginPresentTiming();
+                const bool presentTiming = performanceOverlay || gpu_busy::Requested();
+                if (presentTiming) BeginPresentTiming();
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
                 if (g_d3dFg && g_d3dFg->Enabled()) {
                     g_d3dFg->PrepareAfterHostDrain(composite,
@@ -5513,7 +5547,7 @@ namespace gpu::video
 #endif
                 g_captureCopy.d3dFenceValue = d3dSignal;
                 PreparePresentImage(backBuffer);
-                if (performanceOverlay) EndPresentTiming();
+                if (presentTiming) EndPresentTiming();
                 if (!EndGpuCommands(g_commandList.get())) return;
 
                 const plume::RenderCommandList* lists[] = { g_commandList.get() };
@@ -5525,7 +5559,7 @@ namespace gpu::video
                     g_fence.get(), &submissionSerial, &submitResult);
                 FgHostSubmitted(submitted, submissionSerial, submitResult);
                 if (!submitted) { LOG_ERROR("video: GPU presentation submit failed raw_result={}", submitResult); ReadPresentCapture(captureResult, false, false, 0); return; }
-                if (performanceOverlay) g_presentTiming.pending = g_presentTiming.recording;
+                if (presentTiming) g_presentTiming.pending = g_presentTiming.recording;
                 g_fgPresent.Submitted(g_deviceEpoch.load(), submissionSerial);
                 FgPresentStart();
                 const bool presented = PresentSwapchainImage(imageIndex, &signalSemaphore, 1);

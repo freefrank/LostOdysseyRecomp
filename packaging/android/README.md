@@ -279,6 +279,10 @@ The catalog and package logic has JVM tests:
 
 ## Logs
 
+The in-game **Settings → System → Android diagnostics** page can record and
+export a bounded tester trace without a PC. Its measurements, privacy notes and
+hardware validation plan are described in [Android tester diagnostics](../../docs/ANDROID_TESTER.md).
+
 `RuntimeActivity` sets `LO_LOG_DIR` to `getExternalFilesDir(null)/logs`, so the
 runtime log, `shader-*.jsonl` and `native-stderr.log` land in
 `Android/data/io.github.freefrank.lostodyssey/files/logs/`, which players can
