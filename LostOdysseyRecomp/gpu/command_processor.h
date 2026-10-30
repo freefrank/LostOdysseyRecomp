@@ -196,6 +196,10 @@ namespace gpu
         std::atomic<uint32_t> m_writePtrIndex{ 0xBAADF00D };
         std::mutex m_writePtrMutex;
         std::condition_variable m_writePtrChanged;
+        // Threads asleep on m_writePtrChanged / m_waitProgress, counted under each
+        // one's mutex: on the Switch the per-WPTR and per-interrupt notifies skip
+        // the kernel call it makes for every notify when nobody waits (#14).
+        std::atomic<uint32_t> m_writePtrWaiters{ 0 };
         std::atomic<bool> m_wake{ false }; // Wake(): end the current idle or WAIT_REG_MEM wait early
         std::atomic<uint32_t> m_counter{ 0 };
         // The command thread updates these on every constant run and sync point.
@@ -220,6 +224,7 @@ namespace gpu
         std::atomic<uint64_t> m_interruptsCompleted{ 0 };
         std::mutex m_waitProgressMutex;
         std::condition_variable m_waitProgress;
+        std::atomic<uint32_t> m_waitProgressWaiters{ 0 };
         std::vector<std::pair<uint32_t, uint32_t>> m_pendingInterrupts; // (source, cpu)
         uint64_t m_binMask = 0xFFFFFFFFFFFFFFFFull;
         uint64_t m_binSelect = 0xFFFFFFFFFFFFFFFFull;
