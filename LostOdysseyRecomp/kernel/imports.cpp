@@ -525,8 +525,13 @@ static void RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION* cs, 
 
 static void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
+    const uint32_t thread = g_ppcContext->r13.u32;
+    // Switch: most entries are uncontended, so record the wait (watchdog, wait profile) only when
+    // it can wait (#15).
+    if (LO_PLATFORM_SWITCH && GuestCriticalSection::TryEnter(cs->RecursionCount, cs->OwningThread, thread))
+        return;
     WaitScope scope("RtlEnterCriticalSection", g_memory.MapVirtual(cs));
-    GuestCriticalSection::Enter(cs->RecursionCount, cs->OwningThread, g_ppcContext->r13.u32);
+    GuestCriticalSection::Enter(cs->RecursionCount, cs->OwningThread, thread);
 }
 
 static bool RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
