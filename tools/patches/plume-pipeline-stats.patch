@@ -1,0 +1,182 @@
+--- a/plume_vulkan.cpp	2026-10-31 13:21:29.036279712 +0000
++++ b/plume_vulkan.cpp	2026-10-31 13:21:29.040279712 +0000
+@@ -93,6 +93,7 @@
+         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+         VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME,
+         VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
++        VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME,
+         VK_KHR_PRESENT_ID_EXTENSION_NAME,
+         VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
+         VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
+@@ -1385,6 +1386,10 @@
+         this->device = device;
+         this->format = format;
+         this->entryPointName = (entryPointName != nullptr) ? std::string(entryPointName) : std::string();
++        codeHash = 1469598103934665603ULL;
++        for (uint64_t i = 0; i < size; i++) {
++            codeHash = (codeHash ^ static_cast<const uint8_t *>(data)[i]) * 1099511628211ULL;
++        }
+ 
+         VkShaderModuleCreateInfo shaderInfo = {};
+         shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+@@ -1509,6 +1514,78 @@
+ 
+     // VulkanGraphicsPipeline
+ 
++    // LostOdysseyRecomp pipeline-stats diag: one line per pipeline executable with every statistic
++    // the driver reports, keyed by the FNV-1a hash of the stage SPIR-V, so two drivers' runs can be
++    // joined offline.
++    static void logPipelineStatistics(VulkanDevice *device, VkPipeline pipeline, uint64_t vsHash, uint64_t fsHash,
++        uint32_t rtCount, unsigned samples, unsigned rt0Format) {
++        static FILE *out = nullptr;
++        static std::mutex outMutex;
++        std::lock_guard<std::mutex> lock(outMutex);
++        if (out == nullptr) {
++            const char *dir = getenv("LO_LOG_DIR");
++            std::string path = std::string((dir != nullptr) ? dir : ".") + "/pipeline-stats.txt";
++            out = fopen(path.c_str(), "a");
++            if (out == nullptr) {
++                return;
++            }
++            fprintf(out, "device %s driver=%u\n", device->physicalDeviceProperties.deviceName,
++                unsigned(device->physicalDeviceProperties.driverVersion));
++        }
++
++        VkPipelineInfoKHR pipelineInfo = {};
++        pipelineInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR;
++        pipelineInfo.pipeline = pipeline;
++        uint32_t executableCount = 0;
++        if (vkGetPipelineExecutablePropertiesKHR(device->vk, &pipelineInfo, &executableCount, nullptr) != VK_SUCCESS) {
++            return;
++        }
++        std::vector<VkPipelineExecutablePropertiesKHR> executables(executableCount);
++        for (VkPipelineExecutablePropertiesKHR &executable : executables) {
++            executable.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR;
++        }
++        vkGetPipelineExecutablePropertiesKHR(device->vk, &pipelineInfo, &executableCount, executables.data());
++
++        for (uint32_t i = 0; i < executableCount; i++) {
++            VkPipelineExecutableInfoKHR executableInfo = {};
++            executableInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR;
++            executableInfo.pipeline = pipeline;
++            executableInfo.executableIndex = i;
++            uint32_t statCount = 0;
++            vkGetPipelineExecutableStatisticsKHR(device->vk, &executableInfo, &statCount, nullptr);
++            std::vector<VkPipelineExecutableStatisticKHR> stats(statCount);
++            for (VkPipelineExecutableStatisticKHR &stat : stats) {
++                stat.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR;
++            }
++            vkGetPipelineExecutableStatisticsKHR(device->vk, &executableInfo, &statCount, stats.data());
++
++            fprintf(out, "pipe vs=%016llx fs=%016llx rts=%u samples=%u rt0=%u exec=%u stages=0x%x name=\"%s\"",
++                (unsigned long long)vsHash, (unsigned long long)fsHash, rtCount, samples, rt0Format, i,
++                unsigned(executables[i].stages), executables[i].name);
++            for (uint32_t j = 0; j < statCount; j++) {
++                const VkPipelineExecutableStatisticKHR &stat = stats[j];
++                switch (stat.format) {
++                case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_BOOL32_KHR:
++                    fprintf(out, " \"%s\"=%u", stat.name, unsigned(stat.value.b32));
++                    break;
++                case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_INT64_KHR:
++                    fprintf(out, " \"%s\"=%lld", stat.name, (long long)stat.value.i64);
++                    break;
++                case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR:
++                    fprintf(out, " \"%s\"=%llu", stat.name, (unsigned long long)stat.value.u64);
++                    break;
++                case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_FLOAT64_KHR:
++                    fprintf(out, " \"%s\"=%g", stat.name, stat.value.f64);
++                    break;
++                default:
++                    break;
++                }
++            }
++            fprintf(out, "\n");
++        }
++        fflush(out);
++    }
++
+     VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice *device) : VulkanPipeline(device, Type::Graphics) { }
+ 
+     VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice *device, const RenderGraphicsPipelineDesc &desc) : VulkanPipeline(device, Type::Graphics) {
+@@ -1751,6 +1828,9 @@
+         pipelineInfo.pDynamicState = &dynamicState;
+         pipelineInfo.layout = pipelineLayout->vk;
+         pipelineInfo.renderPass = renderPass;
++        if (device->pipelineStatsEnabled) {
++            pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
++        }
+ 
+         VkResult res = vkCreateGraphicsPipelines(device->vk, device->pipelineCache, 1, &pipelineInfo, nullptr, &vk);
+         if (res != VK_SUCCESS) {
+@@ -1759,6 +1839,14 @@
+                 unsigned(desc.renderTargetCount), unsigned(desc.multisampling.sampleCount), unsigned(pipelineInfo.flags));
+             return;
+         }
++
++        if (device->pipelineStatsEnabled) {
++            logPipelineStatistics(device, vk,
++                desc.vertexShader ? static_cast<const VulkanShader *>(desc.vertexShader)->codeHash : 0,
++                desc.pixelShader ? static_cast<const VulkanShader *>(desc.pixelShader)->codeHash : 0,
++                desc.renderTargetCount, unsigned(desc.multisampling.sampleCount),
++                desc.renderTargetCount ? unsigned(desc.renderTargetFormat[0]) : 0u);
++        }
+     }
+ 
+     VulkanGraphicsPipeline::~VulkanGraphicsPipeline() {
+@@ -4987,6 +5075,14 @@
+ 
+         // FidelityFX queries physical capabilities when selecting shader
+         // permutations. Enable the matching logical-device features as well.
++        VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pipelineStatsFeatures = {};
++        const bool pipelineStatsFound = supportedOptionalExtensions.find(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME) != supportedOptionalExtensions.end();
++        if (pipelineStatsFound) {
++            pipelineStatsFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
++            pipelineStatsFeatures.pNext = featuresChain;
++            featuresChain = &pipelineStatsFeatures;
++        }
++
+         VkPhysicalDeviceShaderFloat16Int8Features float16Features = {};
+         const bool interpolationFeatures = renderInterface->enableFrameInterpolationFeatures;
+         const bool float16Found = interpolationFeatures && (physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2 ||
+@@ -5095,7 +5191,10 @@
+ 
+         // Build the device creation chain.
+         void *createDeviceChain = nullptr;
+-        const bool fastLinkSupported = pipelineLibraryProperties.graphicsPipelineLibraryFastLinking;
++        // LostOdysseyRecomp pipeline-stats diag: whole pipelines only, so each one reports its
++        // own executables.
++        const bool fastLinkSupported = pipelineLibraryProperties.graphicsPipelineLibraryFastLinking &&
++            !(pipelineStatsFound && pipelineStatsFeatures.pipelineExecutableInfo);
+         if (fastLinkSupported) {
+             pipelineLibraryFeatures.pNext = createDeviceChain;
+             createDeviceChain = &pipelineLibraryFeatures;
+@@ -5107,6 +5206,11 @@
+             float16Features.pNext = createDeviceChain;
+             createDeviceChain = &float16Features;
+         }
++        if (pipelineStatsFound && pipelineStatsFeatures.pipelineExecutableInfo) {
++            pipelineStatsFeatures.pNext = createDeviceChain;
++            createDeviceChain = &pipelineStatsFeatures;
++            pipelineStatsEnabled = true;
++        }
+         if (storage16Found) {
+             storage16Features.pNext = createDeviceChain;
+             createDeviceChain = &storage16Features;
+--- a/plume_vulkan.h	2026-10-31 13:21:29.036279712 +0000
++++ b/plume_vulkan.h	2026-10-31 13:21:29.044279712 +0000
+@@ -178,6 +178,7 @@
+     struct VulkanShader : RenderShader {
+         VkShaderModule vk = VK_NULL_HANDLE;
+         std::string entryPointName;
++        uint64_t codeHash = 0;
+         VulkanDevice *device = nullptr;
+         RenderShaderFormat format = RenderShaderFormat::UNKNOWN;
+ 
+@@ -534,6 +535,7 @@
+         VkPhysicalDeviceSampleLocationsPropertiesEXT sampleLocationProperties = {};
+         std::unique_ptr<RenderBuffer> nullBuffer;
+         bool loadStoreOpNoneSupported = false;
++        bool pipelineStatsEnabled = false;
+         bool nullDescriptorSupported = false;
+         bool timelineSemaphoresSupported = false;
+         // A replacement WSI owns its queue synchronization and cannot have two
