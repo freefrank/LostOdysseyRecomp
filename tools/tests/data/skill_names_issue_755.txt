@@ -1,0 +1,171 @@
+Turn Tail
+Steal
+Taunt
+Stand Firm
+Complete Defense
+Casting Support
+Concentrate
+MP Gift
+Huge MP Gift
+MP Convert
+Prayer
+Lullaby
+Award Medal
+Magic Seal
+Counter Seal
+Power Hit
+Break Hit
+Member Hit
+Skill Hit
+Slot Hit
+Combo
+3 Combo
+Ultimate Hit
+Cut Down
+All Hit
+Wall
+Walla
+Wallus
+Double Item
+Double-Cast
+Absorb Transfer
+Drain Shower
+Counter
+Spell Counter
+Weapon Guard
+Absorb Attack
+Absorb Magic
+MP Guard
+Persistence
+Counter Guard
+Absorb Guard
+Guard Heal
+Relax
+Stand Ready
+Power Guard
+Lucky GC Ignore
+Mental Stability 1
+Auto Shield
+Auto Barrier
+Auto HP Recovery
+Auto MP Recovery
+Reduce Casting Time 1
+Reduce Casting Time 2
+MP Conservation
+Double Back
+Counter Up
+Angel Heart
+Resourceful
+Potion Booster
+Double Gold
+Double Loot
+Double Experience
+Double SP
+2 Accessories
+3 Accessories
+Special Accessory
+Royal Equipment
+Black Staff
+White Staff
+Slot +3
+Slot +5
+Slot +10
+Lv 1 White Magic
+Lv 2 White Magic
+Lv 3 White Magic
+Lv 4 White Magic
+Lv 5 White Magic
+Lv 6 White Magic
+Lv 7 White Magic
+Lv 8 White Magic
+Lv 1 Black Magic
+Lv 2 Black Magic
+Lv 3 Black Magic
+Lv 4 Black Magic
+Lv 5 Black Magic
+Lv 6 Black Magic
+Lv 7 Black Magic
+Lv 8 Black Magic
+Lv 1 Spirit Magic
+Lv 2 Spirit Magic
+Lv 3 Spirit Magic
+Lv 4 Spirit Magic
+Lv 5 Spirit Magic
+Lv 6 Spirit Magic
+Lv 7 Spirit Magic
+Lv 8 Spirit Magic
+Lv 1 Black-White Magic
+Lv 2 Black-White Magic
+Lv 3 Black-White Magic
+Lv 4 Black-White Magic
+Lv 5 Black-White Magic
+Lv 6 Black-White Magic
+Lv 7 Black-White Magic
+Lv 8 Black-White Magic
+Lv 1 Composite Magic
+Lv 2 Composite Magic
+Lv 3 Composite Magic
+Lv 4 Composite Magic
+HP Max Up 1
+HP Max Up 2
+HP Max Up 3
+HP Max Up 4
+MP Max Up 1
+MP Max Up 2
+MP Max Up 3
+MP Max Up 4
+Attack Boost 1
+Attack Boost 2
+Defense Boost 1
+Defense Boost 2
+Magic Defense Boost 1
+Magic Defense Boost 2
+Evade Up
+Mental Stability 2
+Factual Analysis
+Status Analysis
+Treasure Analysis
+Ultimate Analysis
+Anti-Poison
+Anti-Blind
+Anti-Kelolon
+Anti-Sleep
+Anti-Curse
+Anti-Terror
+Anti-Dizzy
+Anti-Seal
+Anti-Paralysis
+Anti-Freeze
+Anti-Petrify
+Anti-Darkness
+Ailment Resistance
+Fire Resistance Up
+Water Resistance Up
+Wind Resistance Up
+Earth Resistance Up
+Elements Resistance Up
+Fire Proof
+Water Proof
+Wind Proof
+Earth Proof
+Nullify All Elements
+Absorb Fire
+Absorb Water
+Absorb Wind
+Absorb Earth
+Absorb All Elements
+Critical Heal
+Crisis Defense
+Crisis Concentration
+Crisis Prayer
+Crisis Attack Boost
+Crisis Defense Boost
+Lucky 0 Magic Damage
+Freeform
+Half All Magic
+1 Turn Cast
+Counter 2
+Spell Counter 2
+Weapon Guard 2
+Reduce Casting Time 3
+Zero MP Consumption

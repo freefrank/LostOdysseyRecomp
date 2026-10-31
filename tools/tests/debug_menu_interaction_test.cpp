@@ -191,8 +191,35 @@ const wchar_t* TakeRefusal()
 }
 }
 
+void CheckSkillPicker()
+{
+    using namespace debug_menu::cheat_overlay;
+    using namespace debug_menu::cheats;
+    for (unsigned character=0; character<9; ++character) {
+        Model m; m.category=1; m.row=5; m.character=character;
+        m.Input(Nav::Confirm,false);
+        Require(m.PickCount()==172, "Skill picker does not expose the recovered catalog");
+        for (unsigned position=0; position<m.PickCount(); ++position) {
+            Require(m.picked==position, "Skill picker skipped an entry");
+            Require(m.PickName(position)==data::LearnedSkills[position].name,
+                "Skill picker name and request index disagree");
+            if (position+1<m.PickCount()) m.Input(Nav::Down,false);
+        }
+        m.Input(Nav::Confirm,false);
+        Require(m.skill==171, "Picker lost the selected catalog index");
+        m.Input(Nav::Right,false);
+        Require(m.skill==0, "Skill list failed to wrap");
+        m.Input(Nav::Left,false);
+        Require(m.skill==171, "Skill list wrapped to the wrong entry");
+        m.Input(Nav::Confirm,false);
+        Require(m.picked==171, "Reopening the picker selected the wrong position");
+        m.Input(Nav::Cancel,false);
+    }
+}
+
 int main()
 {
+    CheckSkillPicker();
     // Setup initial mock environment
     g_mock.snapshot.available = true;
     g_mock.snapshot.current = {100.0f, 200.0f, 300.0f};
