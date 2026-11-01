@@ -317,3 +317,10 @@ Short runs in the first battle. Limits at 540 rows: GPU busy 41 ms, `Guest Main`
   It needs a pack built with the same setting, `shaders/deko3d_shaders_lean2.lodk`:
   `LO_DEKO3D_LEAN_SHADERS=2 deko3d_shader_tool cache|variants`, then `pack_dkcache.py`. Level 2 changes float rounding in
   position math, so depth-equal passes need watching; no flicker in screenshots of this battle. Off by default.
+
+## Multiple waits: a signal wakes only the threads waiting for that object
+
+`kernel::wait::Multiple` kept every multiple wait on one global condition variable, so each guest signal woke them all: five idle
+workers ran at least 400 times a second doing nothing. Each waiter now registers on its own objects. Alternated short runs at 360
+rows: 23.6 / 23.72 FPS, 23.17 / 22.93 before, about +2.8%; median frame 42.5 ms against 43.9. No hang files in the runs.
+The 15.9% and 7.9% of samples in `svcSignalProcessWideKey` were partly this: the signal call was cheap, the woken threads were not.
