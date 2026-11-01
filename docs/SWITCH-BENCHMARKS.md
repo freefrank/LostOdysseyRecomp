@@ -347,3 +347,9 @@ A `--wrap` of `pthread_cond_broadcast` misses these calls, as newlib reaches `__
 
 The CPU limit moved from about 23 to about 25.5 FPS, so 540 rows is limited by the GPU again.
 
+
+## A second scene: the merchant ship
+
+Save at `Barco_mercante_saman` (interior, about 790 draws), 540 rows, handheld, `LO_DEKO3D_LEAN_SHADERS=2`, short reading standing and
+walking: 30.0 FPS held, p99 about 34.5 ms, GPU busy 23-25 ms, no hitches. The first battle (about 1,250 draws, 3.2 million indices)
+remains the demanding scene.
