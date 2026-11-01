@@ -129,6 +129,7 @@ namespace plume {
         sharedBase = 0;
         sharedSize = 0;
         sharedCpu = nullptr;
+        cachedCpu = nullptr;
         sharedWords = nullptr;  // banjo-nx (2026-10-19)
         sharedWordsSize = 0;
         descriptorEpoch = 0;
@@ -379,7 +380,7 @@ namespace plume {
                                 DkGpuAddr base = 0;
                                 uint32_t size = 0;
                                 const uint8_t *cpu = nullptr;
-                                if (device->findBuffer(addr, base, size, cpu) && cpu && addr + 4 <= base + size)
+                                if (findBufferCached(addr, base, size, cpu) && cpu && addr + 4 <= base + size)
                                     memcpy(&word, cpu + (addr - base), 4);
                             }
                             index += word;
@@ -472,6 +473,23 @@ namespace plume {
     // LostOdysseyRecomp (2026-10-27): storage windows that start at an address the push constants hold (the
     // renderer's own shaders read the shared constants through such addresses): the buffer holding the address, from
     // there to its end.
+    // The buffer holding an address, from the list's one-entry cache while no buffer was destroyed since it was filled
+    // (a created buffer never overlaps a live one).
+    bool Deko3DCommandList::findBufferCached(DkGpuAddr address, DkGpuAddr &base, uint32_t &size, const uint8_t *&cpu) {
+        const uint32_t generation = device->bufferGeneration.load(std::memory_order_acquire);
+        if (!cachedCpu || cachedGeneration != generation || address < cachedBase || address >= cachedBase + cachedSize) {
+            if (!device->findBuffer(address, cachedBase, cachedSize, cachedCpu)) {
+                cachedCpu = nullptr;
+                return false;
+            }
+            cachedGeneration = generation;
+        }
+        base = cachedBase;
+        size = cachedSize;
+        cpu = cachedCpu;
+        return true;
+    }
+
     void Deko3DCommandList::bindPushWindows() {
         const Deko3DGraphicsPipeline *p = graphicsPipeline;
         for (int st = 0; st < 3; st++) {
@@ -484,7 +502,7 @@ namespace plume {
                 uint32_t size = 0;
                 const uint8_t *cpu = nullptr;
                 DkBufExtents e{device->zeroAddr, Deko3DDevice::ZeroSize};
-                if (address && device->findBuffer(address, base, size, cpu) && address < base + size)
+                if (address && findBufferCached(address, base, size, cpu) && address < base + size)
                     e = {address, uint32_t(base + size - address)};
                 if (!(graphicsSsboValid & (1u << w.slot)) || graphicsSsbo[w.slot].addr != e.addr || graphicsSsbo[w.slot].size != e.size) {
                     graphicsSsbo[w.slot] = e;
@@ -1294,7 +1312,7 @@ namespace plume {
         cl->sharedWords = static_cast<const uint8_t *>(cpu);
         cl->sharedWordsSize = size;
         if (!cpu)
-            cl->sharedCpu = nullptr;  // looked up again where the bound buffer is
+            cl->sharedCpu = cl->cachedCpu = nullptr;  // looked up again where the bound buffer is
         return true;
     }
 

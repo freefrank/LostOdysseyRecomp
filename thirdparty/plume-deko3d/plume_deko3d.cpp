@@ -468,6 +468,7 @@ namespace plume {
             {
                 std::lock_guard<std::mutex> lock(device->bufferMutex);
                 device->bufferRanges.erase(gpu);
+                device->bufferGeneration.fetch_add(1, std::memory_order_release);
             }
             g_deko3dStats.bufferBytes -= dkMemBlockGetSize(block);
             device->retire({}, block);

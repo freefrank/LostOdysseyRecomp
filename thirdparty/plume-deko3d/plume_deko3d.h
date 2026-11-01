@@ -380,6 +380,12 @@ namespace plume {
         DkGpuAddr sharedBase = 0;
         uint32_t sharedSize = 0;
         const uint8_t *sharedCpu = nullptr;
+        // The buffer the last findBufferCached found, valid while the device's bufferGeneration is the one it saw.
+        DkGpuAddr cachedBase = 0;
+        uint32_t cachedSize = 0;
+        const uint8_t *cachedCpu = nullptr;
+        uint32_t cachedGeneration = 0;
+        bool findBufferCached(DkGpuAddr address, DkGpuAddr &base, uint32_t &size, const uint8_t *&cpu);
         // banjo-nx (2026-10-19, render-thread proposal 5, Deko3DSetSharedWords): the CPU's copy of the shared constants
         // the next draws read, when the renderer pushes them (its uniform buffer holds them only on the GPU's side).
         const uint8_t *sharedWords = nullptr;
@@ -596,6 +602,8 @@ namespace plume {
         // Every buffer by its GPU address (bound textures read the shared constants' words through it).
         std::mutex bufferMutex;
         std::map<DkGpuAddr, std::pair<uint32_t, const uint8_t *>> bufferRanges; // GPU address -> size, CPU address
+        // Counts the destroyed buffers (under bufferMutex): a list's cached range is stale once it changes.
+        std::atomic<uint32_t> bufferGeneration{0};
         bool findBuffer(DkGpuAddr address, DkGpuAddr &base, uint32_t &size, const uint8_t *&cpu);
 
         Deko3DDevice();
