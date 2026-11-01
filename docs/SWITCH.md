@@ -56,6 +56,21 @@ Settings, saves, caches and logs are created in the same folder. Disc 1 is
 required to start; the game switches discs by itself when the others are
 present. The game data is about 21 GB: use an exFAT card with enough space.
 
+If you are using a Mac to copy your files to the SD card, you may see the app
+crashes whilst loading in assets on the main menu. This is because Mac creates
+hidden files with the same extension i.e. `._default.xex`, `._LO.fpi` etc.
+These files don't contain real data yet since have the same extensions as
+to what the game is trying to load, the game crashes on Switch. In your
+Mac Terminal, run the `-print` command below to see if there are any
+hidden files. Replace `SDCARD` with the name of your volume.
+```
+find "/Volumes/SDCARD/switch/LostOdysseyRecomp" -name '._*' -print
+```
+If you do see any hidden files listed, run the same command with `-delete`
+```
+find "/Volumes/SDCARD/switch/LostOdysseyRecomp" -name '._*' -delete
+```
+
 ## Starting the game
 
 Start the Homebrew Menu **through title takeover**: hold **R** while launching
