@@ -829,6 +829,10 @@ add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
 
+add_executable(LoEngineDeltaLimitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/engine_delta_limit_test.cpp)
+target_include_directories(LoEngineDeltaLimitTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoEngineDeltaLimitTest PRIVATE cxx_std_20)
+
 add_executable(LoHostUiCompositeTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/host_ui_composite_test.cpp)
 target_include_directories(LoHostUiCompositeTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoHostUiCompositeTest PRIVATE cxx_std_20)
