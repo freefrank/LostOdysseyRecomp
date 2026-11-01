@@ -47,6 +47,7 @@ lo_add_header_test(LoTextureDescriptorCacheTest ${CMAKE_SOURCE_DIR}/tools/tests/
 lo_add_header_test(LoTextureKeyTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_key_test.cpp)
 lo_add_header_test(LoTextureContentTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_content_test.cpp)
 target_link_libraries(LoTextureContentTest PRIVATE xxHash::xxhash)
+lo_add_header_test(LoTextureBudgetTest ${CMAKE_SOURCE_DIR}/tools/tests/texture_budget_test.cpp)
 lo_add_header_test(LoBcDecodeTest ${CMAKE_SOURCE_DIR}/tools/tests/bc_decode_test.cpp)
 find_package(Threads REQUIRED)
 lo_add_header_test(LoAudioCallbackTest ${CMAKE_SOURCE_DIR}/tools/tests/audio_callback_test.cpp)

@@ -334,6 +334,7 @@ and logs.
 | `LO_HEADLESS=1` | No video device/window; not equivalent to hidden rendering. |
 | `LO_AUDIO_MUTE=1` | Mute device output. |
 | `LO_AUDIO_CAPTURE=<path>` | Up to 60 seconds of raw 48kHz stereo float PCM before mute. |
+| `LO_TEXTURE_CACHE_LIMIT_MIB=<n>` | Hard limit of the texture cache in MiB; the soft limit is 3/4 of it. `0` turns the budget off. Default: half of the reported video memory. |
 | `LO_CONTROLLER_RUMBLE=0` | Disable host controller rumble; it is enabled by default. Physical device support remains driver/controller dependent. |
 | `LO_GRAPHICS_API=d3d12\|vulkan` | Override the persisted `graphics_backend` choice for one launch on Windows (`dx12` is accepted for `d3d12`); unset/`auto` uses the saved choice. Linux always uses Vulkan and macOS Metal. |
 
