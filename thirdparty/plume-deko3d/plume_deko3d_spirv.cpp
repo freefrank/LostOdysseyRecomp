@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <regex>
 #include <set>
 
 namespace plume {
@@ -92,6 +93,33 @@ namespace plume {
             uint32_t binding = 0;
             std::string type;         // sampler2D, sampler2DShadow, ...
         };
+    }
+
+    // LostOdysseyRecomp (2026-11-01): text passes over SPIRV-Cross's output (Deko3DSpirvOptions::leanShaders).
+    static void leanGlsl(std::string &glsl, uint32_t level) {
+        // The vertex arena's storage buffer is 1 GiB and every fetch stays inside it: min() and the compare that
+        // follows repeat, per attribute of every vertex, what the buffer's own size gives.
+        static const std::regex scalarFetch(R"(\((_\d+) > 107374\d+u\) \? 0u : (dkLoad_uintW\d+)\(0u \+ uint\(min\(\1, 107374\d+u\)\)\))");
+        static const std::regex vectorFetch(R"(mix\((dkLoad_uvec\dW\d+)\(0u \+ uint\(min\((_\d+), 107374\d+u\)\)\), uvec\d\(0u\), bvec\d\(\2 > 107374\d+u\)\))");
+        glsl = std::regex_replace(glsl, scalarFetch, "$2($1)");
+        glsl = std::regex_replace(glsl, vectorFetch, "$1($2)");
+        // Debug paints (LO_PS_DEBUG, LO_PS_TEXDEBUG, LO_VS_DEBUG, LO_VS_RAW). 1 is the alpha test, 32 the colour clamp.
+        static const char *const debugFlags[] = {"(XeShared.xeFlags & 2u)", "(XeShared.xeFlags & 4u)",
+                                                 "(XeShared.xeFlags & 8u)", "(XeShared.xeFlags & 16u)"};
+        for (const char *flag : debugFlags) {
+            const size_t length = strlen(flag);
+            for (size_t at = glsl.find(flag); at != std::string::npos; at = glsl.find(flag, at))
+                glsl.replace(at, length, "0u");
+        }
+        if (level < 2)
+            return;
+        static const std::regex constantIndex(R"(clamp\((\d+ \+ _\d+), 0, 255\))");
+        static const std::regex addressRegister(R"(int\(clamp\(floor\(([^()]+) \+ 0\.5\), -256\.0, 255\.0\)\))");
+        glsl = std::regex_replace(glsl, constantIndex, "($1)");
+        glsl = std::regex_replace(glsl, addressRegister, "int(floor($1 + 0.5))");
+        const std::string precise = "precise ";
+        for (size_t at = glsl.find(precise); at != std::string::npos; at = glsl.find(precise, at))
+            glsl.erase(at, precise.size());
     }
 
     Deko3DSpirvResult Deko3DTranslateSpirv(const uint32_t *words, size_t wordCount, Deko3DSpirvStage stage,
@@ -951,6 +979,8 @@ namespace plume {
                 result.glsl = std::move(glsl);  // for the PC tool's report
                 return result;
             }
+            if (options.leanShaders)
+                leanGlsl(glsl, options.leanShaders);
             result.glsl = std::move(glsl);
             result.ok = true;
         }
@@ -991,6 +1021,8 @@ namespace plume {
         h = fnvMix(h, options.addressWindowMember.data(), options.addressWindowMember.size());
         const uint32_t window[2] = {options.addressWindowSet, options.addressWindowBinding};
         h = fnvMix(h, window, sizeof(window));
+        if (options.leanShaders)
+            h = fnvMix(h, &options.leanShaders, sizeof(options.leanShaders));
         // Never equal to a GLSL key in practice; the salt keeps the two kinds of entry apart in one cache.
         return h ^ 0x5452414E534C4154ull;
     }

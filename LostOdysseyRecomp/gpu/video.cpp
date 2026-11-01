@@ -454,12 +454,14 @@ namespace gpu::video
         std::unique_ptr<plume::RenderInterface> CreateDeko3dInterface()
         {
             plume::SetDeko3DLogCallback([](const char* message) { LOG_INFO("deko3d: {}", message); });
-            plume::Deko3DSetSpirvOptions(plume::Deko3DSpirvOptions{});
+            plume::Deko3DSpirvOptions spirvOptions;
+            if (const char* lean = getenv("LO_DEKO3D_LEAN_SHADERS")) spirvOptions.leanShaders = uint32_t(atoi(lean));
+            plume::Deko3DSetSpirvOptions(spirvOptions);
             // GPU switches, all off by default but colour compression: env.txt (LO_DEKO3D_GPU_FAST=1 turns them all on,
             // each LO_DEKO3D_<NAME>=0/1 overrides it), else what the Debug page saved (debug/debug_options.h).
             debug_options::StartDeko3d();
             const std::filesystem::path root = LO_SWITCH_DATA_ROOT;
-            lo::deko3d::InstallShaderCache(root / "shaders" / "deko3d_shaders.lodk", root / "cache" / "deko3d_runtime.dkcache");
+            lo::deko3d::InstallShaderCache(root / "shaders" / (spirvOptions.leanShaders ? "deko3d_shaders_lean" + std::to_string(spirvOptions.leanShaders) + ".lodk" : std::string("deko3d_shaders.lodk")), root / "cache" / "deko3d_runtime.dkcache");
             LOG_NOTICE("video: deko3d back end (LO_SWITCH_BACKEND=deko3d)");
             return plume::CreateDeko3DInterface();
         }

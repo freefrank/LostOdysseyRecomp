@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <algorithm>
@@ -75,7 +76,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     const plume::Deko3DSpirvLayout layout = lo::deko3d::GameLayout();
-    const plume::Deko3DSpirvOptions options;
+    plume::Deko3DSpirvOptions options;
+    if (const char *lean = std::getenv("LO_DEKO3D_LEAN_SHADERS"))
+        options.leanShaders = uint32_t(std::atoi(lean));
     const std::string mode = argv[1];
     if (mode == "translate") {
         std::vector<uint32_t> words;

@@ -1002,14 +1002,15 @@ namespace
     uint64_t g_reportedIdleReadAt[4]{};
     uint64_t g_placementWindowStart = 0;
 
-    // LO_THREAD_CORES=name=core:mask,...: experiments with thread placement, needing LO_THREAD_PLACEMENT. Applied at a
-    // report to a thread of that name above 50% CPU, which picks the render thread among its namesakes.
+    // LO_THREAD_CORES=name=core:mask[:percent],...: experiments with thread placement, needing LO_THREAD_PLACEMENT.
+    // Applied at a report to a thread of that name above percent CPU (default 50, which picks the render thread among
+    // its namesakes).
     constexpr double CORE_RULE_MIN_PERCENT = 50.0;
 
     void ApplyCoreRule(ThreadSlot& thread, double percent)
     {
         const char* rules = getenv("LO_THREAD_CORES");
-        if (!rules || thread.coreRuleApplied || percent < CORE_RULE_MIN_PERCENT)
+        if (!rules || thread.coreRuleApplied)
             return;
 
         const size_t length = strlen(thread.name);
@@ -1018,8 +1019,9 @@ namespace
             const char* end = strchr(rule, ',');
             int core = -1;
             unsigned mask = 0;
+            int minPercent = int(CORE_RULE_MIN_PERCENT);
             if (strncmp(rule, thread.name, length) == 0 && rule[length] == '=' &&
-                sscanf(rule + length + 1, "%d:%x", &core, &mask) == 2)
+                sscanf(rule + length + 1, "%d:%x:%d", &core, &mask, &minPercent) >= 2 && percent >= minPercent)
             {
                 const Result rc = svcSetThreadCoreMask(thread.handle, core, mask);
                 thread.coreRuleApplied = true;
@@ -1067,6 +1069,11 @@ void os::switch_cpu_profiler::Start(bool sampler)
     g_usageWindowStart = armGetSystemTick();
     FindModule();
 
+    {
+        u64 coreMask = 0;
+        svcGetInfo(&coreMask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
+        fprintf(stderr, "thread placement: the process may use cores 0x%llx\n", (unsigned long long)coreMask);
+    }
     if (const char* placement = getenv("LO_THREAD_PLACEMENT"); placement && placement[0] == '1')
         StartPlacementLog();
 

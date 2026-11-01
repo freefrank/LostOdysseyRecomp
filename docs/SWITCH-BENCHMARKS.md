@@ -301,3 +301,19 @@ against 53 ms. 47 of the first 64 pixel shaders can't discard. Checking 64 shade
 540 rows is now within about 6% of the 360-row CPU limit, so the GPU and the CPU cap the frame about equally. Longest frame at
 540 rows: 91 ms against 81.2 ms, from one hitch in the runs, so it needs watching.
 
+
+## The 30 FPS analysis
+
+Short runs in the first battle. Limits at 540 rows: GPU busy 41 ms, `Guest Main` and `GPU CmdProc` about 38 ms busy each.
+
+- Memory clock: 20% more bandwidth saves 3.6% of GPU time, so the GPU is limited by shader cycles, not bandwidth.
+- GPU busy is 27 ms at 360 rows and 41.7 ms at 540: about 26 ms of pixels, the rest mostly vertices. 3.2 million indices per
+  frame, about 2.8 million of them through three skinned vertex shaders of about 1,000 instructions each.
+- Fourth core: the process may only use cores 0x7, and moving a thread to core 3 fails with 0xe201.
+- Zcull: no effect (40.9 ms on, 41.0 off). deko3d drops it when the depth target changes, and the shadow pass splits the main
+  pass in two, so the second half (25 of 39 ms) has none. deko3d has no save and restore for it.
+- `LO_DEKO3D_LEAN_SHADERS=2` (`plume_deko3d_spirv.cpp`): the hot vertex shaders lose 30-34% of their code; `precise` is the
+  largest part, as it stops uam fusing multiplies and adds. GPU busy 41.1 to 37.4 ms; FPS 21.8 to 22.4, now limited by the CPU.
+  It needs a pack built with the same setting, `shaders/deko3d_shaders_lean2.lodk`:
+  `LO_DEKO3D_LEAN_SHADERS=2 deko3d_shader_tool cache|variants`, then `pack_dkcache.py`. Level 2 changes float rounding in
+  position math, so depth-equal passes need watching; no flicker in screenshots of this battle. Off by default.
