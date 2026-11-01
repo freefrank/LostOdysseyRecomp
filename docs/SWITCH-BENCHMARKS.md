@@ -332,3 +332,18 @@ read lock in nearly every call that checks an object. Controller polling alone w
 `os/switch/rwlock_switch.c` replaces `pthread_rwlock_*` at link time and only calls the kernel for a real waiter. Alternated short
 runs at 360 rows: 25.47 / 25.18 FPS against about 23.6, about +7.5%; median frame about 40 ms against 42.2.
 A `--wrap` of `pthread_cond_broadcast` misses these calls, as newlib reaches `__libc_cond_broadcast` directly.
+
+## Milestone 3 (`571e52d0`, full benchmark, 1 warm-up + 3 counted runs)
+
+| First battle | Baseline | Milestone 2 | Milestone 3 | With `LO_DEKO3D_LEAN_SHADERS=2` |
+|---|---:|---:|---:|---:|
+| FPS at 540 rows | 14.36 | 21.63 | **22.30** | **23.51** |
+| Median frame at 540 rows | 66.5 ms | 44.4 ms | 44.0 ms | 40.5 ms |
+| Frame p99 at 540 rows | | 62.9 ms | 52.8 ms | 52.3 ms |
+| 1% low at 540 rows | | 15.90 | 18.95 | 19.13 |
+| GPU busy at 540 rows | 52 ms | 41.7 ms | 42.1 ms | 38.2 ms |
+| FPS at 360 rows | 14.6 | 22.88 | **25.49** | |
+| 1% low at 360 rows | | 16.76 | 18.44 | |
+
+The CPU limit moved from about 23 to about 25.5 FPS, so 540 rows is limited by the GPU again.
+
