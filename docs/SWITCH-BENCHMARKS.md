@@ -324,3 +324,11 @@ Short runs in the first battle. Limits at 540 rows: GPU busy 41 ms, `Guest Main`
 workers ran at least 400 times a second doing nothing. Each waiter now registers on its own objects. Alternated short runs at 360
 rows: 23.6 / 23.72 FPS, 23.17 / 22.93 before, about +2.8%; median frame 42.5 ms against 43.9. No hang files in the runs.
 The 15.9% and 7.9% of samples in `svcSignalProcessWideKey` were partly this: the signal call was cheap, the woken threads were not.
+
+## Reader-writer locks: every unlock was a kernel call
+
+newlib's `pthread_rwlock_unlock` always broadcasts a condition variable, a kernel call on libnx even with no waiter, and SDL takes a
+read lock in nearly every call that checks an object. Controller polling alone was 11.2% of `Guest Main`, about 5 ms per frame.
+`os/switch/rwlock_switch.c` replaces `pthread_rwlock_*` at link time and only calls the kernel for a real waiter. Alternated short
+runs at 360 rows: 25.47 / 25.18 FPS against about 23.6, about +7.5%; median frame about 40 ms against 42.2.
+A `--wrap` of `pthread_cond_broadcast` misses these calls, as newlib reaches `__libc_cond_broadcast` directly.

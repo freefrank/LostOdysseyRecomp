@@ -176,8 +176,11 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     # (Horizon's file system does not), wired in with --wrap=rename.
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
         ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c
-        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c)
+        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
+        ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS
