@@ -353,3 +353,7 @@ The CPU limit moved from about 23 to about 25.5 FPS, so 540 rows is limited by t
 Save at `Barco_mercante_saman` (interior, about 790 draws), 540 rows, handheld, `LO_DEKO3D_LEAN_SHADERS=2`, short reading standing and
 walking: 30.0 FPS held, p99 about 34.5 ms, GPU busy 23-25 ms, no hitches. The first battle (about 1,250 draws, 3.2 million indices)
 remains the demanding scene.
+
+Handheld memory stays at the system's clock: the game never selects 1600 MHz itself (the short test above removed in favour of
+sys-clk for players who want it). Docked already runs at 1600 MHz.
+

@@ -272,7 +272,6 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx)
 namespace
 {
 constexpr u32 kHandheldGpu460Memory1331 = 0x92220008;
-constexpr u32 kHandheldGpu460Memory1600 = 0x92220007;
 Thread g_apmThread;
 
 bool ReadClocks(u32& gpuHz, u32& memoryHz)
@@ -323,9 +322,7 @@ void ApmThreadMain(void*)
         std::fprintf(stderr, "[apm] Unable to read clocks through clkrst; clocks unchanged.\n");
         return;
     }
-    const char* memorySetting = std::getenv("LO_HANDHELD_MEMORY");
-    const bool memory1600 = memorySetting && std::strcmp(memorySetting, "1600") == 0;
-    const u32 configuration = memory1600 ? kHandheldGpu460Memory1600 : kHandheldGpu460Memory1331;
+    const u32 configuration = kHandheldGpu460Memory1331;
     if (R_FAILED(apmSetPerformanceConfiguration(mode, configuration)))
     {
         std::fprintf(stderr, "[apm] Configuration 0x%08X is not available on this firmware.\n", configuration);
@@ -341,8 +338,7 @@ void ApmThreadMain(void*)
             memoryStable = false;
             break;
         }
-        // The 1600 MHz configuration raises the memory clock; it must not fall.
-        const u32 delta = memoryAfter > memoryBefore ? (memory1600 ? 0 : memoryAfter - memoryBefore) : memoryBefore - memoryAfter;
+        const u32 delta = memoryAfter > memoryBefore ? memoryAfter - memoryBefore : memoryBefore - memoryAfter;
         if (delta > 20000000)
         {
             memoryStable = false;
