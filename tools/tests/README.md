@@ -57,7 +57,7 @@ Examples of fixtures that stay out of the default build. Build only what the cha
 | `LoStorageTest`, `LoGuestDispatchTest`, `LoGuestPrintfTest` | Guest file I/O, dispatch tables, string formatting |
 | `LoHidTest`, `LoQuitActionHookTest`, `LoQuitTextHookTest` | Input mapping, quit routing and text overrides |
 | `LoSaveAnywhereConfigTest`, `LoDebugMenuInteractionTest` | Debug settings persistence and menu behavior |
-| `LoFramePlanTest`, `LoFramePacerTest`, `LoRenderTimingTest` | Frame planning and pacing |
+| `LoFramePlanTest`, `LoFramePacerTest`, `LoRenderTimingTest`, `LoEngineDeltaLimitTest` | Frame planning, pacing and the engine tick's delta limit |
 | `LoPortableShaderPackTest`, `LoPortableShaderPackIntegrationTest`, `LoPortableShaderContractTest` | Shader pack format and runtime contract |
 | `LoImportGameTest`, `LoInstallerControllerTest` | Importer and installer state machines |
 | `LoVertexCacheTest`, `LoTextureKeyTest`, `LoTextureDescriptorCacheTest`, `LoRegisterSnapshotTest` | Render caches and register/constant snapshots |

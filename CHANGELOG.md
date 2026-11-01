@@ -8,10 +8,12 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
+- Fixed the black screen on the Experimental Staff lifts (Operation Division to Upper Division, Disc 2): after a long stall the player arrived with nothing under them and fell out of the world. A frame delta longer than 250 ms is now cut to 250 ms (`LO_MAX_ENGINE_DELTA_MS`; 0 turns it off) (#17).
 - Settings → System → Add to Steam adds the game to your Steam library on Windows and Linux, including AppImage and Flatpak. Artwork is generated from your game files, with bundled artwork as a fallback if that fails.
 
 ### 简体中文
 
+- 修复实验场升降梯（Disc 2 的 Operation Division 到 Upper Division）黑屏：长时间卡顿后玩家到达时脚下没有平台，会掉出场景。现在超过 250 毫秒的帧间隔会被限制为 250 毫秒（`LO_MAX_ENGINE_DELTA_MS`，0 为关闭）（#17）。
 - Windows 和 Linux（包括 AppImage、Flatpak）可通过“设置 → 系统 → 添加到 Steam”把游戏加入 Steam；库封面从你的游戏文件生成，失败时使用随包的备用美术。
 
 ## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19

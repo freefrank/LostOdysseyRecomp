@@ -16,6 +16,7 @@
 #include "battle_tour.h"
 #include "soft_reset.h"
 #include <patches/mod_hot_reload.h>
+#include <patches/engine_delta_limit.h>
 #include <discord/game_state.h>
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
@@ -526,6 +527,8 @@ PPC_FUNC(sub_82290B60)
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
     if (engine) { debug_menu::soft_reset::Tick(ctx, base); debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+    // After the timing record, so frame timing still reports the real delta (issue #17).
+    if (engine) ctx.f1.f64 = engine_delta::Limit(ctx.f1.f64, engine_delta::MaxSeconds());
     __imp__sub_82290B60(ctx, base);
     if (engine)
     {
