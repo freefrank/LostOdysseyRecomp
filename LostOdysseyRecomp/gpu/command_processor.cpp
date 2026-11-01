@@ -421,7 +421,8 @@ namespace gpu
             std::lock_guard lock(m_writePtrMutex);
             m_writePtrIndex = dwordIndex;
         }
-        m_writePtrChanged.notify_one();
+        if (!LO_PLATFORM_SWITCH || m_writePtrWaiters.load())
+            m_writePtrChanged.notify_one();
     }
 
     // Guest MMIO stores reach WriteRegister on other threads.
@@ -737,10 +738,12 @@ namespace gpu
                 }
                 {
                     std::unique_lock lock(m_writePtrMutex);
+                    m_writePtrWaiters.fetch_add(1);
                     notified_wait::For(m_writePtrChanged, lock, std::chrono::microseconds(500), [&] {
                         return !m_running || m_writePtrIndex.load() != writePtr ||
                             m_wake.exchange(false, std::memory_order_acq_rel);
                     });
+                    m_writePtrWaiters.fetch_sub(1);
                 }
                 if (m_running)
                 {
@@ -871,7 +874,8 @@ namespace gpu
                 std::lock_guard lock(m_waitProgressMutex);
                 m_interruptsCompleted.fetch_add(1, std::memory_order_release);
             }
-            m_waitProgress.notify_all();
+            if (!LO_PLATFORM_SWITCH || m_waitProgressWaiters.load())
+                m_waitProgress.notify_all();
             if (trace)
                 LOG_VERBOSE("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
@@ -1397,10 +1401,12 @@ namespace gpu
                     // the scratch writeback word. Re-check when any handler completes
                     // rather than always sleeping the whole poll interval.
                     std::unique_lock lock(m_waitProgressMutex);
+                    m_waitProgressWaiters.fetch_add(1);
                     m_waitProgress.wait_for(lock, std::chrono::milliseconds(wait / 0x100), [&] {
                         return m_interruptsCompleted.load(std::memory_order_relaxed) != progress || !m_running ||
                             m_wake.exchange(false, std::memory_order_acq_rel);
                     });
+                    m_waitProgressWaiters.fetch_sub(1);
                 }
                 else
                     std::this_thread::yield();

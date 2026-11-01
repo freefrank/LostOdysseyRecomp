@@ -9,6 +9,8 @@
 #include <mutex>
 #include <span>
 
+#include <os/platform.h>
+
 namespace kernel::wait {
 inline constexpr uint32_t Success = 0, Timeout = 0x102, Invalid = 0xC000000D;
 inline constexpr uint32_t Infinite = 0xFFFFFFFF;
@@ -38,12 +40,23 @@ public:
     // Caller owns mutex. Inspecting readiness never consumes state.
     virtual bool Ready(uint32_t owner) const = 0;
     virtual void Consume(uint32_t owner) = 0;
-    void Notify() { cv.notify_all(); changes.Notify(); }
+    // Threads in Wait. Same rule as Changes: a waiter counts itself under the
+    // mutex before it checks Ready, and a signaller changes the object under
+    // the mutex before reading the count, so a zero count means nobody can be
+    // asleep on cv. On the Switch every notify is a kernel call
+    // (svcSignalProcessWideKey) even with no waiter, so skip it there (#14);
+    // elsewhere a notify with no waiter is cheap and stays unconditional.
+    std::atomic<uint32_t> waiters{0};
+    void Notify() { if (!LO_PLATFORM_SWITCH || waiters.load()) cv.notify_all(); changes.Notify(); }
     uint32_t Wait(uint32_t timeout, uint32_t owner = 0) {
         std::unique_lock lock(mutex);
         const auto ready = [&] { return Ready(owner); };
-        if (timeout == Infinite) cv.wait(lock, ready);
-        else if (!cv.wait_for(lock, std::chrono::milliseconds(timeout), ready)) return Timeout;
+        if (!ready()) {
+            waiters.fetch_add(1);
+            struct Counted { std::atomic<uint32_t>& count; ~Counted() { count.fetch_sub(1); } } counted{waiters};
+            if (timeout == Infinite) cv.wait(lock, ready);
+            else if (!cv.wait_for(lock, std::chrono::milliseconds(timeout), ready)) return Timeout;
+        }
         Consume(owner);
         return Success;
     }
