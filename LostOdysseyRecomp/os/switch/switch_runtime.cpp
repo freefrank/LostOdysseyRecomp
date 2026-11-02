@@ -631,6 +631,11 @@ uint32_t SetThreadIdealCore(uint32_t handle, int core)
     return svcSetThreadCoreMask(handle ? Handle(handle) : CUR_THREAD_HANDLE, core, 0x7);
 }
 
+void SleepNanoseconds(int64_t nanoseconds)
+{
+    svcSleepThread(nanoseconds);
+}
+
 void PinCurrentThread(int core)
 {
     if (R_SUCCEEDED(svcSetThreadCoreMask(CUR_THREAD_HANDLE, core, 1u << core)))

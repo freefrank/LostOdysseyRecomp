@@ -54,6 +54,7 @@ namespace os::switch_platform
     uint32_t CurrentThreadHandle();
     uint32_t SetThreadIdealCore(uint32_t handle, int core);
     void PinCurrentThread(int core);
+    void SleepNanoseconds(int64_t nanoseconds);
 
     // Appends to a file in the app folder through a file system session of this module's own, opened
     // in Initialize: no newlib, no allocation and none of libnx's shared file system sessions, so it
@@ -66,6 +67,7 @@ namespace os::switch_platform
     uint32_t CurrentThreadHandle();
     uint32_t SetThreadIdealCore(uint32_t handle, int core);
     void PinCurrentThread(int core);
+    void SleepNanoseconds(int64_t nanoseconds);
 
     // Raises the CPU clock while loading (applet CPU boost), off when false.
     void SetLoadingBoost(bool enabled);

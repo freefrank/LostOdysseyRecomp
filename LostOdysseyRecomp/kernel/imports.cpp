@@ -548,11 +548,20 @@ static void KfAcquireSpinLock(uint32_t* spinLock)
 {
     WaitScope scope("KfAcquireSpinLock", g_memory.MapVirtual(spinLock));
     os::AtomicRef<uint32_t> ref(*spinLock);
-    while (true)
+    for (uint32_t spins = 0;; ++spins)
     {
         uint32_t expected = 0;
         if (ref.compare_exchange_weak(expected, g_ppcContext->r13.u32))
             break;
+#if LO_PLATFORM_SWITCH
+        // The 360 can't preempt a spinlock's holder. Here it can, and a yield only lets threads of this priority or
+        // higher run: the XAudio workers spun over a lower-priority holder for 114 s. A real sleep lets it finish.
+        if (spins >= 32)
+        {
+            os::switch_platform::SleepNanoseconds(spins >= 128 ? 1000000 : 20000);
+            continue;
+        }
+#endif
         std::this_thread::yield();
     }
 }
