@@ -450,6 +450,10 @@ First battle at 540 rows, alternated runs, against about 36.3 ms of GPU time:
 | Render target lookup memo | No gain, removed. `GPU CmdProc` no longer limits the frame |
 | `-fno-rounding-math` | No gain, removed |
 | Worker #10 sleeping 2 ms, not 1 | Median frame worse, more audio `starved`, removed |
+| Copying only the constants each shader reads | No gain, removed. Street, 4 runs: 26.21 FPS and 27.5 ms of `GPU CmdProc` with it, 26.45 and 27.6 without, with 68% of banks sparse |
+| Maxwell's alpha test, not one in every shader | GPU 35.30 to 35.12 ms, near noise, removed |
+| Dual issue | GPU 35.12 to 34.65 ms, but 2 crashes in about 25 minutes (`dkQueueAcquireImage`, 2359-0001), none on level 3 in hours. Removed |
+| Branchless gamma decode | Same size or larger, and every path runs on every pixel, removed |
 
 The battle has two limits. In the command menu the GPU sets the frame (38 ms). During attacks `GPU CmdProc` idles 6-17 ms a frame waiting for the game,
 so `Guest Main` sets it, and its profile is flat: about 18% UnrealScript, 27% skeletal update, 12% scene update, 9% particles. Long frames around 1.4 s at the first
