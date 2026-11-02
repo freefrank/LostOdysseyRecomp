@@ -196,6 +196,7 @@ Switch-specific options and diagnostics:
 | `LO_DYNAMIC_RESOLUTION_MIN` | 80% | The lowest scene height dynamic resolution uses (rows; 360 at the least) |
 | `LO_DYNAMIC_RESOLUTION_STEP` | `36` | Rows per dynamic resolution step (a multiple of 9, so 16:9 widths stay whole; `90` gives 540, 450, 360) |
 | `LO_TRIM_VARYINGS` | `1` | Keeps only vertex outputs used by the paired fragment shader; set to `0` to disable the Switch Vulkan optimisation |
+| `LO_SKIP_RESTORE` | on | `0` draws the game's EDRAM restores instead of skipping them (deko3d) |
 | `LO_RT32` | off | Set to `1` to use 32-bit formats for the two 10-bit render-target classes; on Switch the 7e3 class uses `R11G11B10_FLOAT`, so its 2-bit alpha is read as 1 |
 | `LO_GUEST_AFFINITY` | off | Set to `1` to map Xbox guest thread affinity onto the Switch's three cores |
 | `LO_THREAD_PLACEMENT` | off | Set to `1` to log every 30 s (`switch: placement`) each core's idle share and, per thread above 1% CPU, its priority, ideal core, allowed mask, and the cores it was seen on |

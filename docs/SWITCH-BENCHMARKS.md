@@ -377,3 +377,37 @@ GCC's profile-guided build, set up as in SwitchWakerHD: game hot files, runtime 
 (+5.7%), median frame 42.4 to 40.9 ms, p99 74.6 to 68.6 ms. `GPU CmdProc` falls from 75.8 to 64.4% of a core with more frames, 20% less per frame.
 At 360 rows: 23.27 to 25.22 FPS (+8.4%, one run each). These scripted runs include the attacks, so they read lower than the command-menu
 short runs above. GPU busy stays at 39 ms, which now limits 540 rows to 25.6 FPS at best, so hardware vertex attributes (#20) come next.
+
+
+## Where the GPU time goes
+
+The first battle at 540 rows, timed draw by draw (`LO_GPU_DRAW_TIMING_EVERY=300`, `LO_GPU_DRAW_TIMING_GROUP=1`; the group size is new) with the GPU's
+fragment and vertex counters added for the test. 38 ms of GPU time, approximately:
+
+| Part | ms |
+|---|---|
+| Vertices, 1.1M at about 7.3 ns each | 8 |
+| Pixels of the scene's geometry | 6 |
+| Draw overhead | 2.4 |
+| Full-screen and small passes | 15 |
+| Resolves (4.3), clears and barriers | 6.6 |
+
+Only about 6 ms is scene pixels, so changes aimed at them did little. The time is spread over many shaders; no single one is large. The fragment
+counter lags the timer by a draw, so per-draw pixel counts are approximate. Scene shaders alone shade about 1.5M pixels.
+
+Measured against 38.2-38.8 ms, alternating runs on the first battle:
+
+| Change | GPU ms | Result |
+|---|---|---|
+| Hardware vertex attributes (all 285 vertex shaders, no storage loads left) | 40.0 | Rejected. Correct image, but uam adds moves and attribute loads: 484 to 493 instructions in the hot shader |
+| `LO_RT32=1` | 39.0 | Rejected. Resolves turn into blits into FP16 |
+| `LO_RT32=1`, with those resolves kept as copies | 38.3 | No gain. The format isn't the limit |
+| Early tests on discarding draws that write neither depth nor stencil | 38.2 | No gain |
+| Skipping the game's EDRAM restores | 36.2 | Kept |
+
+**Restores.** After a resolve the Xbox 360 has to draw the image back into EDRAM, and two full-screen draws per battle frame do that. Here the target
+still holds the image, unless the clear queued by the same resolve runs, so the clear and the draw both go. A target stays in `COPY_SOURCE` after a
+resolve until something writes it, which proves the two images match. The skipped draw must still make its format the owner of the tiles: without
+that, the next draw converts another format's pixels over the image, and the frame blows out to white. `LO_SKIP_RESTORE=0` turns it off. Checked on the
+merchant ship: on against off differs as much as two runs of one mode. The estimate of 36-43% from hardware attributes in earlier notes was wrong: it
+replaced fetched values with a constant, which let the compiler fold real work away.

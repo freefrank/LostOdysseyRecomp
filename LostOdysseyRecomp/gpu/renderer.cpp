@@ -1071,6 +1071,7 @@ namespace gpu::renderer
             // same address, and the presenter copies the frontbuffer from here.
             struct ResolvedSurface
             {
+                uint64_t sourceSerial = 0; // allocationSerial of the target a copy came from (ResolveOnGpu)
                 std::unique_ptr<HostTexture> tex;
                 std::unordered_map<uint64_t, std::unique_ptr<HostTexture>> fetchViews;
                 uint32_t destFormat = 0, destPitch = 0;
@@ -9762,6 +9763,30 @@ void main()
                 uint32_t depthInfo = Reg(REG_RB_DEPTH_INFO);
                 uint32_t depthControl = Reg(REG_RB_DEPTHCONTROL);
                 bool colorWrites = modeControl == 4;
+                // On the Xbox 360 a resolve leaves EDRAM behind, so the game draws the image back with its one-texture
+                // copy shader, often right after the resolve cleared the target. Here the target still holds it, unless
+                // the queued clear runs. A target stays in COPY_SOURCE after a resolve until something writes it, and
+                // that layout proves the two images are the same, so the clear and the draw can both go.
+                static const bool skipRestores = video::IsDeko3d() && !(getenv("LO_SKIP_RESTORE") && getenv("LO_SKIP_RESTORE")[0] == '0');
+                constexpr uint64_t kPlainCopyShader = 0x38b953b91dcfd9ceull;
+                if (skipRestores && psHash == kPlainCopyShader && info.indexCount <= 6 && !(depthControl & 7) &&
+                    Reg(REG_RB_BLENDCONTROL0) == 0x10001 && (Reg(REG_RB_COLOR_MASK) & 0xF) == 0xF && !(Reg(REG_RB_COLORCONTROL) & 8))
+                {
+                    const auto target = renderTargets.find(RenderTargetKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false});
+                    uint32_t fetch[6];
+                    g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS, 6, fetch);
+                    const ResolvedSurface* rs = FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F);
+                    if (target != renderTargets.end() && target->second->layout == RenderTextureLayout::COPY_SOURCE &&
+                        rs && rs->tex && rs->frame == frame && rs->sourceSerial == target->second->allocationSerial &&
+                        !rs->writeX && !rs->writeY && rs->writeWidth == rs->tex->width && rs->writeHeight == rs->tex->height)
+                    {
+                        target->second->pendingClear.Take();
+                        // The draw would have made this format the tiles' owner; without that, the next draw converts
+                        // whatever another format left there over this image.
+                        tileOwner[{ colorInfo & 0xFFF, pitch }] = ColorClassOf((colorInfo >> 16) & 0xF);
+                        return;
+                    }
+                }
                 HostTexture* color = nullptr;
                 HostTexture* depth = nullptr;
                 {
@@ -14337,9 +14362,13 @@ void main()
                         ++resolveCopiesRecorded;
                     }
                     consecutiveResolveCopies.Record(copy);
+                    rs.sourceSerial = color.allocationSerial;
                 }
-                else if (!BlitRegion(color, *rs.tex, x0, y0, w, h))
-                    return false;
+                else
+                {
+                    rs.sourceSerial = 0;
+                    if (!BlitRegion(color, *rs.tex, x0, y0, w, h)) return false;
+                }
                 Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
