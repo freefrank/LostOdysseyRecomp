@@ -2926,6 +2926,15 @@ namespace gpu::video
             // events still request one, and needsResize() still compares the sizes.
             g_windowResizeRequested = false;
 #endif
+#if LO_PLATFORM_SWITCH
+            // LO_SWITCH_OUTPUT_HEIGHT=540: present the size the scene is rendered at and let the display scale it, as Switch
+            // games do, instead of a full-screen GPU pass into 1280x720.
+            if (const char* output = getenv("LO_SWITCH_OUTPUT_HEIGHT"); output && IsDeko3d())
+            {
+                const uint32_t height = uint32_t(atoi(output));
+                if (height) plume::Deko3DSetSwapChainSize(height * 16 / 9, height);
+            }
+#endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
 #ifdef _WIN32
             if (os::hang_watch::StartupTrace())

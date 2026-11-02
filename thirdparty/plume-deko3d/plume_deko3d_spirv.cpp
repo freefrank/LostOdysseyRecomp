@@ -113,6 +113,9 @@ namespace plume {
         }
         if (level < 2)
             return;
+        // Level 3: the lower clamp of signed render targets (16_16_FLOAT, 32_FLOAT), a branch in every pixel shader.
+        if (level >= 3)
+            replaceAll(glsl, "(XeShared.xeFlags & 32u)", "0u");
         static const std::regex constantIndex(R"(clamp\((\d+ \+ _\d+), 0, 255\))");
         static const std::regex addressRegister(R"(int\(clamp\(floor\(([^()]+) \+ 0\.5\), -256\.0, 255\.0\)\))");
         glsl = std::regex_replace(glsl, constantIndex, "($1)");

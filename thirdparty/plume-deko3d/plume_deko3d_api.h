@@ -47,6 +47,9 @@ namespace plume {
     // aren't shaded. Stays until changed.
     void Deko3DSetEarlyFragmentTests(RenderCommandList *list, bool allowed);
 
+    // sa2-nx (2026-10-20): the swap chain's size, instead of the window's; 0, 0 goes back to the window's.
+    void Deko3DSetSwapChainSize(uint32_t width, uint32_t height);
+
     // The back end's running totals (Deko3DStats), for the renderer's per-frame report.
     struct Deko3DCounters {
         uint64_t draws = 0, pipelineBinds = 0, stateBinds = 0, descriptorWrites = 0;

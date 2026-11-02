@@ -63,7 +63,8 @@ namespace plume {
         uint32_t addressWindowSet = 0;
         uint32_t addressWindowBinding = 0;
         // LostOdysseyRecomp (2026-11-01): 1 drops vertex fetch range checks and the debug branches of xeFlags; 2 also
-        // drops `precise` and the clamps of constant indices, which lets uam fuse multiplies and adds.
+        // drops `precise` and the clamps of constant indices, which lets uam fuse multiplies and adds. 3 (2026-11-02) also
+        // drops the lower clamp of signed render targets, for a game that doesn't draw to them.
         uint32_t leanShaders = 0;
     };
 

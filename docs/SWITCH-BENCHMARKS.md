@@ -415,3 +415,46 @@ replaced fetched values with a constant, which let the compiler fold real work a
 With the profile retrained on these sources, first battle at 540 rows, two alternated runs of 90 s: 20.98 FPS normal, 22.47 with the profile (+7.1%);
 median frame 41.5 to 39.6 ms, p99 73.6 to 70.4 ms, `GPU CmdProc` 72.2 to 62.8%, GPU busy 36.4 ms in both. These 90 s windows read lower than the 120 s
 ones above, so compare only within a table. The median frame is now close to GPU busy, and `Guest Main` runs at 84%: both limit the frame.
+
+
+## Register write-backs
+
+With `argument_as_local`, a recompiled function writes every argument register it changed back to `PPCContext` before each call and
+return, and reads them back after each call. In the 50 hottest functions of `Guest Main`, about 14% of instructions touch the context, about 12
+per call. `tools/switch/ppc_elide.py` runs on the generated code (`build-switch.sh` calls it) and removes 1.37 million of 2.68 million stores, 51%:
+
+- A register unchanged since it last matched the context needs no store. This assumes nothing about the guest's code.
+- A changed register needs no store before a direct call if the callee doesn't read it and the caller doesn't read it after the call, or before a
+  return if it isn't a return register and no caller reads it. Liveness is whole-program, over 62,620 functions.
+- Indirect calls keep every changed register, and the 143 functions replaced by host code count as reading everything.
+
+First battle at 540 rows, against the original code, alternated: 20.83 to 21.39 FPS (+2.7%), median frame 42.4 to 40.3 ms. During attacks `Guest Main`
+goes from 87% to 85.7% of a core with more frames, and the game's render thread from 75% to 71%. The NRO shrinks from 98.0 to 94.7 MB. Calling
+`__imp__sub_X` directly, past the weak alias, so GCC can inline guest functions (`--direct-calls`), gains nothing without a profile.
+
+Two limits: an indirect callee is taken to keep to the ABI, and a value returned in a non-return register and passed straight to an indirect
+call isn't tracked.
+
+## More GPU and CPU trials
+
+First battle at 540 rows, alternated runs, against about 36.3 ms of GPU time:
+
+| Change | Result |
+|---|---|
+| Lean shaders level 3: no lower clamp for signed targets, which the game didn't draw to in these runs | GPU -0.55 ms, kept. Needs the level 3 pack; a draw to such a target logs a warning |
+| `LO_SWITCH_OUTPUT_HEIGHT=540`: present 960x540 and let the display scale it | GPU -0.75 ms, kept as an option: the picture hasn't been compared yet, and the host menus would be 540 too |
+| Native pool allocator fast paths | At most 1%, inside the noise, kept (`LO_NATIVE_MALLOC=0`) |
+| Maxwell's tiled cache, which deko3d never enables | No gain, removed |
+| All shaders capped at 32 registers | 36.3 to 38 ms, removed. The hot vertex shader needs spills: 484 to 595 instructions |
+| Real clears for D3D `Clear()` draws | No gain, removed. They're thin edge strips, not whole targets |
+| Render target lookup memo | No gain, removed. `GPU CmdProc` no longer limits the frame |
+| `-fno-rounding-math` | No gain, removed |
+| Worker #10 sleeping 2 ms, not 1 | Median frame worse, more audio `starved`, removed |
+
+The battle has two limits. In the command menu the GPU sets the frame (38 ms). During attacks `GPU CmdProc` idles 6-17 ms a frame waiting for the game,
+so `Guest Main` sets it, and its profile is flat: about 18% UnrealScript, 27% skeletal update, 12% scene update, 9% particles. Long frames around 1.4 s at the first
+attack, and 0.6 s at the end of the battle, are one-off stalls. Note that `lo_debug.py shot` writes a PPM to the SD card and stalls the game about 4.5 s.
+
+All three cores are 92-96% busy during attacks. The two threads at priority 0x2D, `82cc4d98` and `82cc4e60`, are the XAudio workers: about 12% of a core each.
+They meet at a spin barrier (`sub_82CC3C50`). Confining them to the render threads' cores while `Guest Main` had core 0 alone took them to 74% each and the game
+to 16 FPS.

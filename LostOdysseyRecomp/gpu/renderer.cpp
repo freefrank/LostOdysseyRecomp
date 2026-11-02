@@ -10486,8 +10486,12 @@ void main()
                     else if (cfmt >= 4 && cfmt != 10) m = 65504.0f;           // 16_16(_16_16)(_FLOAT), 32_FLOAT
                     shared.colorMax[0] = shared.colorMax[1] = shared.colorMax[2] = m;
                     shared.colorMax[3] = (cfmt == 3 || cfmt == 12 || cfmt <= 2 || cfmt == 10) ? 1.0f : m;
-                    if (cfmt >= 4 && cfmt != 10 && cfmt != 12)
+                    if (cfmt >= 4 && cfmt != 10 && cfmt != 12) {
                         shared.flags |= 32u;    // signed format (16_16_FLOAT, 32_FLOAT)
+                        // Lean shaders level 3 assume the game never draws to these (plume_deko3d_spirv.cpp).
+                        static uint32_t signedDraws = 0;
+                        if (signedDraws++ % 1000 == 0) LOG_WARNING("signed colour target fmt={} pitch={} draws={}", cfmt, pitch, signedDraws);
+                    }
                 }
                 uint32_t colorControl = Reg(REG_RB_COLORCONTROL);
                 // LO_PS_DEBUG=<n>: paint draws with at least n indices magenta.
