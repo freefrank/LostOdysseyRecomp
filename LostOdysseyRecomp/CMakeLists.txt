@@ -78,6 +78,7 @@ lo_add_header_test(LoFileBrowserFolderTest ${CMAKE_SOURCE_DIR}/tools/tests/file_
 target_compile_definitions(LoImportGameTest PRIVATE LO_IMPORT_TESTING)
 target_sources(LoImportGameTest PRIVATE
     ${LO_RUNTIME_ROOT}/install/import_game.cpp
+    ${LO_RUNTIME_ROOT}/install/prepare_content.cpp
     ${LO_RUNTIME_ROOT}/install/import_image.cpp)
 if(WIN32)
     target_link_libraries(LoImportGameTest PRIVATE bcrypt)
