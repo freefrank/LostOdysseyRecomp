@@ -368,3 +368,12 @@ range.
 
 More vertex shader cuts look small: removing `gl_PointSize` saves about 5% of the hot shaders' code and needs a variant for point draws;
 taking the vertex index directly and dropping `floor` on bone indices saves nothing after uam's optimiser.
+
+
+## Profile-guided build
+
+GCC's profile-guided build, set up as in SwitchWakerHD: game hot files, runtime and deko3d backend ([SWITCH-PGO.md](SWITCH-PGO.md)). First battle at
+540 rows, two alternated runs each: 22.11 FPS normal, 23.16 with a profile that never saw the battle (+4.8%), 23.37 with the full profile
+(+5.7%), median frame 42.4 to 40.9 ms, p99 74.6 to 68.6 ms. `GPU CmdProc` falls from 75.8 to 64.4% of a core with more frames, 20% less per frame.
+At 360 rows: 23.27 to 25.22 FPS (+8.4%, one run each). These scripted runs include the attacks, so they read lower than the command-menu
+short runs above. GPU busy stays at 39 ms, which now limits 540 rows to 25.6 FPS at best, so hardware vertex attributes (#20) come next.

@@ -49,11 +49,34 @@ python3 tools/switch/pgo_train.py scene ship
 python3 tools/switch/pgo_train.py fetch --out out/pgo
 ```
 
+`scene ship` needs the console's save in `save/user02`. Add `--here` to train where the game already stands.
+
 Configure a second folder with `-DLO_SWITCH_PGO=USE -DLO_SWITCH_PGO_DIR=$PWD/out/pgo` and build it. Deploy a normal build
 afterwards: the training build is slow, and its speed means nothing.
 
 To check that a profile is not overfitted, fetch after one scene into its own folder, build `USE` from it and judge it on
 the other scene, which it never saw.
+
+## Results
+
+First battle, 960x540, handheld at CPU 1020 / GPU 460 / memory 1331 MHz, lean shaders level 2. Each row is a scripted
+120 s of the battle, attacking, on freshly started builds, two runs per build unless noted.
+
+| Build | FPS | p50 ms | p99 ms | GPU ms | Main % | CmdProc % |
+|---|---|---|---|---|---|---|
+| Normal | 22.11 | 42.4 | 74.6 | 38.9 | 86.3 | 75.8 |
+| Profile from the ship only (battle never seen) | 23.16 | 40.9 | 68.6 | 39.1 | 86.4 | 63.8 |
+| Profile from ship and battle | 23.37 | 40.9 | 68.6 | 39.1 | 86.0 | 64.4 |
+| Same, with `-freorder-functions` | 23.27 | 40.9 | 70.5 | 39.1 | 86.3 | 63.8 |
+
+- **+5.7% FPS at 540 rows**, and +4.8% on a scene the profile never saw, so it isn't overfitted.
+- **Render thread time per frame is 20% lower** (3.43 to 2.76 % of a core per FPS). Main improved about 6%.
+- **At 360 rows, one run each:** 23.27 to 25.22 FPS (+8.4%), which is closer to the CPU's gain, since the GPU limits 540 at 39 ms.
+- **The merchant ship** holds 30 FPS at 540 with the full profile, p99 34.5 ms.
+- With the ship profile the code shrank 0.13%, with 1,603 cold parts split out, against the 29% growth of GCC's default options.
+- `-freorder-functions` does group the hot functions, but gains nothing here, so the USE flags stay as in SwitchWakerHD.
+
+The GPU now sets the limit at 540: 39 ms per frame allows 25.6 FPS at best.
 
 ## Traps (all from SwitchWakerHD)
 

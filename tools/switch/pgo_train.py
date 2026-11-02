@@ -50,17 +50,19 @@ def attack(con):
 
 
 def battle(con, scale, restart):
-    """A new game's first battle. The buttons are timed from the start, so a slow training build stretches them."""
-    times = [("s", 40), ("a", 55), ("b", 70), ("s", 110), ("k", 114)]
-    buttons = ",".join(f"{b}@{t * scale:.0f}s" for b, t in times)
-    restart({"LO_AUTO_BUTTONS": buttons, "LO_AUTO_PULSE": "6"})
-    return 1000, None
+    """A new game's first battle: New Game, B to close the settings it opens, then START and BACK to skip the movie."""
+    restart({})
+    time.sleep(58 * scale)
+    for button, wait in (("START", 10), ("A", 6), ("B", 40), ("START", 4), ("BACK", 0)):
+        con.command("press", button, timeout=20.0)
+        time.sleep(wait * scale)
+    return 1000, lambda step: attack(con)
 
 
 def ship(con, scale, restart):
-    """The merchant ship, from the save in slot 2."""
-    restart({"LO_AUTO_BUTTONS": None, "LO_AUTO_PULSE": None})
-    time.sleep(35 * scale)
+    """The merchant ship, from the console's save (save/user02)."""
+    restart({})
+    time.sleep(58 * scale)
     for button in ("START", "DOWN", "A", "A", "A", "A"):
         con.command("press", button, timeout=20.0)
         time.sleep(4 * scale)
@@ -135,7 +137,7 @@ def main():
     scene.add_argument("--dwell", type=float, default=180.0, help="seconds of training in the scene")
     scene.add_argument("--arrive", type=float, default=600.0, help="seconds to wait for the scene")
     scene.add_argument("--here", action="store_true", help="the game is already in the scene: train where it stands")
-    scene.add_argument("--scale", type=float, default=2.0, help="stretches the start's timings on a slow training build")
+    scene.add_argument("--scale", type=float, default=1.0, help="stretches the start's timings")
     scene.set_defaults(run=cmd_scene)
     fetch = sub.add_parser("fetch")
     fetch.add_argument("--out", default=str(REPO / "out/pgo"))
