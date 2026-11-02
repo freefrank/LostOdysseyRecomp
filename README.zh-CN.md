@@ -64,6 +64,8 @@ Steam Deck 上，两个 Linux 安装包都可通过 **设置 → 系统 → 添�
 
 启动需要 Disc 1。请使用一套受支持的四盘版本（亚洲多语言版或 USA/Europe 版），不要混装不同版本；[安装指南](docs/INSTALLING.zh-CN.md)介绍如何核对。
 
+本源码构建的 Windows ZIP 内含 [`recomplauncher.json`](recomplauncher.json)，因此 [RecompLauncher](https://recomplauncher.com/) 可以从源文件夹导入光盘与 DLC，并在其游戏页面提供画质设置。游戏进度存档的备份仍需启动器修复；参见[集成说明与交付状态](docs/RECOMPLAUNCHER.md)。
+
 ### macOS
 
 应用未经公证，macOS 会拦截首次启动：先尝试打开一次，再到 **系统设置 → 隐私与安全性** 点击 **仍要打开**。更新时用新版替换应用。[详细步骤](docs/INSTALLING.zh-CN.md#macos)。

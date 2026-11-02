@@ -2,6 +2,33 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+<a id="recomplauncher-integration"></a>
+
+## RecompLauncher integration — local, unreleased — 2026-11-02
+
+Local source adds a Windows ZIP profile, graphics controls, and `--prepare-content` for importing
+discs and optional DLC through RecompLauncher's setup screen. The command reuses the game importer,
+commits `game-path.txt` with content publication, and runs before updates, mods, windows or graphics
+initialization. The full scope and maintained procedures are in the [integration guide](RECOMPLAUNCHER.md).
+This addition is not in published v1.1.0; no commit, tag or release was created for this validation.
+
+Validation: a full Windows Release build with the release's DLSS, FSR and XeSS options enabled,
+package assembly and payload checks, `LoSaveAnywhereConfigTest`, `LoSettingsPathTest`, and synthetic
+import/reimport tests passed. The actual Windows executable returned the expected malformed-argument
+exit code without opening a window. The production scanner recognized a real four-disc USA/Europe
+set and three DLC packages with no rejected inputs. The user subsequently reported completing setup,
+running the game through RecompLauncher, and adding saves. Native Linux importer and extracted
+production-settings fixtures also passed on the Plasma VM. Local build/test logs are under the
+ignored `out/launcher-review/` directory and are not shipped with the repository.
+
+Limits: the profile ships only in Windows ZIPs. Linux launcher packaging and end-to-end integration
+remain separate work; Linux fixture results do not establish that flow. Graphics choices express
+preferences, not detected hardware support or broad rendering/performance acceptance. The current
+launcher filters out `save.bin`: inspection of a backup after the user's save-copy test confirmed
+three thumbnail images and no gameplay save data. Its cloud sync indicator does not establish save
+protection. No restoration test or whole-ISO clean-dump badge is claimed; those launcher concerns
+are outside this patch. Back up the full save folder manually.
+
 ## v1.1.0 published — 2026-10-26
 
 [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) was published at 2026-10-26T01:12:52Z by the workflow's own publish step. A GitHub API read on 2026-10-26 shows that it is not a draft or pre-release and is the GitHub Latest release. The release body equals the [Changelog, v1.1.0](../CHANGELOG.md#v110--2026-10-26) section. It was cut from tag `v1.1.0` at commit `fcfda131`, the PR [#729](https://github.com/freefrank/LostOdysseyRecomp/pull/729) fix on top of the release PR [#728](https://github.com/freefrank/LostOdysseyRecomp/pull/728) (`e4d111f8`). The previous release is v1.0.6, published 2026-10-19T04:32:05Z at `b11c884e`.

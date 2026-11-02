@@ -15,6 +15,23 @@ out\build\windows-clang\LostOdysseyRecomp\LoHidTest.exe
 
 Targets that touch `settings.ini` or other files (for example `LoSaveAnywhereConfigTest`) must run in an empty temporary directory with a copy of the executable. GPU fixtures (`Vulkan`, `D3D12`, `Presentation`, `*Gpu*`) need a real device and have device side effects. They are not CI gates.
 
+### RecompLauncher integration
+
+- `LoImportGameTest --prepare-content-test` covers headless disc/DLC import, repeat setup,
+  adoption of an imported installation, cancellation and game-path commit rollback with synthetic data.
+  It also runs in the default `LoImportGameTest` suite.
+- `LoSaveAnywhereConfigTest` and `LoSettingsPathTest` cover spaced INI lines in the production
+  graphics parser and early startup preferences, respectively.
+- On Linux, `python3 -B tools/tests/recomplauncher_config_test.py --out out/launcher-config`
+  compiles production parser/writer and early DXGI-selection bodies with the platform loader/log
+  sink stubbed. It round-trips profile choices and checks provider-dependent quality rows.
+- `python -B tools/tests/package_release_test.py` checks that the Windows ZIP contains the profile
+  beside the executable and records its checksum. It assembles a synthetic package, not a real release.
+
+The profile test and packaging fixture are part of `review_regressions/`. Linux fixture coverage
+does not establish end-to-end Linux launcher support. Player-side checks and limitations are in
+the [integration guide](../../docs/RECOMPLAUNCHER.md).
+
 ## Independent suites
 
 Each directory configures on its own, without game data or the full dependency tree.

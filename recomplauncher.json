@@ -1,0 +1,708 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Lost Odyssey Recomp",
+  "repo": "freefrank/LostOdysseyRecomp",
+  "start": {
+    "program": ["LostOdysseyRecomp.exe"]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "ini",
+      "file": [
+        {"path": "{install}/settings.ini"}
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "id": "backend",
+      "label": "Graphics backend",
+      "choices": [
+        {"label": "Vulkan", "set": {"graphics_backend": "1"}},
+        {"label": "DirectX 12", "set": {"graphics_backend": "0"}}
+      ],
+      "defaults": {"graphics_backend": "1"},
+      "help": "Applied on the next start. XeSS requires DirectX 12; providers still require compatible hardware and drivers."
+    },
+    {
+      "id": "window",
+      "label": "Window mode",
+      "help": "Borderless fills your screen and still switches apps quickly.",
+      "choices": [
+        {"label": "Windowed", "set": {"window_mode": "0"}},
+        {"label": "Borderless", "set": {"window_mode": "1"}}
+      ],
+      "defaults": {"window_mode": "0"}
+    },
+    {
+      "id": "aspect",
+      "label": "Screen shape",
+      "help": "Auto fits your window; a fixed shape frames the picture and the movies with black bars.",
+      "choices": [
+        {"label": "Auto", "set": {"aspect_ratio": "0"}},
+        {"label": "16:9", "set": {"aspect_ratio": "1"}},
+        {"label": "21:9", "set": {"aspect_ratio": "2"}},
+        {"label": "4:3", "set": {"aspect_ratio": "3"}}
+      ],
+      "defaults": {"aspect_ratio": "0"}
+    },
+    {
+      "id": "output_resolution",
+      "label": "Output resolution",
+      "choices": [
+        {"label": "1280 × 720", "set": {"width": "1280", "height": "720"}},
+        {"label": "1920 × 1080", "set": {"width": "1920", "height": "1080"}},
+        {"label": "2560 × 1440", "set": {"width": "2560", "height": "1440"}},
+        {"label": "3840 × 2160", "set": {"width": "3840", "height": "2160"}}
+      ],
+      "defaults": {"width": "1280", "height": "720"},
+      "help": "Common window sizes. Fullscreen follows the display; choose unusual display modes in the game."
+    },
+    {
+      "id": "resolution",
+      "label": "Internal resolution",
+      "help": "What the game draws at before it is fitted to your window. 720p is the console's own.",
+      "choices": [
+        {"label": "720p (console)", "set": {"internal_resolution": "720"}},
+        {"label": "1080p", "set": {"internal_resolution": "1080"}},
+        {"label": "1440p", "set": {"internal_resolution": "1440"}},
+        {"label": "4K", "set": {"internal_resolution": "2160"}},
+        {"label": "Match the window", "set": {"internal_resolution": "0"}}
+      ],
+      "defaults": {"internal_resolution": "720"}
+    },
+    {
+      "id": "shadow_resolution",
+      "label": "Shadow resolution",
+      "choices": [
+        {"label": "1×", "set": {"shadow_resolution": "1"}},
+        {"label": "2×", "set": {"shadow_resolution": "2"}},
+        {"label": "4×", "set": {"shadow_resolution": "4"}}
+      ],
+      "defaults": {"shadow_resolution": "1"}
+    },
+    {
+      "id": "dynamic_shadows",
+      "label": "Dynamic shadows",
+      "choices": [
+        {"label": "On", "set": {"dynamic_shadows": "1"}},
+        {"label": "Low", "set": {"dynamic_shadows": "2"}},
+        {"label": "Off", "set": {"dynamic_shadows": "0"}}
+      ],
+      "defaults": {"dynamic_shadows": "1"}
+    },
+    {
+      "id": "antialiasing",
+      "label": "Anti-aliasing and upscaling",
+      "choices": [
+        {"label": "Off", "set": {"upscaler": "0", "antialiasing": "0"}},
+        {"label": "FXAA", "set": {"upscaler": "0", "antialiasing": "1"}},
+        {"label": "SMAA", "set": {"upscaler": "0", "antialiasing": "2"}},
+        {"label": "TAA (experimental)", "set": {"upscaler": "0", "antialiasing": "3"}},
+        {"label": "DLSS", "set": {"upscaler": "1"}},
+        {"label": "FSR", "set": {"upscaler": "2"}},
+        {"label": "XeSS (select DirectX 12 first)", "set": {"upscaler": "4"}}
+      ],
+      "defaults": {"upscaler": "0", "antialiasing": "0"},
+      "help": "Temporal upscaling replaces ordinary anti-aliasing where supported. DLSS needs a compatible NVIDIA RTX GPU; XeSS needs DirectX 12. Unsupported requests fall back to ordinary anti-aliasing."
+    },
+    {
+      "id": "dlss_quality",
+      "label": "DLSS quality",
+      "choices": [
+        {"label": "Quality", "set": {"dlss_quality": "0"}},
+        {"label": "Balanced", "set": {"dlss_quality": "1"}},
+        {"label": "Performance", "set": {"dlss_quality": "2"}},
+        {"label": "DLAA", "set": {"dlss_quality": "3"}}
+      ],
+      "defaults": {"dlss_quality": "0"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "fsr_quality",
+      "label": "FSR quality",
+      "choices": [
+        {"label": "Quality", "set": {"fsr_quality": "0"}},
+        {"label": "Balanced", "set": {"fsr_quality": "1"}},
+        {"label": "Performance", "set": {"fsr_quality": "2"}},
+        {"label": "Native AA", "set": {"fsr_quality": "3"}}
+      ],
+      "defaults": {"fsr_quality": "0"},
+      "when": {"upscaler": "2"}
+    },
+    {
+      "id": "xess_quality",
+      "label": "XeSS quality",
+      "choices": [
+        {"label": "Quality", "set": {"fsr_quality": "0"}},
+        {"label": "Balanced", "set": {"fsr_quality": "1"}},
+        {"label": "Performance", "set": {"fsr_quality": "2"}},
+        {"label": "Native AA", "set": {"fsr_quality": "3"}}
+      ],
+      "defaults": {"fsr_quality": "0"},
+      "when": {"upscaler": "4"}
+    },
+    {
+      "id": "dlss_model",
+      "label": "DLSS model",
+      "choices": [
+        {"label": "M", "set": {"dlss_model": "0"}},
+        {"label": "L", "set": {"dlss_model": "1"}}
+      ],
+      "defaults": {"dlss_model": "0"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "fsr_sharpness",
+      "label": "FSR sharpness",
+      "choices": [
+        {"label": "0%", "set": {"fsr_sharpness": "0"}},
+        {"label": "5%", "set": {"fsr_sharpness": "5"}},
+        {"label": "10%", "set": {"fsr_sharpness": "10"}},
+        {"label": "15%", "set": {"fsr_sharpness": "15"}},
+        {"label": "20%", "set": {"fsr_sharpness": "20"}},
+        {"label": "25%", "set": {"fsr_sharpness": "25"}},
+        {"label": "30%", "set": {"fsr_sharpness": "30"}},
+        {"label": "35%", "set": {"fsr_sharpness": "35"}},
+        {"label": "40%", "set": {"fsr_sharpness": "40"}},
+        {"label": "45%", "set": {"fsr_sharpness": "45"}},
+        {"label": "50%", "set": {"fsr_sharpness": "50"}},
+        {"label": "55%", "set": {"fsr_sharpness": "55"}},
+        {"label": "60%", "set": {"fsr_sharpness": "60"}},
+        {"label": "65%", "set": {"fsr_sharpness": "65"}},
+        {"label": "70%", "set": {"fsr_sharpness": "70"}},
+        {"label": "75%", "set": {"fsr_sharpness": "75"}},
+        {"label": "80%", "set": {"fsr_sharpness": "80"}},
+        {"label": "85%", "set": {"fsr_sharpness": "85"}},
+        {"label": "90%", "set": {"fsr_sharpness": "90"}},
+        {"label": "95%", "set": {"fsr_sharpness": "95"}},
+        {"label": "100%", "set": {"fsr_sharpness": "100"}}
+      ],
+      "defaults": {"fsr_sharpness": "0"},
+      "when": {"upscaler": "2"}
+    },
+    {
+      "id": "dlss_neural_rendering",
+      "label": "DLSS neural rendering passes",
+      "choices": [
+        {"label": "Off", "set": {"dlss_neural_rendering": "0"}},
+        {"label": "1", "set": {"dlss_neural_rendering": "1"}},
+        {"label": "2", "set": {"dlss_neural_rendering": "2"}},
+        {"label": "3", "set": {"dlss_neural_rendering": "3"}},
+        {"label": "4", "set": {"dlss_neural_rendering": "4"}}
+      ],
+      "defaults": {"dlss_neural_rendering": "0"},
+      "help": "Requires your own nvngx_dlssnr.dll and supported hardware. This DLL is not bundled.",
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_preset",
+      "label": "Neural rendering preset",
+      "choices": [
+        {"label": "Default", "set": {"dlss_nr_preset": "0"}},
+        {"label": "Preset 1", "set": {"dlss_nr_preset": "1"}},
+        {"label": "Preset 2", "set": {"dlss_nr_preset": "2"}},
+        {"label": "Preset 3", "set": {"dlss_nr_preset": "3"}}
+      ],
+      "defaults": {"dlss_nr_preset": "0"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_style",
+      "label": "Neural rendering style",
+      "choices": [
+        {"label": "Default", "set": {"dlss_nr_style": "0"}},
+        {"label": "Natural", "set": {"dlss_nr_style": "1"}},
+        {"label": "Cinematic", "set": {"dlss_nr_style": "2"}}
+      ],
+      "defaults": {"dlss_nr_style": "0"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_intensity",
+      "label": "Neural rendering: Intensity",
+      "choices": [
+        {"label": "0%", "set": {"dlss_nr_intensity": "0"}},
+        {"label": "10%", "set": {"dlss_nr_intensity": "10"}},
+        {"label": "20%", "set": {"dlss_nr_intensity": "20"}},
+        {"label": "30%", "set": {"dlss_nr_intensity": "30"}},
+        {"label": "40%", "set": {"dlss_nr_intensity": "40"}},
+        {"label": "50%", "set": {"dlss_nr_intensity": "50"}},
+        {"label": "60%", "set": {"dlss_nr_intensity": "60"}},
+        {"label": "70%", "set": {"dlss_nr_intensity": "70"}},
+        {"label": "80%", "set": {"dlss_nr_intensity": "80"}},
+        {"label": "90%", "set": {"dlss_nr_intensity": "90"}},
+        {"label": "100%", "set": {"dlss_nr_intensity": "100"}},
+        {"label": "110%", "set": {"dlss_nr_intensity": "110"}},
+        {"label": "120%", "set": {"dlss_nr_intensity": "120"}},
+        {"label": "130%", "set": {"dlss_nr_intensity": "130"}},
+        {"label": "140%", "set": {"dlss_nr_intensity": "140"}},
+        {"label": "150%", "set": {"dlss_nr_intensity": "150"}},
+        {"label": "160%", "set": {"dlss_nr_intensity": "160"}},
+        {"label": "170%", "set": {"dlss_nr_intensity": "170"}},
+        {"label": "180%", "set": {"dlss_nr_intensity": "180"}},
+        {"label": "190%", "set": {"dlss_nr_intensity": "190"}},
+        {"label": "200%", "set": {"dlss_nr_intensity": "200"}}
+      ],
+      "defaults": {"dlss_nr_intensity": "100"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_global_tone",
+      "label": "Neural rendering: Global tone",
+      "choices": [
+        {"label": "0%", "set": {"dlss_nr_global_tone": "0"}},
+        {"label": "10%", "set": {"dlss_nr_global_tone": "10"}},
+        {"label": "20%", "set": {"dlss_nr_global_tone": "20"}},
+        {"label": "30%", "set": {"dlss_nr_global_tone": "30"}},
+        {"label": "40%", "set": {"dlss_nr_global_tone": "40"}},
+        {"label": "50%", "set": {"dlss_nr_global_tone": "50"}},
+        {"label": "60%", "set": {"dlss_nr_global_tone": "60"}},
+        {"label": "70%", "set": {"dlss_nr_global_tone": "70"}},
+        {"label": "80%", "set": {"dlss_nr_global_tone": "80"}},
+        {"label": "90%", "set": {"dlss_nr_global_tone": "90"}},
+        {"label": "100%", "set": {"dlss_nr_global_tone": "100"}},
+        {"label": "110%", "set": {"dlss_nr_global_tone": "110"}},
+        {"label": "120%", "set": {"dlss_nr_global_tone": "120"}},
+        {"label": "130%", "set": {"dlss_nr_global_tone": "130"}},
+        {"label": "140%", "set": {"dlss_nr_global_tone": "140"}},
+        {"label": "150%", "set": {"dlss_nr_global_tone": "150"}},
+        {"label": "160%", "set": {"dlss_nr_global_tone": "160"}},
+        {"label": "170%", "set": {"dlss_nr_global_tone": "170"}},
+        {"label": "180%", "set": {"dlss_nr_global_tone": "180"}},
+        {"label": "190%", "set": {"dlss_nr_global_tone": "190"}},
+        {"label": "200%", "set": {"dlss_nr_global_tone": "200"}}
+      ],
+      "defaults": {"dlss_nr_global_tone": "100"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_local_tone",
+      "label": "Neural rendering: Local tone",
+      "choices": [
+        {"label": "0%", "set": {"dlss_nr_local_tone": "0"}},
+        {"label": "10%", "set": {"dlss_nr_local_tone": "10"}},
+        {"label": "20%", "set": {"dlss_nr_local_tone": "20"}},
+        {"label": "30%", "set": {"dlss_nr_local_tone": "30"}},
+        {"label": "40%", "set": {"dlss_nr_local_tone": "40"}},
+        {"label": "50%", "set": {"dlss_nr_local_tone": "50"}},
+        {"label": "60%", "set": {"dlss_nr_local_tone": "60"}},
+        {"label": "70%", "set": {"dlss_nr_local_tone": "70"}},
+        {"label": "80%", "set": {"dlss_nr_local_tone": "80"}},
+        {"label": "90%", "set": {"dlss_nr_local_tone": "90"}},
+        {"label": "100%", "set": {"dlss_nr_local_tone": "100"}},
+        {"label": "110%", "set": {"dlss_nr_local_tone": "110"}},
+        {"label": "120%", "set": {"dlss_nr_local_tone": "120"}},
+        {"label": "130%", "set": {"dlss_nr_local_tone": "130"}},
+        {"label": "140%", "set": {"dlss_nr_local_tone": "140"}},
+        {"label": "150%", "set": {"dlss_nr_local_tone": "150"}},
+        {"label": "160%", "set": {"dlss_nr_local_tone": "160"}},
+        {"label": "170%", "set": {"dlss_nr_local_tone": "170"}},
+        {"label": "180%", "set": {"dlss_nr_local_tone": "180"}},
+        {"label": "190%", "set": {"dlss_nr_local_tone": "190"}},
+        {"label": "200%", "set": {"dlss_nr_local_tone": "200"}}
+      ],
+      "defaults": {"dlss_nr_local_tone": "100"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_structure",
+      "label": "Neural rendering: Structure",
+      "choices": [
+        {"label": "0%", "set": {"dlss_nr_structure": "0"}},
+        {"label": "10%", "set": {"dlss_nr_structure": "10"}},
+        {"label": "20%", "set": {"dlss_nr_structure": "20"}},
+        {"label": "30%", "set": {"dlss_nr_structure": "30"}},
+        {"label": "40%", "set": {"dlss_nr_structure": "40"}},
+        {"label": "50%", "set": {"dlss_nr_structure": "50"}},
+        {"label": "60%", "set": {"dlss_nr_structure": "60"}},
+        {"label": "70%", "set": {"dlss_nr_structure": "70"}},
+        {"label": "80%", "set": {"dlss_nr_structure": "80"}},
+        {"label": "90%", "set": {"dlss_nr_structure": "90"}},
+        {"label": "100%", "set": {"dlss_nr_structure": "100"}},
+        {"label": "110%", "set": {"dlss_nr_structure": "110"}},
+        {"label": "120%", "set": {"dlss_nr_structure": "120"}},
+        {"label": "130%", "set": {"dlss_nr_structure": "130"}},
+        {"label": "140%", "set": {"dlss_nr_structure": "140"}},
+        {"label": "150%", "set": {"dlss_nr_structure": "150"}},
+        {"label": "160%", "set": {"dlss_nr_structure": "160"}},
+        {"label": "170%", "set": {"dlss_nr_structure": "170"}},
+        {"label": "180%", "set": {"dlss_nr_structure": "180"}},
+        {"label": "190%", "set": {"dlss_nr_structure": "190"}},
+        {"label": "200%", "set": {"dlss_nr_structure": "200"}}
+      ],
+      "defaults": {"dlss_nr_structure": "100"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_skin",
+      "label": "Neural rendering: Skin",
+      "choices": [
+        {"label": "Follow Structure", "set": {"dlss_nr_skin": "-100"}},
+        {"label": "0%", "set": {"dlss_nr_skin": "0"}},
+        {"label": "10%", "set": {"dlss_nr_skin": "10"}},
+        {"label": "20%", "set": {"dlss_nr_skin": "20"}},
+        {"label": "30%", "set": {"dlss_nr_skin": "30"}},
+        {"label": "40%", "set": {"dlss_nr_skin": "40"}},
+        {"label": "50%", "set": {"dlss_nr_skin": "50"}},
+        {"label": "60%", "set": {"dlss_nr_skin": "60"}},
+        {"label": "70%", "set": {"dlss_nr_skin": "70"}},
+        {"label": "80%", "set": {"dlss_nr_skin": "80"}},
+        {"label": "90%", "set": {"dlss_nr_skin": "90"}},
+        {"label": "100%", "set": {"dlss_nr_skin": "100"}}
+      ],
+      "defaults": {"dlss_nr_skin": "-100"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "dlss_nr_auto_mask",
+      "label": "Neural rendering character mask",
+      "choices": [
+        {"label": "Off", "set": {"dlss_nr_auto_mask": "0"}},
+        {"label": "On", "set": {"dlss_nr_auto_mask": "1"}}
+      ],
+      "defaults": {"dlss_nr_auto_mask": "1"},
+      "when": {"upscaler": "1"}
+    },
+    {
+      "id": "frame_generation",
+      "label": "Frame generation",
+      "choices": [
+        {"label": "Off", "set": {"frame_generation_provider": "0"}},
+        {"label": "FSR 2×", "set": {"frame_generation_provider": "2", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "DLSS", "set": {"frame_generation_provider": "1", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "XeSS 2× (select DirectX 12 first)", "set": {"frame_generation_provider": "4", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}}
+      ],
+      "defaults": {"frame_generation_provider": "0", "frame_generation_mode": "1", "frame_generation_multiplier": "2", "frame_generation_target_fps": "0"},
+      "help": "Applied on the next start. FSR and XeSS use 2×; XeSS requires DirectX 12. DLSS needs compatible RTX hardware; higher multipliers require multi-frame-generation support."
+    },
+    {
+      "id": "frame_generation_multiplier",
+      "label": "DLSS frame generation multiplier",
+      "choices": [
+        {"label": "2×", "set": {"frame_generation_multiplier": "2", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "3×", "set": {"frame_generation_multiplier": "3", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "4×", "set": {"frame_generation_multiplier": "4", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "5×", "set": {"frame_generation_multiplier": "5", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}},
+        {"label": "6×", "set": {"frame_generation_multiplier": "6", "frame_generation_mode": "1", "frame_generation_target_fps": "0"}}
+      ],
+      "defaults": {"frame_generation_multiplier": "2", "frame_generation_mode": "1", "frame_generation_target_fps": "0"},
+      "help": "Requested multiplier; availability depends on the GPU and driver.",
+      "when": {"frame_generation_provider": "1"}
+    },
+    {
+      "id": "ambient_occlusion",
+      "label": "Ambient occlusion",
+      "choices": [
+        {"label": "Off", "set": {"ambient_occlusion": "0"}},
+        {"label": "SSAO", "set": {"ambient_occlusion": "1"}},
+        {"label": "GTAO", "set": {"ambient_occlusion": "2"}}
+      ],
+      "defaults": {"ambient_occlusion": "0"}
+    },
+    {
+      "id": "anisotropic_filtering",
+      "label": "Anisotropic filtering",
+      "choices": [
+        {"label": "Off", "set": {"anisotropic_filtering": "0"}},
+        {"label": "2×", "set": {"anisotropic_filtering": "2"}},
+        {"label": "4×", "set": {"anisotropic_filtering": "4"}},
+        {"label": "8×", "set": {"anisotropic_filtering": "8"}},
+        {"label": "16×", "set": {"anisotropic_filtering": "16"}}
+      ],
+      "defaults": {"anisotropic_filtering": "0"}
+    },
+    {
+      "id": "frame_rate",
+      "label": "Frame rate",
+      "help": "The cap the game holds itself to. 30 fps is the console's own rate.",
+      "choices": [
+        {"label": "30 fps (console)", "set": {"frame_rate": "30"}},
+        {"label": "60 fps", "set": {"frame_rate": "60"}},
+        {"label": "90 fps", "set": {"frame_rate": "90"}},
+        {"label": "120 fps", "set": {"frame_rate": "120"}}
+      ],
+      "defaults": {"frame_rate": "30"}
+    },
+    {
+      "id": "loading_transitions",
+      "label": "Loading transitions",
+      "choices": [
+        {"label": "Original", "set": {"loading_transitions": "0"}},
+        {"label": "Fast", "set": {"loading_transitions": "2"}}
+      ],
+      "defaults": {"loading_transitions": "2"}
+    },
+    {
+      "id": "vsync",
+      "label": "Display synchronization",
+      "choices": [
+        {"label": "Off", "set": {"vsync": "0", "variable_refresh_rate": "0"}},
+        {"label": "On", "set": {"vsync": "1", "variable_refresh_rate": "0"}},
+        {"label": "FreeSync / G-SYNC Compatible", "set": {"variable_refresh_rate": "1"}}
+      ],
+      "defaults": {"vsync": "1", "variable_refresh_rate": "0"},
+      "help": "Adaptive synchronization takes precedence over V-Sync and does not enable VRR in the monitor or driver."
+    },
+    {
+      "id": "performance_overlay",
+      "label": "Performance overlay",
+      "choices": [
+        {"label": "Off", "set": {"performance_overlay": "0"}},
+        {"label": "FPS", "set": {"performance_overlay": "1"}},
+        {"label": "Detailed", "set": {"performance_overlay": "2"}}
+      ],
+      "defaults": {"performance_overlay": "0"}
+    },
+    {
+      "id": "scaling_quality",
+      "label": "Spatial scaling quality",
+      "choices": [
+        {"label": "Standard (bilinear)", "set": {"scaling_quality": "0"}},
+        {"label": "High (bicubic)", "set": {"scaling_quality": "1"}}
+      ],
+      "defaults": {"scaling_quality": "1"}
+    },
+    {
+      "id": "depth_of_field",
+      "label": "Depth of field",
+      "choices": [
+        {"label": "0%", "set": {"depth_of_field": "0"}},
+        {"label": "10%", "set": {"depth_of_field": "10"}},
+        {"label": "20%", "set": {"depth_of_field": "20"}},
+        {"label": "30%", "set": {"depth_of_field": "30"}},
+        {"label": "40%", "set": {"depth_of_field": "40"}},
+        {"label": "50%", "set": {"depth_of_field": "50"}},
+        {"label": "60%", "set": {"depth_of_field": "60"}},
+        {"label": "70%", "set": {"depth_of_field": "70"}},
+        {"label": "80%", "set": {"depth_of_field": "80"}},
+        {"label": "90%", "set": {"depth_of_field": "90"}},
+        {"label": "100%", "set": {"depth_of_field": "100"}}
+      ],
+      "defaults": {"depth_of_field": "100"}
+    },
+    {
+      "id": "bloom",
+      "label": "Bloom",
+      "choices": [
+        {"label": "Off", "set": {"bloom": "0"}},
+        {"label": "On", "set": {"bloom": "1"}}
+      ],
+      "defaults": {"bloom": "1"}
+    },
+    {
+      "id": "motion_blur",
+      "label": "Motion blur",
+      "choices": [
+        {"label": "Off", "set": {"motion_blur": "0"}},
+        {"label": "On", "set": {"motion_blur": "1"}}
+      ],
+      "defaults": {"motion_blur": "1"}
+    },
+    {
+      "id": "scene_fades",
+      "label": "Scene fades",
+      "choices": [
+        {"label": "Off", "set": {"scene_fades": "0"}},
+        {"label": "On", "set": {"scene_fades": "1"}}
+      ],
+      "defaults": {"scene_fades": "1"}
+    },
+    {
+      "id": "culling",
+      "label": "View-frustum culling",
+      "choices": [
+        {"label": "0%", "set": {"culling": "0"}},
+        {"label": "10%", "set": {"culling": "10"}},
+        {"label": "20%", "set": {"culling": "20"}},
+        {"label": "30%", "set": {"culling": "30"}},
+        {"label": "40%", "set": {"culling": "40"}},
+        {"label": "50%", "set": {"culling": "50"}},
+        {"label": "60%", "set": {"culling": "60"}},
+        {"label": "70%", "set": {"culling": "70"}},
+        {"label": "80%", "set": {"culling": "80"}},
+        {"label": "90%", "set": {"culling": "90"}},
+        {"label": "100%", "set": {"culling": "100"}},
+        {"label": "110%", "set": {"culling": "110"}},
+        {"label": "120%", "set": {"culling": "120"}},
+        {"label": "130%", "set": {"culling": "130"}},
+        {"label": "140%", "set": {"culling": "140"}},
+        {"label": "150%", "set": {"culling": "150"}},
+        {"label": "160%", "set": {"culling": "160"}},
+        {"label": "170%", "set": {"culling": "170"}},
+        {"label": "180%", "set": {"culling": "180"}},
+        {"label": "190%", "set": {"culling": "190"}},
+        {"label": "200%", "set": {"culling": "200"}}
+      ],
+      "defaults": {"culling": "100"},
+      "help": "100% is the original value; lower draws objects at the screen edges longer."
+    },
+    {
+      "id": "expand_rgb_range",
+      "label": "Expanded RGB range",
+      "choices": [
+        {"label": "Off", "set": {"expand_rgb_range": "0"}},
+        {"label": "On", "set": {"expand_rgb_range": "1"}}
+      ],
+      "defaults": {"expand_rgb_range": "0"}
+    },
+    {
+      "id": "display_brightness",
+      "label": "Black level",
+      "choices": [
+        {"label": "-20", "set": {"display_brightness": "-20"}},
+        {"label": "-19", "set": {"display_brightness": "-19"}},
+        {"label": "-18", "set": {"display_brightness": "-18"}},
+        {"label": "-17", "set": {"display_brightness": "-17"}},
+        {"label": "-16", "set": {"display_brightness": "-16"}},
+        {"label": "-15", "set": {"display_brightness": "-15"}},
+        {"label": "-14", "set": {"display_brightness": "-14"}},
+        {"label": "-13", "set": {"display_brightness": "-13"}},
+        {"label": "-12", "set": {"display_brightness": "-12"}},
+        {"label": "-11", "set": {"display_brightness": "-11"}},
+        {"label": "-10", "set": {"display_brightness": "-10"}},
+        {"label": "-9", "set": {"display_brightness": "-9"}},
+        {"label": "-8", "set": {"display_brightness": "-8"}},
+        {"label": "-7", "set": {"display_brightness": "-7"}},
+        {"label": "-6", "set": {"display_brightness": "-6"}},
+        {"label": "-5", "set": {"display_brightness": "-5"}},
+        {"label": "-4", "set": {"display_brightness": "-4"}},
+        {"label": "-3", "set": {"display_brightness": "-3"}},
+        {"label": "-2", "set": {"display_brightness": "-2"}},
+        {"label": "-1", "set": {"display_brightness": "-1"}},
+        {"label": "0", "set": {"display_brightness": "0"}},
+        {"label": "1", "set": {"display_brightness": "1"}},
+        {"label": "2", "set": {"display_brightness": "2"}},
+        {"label": "3", "set": {"display_brightness": "3"}},
+        {"label": "4", "set": {"display_brightness": "4"}},
+        {"label": "5", "set": {"display_brightness": "5"}},
+        {"label": "6", "set": {"display_brightness": "6"}},
+        {"label": "7", "set": {"display_brightness": "7"}},
+        {"label": "8", "set": {"display_brightness": "8"}},
+        {"label": "9", "set": {"display_brightness": "9"}},
+        {"label": "10", "set": {"display_brightness": "10"}},
+        {"label": "11", "set": {"display_brightness": "11"}},
+        {"label": "12", "set": {"display_brightness": "12"}},
+        {"label": "13", "set": {"display_brightness": "13"}},
+        {"label": "14", "set": {"display_brightness": "14"}},
+        {"label": "15", "set": {"display_brightness": "15"}},
+        {"label": "16", "set": {"display_brightness": "16"}},
+        {"label": "17", "set": {"display_brightness": "17"}},
+        {"label": "18", "set": {"display_brightness": "18"}},
+        {"label": "19", "set": {"display_brightness": "19"}},
+        {"label": "20", "set": {"display_brightness": "20"}}
+      ],
+      "defaults": {"display_brightness": "0"}
+    },
+    {
+      "id": "display_gamma",
+      "label": "Gamma",
+      "choices": [
+        {"label": "0.50", "set": {"display_gamma": "50"}},
+        {"label": "0.55", "set": {"display_gamma": "55"}},
+        {"label": "0.60", "set": {"display_gamma": "60"}},
+        {"label": "0.65", "set": {"display_gamma": "65"}},
+        {"label": "0.70", "set": {"display_gamma": "70"}},
+        {"label": "0.75", "set": {"display_gamma": "75"}},
+        {"label": "0.80", "set": {"display_gamma": "80"}},
+        {"label": "0.85", "set": {"display_gamma": "85"}},
+        {"label": "0.90", "set": {"display_gamma": "90"}},
+        {"label": "0.95", "set": {"display_gamma": "95"}},
+        {"label": "1.00", "set": {"display_gamma": "100"}},
+        {"label": "1.05", "set": {"display_gamma": "105"}},
+        {"label": "1.10", "set": {"display_gamma": "110"}},
+        {"label": "1.15", "set": {"display_gamma": "115"}},
+        {"label": "1.20", "set": {"display_gamma": "120"}},
+        {"label": "1.25", "set": {"display_gamma": "125"}},
+        {"label": "1.30", "set": {"display_gamma": "130"}},
+        {"label": "1.35", "set": {"display_gamma": "135"}},
+        {"label": "1.40", "set": {"display_gamma": "140"}},
+        {"label": "1.45", "set": {"display_gamma": "145"}},
+        {"label": "1.50", "set": {"display_gamma": "150"}}
+      ],
+      "defaults": {"display_gamma": "100"}
+    },
+    {
+      "id": "hdr",
+      "label": "HDR output",
+      "help": "Needs an HDR screen. The game's own Graphics settings go into more detail.",
+      "choices": [
+        {"label": "Off", "set": {"hdr": "0"}},
+        {"label": "On", "set": {"hdr": "1"}}
+      ],
+      "defaults": {"hdr": "0"}
+    },
+    {
+      "id": "hdr_paper_white",
+      "label": "HDR paper white",
+      "choices": [
+        {"label": "80 nits", "set": {"hdr_paper_white_nits": "80"}},
+        {"label": "100 nits", "set": {"hdr_paper_white_nits": "100"}},
+        {"label": "150 nits", "set": {"hdr_paper_white_nits": "150"}},
+        {"label": "203 nits", "set": {"hdr_paper_white_nits": "203"}},
+        {"label": "250 nits", "set": {"hdr_paper_white_nits": "250"}},
+        {"label": "300 nits", "set": {"hdr_paper_white_nits": "300"}},
+        {"label": "350 nits", "set": {"hdr_paper_white_nits": "350"}},
+        {"label": "400 nits", "set": {"hdr_paper_white_nits": "400"}}
+      ],
+      "defaults": {"hdr_paper_white_nits": "203"},
+      "when": {"hdr": "1"}
+    },
+    {
+      "id": "hdr_peak_auto",
+      "label": "HDR automatic peak",
+      "choices": [
+        {"label": "Off", "set": {"hdr_peak_auto": "0"}},
+        {"label": "On", "set": {"hdr_peak_auto": "1"}}
+      ],
+      "defaults": {"hdr_peak_auto": "1"},
+      "when": {"hdr": "1"}
+    },
+    {
+      "id": "hdr_peak",
+      "label": "HDR manual peak",
+      "choices": [
+        {"label": "203 nits", "set": {"hdr_peak_nits": "203"}},
+        {"label": "400 nits", "set": {"hdr_peak_nits": "400"}},
+        {"label": "600 nits", "set": {"hdr_peak_nits": "600"}},
+        {"label": "800 nits", "set": {"hdr_peak_nits": "800"}},
+        {"label": "1000 nits", "set": {"hdr_peak_nits": "1000"}},
+        {"label": "1200 nits", "set": {"hdr_peak_nits": "1200"}},
+        {"label": "1500 nits", "set": {"hdr_peak_nits": "1500"}},
+        {"label": "2000 nits", "set": {"hdr_peak_nits": "2000"}},
+        {"label": "4000 nits", "set": {"hdr_peak_nits": "4000"}},
+        {"label": "10000 nits", "set": {"hdr_peak_nits": "10000"}}
+      ],
+      "defaults": {"hdr_peak_nits": "1000"},
+      "help": "Must be at least the paper-white value. Use the in-game HDR calibration for fine adjustment.",
+      "when": {"hdr": "1", "hdr_peak_auto": "0"}
+    }
+  ],
+  "saves": ["{install}/save"],
+  "folders": {
+    "saves": [
+      {"path": "{install}/save"}
+    ],
+    "logs": [
+      {"path": "{install}/logs"}
+    ],
+    "mods": [
+      {"path": "{install}/mods"}
+    ]
+  },
+  "actions": [
+    {"id": "saves", "label": "Saves", "help": "One folder per slot, such as user00. Xenia and console saves copy straight in.", "open": "saves"},
+    {"id": "mods", "label": "Mods", "help": "The game reads mods from here on the next start.", "open": "mods"},
+    {"id": "logs", "label": "Logs", "help": "One log per run. The newest one goes with a bug report.", "open": "logs"}
+  ],
+  "looks": {"allowed": false, "reason": "The game has its own anti-aliasing, upscaling, frame generation and HDR settings, and draws with Vulkan or Direct3D 12 chosen in its own menu."},
+  "game": {"kind": "folder", "label": "A folder containing your Lost Odyssey discs (ISO, extracted files or GOD), with Disc 1 at least. Use one supported edition; optional DLC may be in the same folder."},
+  "prepare": {
+    "program": ["LostOdysseyRecomp.exe"],
+    "args": ["--prepare-content", "--source", "{game}", "--destination", "{install}/game"],
+    "label": "Importing Lost Odyssey discs and DLC",
+    "timeout": 7200
+  }
+}

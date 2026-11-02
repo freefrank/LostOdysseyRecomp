@@ -15,6 +15,7 @@
 | Read the 2026-10 cutscene tour report (archived) | [Cutscene tour](archive/CUTSCENE_TOUR.md) / [过场巡游](archive/CUTSCENE_TOUR.zh-CN.md); the current tool is in [tools/tours](../tools/tours/README.md) |
 | Find development, analysis or test commands | [Tool catalog](../tools/README.md) / [Test catalog](../tools/tests/README.md) |
 | Understand diagnostics and consent | [Privacy](../PRIVACY.md) / [隐私说明](../PRIVACY.zh-CN.md) |
+| Play with RecompLauncher, or keep our launcher profile in step | [RecompLauncher integration](RECOMPLAUNCHER.md) |
 | Create a mod | [Modding guide](wiki/Modding.md) |
 
 ## Document roles and maintenance
