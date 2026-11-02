@@ -28,6 +28,10 @@
 
 extern std::atomic<uint32_t> g_presentedSwaps; // gpu/command_processor.cpp: frames presented
 
+#ifdef LO_SWITCH_PGO_GEN
+namespace os::pgo { void RegisterCommands(); } // os/switch/pgo_switch.cpp: training builds only
+#endif
+
 namespace os::debug_server
 {
 namespace
@@ -400,6 +404,9 @@ void StartNetwork(const char* dataRoot)
     debugsrv::add_command("stick", "stick <L|R> <x> <y> [ms]  -1..1, y up; without ms until \"stick L 0 0\"", StickCommand);
     debugsrv::add_command("shot", "shot [ppm]             the next frame as a PNG (ppm: as saved)", Shot);
     debugsrv::add_command("restart", "restart [force]        start the program again (a HOME-menu forwarder)", Restart);
+#ifdef LO_SWITCH_PGO_GEN
+    os::pgo::RegisterCommands();
+#endif
     debugsrv::Config config;
     config.port = port;
     config.root = g_root;

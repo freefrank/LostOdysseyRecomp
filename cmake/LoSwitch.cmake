@@ -67,6 +67,8 @@ if(LO_SWITCH_LTO)
     add_link_options(-flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
 endif()
 
+include(cmake/LoSwitchPgo.cmake)
+
 # Development check build (tools/switch/check-toolchain.cmake): compiles with a
 # stock aarch64 Linux GCC and the libnx headers, links nothing.
 if(LO_SWITCH_CHECK_ONLY)

@@ -179,6 +179,13 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
         ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
         ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.
+    lo_switch_pgo_target(LostOdysseyRecomp)
+    lo_switch_pgo_target(lo_plume_deko3d)
+    if(LO_SWITCH_PGO STREQUAL "GEN")
+        target_compile_definitions(LostOdysseyRecomp PRIVATE LO_SWITCH_PGO_GEN=1)
+        target_link_options(LostOdysseyRecomp PRIVATE -fprofile-generate)
+    endif()
     # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
