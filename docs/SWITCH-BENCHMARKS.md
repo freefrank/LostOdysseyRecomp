@@ -486,6 +486,6 @@ Profile-guided against normal build on the final code, scripted attacks, 540 row
 | Normal | 22.21 | 40.2 | 71.4 | 35.1 | 82.1 | 74.4 |
 | Profile from ship and battle, retrained | 23.63 | 37.7 | 66.7 | 35.1 | 82.4 | 63.3 |
 
-**Guest Main on its own core** (`LO_MAIN_CORE`, default 0): +2% in the attack runs, 21.45 to 21.87 FPS, p99 about 78 to 70 ms, with no audio drops or errors logged. The `starved` count rose from about 270 to 550-870. Other threads may still run on core 0.
+**Guest Main on its own core** (`LO_MAIN_CORE=0`) gave +2% in the attack runs, 21.45 to 21.87 FPS, p99 about 78 to 70 ms, but it is **off by default**. In the intro video one frame took 114.6 s: the XAudio workers ran at 100% each, `Guest Main` got no CPU, and `GPU CmdProc` waited. A pinned thread can't leave a core where a higher-priority thread spins. The `starved` count that rose from about 270 to 550-870 was probably the first sign. The Milestone 4 numbers above were taken with it on, so a default build may read about 2% lower.
 
 **Guest memory mapping** now retries at another address. A crash log showed `guest memory commit failed`, after which a guest thread block came back null and the game wrote through it. An allocation that still fails now stops with a clear error. No crash in about 14 game starts since the fix, too few to prove it at the earlier rate of about 1 in 50.

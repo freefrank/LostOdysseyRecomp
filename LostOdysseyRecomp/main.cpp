@@ -303,11 +303,11 @@ static int RunGuest(uint32_t entry)
     os::SetCurrentThreadName("Guest Main");
     os::scheduling::PreferPerformanceCores(true);
 #if LO_PLATFORM_SWITCH
-    // The busiest thread stays on one core instead of moving between three full ones: 2% more frames and a 10% better
-    // slowest 1% in the first battle. Other threads can still run there. LO_MAIN_CORE=-1 lets it move.
+    // LO_MAIN_CORE=<core> keeps the busiest thread on one core: 2% more frames in the first battle, but it can't leave
+    // a core where a higher-priority thread spins, and the XAudio workers stalled the game 114 s that way. Off by default.
     {
         const char* mainCore = getenv("LO_MAIN_CORE");
-        const int core = mainCore ? atoi(mainCore) : 0;
+        const int core = mainCore ? atoi(mainCore) : -1;
         if (core >= 0) os::switch_platform::PinCurrentThread(core);
     }
 #endif
