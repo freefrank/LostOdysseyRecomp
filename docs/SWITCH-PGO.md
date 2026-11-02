@@ -85,10 +85,16 @@ Retrained on the final code, with the register write-backs removed and lean shad
 The profile is only read while compiling, and its gain is in the machine code of the NRO. Players need nothing extra, and the profile itself doesn't ship. It isn't in the repository either, so a default build doesn't get this gain: whoever makes the release retrains and builds it, about 30 minutes in all.
 
 1. **Freeze the code.** Commit everything first, and run `tools/switch/build-switch.sh`, which leaves `LostOdysseyRecompLib/ppc/` ready. The profile only fits the code it was trained on.
-2. **Build `GEN`** in `out/build/switch-pgo-gen`, as in [Procedure](#procedure), about 9 minutes. Deploy it:
+2. **Build `GEN`,** about 9 minutes:
 
    ```bash
-   python3 tools/switch/lo_debug.py deploy out/build/switch-pgo-gen/LostOdysseyRecomp/LostOdysseyRecomp.nro
+   docker run --rm -v "$PWD:/work" -w /work -e PGO=GEN ghcr.io/autorunhq/switch-dev:2026.10.05 bash tools/switch/build-switch.sh
+   ```
+
+   Deploy it:
+
+   ```bash
+   python3 tools/switch/lo_debug.py deploy out/switch/pgo-GEN/LostOdysseyRecomp.nro
    ```
 
 3. **Train,** about 10 minutes. This restarts the game, so nobody can play meanwhile:
@@ -109,9 +115,14 @@ The profile is only read while compiling, and its gain is in the machine code of
    python3 tools/switch/pgo_train.py fetch --out out/pgo
    ```
 
-4. **Build `USE`** in `out/build/switch-pgo-use` with `-DLO_SWITCH_PGO=USE -DLO_SWITCH_PGO_DIR=$PWD/out/pgo`, about 8 minutes.
+4. **Build `USE`,** about 8 minutes. The result is in `out/switch/pgo-USE/`:
+
+   ```bash
+   docker run --rm -v "$PWD:/work" -w /work -e PGO=USE ghcr.io/autorunhq/switch-dev:2026.10.05 bash tools/switch/build-switch.sh
+   ```
+
 5. **Test that NRO on the console,** then publish it. The training build must never ship.
-6. **Keep the matching `.elf`** from the same folder: crash addresses from that release only resolve against it.
+6. **Keep the matching `.elf`** from `out/switch/pgo-USE/`: crash addresses from that release only resolve against it.
 
 The level 3 shader pack is separate from the NRO. For the speed in `docs/SWITCH-BENCHMARKS.md`, the release also needs `shaders/deko3d_shaders_lean3.lodk` and `LO_DEKO3D_LEAN_SHADERS=3` in `tools/switch/release-env.txt`.
 
