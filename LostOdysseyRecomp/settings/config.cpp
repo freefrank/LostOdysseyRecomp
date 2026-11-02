@@ -1,4 +1,5 @@
 #include "config.h"
+#include "ini.h"
 #include <debug/fast_forward.h>
 #include <atomic>
 #include <gpu/frame_rate.h>
@@ -154,7 +155,7 @@ Config Read()
         auto equal = key.find('=');
         if (equal == std::string::npos)
             continue;
-        const auto name = key.substr(0, equal);
+        const std::string name(ini::Trim(std::string_view(key).substr(0, equal)));
         // Presence wins over the legacy key even if the new value is malformed.
         if (name == "antialiasing") { hasAntialiasing = true; value.antialiasing = 0; }
         if (name == "encounter_rate") { hasEncounterRate = true; value.encounterRate = EncounterRate::Normal; }
@@ -163,7 +164,7 @@ Config Read()
         if (name == "anisotropic_filtering") value.anisotropicFiltering = 0;
         if (name == "aspect_ratio") hasAspectRatio = true;
         uint32_t number = 0;
-        const auto digits = key.substr(equal + 1);
+        const std::string digits(ini::Trim(std::string_view(key).substr(equal + 1)));
         if (name == "gpu_device" || name == "display_name" || name == "game_language_pack")
         {
             (name == "gpu_device" ? value.gpuDevice : name == "display_name" ? value.displayName : value.gameLanguagePack) =
@@ -191,7 +192,7 @@ Config Read()
         auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
         if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size())
             continue;
-        key.resize(equal);
+        key = name;
         if (key == "ui_language")
             value.uiLanguage = number;
         else if (key == "debug_language")

@@ -71,7 +71,9 @@ int main()
             Check(updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog == enabled,
                   "startup diagnostic_log respects opt-out and overrides the legacy key");
         }
-        WriteSettings(root / "launch/settings.ini", "automatic_updates=0\nui_language=2\n");
+        WriteSettings(root / "launch/settings.ini", "  automatic_updates = 0 \r\n\tui_language\t=\t2\r\ndiagnostic_log = 0\r\n");
+        Check(!updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog,
+              "startup reads external INI editor spacing and CRLF");
         Check(fs::exists(os::user_paths::SettingsPath()), "saved portable settings bypass initial setup");
         auto preferences = updater::ReadStartupPreferences(os::user_paths::SettingsPath());
         Check(!preferences.automaticUpdates && preferences.uiLanguage == 2, "startup reads the portable settings path");
