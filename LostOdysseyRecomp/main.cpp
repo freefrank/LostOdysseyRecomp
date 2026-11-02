@@ -30,6 +30,7 @@
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#include "settings/ini.h"
 #include "settings/game_path.h"
 #include "settings/restart.h"
 #include "updater/update.h"
@@ -120,10 +121,17 @@ static void PreferSystemDxgiOnVulkan(const std::filesystem::path& executableDire
     auto configured = settings::Config{}.graphicsBackend;
     std::ifstream input(os::user_paths::SettingsPath());
     for (std::string line; std::getline(input, line);)
-        if (line.rfind("graphics_backend=", 0) == 0) {
-            const auto saved = settings::GraphicsBackend(std::strtoul(line.c_str() + 17, nullptr, 10));
-            configured = gpu::backend::Known(saved) ? saved : settings::Config{}.graphicsBackend;
-        }
+    {
+        const auto equal = line.find('=');
+        if (equal == std::string::npos || settings::ini::Trim(std::string_view(line).substr(0, equal)) != "graphics_backend")
+            continue;
+        const auto digits = settings::ini::Trim(std::string_view(line).substr(equal + 1));
+        uint32_t number = 0;
+        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
+        if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) continue;
+        const auto saved = settings::GraphicsBackend(number);
+        configured = gpu::backend::Known(saved) ? saved : settings::Config{}.graphicsBackend;
+    }
     if (gpu::backend::Requested(configured, getenv("LO_GRAPHICS_API")) != gpu::backend::Backend::Vulkan) return;
     const HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     wchar_t loaded[MAX_PATH]{};
