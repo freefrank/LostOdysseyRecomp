@@ -1287,7 +1287,7 @@ bool GraphicsRowHidden(int r)
     case GraphicsRow::FrameGeneration: case GraphicsRow::FrameGenerationMultiplier:
     case GraphicsRow::AmbientOcclusion: case GraphicsRow::AnisotropicFiltering:
     case GraphicsRow::VariableRefreshRate: case GraphicsRow::Hdr: case GraphicsRow::HdrPaperWhite:
-    case GraphicsRow::HdrPeak:
+    case GraphicsRow::HdrPeak: case GraphicsRow::RgbRange:
         return true;
     default:
         return false;

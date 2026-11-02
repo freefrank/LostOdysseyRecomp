@@ -171,6 +171,9 @@ Config Validate(Config value)
     value.dlssNeuralRendering = 0;
     value.frameGenerationProvider = framegen::Provider::Off;
     value.hdr = false;
+    // The guest's display gamma ramp already darkens the blacks like the Xbox 360;
+    // expanding 16-235 on top of it crushes everything below 32/255 to black.
+    value.expandRgbRange = false;
 #endif
 #if LO_PLATFORM_MACOS
     // Metal always keeps display sync; the menu offers only ProMotion there.
