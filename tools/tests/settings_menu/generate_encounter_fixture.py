@@ -17,6 +17,7 @@ def production(relative: str) -> str:
 
 prefix = r'''
 #include <settings/config.h>
+#include <settings/ini.h>
 #include <debug/fast_forward.h>
 #include <debug/no_encounters.h>
 #include <debug/battle_tour.h>
