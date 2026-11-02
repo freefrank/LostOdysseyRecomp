@@ -443,7 +443,7 @@ First battle at 540 rows, alternated runs, against about 36.3 ms of GPU time:
 |---|---|
 | Lean shaders level 3: no lower clamp for signed targets, which the game didn't draw to in these runs | GPU -0.55 ms, kept. Needs the level 3 pack; a draw to such a target logs a warning |
 | `LO_SWITCH_OUTPUT_HEIGHT=540`: present 960x540 and let the display scale it | GPU -0.75 ms, kept as an option: the picture hasn't been compared yet, and the host menus would be 540 too |
-| Native pool allocator fast paths | At most 1%, inside the noise, kept (`LO_NATIVE_MALLOC=0`) |
+| Native pool allocator fast paths | At most 1%, inside the noise. Removed: 2 unexplained stops in about 55 runs with it, none in about 50 before it |
 | Maxwell's tiled cache, which deko3d never enables | No gain, removed |
 | All shaders capped at 32 registers | 36.3 to 38 ms, removed. The hot vertex shader needs spills: 484 to 595 instructions |
 | Real clears for D3D `Clear()` draws | No gain, removed. They're thin edge strips, not whole targets |
