@@ -49,7 +49,8 @@ lo_review_test(LoLoadingStateTest loading_state_test.cpp)
 lo_review_test(LoSettingsPathTest settings_path_test.cpp "${LO_RUNTIME}/updater/update.cpp")
 lo_review_test(LoUserPathsTest user_paths_test.cpp)
 lo_review_test(LoImportGameTest import_game_test.cpp
-    "${LO_RUNTIME}/install/import_game.cpp" "${LO_RUNTIME}/install/import_image.cpp")
+    "${LO_RUNTIME}/install/import_game.cpp" "${LO_RUNTIME}/install/import_image.cpp"
+    "${LO_RUNTIME}/install/prepare_content.cpp")
 target_compile_definitions(LoImportGameTest PRIVATE LO_IMPORT_TESTING)
 if(WIN32)
     target_link_libraries(LoImportGameTest PRIVATE bcrypt)

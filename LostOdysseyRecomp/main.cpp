@@ -26,6 +26,7 @@
 #include <os/crash_handler.h>
 #include <os/startup_diagnostics.h>
 #include <cstring>
+#include <iostream>
 #include <ctime>
 #include <chrono>
 #include "settings/first_run.h"
@@ -41,6 +42,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/prepare_content.h"
 #include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
@@ -336,6 +338,17 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
+    // A launcher setup command must exit before logs, updates, mods, SDL, or the GPU.
+    try
+    {
+        if (const auto request = install::prepare_content::ParseArguments(argc, argv))
+            return install::prepare_content::Run(*request, executableDirectory, std::cout, std::cerr);
+    }
+    catch (const std::exception& error)
+    {
+        std::fprintf(stderr, "%s\n", error.what());
+        return 2;
+    }
     // This host-only command reads original artwork from available game data,
     // then exits without an SDL window or GPU (bundled art remains a fallback).
     for (int i = 1; i < argc; ++i)
