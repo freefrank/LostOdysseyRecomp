@@ -106,6 +106,12 @@ namespace
     // Lock order: logical input -> HID devices; never call menu code under g_hidMutex.
     Mutex g_getStateMutex;
     uint32_t g_packet = 0;
+    // The last controller reading. Guarded by g_getStateMutex.
+    constexpr auto kPadReuse = std::chrono::milliseconds(8);
+    constexpr auto kControllerObserveEvery = std::chrono::milliseconds(100);
+    std::chrono::steady_clock::time_point g_lastPadRead{}, g_lastControllerObserve{};
+    XAMINPUT_GAMEPAD g_lastPad{};
+    uint16_t g_lastDefaultButtons = 0;
 
     // Match XInput/Xam semantics: rumble is enabled by default and remains at
     // the requested motor speeds until the guest changes or clears the state.
@@ -410,7 +416,11 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         return ERROR_DEVICE_NOT_CONNECTED;
 
     std::lock_guard stateLock(g_getStateMutex);
-    Poll();
+    // The game polls twice a frame, and a reading is dozens of SDL calls that
+    // each take locks. Within kPadReuse the last reading stands.
+    const auto pollTime = std::chrono::steady_clock::now();
+    const bool freshPad = !LO_PLATFORM_SWITCH || pollTime - g_lastPadRead >= kPadReuse;
+    if (freshPad) Poll();
 
     *pState = {};
     pState->dwPacketNumber = ++g_packet;
@@ -424,11 +434,14 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
     {
         std::lock_guard lock(g_hidMutex);
-        if (!g_externalPump) SDL_UpdateGamepads();
-        for (auto* controller : g_controllers)
+        if (freshPad && !g_externalPump) SDL_UpdateGamepads();
+        // Only prompts use this, so it needn't run on every reading.
+        const bool observe = freshPad && (!LO_PLATFORM_SWITCH || pollTime - g_lastControllerObserve >= kControllerObserveEvery);
+        if (observe) g_lastControllerObserve = pollTime;
+        if (freshPad) for (auto* controller : g_controllers)
         {
             if (!SDL_GamepadConnected(controller)) continue;
-            ObserveController(controller);
+            if (observe) ObserveController(controller);
             auto axis = [&](SDL_GamepadAxis a) { return SDL_GetGamepadAxis(controller, a); };
             const auto sources = ReadSources(controller);
             const auto pad = ApplyController(g_controllerMap, sources);
@@ -439,6 +452,17 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
             MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_GAMEPAD_AXIS_LEFTX), flip(axis(SDL_GAMEPAD_AXIS_LEFTY)), 7849);
             MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_GAMEPAD_AXIS_RIGHTX), flip(axis(SDL_GAMEPAD_AXIS_RIGHTY)), 8689);
+        }
+        if (freshPad)
+        {
+            g_lastPadRead = pollTime;
+            g_lastPad = gp;
+            g_lastDefaultButtons = defaultButtons;
+        }
+        else
+        {
+            gp = g_lastPad;
+            defaultButtons = g_lastDefaultButtons;
         }
         controllerConnected = !g_controllers.empty();
         PublishPromptStyle();

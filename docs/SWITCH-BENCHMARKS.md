@@ -357,3 +357,14 @@ remains the demanding scene.
 Handheld memory stays at the system's clock: the game never selects 1600 MHz itself (the short test above removed in favour of
 sys-clk for players who want it). Docked already runs at 1600 MHz.
 
+
+## Controller polling and polling threads
+
+Controller polling was still 4.04% of `Guest Main` after the reader-writer lock fix, as the game polls twice a frame and each reading is
+dozens of SDL calls. A reading now stands for 8 ms and prompt tracking runs every 100 ms. XMA sleeps 2 ms instead of mostly 250 us (an
+enabled context counted as work), and the audio driver's queue-full wait is 2.5 ms instead of 1 ms. Alternated short runs at 360 rows:
+26.05 / 25.92 FPS against 25.47 / 25.33, about +2.6%; median frame 38.2 ms against 39.7. Audio: no drops or errors, `starved` in the same
+range.
+
+More vertex shader cuts look small: removing `gl_PointSize` saves about 5% of the hot shaders' code and needs a variant for point draws;
+taking the vertex index directly and dropping `floor` on bone indices saves nothing after uam's optimiser.

@@ -619,7 +619,9 @@ namespace apu::xma
                     Work(id);
                     didWork = true;
                 }
-                std::this_thread::sleep_for(std::chrono::microseconds(didWork ? 250 : 1000));
+                // An enabled context counts as work, so on the Switch the short sleep would be a thousand wakeups a
+                // second taken from the busy threads; a decoded frame lasts over 5 ms.
+                std::this_thread::sleep_for(std::chrono::microseconds(LO_PLATFORM_SWITCH ? 2000 : (didWork ? 250 : 1000)));
             }
         }
     }

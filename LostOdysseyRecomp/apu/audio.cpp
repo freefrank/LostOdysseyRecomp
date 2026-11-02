@@ -302,7 +302,12 @@ namespace apu
                         break;
                     }
 #endif
+#if LO_PLATFORM_SWITCH
+                    // The queue holds about 21 ms: half a frame is fine, and fewer wakeups for the busy threads.
+                    os::scheduling::PreciseSleepFor(std::chrono::microseconds(2500));
+#else
                     os::scheduling::PreciseSleepFor(std::chrono::milliseconds(1));
+#endif
 #if LO_PLATFORM_ANDROID
                     waited = true;
                     ReopenIfStalledAfterResume();
