@@ -411,3 +411,7 @@ resolve until something writes it, which proves the two images match. The skippe
 that, the next draw converts another format's pixels over the image, and the frame blows out to white. `LO_SKIP_RESTORE=0` turns it off. Checked on the
 merchant ship: on against off differs as much as two runs of one mode. The estimate of 36-43% from hardware attributes in earlier notes was wrong: it
 replaced fetched values with a constant, which let the compiler fold real work away.
+
+With the profile retrained on these sources, first battle at 540 rows, two alternated runs of 90 s: 20.98 FPS normal, 22.47 with the profile (+7.1%);
+median frame 41.5 to 39.6 ms, p99 73.6 to 70.4 ms, `GPU CmdProc` 72.2 to 62.8%, GPU busy 36.4 ms in both. These 90 s windows read lower than the 120 s
+ones above, so compare only within a table. The median frame is now close to GPU busy, and `Guest Main` runs at 84%: both limit the frame.
