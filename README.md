@@ -64,6 +64,8 @@ On Steam Deck, use **Settings → System → Add to Steam** with either Linux pa
 
 Disc 1 is required to start. Use one supported four-disc set (Asian multilingual or USA/Europe) and don't mix editions; the [installation guide](docs/INSTALLING.md) shows how to check yours.
 
+Windows ZIPs built from this source include [`recomplauncher.json`](recomplauncher.json), so [RecompLauncher](https://recomplauncher.com/) can import discs and DLC from a source folder and put graphics settings on its game page. Gameplay save backups need a launcher-side fix; see [integration details and delivery status](docs/RECOMPLAUNCHER.md).
+
 ### macOS
 
 The app is not notarized, so macOS blocks the first launch: try to open it once, then choose **Open Anyway** in **System Settings → Privacy & Security**. To update, replace the app with the new one. [Step-by-step guide](docs/INSTALLING.md#macos).
