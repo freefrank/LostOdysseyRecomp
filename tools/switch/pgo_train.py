@@ -53,24 +53,24 @@ def battle(con, scale, restart):
     """A new game's first battle: New Game, B to close the settings it opens, then START and BACK to skip the movie."""
     restart({})
     time.sleep(58 * scale)
-    for button, wait in (("START", 10), ("A", 6), ("B", 40), ("START", 4), ("BACK", 0)):
+    # With a save on the console the title menu opens on Continue, and UP wraps, so one press only.
+    for button, wait in (("START", 10), ("UP", 2), ("A", 6), ("B", 40), ("START", 4), ("BACK", 0)):
         con.command("press", button, timeout=20.0)
         time.sleep(wait * scale)
     return 1000, lambda step: attack(con)
 
 
-def ship(con, scale, restart):
-    """The merchant ship, from the console's save (save/user02)."""
+def town(con, scale, restart):
+    """The last save on the console, walking around: Continue, then Last Save."""
     restart({})
     time.sleep(58 * scale)
-    for button in ("START", "DOWN", "A", "A", "A", "A"):
+    for button, wait in (("START", 6), ("A", 4), ("A", 4)):
         con.command("press", button, timeout=20.0)
-        time.sleep(4 * scale)
-
+        time.sleep(wait * scale)
     return 600, lambda step: walk(con, step)
 
 
-SCENES = {"battle": battle, "ship": ship}
+SCENES = {"battle": battle, "town": town}
 
 
 def cmd_scene(args):

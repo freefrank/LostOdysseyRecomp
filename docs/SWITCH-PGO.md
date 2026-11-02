@@ -20,7 +20,7 @@ never correctness.
 
 This is separate from `LO_PGO_MODE` in `cmake/LoOptimization.cmake`, the Clang profile for PC builds.
 
-`pgo_hot_files.txt` lists the 55 of 246 `ppc_recomp.N.cpp` files holding 99.5% of the guest samples of a CPU profile
+`pgo_hot_files.txt` lists the 61 of 246 `ppc_recomp.N.cpp` files holding 99.5% of the guest samples of a CPU profile
 (`tools/switch/switch-cpu-profile.py`). Instrumenting all 96 MB of game code would make training unusable.
 
 ## Procedure
@@ -42,14 +42,14 @@ python3 tools/switch/pgo_train.py scene battle
 ```
 
 ```bash
-python3 tools/switch/pgo_train.py scene ship
+python3 tools/switch/pgo_train.py scene town
 ```
 
 ```bash
 python3 tools/switch/pgo_train.py fetch --out out/pgo
 ```
 
-`scene ship` needs the console's save in `save/user02`. Add `--here` to train where the game already stands.
+`scene town` loads the console's last save, so make that a busy town. Add `--here` to train where the game already stands.
 
 Configure a second folder with `-DLO_SWITCH_PGO=USE -DLO_SWITCH_PGO_DIR=$PWD/out/pgo` and build it. Deploy a normal build
 afterwards: the training build is slow, and its speed means nothing.
@@ -104,7 +104,7 @@ The profile is only read while compiling, and its gain is in the machine code of
    ```
 
    ```bash
-   python3 tools/switch/pgo_train.py scene ship --dwell 180
+   python3 tools/switch/pgo_train.py scene town --dwell 180
    ```
 
    ```bash
