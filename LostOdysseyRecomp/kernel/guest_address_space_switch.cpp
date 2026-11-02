@@ -117,22 +117,39 @@ bool MapChunk(size_t offset, size_t size, uintptr_t& sourceOut)
     }
     std::memset(backing, 0, size);
 
+    // The address is a random free slice, and the mapping can still fail there (a chunk failed about once in 100 runs, at
+    // any time, with most of the heap free, and the game then wrote through a null allocation). Another slice works.
+    constexpr int kMapAttempts = 16;
     void* source = nullptr;
     Result rc = 0;
-    virtmemLock();
-    source = virtmemFindCodeMemory(size, kPage);
-    if (source)
+    for (int attempt = 0; attempt < kMapAttempts; ++attempt)
     {
-        rc = svcMapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
-        if (R_SUCCEEDED(rc))
-            rc = svcSetProcessMemoryPermission(s_process, uintptr_t(source), size, Perm_Rw);
+        virtmemLock();
+        source = virtmemFindCodeMemory(size, kPage);
+        bool mapped = false;
+        if (source)
+        {
+            rc = svcMapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
+            mapped = R_SUCCEEDED(rc);
+            if (mapped)
+            {
+                rc = svcSetProcessMemoryPermission(s_process, uintptr_t(source), size, Perm_Rw);
+                if (R_FAILED(rc))
+                {
+                    svcUnmapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
+                    mapped = false;
+                }
+            }
+        }
+        virtmemUnlock();
+        if (mapped)
+            break;
+        std::fprintf(stderr, "guest memory: chunk %#zx attempt %d failed at %p, rc %#x\n", offset, attempt, source, rc);
+        source = nullptr;
     }
-    virtmemUnlock();
-    if (!source || R_FAILED(rc))
+    if (!source)
     {
         RecordFailure(FailureOperation::CreateBacking, rc, -1, source, size, offset);
-        if (source && R_SUCCEEDED(rc))
-            svcUnmapProcessCodeMemory(s_process, uintptr_t(source), uintptr_t(backing), size);
         free(backing);
         return false;
     }

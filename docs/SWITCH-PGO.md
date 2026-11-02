@@ -78,6 +78,8 @@ First battle, 960x540, handheld at CPU 1020 / GPU 460 / memory 1331 MHz, lean sh
 
 The GPU now sets the limit at 540: 39 ms per frame allows 25.6 FPS at best.
 
+Retrained on the final code, with the register write-backs removed and lean shaders level 3, the gain is **+6.4%**: 22.21 to 23.63 FPS, median frame 40.2 to 37.7 ms, GPU unchanged at 35.1 ms. The full result is Milestone 4 in `docs/SWITCH-BENCHMARKS.md`.
+
 ## Traps (all from SwitchWakerHD)
 
 - **No value profiling** (`-fno-profile-values`). libgcov's value profiling reads `tpidr_el0`, which Horizon leaves 0: the

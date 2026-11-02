@@ -38,7 +38,11 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
     // Thread blocks are large (1 MiB stack each) so they come from the guest
     // virtual page allocator rather than the host object heap.
     uint32_t guestBlock = g_pageAllocator.Alloc(g_pageAllocator.virtualRegion, TOTAL_SIZE, 0x1000);
-    assert(guestBlock != 0 && "out of guest memory for thread block");
+    if (guestBlock == 0)
+    {
+        LOG_ERROR("out of guest memory for a thread block of {} bytes", TOTAL_SIZE);
+        std::abort();
+    }
     thread = (uint8_t*)g_memory.Translate(guestBlock);
     memset(thread, 0, TOTAL_SIZE);
 

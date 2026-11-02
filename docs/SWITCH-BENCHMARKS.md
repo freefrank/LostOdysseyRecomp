@@ -458,3 +458,34 @@ attack, and 0.6 s at the end of the battle, are one-off stalls. Note that `lo_de
 All three cores are 92-96% busy during attacks. The two threads at priority 0x2D, `82cc4d98` and `82cc4e60`, are the XAudio workers: about 12% of a core each.
 They meet at a spin barrier (`sub_82CC3C50`). Confining them to the render threads' cores while `Guest Main` had core 0 alone took them to 74% each and the game
 to 16 FPS.
+
+## Milestone 4 (`8549a9f5` with the changes below, full benchmark, 1 warm-up + 3 counted runs)
+
+The same scene as Milestone 3, with the profile-guided build retrained on this code and `LO_DEKO3D_LEAN_SHADERS=3`. Stock handheld clocks, CPU 1020 / GPU 460 / memory 1331 MHz.
+
+| First battle | Baseline | Milestone 3, lean 2 | Milestone 4 |
+|---|---:|---:|---:|
+| FPS at 540 rows | 14.36 | 23.51 | **26.46** |
+| Median frame at 540 rows | 66.5 ms | 40.5 ms | 36.9 ms |
+| Frame p99 at 540 rows | | 52.3 ms | 48.9 ms |
+| 1% low at 540 rows | | 19.13 | 20.46 |
+| GPU busy at 540 rows | 52 ms | 38.2 ms | 36.95 ms |
+| FPS at 360 rows | 14.6 | 25.49 (lean off) | **29.27** |
+| Median frame at 360 rows | | | 33.4 ms |
+| 1% low at 360 rows | | 18.44 (lean off) | 19.20 |
+| GPU busy at 360 rows | | | 23.9 ms |
+
+- **540 rows is limited by the GPU:** 36.95 ms allows 27 FPS at best, and it's busy 98% of the frame. Reaching 30 needs 3.6 ms more off the GPU.
+- **360 rows is limited by the CPU:** the GPU needs only 24 ms, and the median frame is 33.4 ms, just over the 33.3 ms of 30 FPS.
+- **This route is lighter than a battle with attacks.** The scripted attack runs below gave 23.6 FPS at 540 rows on the same build, so they remain the hard case.
+
+Profile-guided against normal build on the final code, scripted attacks, 540 rows, two runs each:
+
+| Build | FPS | p50 ms | p99 ms | GPU ms | Main % | CmdProc % |
+|---|---|---|---|---|---|---|
+| Normal | 22.21 | 40.2 | 71.4 | 35.1 | 82.1 | 74.4 |
+| Profile from ship and battle, retrained | 23.63 | 37.7 | 66.7 | 35.1 | 82.4 | 63.3 |
+
+**Guest Main on its own core** (`LO_MAIN_CORE`, default 0): +2% in the attack runs, 21.45 to 21.87 FPS, p99 about 78 to 70 ms, with no audio drops or errors logged. The `starved` count rose from about 270 to 550-870. Other threads may still run on core 0.
+
+**Guest memory mapping** now retries at another address. A crash log showed `guest memory commit failed`, after which a guest thread block came back null and the game wrote through it. An allocation that still fails now stops with a clear error. No crash in about 14 game starts since the fix, too few to prove it at the earlier rate of about 1 in 50.

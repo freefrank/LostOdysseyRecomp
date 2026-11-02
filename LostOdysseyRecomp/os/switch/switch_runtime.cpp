@@ -622,9 +622,19 @@ uint32_t CurrentThreadHandle()
     return threadGetCurHandle();
 }
 
+static std::atomic<uint32_t> g_pinnedThread{0}; // the game's own affinity calls leave this one alone
+
 uint32_t SetThreadIdealCore(uint32_t handle, int core)
 {
+    if ((handle ? handle : threadGetCurHandle()) == g_pinnedThread.load(std::memory_order_relaxed))
+        return 0;
     return svcSetThreadCoreMask(handle ? Handle(handle) : CUR_THREAD_HANDLE, core, 0x7);
+}
+
+void PinCurrentThread(int core)
+{
+    if (R_SUCCEEDED(svcSetThreadCoreMask(CUR_THREAD_HANDLE, core, 1u << core)))
+        g_pinnedThread.store(threadGetCurHandle(), std::memory_order_relaxed);
 }
 
 void SetCurrentThreadPriority(int priority)
