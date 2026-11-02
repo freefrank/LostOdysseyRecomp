@@ -124,7 +124,7 @@ The profile is only read while compiling, and its gain is in the machine code of
 5. **Test that NRO on the console,** then publish it. The training build must never ship.
 6. **Keep the matching `.elf`** from `out/switch/pgo-USE/`: crash addresses from that release only resolve against it.
 
-The level 3 shader pack is separate from the NRO. For the speed in `docs/SWITCH-BENCHMARKS.md`, the release also needs `shaders/deko3d_shaders_lean3.lodk` and `LO_DEKO3D_LEAN_SHADERS=3` in `tools/switch/release-env.txt`.
+The level 3 shader pack is separate from the NRO, and `tools/switch/release-env.txt` asks for it: a release must include `shaders/deko3d_shaders_lean3.lodk`, or the console compiles every shader itself. It's built with `LO_DEKO3D_LEAN_SHADERS=3 deko3d_shader_tool cache|variants`, then `pack_dkcache.py`.
 
 A code change after step 3 is safe, but the functions it touches lose their gain. A small hotfix can ship without retraining. Retrain after anything that touches hot code.
 

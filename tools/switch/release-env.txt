@@ -3,6 +3,8 @@
 LO_SWITCH_BACKEND=deko3d
 # deko3d's GPU savings: depth compression, depth culling, fewer GPU waits, leaner vertex shaders
 LO_DEKO3D_GPU_FAST=1
+# Leaner game shaders, 2 ms less GPU time in battle. Needs shaders/deko3d_shaders_lean3.lodk.
+LO_DEKO3D_LEAN_SHADERS=3
 # Dynamic resolution stays off in this release: with deko3d it still shows stripes
 LO_DYNAMIC_RESOLUTION=0
 # Render the 3D scene at 960x540, also when docked (720 is not yet tested with deko3d)
