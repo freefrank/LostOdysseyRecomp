@@ -80,6 +80,43 @@ The GPU now sets the limit at 540: 39 ms per frame allows 25.6 FPS at best.
 
 Retrained on the final code, with the register write-backs removed and lean shaders level 3, the gain is **+6.4%**: 22.21 to 23.63 FPS, median frame 40.2 to 37.7 ms, GPU unchanged at 35.1 ms. The full result is Milestone 4 in `docs/SWITCH-BENCHMARKS.md`.
 
+## Building a release
+
+The profile is only read while compiling, and its gain is in the machine code of the NRO. Players need nothing extra, and the profile itself doesn't ship. It isn't in the repository either, so a default build doesn't get this gain: whoever makes the release retrains and builds it, about 30 minutes in all.
+
+1. **Freeze the code.** Commit everything first, and run `tools/switch/build-switch.sh`, which leaves `LostOdysseyRecompLib/ppc/` ready. The profile only fits the code it was trained on.
+2. **Build `GEN`** in `out/build/switch-pgo-gen`, as in [Procedure](#procedure), about 9 minutes. Deploy it:
+
+   ```bash
+   python3 tools/switch/lo_debug.py deploy out/build/switch-pgo-gen/LostOdysseyRecomp/LostOdysseyRecomp.nro
+   ```
+
+3. **Train,** about 10 minutes. This restarts the game, so nobody can play meanwhile:
+
+   ```bash
+   python3 tools/switch/pgo_train.py clean
+   ```
+
+   ```bash
+   python3 tools/switch/pgo_train.py scene ship --dwell 180
+   ```
+
+   ```bash
+   python3 tools/switch/pgo_train.py scene battle --dwell 180
+   ```
+
+   ```bash
+   python3 tools/switch/pgo_train.py fetch --out out/pgo
+   ```
+
+4. **Build `USE`** in `out/build/switch-pgo-use` with `-DLO_SWITCH_PGO=USE -DLO_SWITCH_PGO_DIR=$PWD/out/pgo`, about 8 minutes.
+5. **Test that NRO on the console,** then publish it. The training build must never ship.
+6. **Keep the matching `.elf`** from the same folder: crash addresses from that release only resolve against it.
+
+The level 3 shader pack is separate from the NRO. For the speed in `docs/SWITCH-BENCHMARKS.md`, the release also needs `shaders/deko3d_shaders_lean3.lodk` and `LO_DEKO3D_LEAN_SHADERS=3` in `tools/switch/release-env.txt`.
+
+A code change after step 3 is safe, but the functions it touches lose their gain. A small hotfix can ship without retraining. Retrain after anything that touches hot code.
+
 ## Traps (all from SwitchWakerHD)
 
 - **No value profiling** (`-fno-profile-values`). libgcov's value profiling reads `tpidr_el0`, which Horizon leaves 0: the

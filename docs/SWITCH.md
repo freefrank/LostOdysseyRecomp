@@ -148,6 +148,9 @@ Options (`tools/switch/build-switch.sh` environment):
 | `CLEAN` | `0` | `1` deletes `out/build/switch` first |
 | `NVK_LIBRARY` | searched | Path of mesa-switch's `libvulkan.a` |
 
+A release is a profile-guided build, about 6% faster than this one. See
+[Building a release](SWITCH-PGO.md#building-a-release).
+
 CMake options (`cmake/LoSwitch.cmake`): `LO_SWITCH_RECOMP_O2`,
 `LO_SWITCH_LTO`, `LO_SWITCH_DATA_ROOT`, `LO_SWITCH_APP_TITLE`.
 
