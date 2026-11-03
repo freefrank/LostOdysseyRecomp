@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(LoReviewRegressions LANGUAGES C CXX)
 
 enable_testing()
+add_test(NAME LoAndroidBuildInputTest COMMAND "${CMAKE_COMMAND}" -E env python3 -B "${CMAKE_CURRENT_SOURCE_DIR}/../android_build_input_test.py")
 find_package(Threads REQUIRED)
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 get_filename_component(LO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
