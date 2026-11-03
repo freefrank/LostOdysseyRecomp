@@ -6,6 +6,43 @@
 
 ## RecompLauncher integration — local, unreleased — 2026-11-02
 
+Linux follow-up, 2026-11-03: local source now packages an additional Linux `.tar.gz` containing
+the verified AppImage and a loose Linux profile generated from the shared graphics rows. The
+profile uses XDG settings/save/mod paths, launcher-session logs, and Linux-supported graphics
+choices. Release assembly includes this sixth package. The standalone AppImage is preserved.
+RecompLauncher's catalog must prefer `LostOdysseyRecomp-linux-x64-*.tar.gz`, or the player must
+select the Linux Folder package, because its default ranking prefers standalone AppImages and
+does not discover a profile inside them. No catalog change is included here.
+
+Plasma VM checks passed: all 11 packaging fixtures, 534 combined Windows/Linux graphics-choice
+round-trips through production config, XDG/AppImage user paths, and native headless import and
+transactional reimport fixtures. All seven Flatpak packaging regressions and the Windows ZIP
+packaging fixture also passed. Packaging checks use synthetic images and linuxdeploy stand-ins.
+A full native Ubuntu 22.04/Clang 18 Release build with DLSS and FSR enabled subsequently passed
+on the Plasma VM in an isolated rootless container. The real AppImage passed ABI checks on all
+31 shipped ELF files (glibc <= 2.35), runtime-wrapper verification, and loader checks before and
+after compression. Its malformed headless command exited 2 with the expected diagnostic and no
+graphics startup. The `.tar.gz` was extracted into a separate local trial folder, and the official
+RecompLauncher 0.90.0-beta.12 AppImage was checksum-verified and opened with that local build
+registered. Launcher config/data and game XDG files are isolated from the VM's normal user data.
+All four user-owned source ISOs and three DLC packages were copied and SHA-256 verified; Disc 1
+and DLC are grouped for the initial import to keep within the VM's disk-space budget. The VM
+exposes software Vulkan (llvmpipe), so this does not establish hardware rendering performance.
+The user then completed setup through the Linux launcher: all four disc roots and the DLC output
+were present, and the XDG `game-path.txt` pointed at the trial installation. Without signing in
+or launching the game, the real launcher controls backed up a disposable 206,000-byte `save.bin`
+and restored it byte-for-byte after a same-size content change. Restoration also recovered a
+deleted test thumbnail, removed a post-backup test file, and made a safety backup first. The test
+files were removed afterward. Before the requested VM cleanup, ZIP evidence, `save-test-result.json`
+and native build/package logs were archived locally under the ignored
+`out/launcher-review/plasma-validation-evidence.tar.gz`. The VM trial, copied content, shortcuts
+and build containers/images were then removed. Gameplay and cloud sync remain unverified.
+This source addition remains unreleased.
+
+The launcher removed its `.bin` backup exclusion in upstream commit
+[`12d9a30`](https://github.com/elripalda/RecompLauncher/commit/12d9a30fb25e52fda62c7d4f24102f09e0694eb3).
+The thumbnail-only backup observations below describe the earlier build, not current main.
+
 Local source adds a Windows ZIP profile, graphics controls, and `--prepare-content` for importing
 discs and optional DLC through RecompLauncher's setup screen. The command reuses the game importer,
 commits `game-path.txt` with content publication, and runs before updates, mods, windows or graphics
@@ -21,10 +58,10 @@ running the game through RecompLauncher, and adding saves. Native Linux importer
 production-settings fixtures also passed on the Plasma VM. Local build/test logs are under the
 ignored `out/launcher-review/` directory and are not shipped with the repository.
 
-Limits: the profile ships only in Windows ZIPs. Linux launcher packaging and end-to-end integration
-remain separate work; Linux fixture results do not establish that flow. Graphics choices express
+Limits of the original Windows validation: the profile then shipped only in Windows ZIPs. Linux
+fixture results did not establish the launcher flow. Graphics choices express
 preferences, not detected hardware support or broad rendering/performance acceptance. The current
-launcher filters out `save.bin`: inspection of a backup after the user's save-copy test confirmed
+launcher build filtered out `save.bin`: inspection of a backup after the user's save-copy test confirmed
 three thumbnail images and no gameplay save data. Its cloud sync indicator does not establish save
 protection. No restoration test or whole-ISO clean-dump badge is claimed; those launcher concerns
 are outside this patch. Back up the full save folder manually.

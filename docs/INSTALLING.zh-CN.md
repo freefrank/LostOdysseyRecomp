@@ -38,7 +38,7 @@
 
 ZIP 中还有一个 `mo2` 文件夹，里面是 Mod Organizer 2 的插件，用法见[Mod Organizer 2](wiki/Mod-Organizer-2.md)。
 
-**通过 RecompLauncher 游玩：** 本源码构建的 Windows ZIP 内含 `recomplauncher.json`，用于在游戏启动前从源文件夹导入光盘与 DLC，并在启动器的游戏页面调整画质设置。即使启动器提示缩略图备份成功，其过滤器仍会跳过本游戏的 `save.bin`；请手动备份完整的 `save/` 文件夹。参见[集成说明与交付状态](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。
+**通过 RecompLauncher 游玩：** 本源码构建的 Windows ZIP 与 Linux 启动器 `.tar.gz` 包内含 `recomplauncher.json`，提供无窗口光盘/DLC 导入与画质设置。Linux 请选 `.tar.gz` 包，其中包含 AppImage 和 Linux 配置。请使用已修复 `save.bin` 备份的启动器版本，并检查新的备份。参见[集成说明、包选择与交付状态](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。
 
 <a id="automatic-content-import"></a>
 

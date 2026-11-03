@@ -10,10 +10,13 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 
 from guest_main_exit_regression import function
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'tools'))
+from recomplauncher_linux import profile as linux_profile
 
 
 def main():
@@ -90,17 +93,21 @@ int main(int argc, char** argv) {
             subprocess.run([str(executable)], cwd=directory, check=True, timeout=5)
             return dict(line.split('=', 1) for line in config.read_text(encoding='utf-8').splitlines())
 
-        for row in profile['settings']:
-            for choice in row['choices']:
-                values = dict(defaults, **row.get('when', {}), **choice['set'])
-                actual = roundtrip(values)
-                for key, expected in choice['set'].items():
-                    # This profile ships on Windows; POSIX always selects Vulkan.
-                    if key == 'graphics_backend':
-                        expected = '1'
-                    if actual.get(key) != expected:
-                        raise AssertionError(f'{row["id"]}/{choice["label"]}: {key}={actual.get(key)!r}, expected {expected!r}')
-                count += 1
+        for platform_profile in (profile, linux_profile()):
+            platform_defaults = {}
+            for row in platform_profile['settings']:
+                platform_defaults.update(row.get('defaults', {}))
+            for row in platform_profile['settings']:
+                for choice in row['choices']:
+                    values = dict(platform_defaults, **row.get('when', {}), **choice['set'])
+                    actual = roundtrip(values)
+                    for key, expected in choice['set'].items():
+                        # The Windows profile includes D3D12; POSIX selects Vulkan.
+                        if key == 'graphics_backend':
+                            expected = '1'
+                        if actual.get(key) != expected:
+                            raise AssertionError(f'{row["id"]}/{choice["label"]}: {key}={actual.get(key)!r}, expected {expected!r}')
+                    count += 1
         actual = roundtrip(dict(defaults, frame_generation_provider='2', frame_generation_multiplier='3'))
         assert actual['frame_generation_multiplier'] == '2', 'FSR must normalize to 2x'
         actual = roundtrip(dict(defaults, frame_rate='invalid', hdr='2', display_brightness='-99'))

@@ -1,13 +1,15 @@
 # RecompLauncher integration
 
 Portable Windows ZIPs built from this source include [`recomplauncher.json`](../recomplauncher.json) beside
-`LostOdysseyRecomp.exe`. RecompLauncher reads it in preference to its catalog or boot profile.
+`LostOdysseyRecomp.exe`. Linux launcher `.tar.gz` bundles contain the AppImage and a generated Linux
+profile beside it. RecompLauncher reads these profiles in preference to its catalog or boot profile.
 It provides a folder-based setup step, graphics settings, and buttons for saves, mods and logs.
 For delivery and validation status, see the [status ledger](STATUS.md#recomplauncher-integration).
 
 ## Set up and play
 
-1. Install the Windows release through RecompLauncher.
+1. Install the Windows ZIP or Linux launcher `.tar.gz` through RecompLauncher. For Linux package
+   selection and local-build testing, see [Linux](#linux).
 2. Choose a source folder containing your supported Lost Odyssey discs: ISO images, extracted
    folders or GOD packages. Disc 1 is required for a new installation; later discs and optional
    DLC can be in the same folder or a subfolder. Use one edition and one source per disc.
@@ -71,7 +73,7 @@ It does not download or compile shaders, change graphics preferences, or start t
 Progress is written and flushed to stdout as `progress 0.4 Importing Disc 2`.
 Failures go to stderr. Exit codes are 0 for success, 1 for an import failure, 2 for malformed
 arguments and 3 for cooperative cancellation (SIGINT/SIGTERM). The profile allows up to two hours
-for setup. The command is available on desktop builds; this launcher profile targets Windows.
+for setup. The command is available on desktop builds; profiles are packaged for Windows and Linux.
 
 A launcher that forcibly terminates the process cannot run its rollback handlers. Keep the
 source files and any `.import-staging-*` folders after an interrupted publication; do not delete
@@ -88,37 +90,67 @@ compatibility and the content needed to import the game. This validation is suff
 supported setup flow. The clean-dump badge is optional and belongs to the launcher; this
 integration adds no whole-disc integrity certification to the game.
 
-**The current launcher excludes gameplay save data from its backups and cloud copies.** The
-profile declares the correct folder, `{install}/save`, but the launcher filters out `.bin` files,
-including `save/userNN/save.bin`. It can still copy and upload `__thumbnail.png` images from the
-same slots and show a successful backup. "Same as This PC" compares the files it selected; it
-does not establish that gameplay progress is protected. Back up the complete `save/` folder manually.
+Older launcher builds filtered out `.bin` files, including `save/userNN/save.bin`, even from an
+explicit save folder. Backups could contain only thumbnails and still show "Same as This PC".
+Upstream [12d9a30](https://github.com/elripalda/RecompLauncher/commit/12d9a30fb25e52fda62c7d4f24102f09e0694eb3)
+removed that exclusion. Use a launcher build containing the fix, make a fresh backup, and check
+that it contains the actual `save.bin` files. Old thumbnail-only backups cannot recover progress.
+Keep a manual copy of the full save folder until backup and restoration have been tested.
 
-The profile cannot bypass that filter. Save backup/restoration and multidisc clean-dump badges
-are launcher-side concerns, outside this game patch. Test both backup and restoration before
-claiming gameplay save support after a launcher-side fix.
+Windows and Linux profiles use different save-root templates. The current launcher restores to
+the templates recorded in the backup, rather than remapping them to the destination profile.
+Do not assume a Windows cloud backup automatically lands in Linux's XDG save folder, or vice
+versa. Cross-platform transfers may need a manual copy of the slot folders to the target save
+directory; keep the originals until the game loads them successfully.
 
 ## Platforms and packaging
 
-This profile targets the portable Windows ZIP only. `tools/package_release.py` copies it beside
+`tools/package_release.py` copies the Windows profile beside
 the executable and includes its checksum in `manifest.json`. It does not ship `settings.ini`.
 Existing settings are preserved when a release is installed over the game's folder.
 
-AppImage, Flatpak, macOS and Android packages do not ship this profile. Their game paths and
-per-user configuration directories differ; the Windows profile must not be copied to their
-catalog entries unchanged. The shared headless command has Linux fixture coverage, but Linux
-packaging/profile integration and an end-to-end Linux launcher test remain separate work.
+### Linux
+
+`tools/package_appimage.py` produces the usual standalone AppImage and a
+`LostOdysseyRecomp-linux-x64-<version>.tar.gz` bundle containing the same image, renamed to the
+stable `LostOdysseyRecomp.AppImage`, plus `recomplauncher.json`. The profile is generated from the
+shared Windows settings by `tools/recomplauncher_linux.py`; no second list of graphics values is
+maintained. Vulkan DLSS and FSR upscaling remain available. DirectX, XeSS, neural-rendering and
+frame-generation controls are omitted because the Linux release does not build those paths.
+
+The current launcher copies standalone AppImages without extracting their contents, and only
+looks for a profile in the install folder. Putting JSON inside the AppImage therefore does not
+provide integration. Select the Linux Folder (`.tar.gz`) package in RecompLauncher. For automatic
+selection, the launcher catalog needs `assets.linux` set to
+`LostOdysseyRecomp-linux-x64-*.tar.gz`; otherwise its default asset ranking prefers the standalone
+AppImage. This game change does not modify the launcher catalog. For local testing, extract the
+bundle and use Developer tools → Add a build on that folder.
+
+The profile uses `{config}/lost-odyssey-recomp/settings.ini` and
+`{local}/lost-odyssey-recomp/save`, matching the game's XDG paths, including custom
+`XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Mods use `{local}/lost-odyssey-recomp/mods`; Linux mod loading
+remains experimental. Launcher sessions set `LO_LOG_DIR` to `{install}/logs` so the Logs action and
+crash-log collection have the same location. Standalone launches retain the game's normal XDG
+state-directory logs. User-provided `LO_SAVE_DIR` or `LO_LOG_FILE` overrides require corresponding
+launcher path adjustments.
+
+Setup imports to `{install}/game` and persists `game-path.txt` in the XDG configuration directory.
+Neither imported content nor user settings are shipped in the bundle. Flatpak, macOS and Android
+packages do not ship a launcher profile. Flatpak integration requires separate sandbox/path work.
 
 ## Validation
 
 - Run `tools/tests/package_release_test.py` to check ZIP placement and the manifest checksum.
+- Run `tools/tests/package_appimage_test.py` to check the Linux bundle's image bytes, executable
+  permissions, loose profile and XDG paths. These are synthetic packaging checks.
 - On Linux, run `tools/tests/recomplauncher_config_test.py --out out/launcher-config` to compile
-  production settings bodies and round-trip every declared choice, including spaced INI lines.
+  production settings bodies and round-trip every Windows and Linux choice, including spaced INI lines.
 - Build `LoImportGameTest` and run `--prepare-content-test` for synthetic headless-import tests.
 - In RecompLauncher, enable **Settings → Developers → Developer tools**, add the extracted build,
   and use **Check again** on its Developer tab. A missing `game.check` is expected: the folder may
   contain several source formats, and our preparation command performs the authoritative scan.
-- Test a fresh installation and a previously configured game through the launcher on Windows.
+- Test a fresh installation and a previously configured game through the launcher on each platform,
+  including save backup/restore. Fixture results do not establish an end-to-end Linux game session.
 
 Upstream contract: [developer guide](https://github.com/elripalda/RecompLauncher/blob/main/docs/DEVELOPERS.md)
 and [schema](https://recomplauncher.com/schema/recomplauncher.json).

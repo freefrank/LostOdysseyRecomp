@@ -8,11 +8,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Works with RecompLauncher: the Windows ZIP now carries `recomplauncher.json`, so the launcher can install a release, import discs and DLC through a headless setup step, expose graphics controls on its game page, and open the saves, mods and logs folders ([integration guide](docs/RECOMPLAUNCHER.md)). Gameplay save backups still need a launcher-side fix for excluded `save.bin` files.
+- Works with RecompLauncher: Windows ZIPs and Linux `.tar.gz` launcher bundles carry `recomplauncher.json` for headless disc/DLC setup, graphics settings and folder actions. The Linux bundle includes the AppImage; standalone AppImages remain available ([integration guide](docs/RECOMPLAUNCHER.md)).
 
 ### 简体中文
 
-- 适配 RecompLauncher：Windows ZIP 现在带有 `recomplauncher.json`，启动器可直接安装发布包，通过无窗口准备步骤导入光盘与 DLC，在其游戏页面提供画质设置，并打开存档、MOD 与日志目录（[集成说明](docs/RECOMPLAUNCHER.md)）。游戏进度存档的备份仍需启动器修复对 `save.bin` 的过滤。
+- 适配 RecompLauncher：Windows ZIP 与 Linux `.tar.gz` 启动器包内含 `recomplauncher.json`，提供无窗口光盘/DLC 导入、画质设置与目录操作。Linux 包内含 AppImage，独立 AppImage 仍可下载（[集成说明](docs/RECOMPLAUNCHER.md)）。
 
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
