@@ -12,6 +12,10 @@ def stageAudioLicenses = tasks.register('stageAudioLicenses', Copy) {
     into audioLicenses.map { it.dir('licenses') }
     from('../../../thirdparty/signalsmith-stretch/LICENSE.txt') { rename { 'Signalsmith-Stretch.txt' } }
     from('../../../thirdparty/signalsmith-stretch/signalsmith-linear/LICENSE.txt') { rename { 'Signalsmith-Linear.txt' } }
+    from('../../../LICENSE') { rename { 'LostOdysseyRecomp-LICENSE.txt' } }
+    from('../../../thirdparty/SDL/LICENSE.txt') { rename { 'SDL3-LICENSE.txt' } }
+    from('../../../thirdparty/plume/LICENSE') { rename { 'Plume-LICENSE.txt' } }
+    from('../../../thirdparty/dxc-licenses') { into 'dxc' }
 }
 def runtimeLibraries = ['libmain.so', 'libSDL3.so', 'libc++_shared.so', 'libdxcompiler.so']
 // libadrenotools hook libraries: present only when the custom Vulkan driver loader is built.
@@ -46,6 +50,10 @@ def loVersionCode = loVersionMatch.find()
 // every release installs over the previous one; unset, AGP's own debug
 // keystore is used.
 def loDebugKeystore = System.getenv('LO_ANDROID_DEBUG_KEYSTORE')
+// Forks can install beside the official app without sharing its signing key.
+// Java/JNI namespace stays fixed; only the installed package identity changes.
+def loApplicationId = (project.findProperty('loApplicationId') ?: 'io.github.freefrank.lostodyssey').toString()
+def loAppLabel = (project.findProperty('loAppLabel') ?: 'Lost Odyssey Recomp').toString()
 
 android {
     namespace 'io.github.freefrank.lostodyssey'
@@ -53,7 +61,8 @@ android {
     buildToolsVersion '35.0.0'
     ndkVersion '28.2.13676358'
     defaultConfig {
-        applicationId 'io.github.freefrank.lostodyssey'
+        applicationId loApplicationId
+        manifestPlaceholders = [loAppLabel: loAppLabel]
         minSdk 26
         targetSdk 35
         versionCode loVersionCode
