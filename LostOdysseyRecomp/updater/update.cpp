@@ -1,4 +1,5 @@
 #include "update.h"
+#include <settings/ini.h>
 
 #include <algorithm>
 #include <array>
@@ -294,10 +295,10 @@ StartupPreferences ReadStartupPreferences(const std::filesystem::path &settingsP
         const auto equal = line.find('=');
         if (equal == std::string::npos) continue;
         uint32_t value = 0;
-        const auto digits = line.substr(equal + 1);
+        const auto digits = settings::ini::Trim(std::string_view(line).substr(equal + 1));
         const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
         if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) continue;
-        const auto key = line.substr(0, equal);
+        const auto key = settings::ini::Trim(std::string_view(line).substr(0, equal));
         if (key == "ui_language") result.uiLanguage = value;
         else if (key == "automatic_updates" && value <= 1) result.automaticUpdates = value == 1;
         else if (key == "diagnostic_log" && value <= 1) result.debugLog = value == 1;

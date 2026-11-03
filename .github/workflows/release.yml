@@ -449,7 +449,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: LostOdysseyRecomp-linux-x64
-          path: out/releases/LostOdysseyRecomp-*.AppImage
+          path: |
+            out/releases/LostOdysseyRecomp-*.AppImage
+            out/releases/LostOdysseyRecomp-linux-x64-*.tar.gz
           if-no-files-found: error
       - name: Reuse published Flatpak asset when available
         id: flatpak-release
@@ -774,6 +776,7 @@ jobs:
           packages=(
             "dist/LostOdysseyRecomp-windows-x64-${RELEASE_TAG}.zip"
             "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.AppImage"
+            "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.tar.gz"
             "dist/LostOdysseyRecomp-linux-x64-${RELEASE_TAG}.flatpak"
             "dist/LostOdysseyRecomp-android-arm64-${RELEASE_TAG}.apk"
             "dist/LostOdysseyRecomp-macos-arm64-${RELEASE_TAG}.dmg"
@@ -806,12 +809,13 @@ jobs:
           expected = {
               f'LostOdysseyRecomp-windows-x64-{tag}.zip',
               f'LostOdysseyRecomp-linux-x64-{tag}.AppImage',
+              f'LostOdysseyRecomp-linux-x64-{tag}.tar.gz',
               f'LostOdysseyRecomp-linux-x64-{tag}.flatpak',
               f'LostOdysseyRecomp-android-arm64-{tag}.apk',
               f'LostOdysseyRecomp-macos-arm64-{tag}.dmg',
           }
           names = {asset['name'] for asset in assets}
-          assert names == expected and len(assets) == len(expected), 'Expected exactly five installable packages; shader packs live on the shader-packs release'
+          assert names == expected and len(assets) == len(expected), 'Expected exactly six installable packages; shader packs live on the shader-packs release'
           assert all(asset['size'] > 0 and asset['state'] == 'uploaded' for asset in assets), 'Incomplete release upload'
           PY
           if [ "$(jq -r '.isDraft' release.json)" != true ]; then
