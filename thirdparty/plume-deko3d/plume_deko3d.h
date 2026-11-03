@@ -63,6 +63,21 @@ namespace plume {
     struct Deko3DDevice;
     struct Deko3DCommandQueue;
 
+    // LostOdysseyRecomp (2026-11-03, LO_DEKO3D_RECORD_THREAD=1): command lists append their calls to a ring that one
+    // worker thread replays into deko3d (plume_deko3d_commands.cpp: the note at its top lists the drain points). What a
+    // caller waits for the worker for:
+    enum class Deko3DRecordWait : uint8_t {
+        Submit, ListDestroyed, SwapchainDestroyed, TextureDestroyed, BufferDestroyed, SetDestroyed, SetWritten,
+        FramebufferDestroyed, PipelineDestroyed, LayoutDestroyed, QueryPoolDestroyed, SharedWords, RingFull, Shutdown, Count
+    };
+    struct Deko3DRecordRing;
+    // Waits until the worker has replayed every call recorded so far on every list; returns at once when the thread is
+    // off or has caught up. Any thread but the worker.
+    void Deko3DRecordDrain(Deko3DRecordWait why);
+    // The worker, started by the device when LO_DEKO3D_RECORD_THREAD=1 (read once), and stopped (drained) with it.
+    void Deko3DRecordStart();
+    void Deko3DRecordStop();
+
     struct Deko3DBuffer : RenderBuffer {
         Deko3DDevice *device = nullptr;
         RenderBufferDesc desc;
@@ -195,6 +210,8 @@ namespace plume {
         std::vector<Set> sets;
         std::vector<RenderPushConstantRange> pushRanges;
         uint32_t pushSize = 0;
+        // LostOdysseyRecomp (2026-11-03): a recorded call may still point at it.
+        ~Deko3DPipelineLayout() override { Deko3DRecordDrain(Deko3DRecordWait::LayoutDestroyed); }
     };
 
     struct Deko3DDescriptorSet : RenderDescriptorSet {
@@ -219,6 +236,10 @@ namespace plume {
         // banjo-nx (2026-10-19, GPU): per image id, the level-0 size of the view written there as a texture query
         // reads it (width, height, depth or layers), for the texture size buffer (txq).
         std::vector<std::array<uint32_t, 3>> imageSizes;
+        // LostOdysseyRecomp (2026-11-03, record thread): the ring (index + 1, top 8 bits) and list generation (low 32)
+        // of its last recorded bind: the worker reads the set at that list's draws until it has replayed its end(), so
+        // a write or destruction before then waits for it (Deko3DRecordWaitSet). 0: never bound by a recorded list.
+        mutable std::atomic<uint64_t> recordTicket{0};
 
         Deko3DDescriptorSet(Deko3DDevice *device, const RenderDescriptorSetDesc &desc);
         ~Deko3DDescriptorSet() override;
@@ -228,6 +249,8 @@ namespace plume {
         void setAccelerationStructure(uint32_t descriptorIndex, const RenderAccelerationStructure *accelerationStructure) override;
         const Range *rangeOf(uint32_t descriptorIndex) const;
     };
+    // Before the set changes or goes: the worker done with the recorded list that bound it, if that list is still open.
+    void Deko3DRecordWaitSet(const Deko3DDescriptorSet &set, Deko3DRecordWait why);
 
     struct Deko3DPipeline : RenderPipeline {
         enum class Type { Graphics, Compute };
@@ -279,12 +302,16 @@ namespace plume {
         const DkShader *stageShaders[3] = {};
         const DkShader *earlyFragment = nullptr;  // stageShaders[2] with early fragment tests (LostOdysseyRecomp)
         uint64_t groupHash[9] = {};
+        // LostOdysseyRecomp (2026-11-03): a recorded setPipeline may still point at it (here, not in the base: its
+        // members are gone by the base's destructor).
+        ~Deko3DGraphicsPipeline() override { Deko3DRecordDrain(Deko3DRecordWait::PipelineDestroyed); }
     };
 
     struct Deko3DComputePipeline : Deko3DPipeline {
         const DkShader *shader = nullptr;
         bool valid = false;
         uint32_t uboMask = 0, ssboMask = 0;
+        ~Deko3DComputePipeline() override { Deko3DRecordDrain(Deko3DRecordWait::PipelineDestroyed); }
     };
 
     struct Deko3DCommandFence : RenderCommandFence {
@@ -302,6 +329,8 @@ namespace plume {
         bool hasDepth = false;
         uint32_t width = 0, height = 0;
         bool srgb[8] = {};
+        // LostOdysseyRecomp (2026-11-03): a recorded setFramebuffer may still point at it.
+        ~Deko3DFramebuffer() override { Deko3DRecordDrain(Deko3DRecordWait::FramebufferDestroyed); }
         uint32_t getWidth() const override { return width; }
         uint32_t getHeight() const override { return height; }
     };
@@ -458,8 +487,18 @@ namespace plume {
             if (pendingBarrier)
                 emitBarrier(pendingBarrierMode, pendingBarrierInvalidate);
         }
+        void applyBarrier(DkBarrier mode, uint32_t invalidate, bool merge, const char *trace);
         void invalidateZcullAfterCopy(const Deko3DTexture *dst);
         uint64_t currentEpoch() const;
+
+        // LostOdysseyRecomp (2026-11-03, LO_DEKO3D_RECORD_THREAD): the ring this list's calls go to while the record
+        // thread is on (null: deko3d is written on the calling thread, as before). Every field above belongs to the
+        // worker then; these are the recording thread's own: the layouts as set (a push constant's size when the call
+        // gives none: graphics, compute), and whether the renderer's own copy of the shared words is bound
+        // (Deko3DSetSharedWords: the worker would read it later than the draw, so each draw waits for it).
+        Deko3DRecordRing *ring = nullptr;
+        const Deko3DPipelineLayout *recordLayouts[2] = {};
+        bool recordSharedWords = false;
         void bindGraphicsBuffers();
         void bindTextures();
         void restoreScissors();

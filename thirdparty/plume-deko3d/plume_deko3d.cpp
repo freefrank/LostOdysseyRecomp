@@ -464,6 +464,8 @@ namespace plume {
     }
 
     Deko3DBuffer::~Deko3DBuffer() {
+        // LostOdysseyRecomp (2026-11-03): recorded calls not yet replayed may point at it (record thread).
+        Deko3DRecordDrain(Deko3DRecordWait::BufferDestroyed);
         if (block) {
             {
                 std::lock_guard<std::mutex> lock(device->bufferMutex);
@@ -600,6 +602,8 @@ namespace plume {
     }
 
     Deko3DTexture::~Deko3DTexture() {
+        // LostOdysseyRecomp (2026-11-03): recorded calls (copies, a framebuffer's views of it) may point at it.
+        Deko3DRecordDrain(Deko3DRecordWait::TextureDestroyed);
         if (valid && ownsMemory) {
             g_deko3dStats.imageBytes -= alloc.size;
             if (ownsBlock)
@@ -725,6 +729,7 @@ namespace plume {
     }
 
     Deko3DDescriptorSet::~Deko3DDescriptorSet() {
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetDestroyed);  // LostOdysseyRecomp (2026-11-03)
         if (imageHeapBase != UINT32_MAX)
             device->heapRetire(false, imageHeapBase, imageCount);
         if (samplerHeapBase != UINT32_MAX)
@@ -742,6 +747,8 @@ namespace plume {
     void Deko3DDescriptorSet::setBuffer(uint32_t descriptorIndex, const RenderBuffer *buffer, uint64_t bufferSize, const RenderBufferStructuredView *structuredView, const RenderBufferFormattedView *) {
         if (descriptorIndex >= buffers.size())
             return;
+        // LostOdysseyRecomp (2026-11-03): the worker may still read the set at an open recorded list's draws.
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);
         const Deko3DBuffer *b = static_cast<const Deko3DBuffer *>(buffer);
         DkBufExtents &e = buffers[descriptorIndex];
         if (b == nullptr || b->block == nullptr) {
@@ -762,6 +769,7 @@ namespace plume {
     void Deko3DDescriptorSet::setTexture(uint32_t descriptorIndex, const RenderTexture *texture, RenderTextureLayout, const RenderTextureView *textureView) {
         if (imageHeapBase == UINT32_MAX || descriptorIndex < imageFirst || descriptorIndex - imageFirst >= imageCount)
             return;
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);  // LostOdysseyRecomp (2026-11-03): imageSizes
         DkImageDescriptor *d = static_cast<DkImageDescriptor *>(dkMemBlockGetCpuAddr(device->imageHeap)) + imageHeapBase + (descriptorIndex - imageFirst);
         const Deko3DTexture *t = static_cast<const Deko3DTexture *>(texture);
         if (t == nullptr || !t->valid) {
@@ -800,6 +808,7 @@ namespace plume {
     void Deko3DDescriptorSet::setSampler(uint32_t descriptorIndex, const RenderSampler *sampler) {
         if (samplerHeapBase == UINT32_MAX || descriptorIndex < samplerFirst || descriptorIndex - samplerFirst >= samplerCount)
             return;
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);  // LostOdysseyRecomp (2026-11-03)
         DkSamplerDescriptor *d = static_cast<DkSamplerDescriptor *>(dkMemBlockGetCpuAddr(device->samplerHeap)) + samplerHeapBase + (descriptorIndex - samplerFirst);
         if (sampler == nullptr)
             memset(d, 0, sizeof(*d));
@@ -822,6 +831,7 @@ namespace plume {
     }
 
     Deko3DQueryPool::~Deko3DQueryPool() {
+        Deko3DRecordDrain(Deko3DRecordWait::QueryPoolDestroyed);  // LostOdysseyRecomp (2026-11-03): writeTimestamp
         if (block)
             device->retire({}, block);
     }
@@ -943,6 +953,7 @@ namespace plume {
         }
         pthread_attr_destroy(&attr);
         pthread_detach(thread);
+        Deko3DRecordStart();  // LostOdysseyRecomp (2026-11-03): LO_DEKO3D_RECORD_THREAD=1
         logf("device ready: queue with zcull %s, depth targets %scompressed, vertex shader outputs %s, 1 MB of queue "
              "command memory; uam compile thread started", g_deko3dOptions.zcull ? "on" : "off",
              g_deko3dOptions.depthCompression ? "" : "not ", g_deko3dOptions.vsOutputs ? "pruned per pipeline" : "all written");
@@ -950,6 +961,7 @@ namespace plume {
     }
 
     Deko3DDevice::~Deko3DDevice() {
+        Deko3DRecordStop();  // LostOdysseyRecomp (2026-11-03): replays what is left, then ends the worker
         if (queue)
             dkQueueWaitIdle(queue);
         {

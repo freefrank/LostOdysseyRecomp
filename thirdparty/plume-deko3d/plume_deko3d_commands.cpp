@@ -2,9 +2,42 @@
 // plume deko3d back end (banjo-nx, 2026-10-17): command lists, the queue and the swapchain (plume_deko3d.cpp has the
 // device). docs/deko3d-renderer.md section 4 maps each plume call to deko3d.
 //
+// LostOdysseyRecomp (2026-11-03): the record thread, LO_DEKO3D_RECORD_THREAD=1 (read once when the device is made; off
+// by default, and then nothing below changes: every call writes deko3d on the calling thread). On, each command list's
+// calls append small records (their arguments by value, arrays copied in) to the list's ring, a lock-free
+// single-producer / single-consumer byte ring of 256 KB, and one worker thread replays them in order through the same
+// methods, so plume's state tracking and deko3d's command writing both leave the render thread. The worker sleeps on
+// a condition variable when every ring is empty; the recording thread wakes it once per 16 KB recorded (or at once
+// when something waits for it). It takes the recording thread's priority, ideal core one past that thread's, on
+// cores 0-2 (LO_DEKO3D_RECORD_CORE / LO_DEKO3D_RECORD_PRIORITY / LO_DEKO3D_RECORD_WAKE override them).
+//
+// What waits for the worker (Deko3DRecordWait; counted and logged every 2048 submits, with the time waited):
+//  - executeCommandLists: each list it submits, fully replayed (its DkCmdList is made by the replayed end()).
+//  - ~Deko3DCommandList: its own ring, before the ring is given back.
+//  - The destructors of what records point at: Deko3DTexture, Deko3DBuffer, Deko3DFramebuffer, the graphics and
+//    compute pipelines, Deko3DPipelineLayout, Deko3DQueryPool, and Deko3DSwapChain::destroy (every ring).
+//  - A descriptor set's setBuffer / setTexture / setSampler and destructor, only when a list that bound it is still
+//    open (the worker reads the set at that list's draws: buffers, heap ids, imageSizes): that ring, to its head.
+//  - A draw while the renderer's own shared words are bound (Deko3DSetSharedWords): the worker would read them after
+//    the renderer changed them, so the draw is replayed before it returns. Lost Odyssey does not call it.
+//  - A full ring (back pressure: until there is room for the record), and the device's destruction.
+// What does not wait, and why: waitForCommandFence, Deko3DCopyFence/Deko3DFenceCopyWait, acquireTexture and present
+// are queue operations, which only the calling thread does, and every list they order against was replayed when it was
+// submitted. Query results and mapped buffers are GPU writes read after a fence. The upload ring and the descriptor set
+// pools the worker reads constants and sets from are rewound only after the slot's fence, behind a submit (renderer.cpp
+// Upload, AcquireSet). Deko3DSetBarrierOptions: a barrier record carries the options of its call. Deko3DReadCounters:
+// counts may lag by the worker's backlog. The descriptor and shader epochs are read when the draw is replayed, not
+// when it was called: an invalidation can come earlier (merged with a later one), never after the draw needs it, as
+// every descriptor write is in memory before the list is submitted.
+// Expected cost: about 20-30 ns and 40 bytes per recorded call on the render thread (3,054 draws at ~7 calls each:
+// ~0.5 ms and ~0.9 MB a frame), at most one wake per 16 KB (~55 a frame, a few microseconds each), and one wait per
+// submit for what the worker has not replayed yet. Against that, plume's and deko3d's share of the render thread
+// (~11% of its samples in the street2 profile, out/bench/street2-folded.txt) runs on the worker.
+//
 #include "plume_deko3d.h"
 
 #include <switch.h>
+#include <pthread.h>
 
 #include <algorithm>
 #include <cassert>
@@ -12,7 +45,10 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <new>
 
 namespace plume {
     DkImageFormat toDkFormat(RenderFormat format);
@@ -32,6 +68,367 @@ namespace plume {
     // Debug builds: the first operations of each kind, logged (what the frame is made of).
     static std::atomic<uint32_t> g_traceClears{0}, g_traceCopies{0}, g_traceTargets{0};
 
+    // ---- The record thread (LostOdysseyRecomp, 2026-11-03; the note at the top)
+
+    enum class RecOp : uint32_t {
+        Wrap, Begin, End, Barrier, Dispatch, Draw, DrawIndexed, Pipeline, ComputeLayout, GraphicsLayout, ComputePush,
+        GraphicsPush, ComputeSet, GraphicsSet, GraphicsSetDynamic, IndexBuffer, VertexBuffers, Viewports, Scissors,
+        Framebuffer, DepthBias, StencilReference, ClearColor, ClearDepthStencil, CopyBufferRegion, CopyTextureRegion,
+        CopyBuffer, CopyTexture, ResolveTexture, ResolveTextureRegion, Timestamp, BlendConstant, EarlyFragmentTests,
+        MemExport, FetchData, BindUniform, PushUniform, SharedWords,
+    };
+
+    struct RecHeader {
+        RecOp op;
+        uint32_t bytes;  // the whole record's, header included: a multiple of 8
+    };
+
+    // A ring's positions count bytes from its first use and never go back (a descriptor set's ticket stays valid
+    // when another list takes the ring).
+    struct Deko3DRecordRing {
+        static constexpr uint32_t Size = 256u << 10;
+        static constexpr uint32_t MaxRecord = Size / 4;
+        uint8_t *data = nullptr;
+        uint32_t index = 0;
+        std::atomic<bool> used{false};
+        std::atomic<Deko3DCommandList *> list{nullptr};  // stored before the records it makes
+        // The recording thread's: bytes published, its write position (the head between calls), the worker's
+        // position as last read, the position it last woke the worker at, the size of the record being written,
+        // the calls recorded, and the list generation (one per begin()).
+        alignas(64) std::atomic<uint64_t> head{0};
+        uint64_t pos = 0, knownTail = 0, wokeAt = 0;
+        uint32_t pending = 0;
+        uint32_t gen = 0;
+        std::atomic<uint64_t> records{0};
+        // The worker's: bytes replayed, the last generation whose end() it replayed, and the position a waiting
+        // thread wants to be woken at (UINT64_MAX: none).
+        alignas(64) std::atomic<uint64_t> tail{0};
+        std::atomic<uint32_t> closedGen{0};
+        std::atomic<uint64_t> wakeAt{UINT64_MAX};
+    };
+
+    struct Deko3DRecorder {
+        static constexpr uint32_t MaxRings = 16;
+        Deko3DRecordRing rings[MaxRings];
+        pthread_t thread{};
+        std::atomic<uint32_t> handle{0};  // the worker's thread handle, once it runs
+        std::atomic<bool> placed{false};
+        // wakeCv: the worker sleeps on it (sleeping set) until woken; progressCv: threads waiting for a ring's tail.
+        std::mutex mutex;
+        std::condition_variable wakeCv, progressCv;
+        std::atomic<bool> sleeping{false};
+        bool wake = false, stop = false;
+        uint32_t wakeBytes = 16u << 10;
+        int core = -1, priority = -1;  // -1: one past the recording thread's core, its priority
+        std::atomic<uint64_t> wakes{0}, submits{0};
+        std::atomic<uint64_t> waits[size_t(Deko3DRecordWait::Count)]{}, waitNs[size_t(Deko3DRecordWait::Count)]{};
+    };
+
+    static Deko3DRecorder *g_recorder = nullptr;
+    static thread_local bool t_replaying = false;  // the worker: its calls write deko3d
+
+    // Whether this call records (the list has a ring, and this is not the worker replaying it).
+    static inline bool deferred(const Deko3DCommandList &cl) { return cl.ring && !t_replaying; }
+
+    static void wakeWorker(Deko3DRecorder &r) {
+        // Against the worker's sleeping store then head loads (seq_cst both): it sees the records, or this sees it asleep.
+        if (!r.sleeping.load(std::memory_order_seq_cst))
+            return;
+        {
+            std::lock_guard<std::mutex> lock(r.mutex);
+            r.wake = true;
+        }
+        r.wakeCv.notify_one();
+        r.wakes.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // Until the worker has replayed the ring up to 'target' (woken first). Never on the worker: it would wait for
+    // itself.
+    static void waitReplayed(Deko3DRecordRing &ring, uint64_t target, Deko3DRecordWait why) {
+        Deko3DRecorder &r = *g_recorder;
+        if (t_replaying || ring.tail.load(std::memory_order_acquire) >= target)
+            return;
+        const uint64_t t0 = armGetSystemTick();
+        wakeWorker(r);
+        {
+            std::unique_lock<std::mutex> lock(r.mutex);
+            for (;;) {
+                // wakeAt then tail, against the worker's tail then wakeAt (seq_cst both): one of the two sees the other.
+                if (target < ring.wakeAt.load(std::memory_order_relaxed))
+                    ring.wakeAt.store(target, std::memory_order_seq_cst);
+                if (ring.tail.load(std::memory_order_seq_cst) >= target)
+                    break;
+                r.progressCv.wait(lock);
+            }
+        }
+        r.waits[size_t(why)].fetch_add(1, std::memory_order_relaxed);
+        r.waitNs[size_t(why)].fetch_add(armTicksToNs(armGetSystemTick() - t0), std::memory_order_relaxed);
+    }
+
+    static bool anyPending(Deko3DRecorder &r) {
+        for (Deko3DRecordRing &ring : r.rings) {
+            if (ring.head.load(std::memory_order_seq_cst) != ring.tail.load(std::memory_order_relaxed))
+                return true;
+        }
+        return false;
+    }
+
+    static void replay(Deko3DCommandList &cl, Deko3DRecordRing &ring, const RecHeader *h);
+
+    static void *recordThreadEntry(void *) {
+        Deko3DRecorder &r = *g_recorder;
+        t_replaying = true;
+        r.handle.store(threadGetCurHandle(), std::memory_order_release);
+        constexpr uint32_t Mask = Deko3DRecordRing::Size - 1;
+        for (;;) {
+            bool worked = false;
+            for (Deko3DRecordRing &ring : r.rings) {
+                const uint64_t head = ring.head.load(std::memory_order_acquire);
+                uint64_t tail = ring.tail.load(std::memory_order_relaxed);
+                if (tail == head)
+                    continue;
+                // Loaded after the head: the list was stored before the records that came with it.
+                Deko3DCommandList *cl = ring.list.load(std::memory_order_relaxed);
+                worked = true;
+                while (tail != head) {
+                    const RecHeader *h = reinterpret_cast<const RecHeader *>(ring.data + (tail & Mask));
+                    if (h->op != RecOp::Wrap)
+                        replay(*cl, ring, h);
+                    tail += h->bytes;
+                    ring.tail.store(tail, std::memory_order_seq_cst);
+                    if (tail >= ring.wakeAt.load(std::memory_order_seq_cst)) {
+                        {
+                            std::lock_guard<std::mutex> lock(r.mutex);
+                            ring.wakeAt.store(UINT64_MAX, std::memory_order_relaxed);
+                        }
+                        r.progressCv.notify_all();
+                    }
+                }
+            }
+            if (worked)
+                continue;
+            // Every ring replayed: asleep until a recording thread wakes it (after sleeping is set, the rings are
+            // looked at again, so a record published before this sees it).
+            std::unique_lock<std::mutex> lock(r.mutex);
+            r.sleeping.store(true, std::memory_order_seq_cst);
+            while (!r.wake && !r.stop && !anyPending(r))
+                r.wakeCv.wait(lock);
+            r.wake = false;
+            r.sleeping.store(false, std::memory_order_seq_cst);
+            if (r.stop && !anyPending(r))
+                break;
+        }
+        return nullptr;
+    }
+
+    static int envInt(const char *name, int fallback) {
+        const char *v = getenv(name);
+        return v && *v ? int(strtol(v, nullptr, 0)) : fallback;
+    }
+
+    void Deko3DRecordStart() {
+        static const bool wanted = envInt("LO_DEKO3D_RECORD_THREAD", 0) == 1;
+        if (!wanted || g_recorder)
+            return;
+        Deko3DRecorder *r = new (std::nothrow) Deko3DRecorder();
+        if (!r)
+            return;
+        for (uint32_t i = 0; i < Deko3DRecorder::MaxRings; i++)
+            r->rings[i].index = i;
+        r->core = envInt("LO_DEKO3D_RECORD_CORE", -1);
+        r->priority = envInt("LO_DEKO3D_RECORD_PRIORITY", -1);
+        r->wakeBytes = uint32_t(std::clamp(envInt("LO_DEKO3D_RECORD_WAKE", 16 << 10), 256, int(Deko3DRecordRing::Size / 2)));
+        g_recorder = r;
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, 256u << 10);
+        const int rc = pthread_create(&r->thread, &attr, recordThreadEntry, nullptr);
+        pthread_attr_destroy(&attr);
+        if (rc != 0) {
+            logf("record thread: did not start (%d); command lists write deko3d themselves", rc);
+            g_recorder = nullptr;
+            delete r;
+            return;
+        }
+        logf("record thread: on (LO_DEKO3D_RECORD_THREAD=1), %u KB rings, woken every %u bytes", Deko3DRecordRing::Size >> 10,
+             r->wakeBytes);
+    }
+
+    void Deko3DRecordStop() {
+        Deko3DRecorder *r = g_recorder;
+        if (!r)
+            return;
+        Deko3DRecordDrain(Deko3DRecordWait::Shutdown);
+        {
+            std::lock_guard<std::mutex> lock(r->mutex);
+            r->stop = true;
+        }
+        r->wakeCv.notify_one();
+        pthread_join(r->thread, nullptr);
+        g_recorder = nullptr;
+        for (Deko3DRecordRing &ring : r->rings) {
+            // A list that outlives the device writes deko3d itself from here on.
+            if (Deko3DCommandList *cl = ring.list.load(std::memory_order_acquire))
+                cl->ring = nullptr;
+            delete[] ring.data;
+        }
+        delete r;
+    }
+
+    void Deko3DRecordDrain(Deko3DRecordWait why) {
+        Deko3DRecorder *r = g_recorder;
+        if (!r || t_replaying)
+            return;
+        for (Deko3DRecordRing &ring : r->rings) {
+            const uint64_t head = ring.head.load(std::memory_order_acquire);
+            if (ring.tail.load(std::memory_order_acquire) < head)
+                waitReplayed(ring, head, why);
+        }
+    }
+
+    static uint64_t setTicket(const Deko3DRecordRing &ring) { return uint64_t(ring.index + 1) << 56 | ring.gen; }
+
+    void Deko3DRecordWaitSet(const Deko3DDescriptorSet &set, Deko3DRecordWait why) {
+        Deko3DRecorder *r = g_recorder;
+        const uint64_t ticket = set.recordTicket.load(std::memory_order_relaxed);
+        if (!r || !ticket)
+            return;
+        Deko3DRecordRing &ring = r->rings[(ticket >> 56) - 1];
+        // The worker replayed that list's end() (or a later one): it reads the set no more.
+        if (ring.closedGen.load(std::memory_order_acquire) >= uint32_t(ticket))
+            return;
+        waitReplayed(ring, ring.head.load(std::memory_order_acquire), why);
+    }
+
+    static Deko3DRecordRing *acquireRing(Deko3DCommandList *cl) {
+        Deko3DRecorder *r = g_recorder;
+        if (!r)
+            return nullptr;
+        for (Deko3DRecordRing &ring : r->rings) {
+            bool expected = false;
+            if (!ring.used.compare_exchange_strong(expected, true, std::memory_order_acquire))
+                continue;
+            if (!ring.data)
+                ring.data = new (std::nothrow) uint8_t[Deko3DRecordRing::Size];
+            if (!ring.data) {
+                ring.used.store(false, std::memory_order_release);
+                break;
+            }
+            ring.list.store(cl, std::memory_order_release);
+            return &ring;
+        }
+        static std::atomic<uint32_t> logged{0};
+        if (logged.fetch_add(1) < 4)
+            logf("record thread: no free ring; this command list writes deko3d itself");
+        return nullptr;
+    }
+
+    static void releaseRing(Deko3DRecordRing &ring) {
+        waitReplayed(ring, ring.head.load(std::memory_order_acquire), Deko3DRecordWait::ListDestroyed);
+        // Sets bound by a list that never ended count as done with (the worker has nothing of it left).
+        ring.closedGen.store(ring.gen, std::memory_order_release);
+        ring.list.store(nullptr, std::memory_order_relaxed);
+        ring.used.store(false, std::memory_order_release);
+    }
+
+    // The worker takes the recording thread's priority and an ideal core one past its core, on cores 0-2 as the game's
+    // threads (SetThreadIdealCore), once the first list begins.
+    static void placeWorker(Deko3DRecorder &r) {
+        if (r.placed.load(std::memory_order_relaxed))
+            return;
+        const uint32_t handle = r.handle.load(std::memory_order_acquire);
+        if (!handle || r.placed.exchange(true))
+            return;  // not running yet: the next begin()
+        s32 priority = r.priority;
+        if (priority < 0 && R_FAILED(svcGetThreadPriority(&priority, CUR_THREAD_HANDLE)))
+            priority = -1;
+        const int core = r.core >= 0 && r.core < 3 ? r.core : int((svcGetCurrentProcessorNumber() + 1) % 3);
+        const Result coreRc = svcSetThreadCoreMask(Handle(handle), core, 0x7);
+        const Result priorityRc = priority >= 0 ? svcSetThreadPriority(Handle(handle), u32(priority)) : 0;
+        logf("record thread: ideal core %d of 0-2 (%s), priority 0x%X (%s)", core, R_SUCCEEDED(coreRc) ? "set" : "failed",
+             unsigned(priority), priority < 0 || R_FAILED(priorityRc) ? "unchanged" : r.priority >= 0 ? "set" : "the recording thread's");
+    }
+
+    // A record of 'payload' bytes after its header: room for it (and a wrap marker before it when the ring's end is
+    // too short) waited for, its header written; publish() makes it the worker's.
+    static uint8_t *reserve(Deko3DRecordRing &ring, RecOp op, uint32_t payload) {
+        constexpr uint32_t Size = Deko3DRecordRing::Size;
+        const uint32_t bytes = alignUp(uint32_t(sizeof(RecHeader)) + payload, 8);
+        assert(bytes <= Deko3DRecordRing::MaxRecord);
+        uint32_t at = uint32_t(ring.pos) & (Size - 1);
+        const uint32_t skip = at + bytes > Size ? Size - at : 0;
+        if (ring.pos + skip + bytes - ring.knownTail > Size) {
+            ring.knownTail = ring.tail.load(std::memory_order_acquire);
+            if (ring.pos + skip + bytes - ring.knownTail > Size) {
+                waitReplayed(ring, ring.pos + skip + bytes - Size, Deko3DRecordWait::RingFull);
+                ring.knownTail = ring.tail.load(std::memory_order_acquire);
+            }
+        }
+        if (skip) {
+            // Published with the record after it.
+            new (ring.data + at) RecHeader{RecOp::Wrap, skip};
+            ring.pos += skip;
+            at = 0;
+        }
+        RecHeader *h = new (ring.data + at) RecHeader{op, bytes};
+        ring.pending = bytes;
+        return reinterpret_cast<uint8_t *>(h + 1);
+    }
+
+    static void publish(Deko3DRecordRing &ring) {
+        ring.pos += ring.pending;
+        ring.records.store(ring.records.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+        ring.head.store(ring.pos, std::memory_order_seq_cst);
+        if (ring.pos - ring.wokeAt >= g_recorder->wakeBytes) {
+            ring.wokeAt = ring.pos;
+            wakeWorker(*g_recorder);
+        }
+    }
+
+    // A call's arguments, and 'count' items after them (arrays the caller owns).
+    template <typename T> static void put(Deko3DCommandList &cl, RecOp op, const T &args) {
+        new (reserve(*cl.ring, op, uint32_t(sizeof(T)))) T(args);
+        publish(*cl.ring);
+    }
+    template <typename T, typename E> static void put(Deko3DCommandList &cl, RecOp op, const T &args, const E *items, uint32_t count) {
+        constexpr uint32_t at = alignUp(uint32_t(sizeof(T)), 8);
+        uint8_t *p = reserve(*cl.ring, op, at + count * uint32_t(sizeof(E)));
+        new (p) T(args);
+        std::uninitialized_copy_n(items, count, reinterpret_cast<E *>(p + at));
+        publish(*cl.ring);
+    }
+    template <typename T> static const T &arg(const RecHeader *h) { return *reinterpret_cast<const T *>(h + 1); }
+    template <typename T, typename E> static const E *items(const RecHeader *h) {
+        return reinterpret_cast<const E *>(reinterpret_cast<const uint8_t *>(h + 1) + alignUp(uint32_t(sizeof(T)), 8));
+    }
+
+    // The arguments of each kind of record (its RecOp in the comment).
+    struct RecGen { uint32_t gen; };                                   // Begin, End
+    struct RecBarrier { DkBarrier mode; uint32_t invalidate; bool merge; uint32_t traceBytes; };  // + the trace text
+    struct RecXyz { uint32_t x, y, z; };                               // Dispatch
+    struct RecDraw { uint32_t count, instances, first; int32_t baseVertex; uint32_t firstInstance; };  // Draw, DrawIndexed
+    struct RecPtr { const void *p; };                                  // Pipeline, layouts, Framebuffer, MemExport
+    struct RecPush { uint32_t rangeIndex, offset, size; };              // ComputePush, GraphicsPush + the bytes
+    struct RecSet { RenderDescriptorSet *set; uint32_t setIndex, count; };  // the sets + dynamic offsets
+    struct RecIndexBuffer { RenderIndexBufferView view; bool present; };
+    struct RecVertexBuffers { uint32_t startSlot, count; };            // + the views
+    struct RecCount { uint32_t count; };                               // Viewports, Scissors + the items
+    struct RecFloats { float v[4]; };                                  // DepthBias, BlendConstant
+    struct RecU32 { uint32_t v; };                                     // StencilReference, EarlyFragmentTests
+    struct RecClearColor { uint32_t attachment; RenderColor color; uint32_t count; };  // + the rectangles
+    struct RecClearDepth { bool depth, stencil; float value; uint32_t stencilValue, count; };  // + the rectangles
+    struct RecCopyBufferRegion { RenderBufferReference dst, src; uint64_t size; };
+    struct RecCopyTextureRegion { RenderTextureCopyLocation dst, src; uint32_t x, y, z; bool hasBox; RenderBox box; };
+    struct RecPair { const void *dst, *src; };                         // CopyBuffer, CopyTexture, ResolveTexture
+    struct RecResolveRegion { const RenderTexture *dst, *src; uint32_t x, y; bool hasRect; RenderRect rect; RenderResolveMode mode; };
+    struct RecTimestamp { const RenderQueryPool *pool; uint32_t index; };
+    struct RecRange { uint64_t address; uint32_t slot, size; };        // FetchData, BindUniform
+    struct RecPushUniform { uint64_t address; uint32_t uboSize, offset, size; };  // + the bytes
+    struct RecSharedWords { const void *cpu; uint32_t size; };
+
+    // Rectangles per clear record (a record is at most a quarter of the ring).
+    static constexpr uint32_t RecRectsPerClear = 1024;
+
     // ---- Deko3DCommandList
 
     static void addMemoryCallback(void *user, DkCmdBuf, size_t minimum) {
@@ -44,9 +441,13 @@ namespace plume {
         m.userData = this;
         m.cbAddMem = addMemoryCallback;
         cmd = dkCmdBufCreate(&m);
+        ring = acquireRing(this);  // LostOdysseyRecomp (2026-11-03): null unless the record thread is on
     }
 
     Deko3DCommandList::~Deko3DCommandList() {
+        // LostOdysseyRecomp (2026-11-03): what the worker has of this list replayed first (it writes cmd).
+        if (ring)
+            releaseRing(*ring);
         if (device->queue)
             dkQueueWaitIdle(device->queue);
         if (cmd)
@@ -92,6 +493,14 @@ namespace plume {
     }
 
     void Deko3DCommandList::begin() {
+        if (deferred(*this)) {
+            // LostOdysseyRecomp (2026-11-03): the recording thread's own state starts over with the list.
+            recordLayouts[0] = recordLayouts[1] = nullptr;
+            recordSharedWords = false;
+            placeWorker(*g_recorder);
+            put(*this, RecOp::Begin, RecGen{++ring->gen});
+            return;
+        }
         // The application waited for this list's last submission (as Vulkan requires before a reset): its command and
         // transient memory is free again. dkCmdBufClear rewinds into the memory fed last, so the first block is fed
         // explicitly (SwitchWakerHD: deko3d 0.5.0's clear keeps the old position).
@@ -164,6 +573,13 @@ namespace plume {
     }
 
     void Deko3DCommandList::end() {
+        if (deferred(*this)) {
+            // The worker is woken now: the submit that follows waits for it.
+            put(*this, RecOp::End, RecGen{ring->gen});
+            ring->wokeAt = ring->pos;
+            wakeWorker(*g_recorder);
+            return;
+        }
         flushBarriers();
         list = dkCmdBufFinishList(cmd);
         open = false;
@@ -197,15 +613,18 @@ namespace plume {
         uint32_t invalidate = 0;
         DkBarrier mode = DkBarrier_None;
         bool copy = (stages & RenderBarrierStage::COPY) != 0;
+        // LostOdysseyRecomp (2026-11-03): the trace's part of this call, made here (the caller is this call's) and
+        // added to the list's in applyBarrier.
+        char trace[sizeof(barrierTrace)];
+        trace[0] = 0;
         if (g_barrierTrace.load(std::memory_order_relaxed)) {
             const int64_t caller = int64_t(reinterpret_cast<intptr_t>(__builtin_return_address(0))) -
                 int64_t(reinterpret_cast<intptr_t>(&Deko3DBarrierTrace));
-            const size_t used = strlen(barrierTrace);
-            int n = snprintf(barrierTrace + used, sizeof(barrierTrace) - used, "%sret=%+lld stages=%u buf=%u tex=", used ? " | " : "",
-                static_cast<long long>(caller), uint32_t(stages), bufferBarriersCount);
-            for (uint32_t i = 0; i < textureBarriersCount && n > 0 && used + size_t(n) < sizeof(barrierTrace) - 24; i++) {
+            int n = snprintf(trace, sizeof(trace), "ret=%+lld stages=%u buf=%u tex=", static_cast<long long>(caller), uint32_t(stages),
+                bufferBarriersCount);
+            for (uint32_t i = 0; i < textureBarriersCount && n > 0 && size_t(n) < sizeof(trace) - 24; i++) {
                 const Deko3DTexture *t = static_cast<const Deko3DTexture *>(textureBarriers[i].texture);
-                n += snprintf(barrierTrace + used + n, sizeof(barrierTrace) - used - n, "%ux%u:%u,", t ? t->desc.width : 0, t ? t->desc.height : 0,
+                n += snprintf(trace + n, sizeof(trace) - n, "%ux%u:%u,", t ? t->desc.width : 0, t ? t->desc.height : 0,
                     uint32_t(textureBarriers[i].layout));
             }
         }
@@ -247,7 +666,24 @@ namespace plume {
             mode = DkBarrier_Full;
         if (mode == DkBarrier_None && textureBarriersCount == 0 && bufferBarriersCount == 0)
             mode = DkBarrier_Primitives;
-        if (Deko3DGetOptions().mergeBarriers) {
+        // LostOdysseyRecomp (2026-11-03): with the options of this call (Deko3DSetBarrierOptions changes them between
+        // lists, while the worker may still be replaying the one before).
+        const bool merge = Deko3DGetOptions().mergeBarriers;
+        if (deferred(*this)) {
+            const uint32_t traceBytes = trace[0] ? uint32_t(strlen(trace)) + 1 : 0;
+            put(*this, RecOp::Barrier, RecBarrier{mode, invalidate, merge, traceBytes}, trace, traceBytes);
+            return;
+        }
+        applyBarrier(mode, invalidate, merge, trace[0] ? trace : nullptr);
+    }
+
+    // The barrier barriers() worked out (on the worker when the record thread is on).
+    void Deko3DCommandList::applyBarrier(DkBarrier mode, uint32_t invalidate, bool merge, const char *trace) {
+        if (trace) {
+            const size_t used = strlen(barrierTrace);
+            snprintf(barrierTrace + used, sizeof(barrierTrace) - used, "%s%s", used ? " | " : "", trace);
+        }
+        if (merge) {
             // banjo-nx (2026-10-19): held until the next command that does work (flushBarriers), merged with any
             // barrier recorded before then.
             pendingBarrierMode = pendingBarrier ? std::max(pendingBarrierMode, mode) : mode;
@@ -282,6 +718,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::dispatch(uint32_t x, uint32_t y, uint32_t z) {
+        if (deferred(*this)) {
+            put(*this, RecOp::Dispatch, RecXyz{x, y, z});
+            return;
+        }
         if (!computePipeline || !computePipeline->valid)
             return;
         flushDescriptorInvalidate();
@@ -513,7 +953,19 @@ namespace plume {
         }
     }
 
+    // LostOdysseyRecomp (2026-11-03): with the renderer's own shared words bound, a recorded draw is replayed before
+    // the call returns (the worker reads them for its textures; the renderer may change them next).
+    static void afterRecordedDraw(Deko3DCommandList &cl) {
+        if (cl.recordSharedWords)
+            waitReplayed(*cl.ring, cl.ring->pos, Deko3DRecordWait::SharedWords);
+    }
+
     void Deko3DCommandList::drawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t startVertex, uint32_t startInstance) {
+        if (deferred(*this)) {
+            put(*this, RecOp::Draw, RecDraw{vertexCount, instanceCount, startVertex, 0, startInstance});
+            afterRecordedDraw(*this);
+            return;
+        }
         if (!graphicsPipeline || !graphicsPipeline->valid)
             return;
         flushDescriptorInvalidate();
@@ -529,6 +981,11 @@ namespace plume {
     }
 
     void Deko3DCommandList::drawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t startIndex, int32_t baseVertex, uint32_t startInstance) {
+        if (deferred(*this)) {
+            put(*this, RecOp::DrawIndexed, RecDraw{indexCount, instanceCount, startIndex, baseVertex, startInstance});
+            afterRecordedDraw(*this);
+            return;
+        }
         if (!graphicsPipeline || !graphicsPipeline->valid || !indexAddress)
             return;
         flushDescriptorInvalidate();
@@ -555,10 +1012,18 @@ namespace plume {
     }
 
     void Deko3DSetEarlyFragmentTests(RenderCommandList *list, bool allowed) {
-        static_cast<Deko3DCommandList *>(list)->earlyFragmentTests = allowed;
+        Deko3DCommandList *cl = static_cast<Deko3DCommandList *>(list);
+        if (deferred(*cl))
+            put(*cl, RecOp::EarlyFragmentTests, RecU32{allowed ? 1u : 0u});
+        else
+            cl->earlyFragmentTests = allowed;
     }
 
     void Deko3DCommandList::setPipeline(const RenderPipeline *pipeline) {
+        if (deferred(*this)) {
+            put(*this, RecOp::Pipeline, RecPtr{pipeline});
+            return;
+        }
         const Deko3DPipeline *base = static_cast<const Deko3DPipeline *>(pipeline);
         if (base == nullptr)
             return;
@@ -637,10 +1102,32 @@ namespace plume {
     }
 
     void Deko3DCommandList::setComputePipelineLayout(const RenderPipelineLayout *pipelineLayout) {
+        if (deferred(*this)) {
+            recordLayouts[1] = static_cast<const Deko3DPipelineLayout *>(pipelineLayout);
+            put(*this, RecOp::ComputeLayout, RecPtr{pipelineLayout});
+            return;
+        }
         computeLayout = static_cast<const Deko3DPipelineLayout *>(pipelineLayout);
     }
 
+    // LostOdysseyRecomp (2026-11-03): push constants recorded with their bytes (the size from the layout as the
+    // recording thread set it when the call gives none; the worker checks the rest as before).
+    static void recordPush(Deko3DCommandList &cl, RecOp op, const Deko3DPipelineLayout *layout, uint32_t limit,
+                           uint32_t rangeIndex, const void *data, uint32_t offset, uint32_t size) {
+        if (!layout || rangeIndex >= layout->pushRanges.size())
+            return;
+        if (size == 0)
+            size = layout->pushRanges[rangeIndex].size;
+        if (size > limit)
+            return;
+        put(cl, op, RecPush{rangeIndex, offset, size}, static_cast<const uint8_t *>(data), size);
+    }
+
     void Deko3DCommandList::setComputePushConstants(uint32_t rangeIndex, const void *data, uint32_t offset, uint32_t size) {
+        if (deferred(*this)) {
+            recordPush(*this, RecOp::ComputePush, recordLayouts[1], uint32_t(sizeof(computePush)), rangeIndex, data, offset, size);
+            return;
+        }
         if (!computeLayout || rangeIndex >= computeLayout->pushRanges.size())
             return;
         const RenderPushConstantRange &r = computeLayout->pushRanges[rangeIndex];
@@ -726,7 +1213,22 @@ namespace plume {
         }
     }
 
+    // LostOdysseyRecomp (2026-11-03): a recorded bind marks the set with this list's ring and generation
+    // (Deko3DRecordWaitSet).
+    static void recordSet(Deko3DCommandList &cl, RecOp op, RenderDescriptorSet *descriptorSet, uint32_t setIndex,
+                          const uint32_t *dynamicOffsets, uint32_t dynamicOffsetsCount) {
+        if (!descriptorSet)
+            return;
+        static_cast<const Deko3DDescriptorSet *>(descriptorSet)->recordTicket.store(setTicket(*cl.ring), std::memory_order_relaxed);
+        const uint32_t n = std::min<uint32_t>(dynamicOffsetsCount, 64);
+        put(cl, op, RecSet{descriptorSet, setIndex, n}, dynamicOffsets, n);
+    }
+
     void Deko3DCommandList::setComputeDescriptorSet(RenderDescriptorSet *descriptorSet, uint32_t setIndex) {
+        if (deferred(*this)) {
+            recordSet(*this, RecOp::ComputeSet, descriptorSet, setIndex, nullptr, 0);
+            return;
+        }
         const Deko3DDescriptorSet *set = static_cast<const Deko3DDescriptorSet *>(descriptorSet);
         if (!set)
             return;
@@ -743,10 +1245,19 @@ namespace plume {
     }
 
     void Deko3DCommandList::setGraphicsPipelineLayout(const RenderPipelineLayout *pipelineLayout) {
+        if (deferred(*this)) {
+            recordLayouts[0] = static_cast<const Deko3DPipelineLayout *>(pipelineLayout);
+            put(*this, RecOp::GraphicsLayout, RecPtr{pipelineLayout});
+            return;
+        }
         graphicsLayout = static_cast<const Deko3DPipelineLayout *>(pipelineLayout);
     }
 
     void Deko3DCommandList::setGraphicsPushConstants(uint32_t rangeIndex, const void *data, uint32_t offset, uint32_t size) {
+        if (deferred(*this)) {
+            recordPush(*this, RecOp::GraphicsPush, recordLayouts[0], Deko3DDevice::PushSize, rangeIndex, data, offset, size);
+            return;
+        }
         if (!graphicsLayout || rangeIndex >= graphicsLayout->pushRanges.size())
             return;
         const RenderPushConstantRange &r = graphicsLayout->pushRanges[rangeIndex];
@@ -761,6 +1272,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::setGraphicsDescriptorSet(RenderDescriptorSet *descriptorSet, uint32_t setIndex) {
+        if (deferred(*this)) {
+            recordSet(*this, RecOp::GraphicsSet, descriptorSet, setIndex, nullptr, 0);
+            return;
+        }
         const Deko3DDescriptorSet *set = static_cast<const Deko3DDescriptorSet *>(descriptorSet);
         if (!set)
             return;
@@ -771,6 +1286,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::setGraphicsDescriptorSetDynamic(RenderDescriptorSet *descriptorSet, uint32_t setIndex, const uint32_t *dynamicOffsets, uint32_t dynamicOffsetsCount) {
+        if (deferred(*this)) {
+            recordSet(*this, RecOp::GraphicsSetDynamic, descriptorSet, setIndex, dynamicOffsets, dynamicOffsetsCount);
+            return;
+        }
         const Deko3DDescriptorSet *set = static_cast<const Deko3DDescriptorSet *>(descriptorSet);
         if (!set)
             return;
@@ -780,12 +1299,17 @@ namespace plume {
         bindSetBuffers(graphicsLayout, setIndex, set, dynamicOffsets, dynamicOffsetsCount, graphicsUbo, graphicsUboValid, uboBoundStages, graphicsSsbo, graphicsSsboValid, ssboBoundStages);
     }
 
+    // No work in deko3d: nothing to record.
     void Deko3DCommandList::setGraphicsRootDescriptor(RenderBufferReference, uint32_t) {}
     void Deko3DCommandList::setRaytracingPipelineLayout(const RenderPipelineLayout *) {}
     void Deko3DCommandList::setRaytracingPushConstants(uint32_t, const void *, uint32_t, uint32_t) {}
     void Deko3DCommandList::setRaytracingDescriptorSet(RenderDescriptorSet *, uint32_t) {}
 
     void Deko3DCommandList::setIndexBuffer(const RenderIndexBufferView *view) {
+        if (deferred(*this)) {
+            put(*this, RecOp::IndexBuffer, RecIndexBuffer{view ? *view : RenderIndexBufferView(), view != nullptr});
+            return;
+        }
         if (!view || !view->buffer.ref) {
             indexAddress = 0;
             return;
@@ -804,6 +1328,11 @@ namespace plume {
         // The strides are the pipeline's (as the Vulkan back end, which ignores inputSlots); a missing buffer reads the
         // device's zero buffer, as Vulkan's null buffer.
         (void)inputSlots;
+        if (deferred(*this)) {
+            const uint32_t n = std::min<uint32_t>(viewCount, 16);
+            put(*this, RecOp::VertexBuffers, RecVertexBuffers{startSlot, n}, views, n);
+            return;
+        }
         DkBufExtents extents[16];
         const uint32_t count = std::min<uint32_t>(viewCount, 16 - std::min<uint32_t>(startSlot, 16));
         for (uint32_t i = 0; i < count; i++) {
@@ -824,6 +1353,10 @@ namespace plume {
 
     void Deko3DCommandList::setViewports(const RenderViewport *vps, uint32_t count) {
         count = std::min<uint32_t>(count, 16);
+        if (deferred(*this)) {
+            put(*this, RecOp::Viewports, RecCount{count}, vps, count);
+            return;
+        }
         bool flipped = false;
         for (uint32_t i = 0; i < count; i++) {
             const RenderViewport &v = vps[i];
@@ -855,6 +1388,10 @@ namespace plume {
 
     void Deko3DCommandList::setScissors(const RenderRect *rects, uint32_t count) {
         count = std::min<uint32_t>(count, 16);
+        if (deferred(*this)) {
+            put(*this, RecOp::Scissors, RecCount{count}, rects, count);
+            return;
+        }
         for (uint32_t i = 0; i < count; i++) {
             const RenderRect &r = rects[i];
             DkScissor &s = scissors[i];
@@ -884,6 +1421,10 @@ namespace plume {
 
     void Deko3DCommandList::setFramebuffer(const RenderFramebuffer *fb) {
         // Bound every time: an application can free a framebuffer and make another at the same address.
+        if (deferred(*this)) {
+            put(*this, RecOp::Framebuffer, RecPtr{fb});
+            return;
+        }
         const Deko3DFramebuffer *f = static_cast<const Deko3DFramebuffer *>(fb);
         framebuffer = f;
         if (!f)
@@ -903,17 +1444,35 @@ namespace plume {
     }
 
     void Deko3DCommandList::setDepthBias(float depthBias, float depthBiasClamp, float slopeScaledDepthBias) {
+        if (deferred(*this)) {
+            put(*this, RecOp::DepthBias, RecFloats{{depthBias, depthBiasClamp, slopeScaledDepthBias, 0.0f}});
+            return;
+        }
         dkCmdBufSetDepthBias(cmd, depthBias, depthBiasClamp, slopeScaledDepthBias);
         boundGroups[7] = 0;  // banjo-nx (2026-10-19): unknown for the next pipeline that sets a bias
     }
 
     void Deko3DCommandList::setStencilReference(uint32_t reference) {
+        if (deferred(*this)) {
+            put(*this, RecOp::StencilReference, RecU32{reference});
+            return;
+        }
         const Deko3DGraphicsPipeline *p = graphicsPipeline;
         dkCmdBufSetStencil(cmd, DkFace_FrontAndBack, p ? p->stencilWriteMask : 0xFF, uint8_t(reference), p ? p->stencilReadMask : 0xFF);
         boundGroups[6] = 0;  // banjo-nx (2026-10-19): unknown for the next pipeline that sets the stencil values
     }
 
     void Deko3DCommandList::clearColor(uint32_t attachmentIndex, RenderColor color, const RenderRect *rects, uint32_t rectsCount) {
+        if (deferred(*this)) {
+            // In pieces of RecRectsPerClear rectangles: each clears its own and puts the scissors back, as the call does.
+            uint32_t done = 0;
+            do {
+                const uint32_t n = std::min(rectsCount - done, RecRectsPerClear);
+                put(*this, RecOp::ClearColor, RecClearColor{attachmentIndex, color, n}, rects + done, n);
+                done += n;
+            } while (done < rectsCount);
+            return;
+        }
 #if defined(PLUME_DEKO3D_GUARDS)
         if (g_traceClears.fetch_add(1) < 40) {
             const Deko3DFramebuffer *f = framebuffer;
@@ -944,6 +1503,15 @@ namespace plume {
     }
 
     void Deko3DCommandList::clearDepthStencil(bool clearDepth, bool clearStencil, float depthValue, uint32_t stencilValue, const RenderRect *rects, uint32_t rectsCount) {
+        if (deferred(*this)) {
+            uint32_t done = 0;  // in pieces, as clearColor
+            do {
+                const uint32_t n = std::min(rectsCount - done, RecRectsPerClear);
+                put(*this, RecOp::ClearDepthStencil, RecClearDepth{clearDepth, clearStencil, depthValue, stencilValue, n}, rects + done, n);
+                done += n;
+            } while (done < rectsCount);
+            return;
+        }
         if (rectsCount == 0) {
             const DkScissor all = {0, 0, 16384, 16384};
             dkCmdBufSetScissors(cmd, 0, &all, 1);
@@ -964,6 +1532,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::copyBufferRegion(RenderBufferReference dst, RenderBufferReference src, uint64_t size) {
+        if (deferred(*this)) {
+            put(*this, RecOp::CopyBufferRegion, RecCopyBufferRegion{dst, src, size});
+            return;
+        }
         const Deko3DBuffer *d = static_cast<const Deko3DBuffer *>(dst.ref);
         const Deko3DBuffer *s = static_cast<const Deko3DBuffer *>(src.ref);
         if (!d || !s || size == 0)
@@ -1044,6 +1616,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::copyTextureRegion(const RenderTextureCopyLocation &dstLoc, const RenderTextureCopyLocation &srcLoc, uint32_t dstX, uint32_t dstY, uint32_t dstZ, const RenderBox *srcBox) {
+        if (deferred(*this)) {
+            put(*this, RecOp::CopyTextureRegion, RecCopyTextureRegion{dstLoc, srcLoc, dstX, dstY, dstZ, srcBox != nullptr, srcBox ? *srcBox : RenderBox()});
+            return;
+        }
 #if defined(PLUME_DEKO3D_GUARDS)
         if (g_traceCopies.fetch_add(1) < 60) {
             auto describe = [](const RenderTextureCopyLocation &l, char *out, size_t n) {
@@ -1138,12 +1714,19 @@ namespace plume {
         // banjo-nx (2026-10-18): deko3d drops the Zcull data only when another depth target is bound; a copy into the
         // bound one (the copy engine does not update Zcull) leaves it describing the old depth, which would cull draws
         // the new depth passes.
-        if (Deko3DGetOptions().zcull && (dst->desc.flags & RenderTextureFlag::DEPTH_TARGET))
+        // LostOdysseyRecomp (2026-11-03, issue #29): the braces were missing, so every copy into any texture dropped
+        // Zcull, with Zcull on or off.
+        if (Deko3DGetOptions().zcull && (dst->desc.flags & RenderTextureFlag::DEPTH_TARGET)) {
             flushBarriers();
             dkCmdBufBarrier(cmd, DkBarrier_None, DkInvalidateFlags_Zcull);
+        }
     }
 
     void Deko3DCommandList::copyBuffer(const RenderBuffer *dst, const RenderBuffer *src) {
+        if (deferred(*this)) {
+            put(*this, RecOp::CopyBuffer, RecPair{dst, src});
+            return;
+        }
         const Deko3DBuffer *d = static_cast<const Deko3DBuffer *>(dst);
         const Deko3DBuffer *s = static_cast<const Deko3DBuffer *>(src);
         if (!d || !s)
@@ -1154,6 +1737,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::copyTexture(const RenderTexture *dst, const RenderTexture *src) {
+        if (deferred(*this)) {
+            put(*this, RecOp::CopyTexture, RecPair{dst, src});
+            return;
+        }
         const Deko3DTexture *dt = static_cast<const Deko3DTexture *>(dst);
         const Deko3DTexture *st = static_cast<const Deko3DTexture *>(src);
         if (!dt || !st || !dt->valid || !st->valid)
@@ -1178,6 +1765,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::resolveTexture(const RenderTexture *dst, const RenderTexture *src) {
+        if (deferred(*this)) {
+            put(*this, RecOp::ResolveTexture, RecPair{dst, src});
+            return;
+        }
         const Deko3DTexture *dt = static_cast<const Deko3DTexture *>(dst);
         const Deko3DTexture *st = static_cast<const Deko3DTexture *>(src);
         if (!dt || !st || !dt->valid || !st->valid)
@@ -1195,7 +1786,11 @@ namespace plume {
         invalidateZcullAfterCopy(dt);
     }
 
-    void Deko3DCommandList::resolveTextureRegion(const RenderTexture *dst, uint32_t dstX, uint32_t dstY, const RenderTexture *src, const RenderRect *srcRect, RenderResolveMode) {
+    void Deko3DCommandList::resolveTextureRegion(const RenderTexture *dst, uint32_t dstX, uint32_t dstY, const RenderTexture *src, const RenderRect *srcRect, RenderResolveMode resolveMode) {
+        if (deferred(*this)) {
+            put(*this, RecOp::ResolveTextureRegion, RecResolveRegion{dst, src, dstX, dstY, srcRect != nullptr, srcRect ? *srcRect : RenderRect(), resolveMode});
+            return;
+        }
         const Deko3DTexture *dt = static_cast<const Deko3DTexture *>(dst);
         const Deko3DTexture *st = static_cast<const Deko3DTexture *>(src);
         if (!dt || !st || !dt->valid || !st->valid)
@@ -1223,12 +1818,17 @@ namespace plume {
         invalidateZcullAfterCopy(dt);
     }
 
+    // No work in deko3d: nothing to record.
     void Deko3DCommandList::buildBottomLevelAS(const RenderAccelerationStructure *, RenderBufferReference, const RenderBottomLevelASBuildInfo &) {}
     void Deko3DCommandList::buildTopLevelAS(const RenderAccelerationStructure *, RenderBufferReference, RenderBufferReference, const RenderTopLevelASBuildInfo &) {}
     void Deko3DCommandList::discardTexture(const RenderTexture *) {}
     void Deko3DCommandList::resetQueryPool(const RenderQueryPool *, uint32_t, uint32_t) {}
 
     void Deko3DCommandList::writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) {
+        if (deferred(*this)) {
+            put(*this, RecOp::Timestamp, RecTimestamp{queryPool, queryIndex});
+            return;
+        }
         const Deko3DQueryPool *pool = static_cast<const Deko3DQueryPool *>(queryPool);
         if (!pool || !pool->block || queryIndex >= pool->results.size())
             return;
@@ -1238,6 +1838,10 @@ namespace plume {
     }
 
     void Deko3DCommandList::setBlendConstant(const float rgba[4]) {
+        if (deferred(*this)) {
+            put(*this, RecOp::BlendConstant, RecFloats{{rgba[0], rgba[1], rgba[2], rgba[3]}});
+            return;
+        }
         if (memcmp(blendConstant, rgba, sizeof(blendConstant)) == 0)
             return;
         memcpy(blendConstant, rgba, sizeof(blendConstant));
@@ -1249,6 +1853,10 @@ namespace plume {
         const Deko3DBuffer *b = static_cast<const Deko3DBuffer *>(buffer);
         if (!cl || !b || !b->block)
             return false;
+        if (deferred(*cl)) {
+            put(*cl, RecOp::MemExport, RecPtr{b});
+            return true;
+        }
         constexpr uint32_t slot = 14;
         const DkBufExtents e = {b->gpu, uint32_t(std::min<uint64_t>(b->desc.size, 0xFFFFF000u))};
         if (!(cl->graphicsSsboValid & (1u << slot)) || cl->graphicsSsbo[slot].addr != e.addr || cl->graphicsSsbo[slot].size != e.size) {
@@ -1263,6 +1871,10 @@ namespace plume {
         Deko3DCommandList *cl = static_cast<Deko3DCommandList *>(commandList);
         if (!cl || !address)
             return false;
+        if (deferred(*cl)) {
+            put(*cl, RecOp::FetchData, RecRange{address, 0, size});
+            return true;
+        }
         const DkBufExtents e = {address, std::max<uint32_t>(alignUp(std::min(size, 0xFFFFF000u), 16), 16)};
         if (!(cl->graphicsSsboValid & (1u << AddressWindowSlot)) || cl->graphicsSsbo[AddressWindowSlot].addr != e.addr ||
             cl->graphicsSsbo[AddressWindowSlot].size != e.size) {
@@ -1277,6 +1889,10 @@ namespace plume {
         Deko3DCommandList *cl = static_cast<Deko3DCommandList *>(commandList);
         if (!cl || !address || slot >= 16)
             return false;
+        if (deferred(*cl)) {
+            put(*cl, RecOp::BindUniform, RecRange{address, slot, size});
+            return true;
+        }
         const DkBufExtents e = {address, size};
         if (!(cl->graphicsUboValid & (1u << slot)) || cl->graphicsUbo[slot].addr != e.addr || cl->graphicsUbo[slot].size != e.size) {
             cl->graphicsUbo[slot] = e;
@@ -1299,7 +1915,11 @@ namespace plume {
         const uint8_t *bytes = static_cast<const uint8_t *>(data);
         for (uint32_t done = 0; done < size;) {
             const uint32_t n = std::min(kPiece, size - done);
-            dkCmdBufPushConstants(cl->cmd, address, uboSize, offset + done, alignUp(n, 4), bytes + done);
+            // LostOdysseyRecomp (2026-11-03): recorded piece by piece, with its bytes; the worker comes back here.
+            if (deferred(*cl))
+                put(*cl, RecOp::PushUniform, RecPushUniform{address, uboSize, offset + done, n}, bytes + done, n);
+            else
+                dkCmdBufPushConstants(cl->cmd, address, uboSize, offset + done, alignUp(n, 4), bytes + done);
             done += n;
         }
         return true;
@@ -1309,6 +1929,13 @@ namespace plume {
         Deko3DCommandList *cl = static_cast<Deko3DCommandList *>(commandList);
         if (!cl)
             return false;
+        if (deferred(*cl)) {
+            // LostOdysseyRecomp (2026-11-03): the worker reads these words at each draw, after the call; while they
+            // are bound each draw waits to be replayed (afterRecordedDraw), as the renderer may change them next.
+            cl->recordSharedWords = cpu != nullptr;
+            put(*cl, RecOp::SharedWords, RecSharedWords{cpu, size});
+            return true;
+        }
         cl->sharedWords = static_cast<const uint8_t *>(cpu);
         cl->sharedWordsSize = size;
         if (!cpu)
@@ -1321,6 +1948,187 @@ namespace plume {
             return false;
         static_cast<Deko3DCommandList *>(commandList)->setBlendConstant(rgba);
         return true;
+    }
+
+    // ---- The record thread's replay (LostOdysseyRecomp, 2026-11-03): each record through the call it came from, now on
+    // the worker (t_replaying: the calls write deko3d).
+
+    static void replay(Deko3DCommandList &cl, Deko3DRecordRing &ring, const RecHeader *h) {
+        switch (h->op) {
+        case RecOp::Wrap:
+            break;
+        case RecOp::Begin:
+            cl.begin();
+            break;
+        case RecOp::End:
+            cl.end();
+            ring.closedGen.store(arg<RecGen>(h).gen, std::memory_order_release);
+            break;
+        case RecOp::Barrier: {
+            const RecBarrier &a = arg<RecBarrier>(h);
+            cl.applyBarrier(a.mode, a.invalidate, a.merge, a.traceBytes ? items<RecBarrier, char>(h) : nullptr);
+            break;
+        }
+        case RecOp::Dispatch: {
+            const RecXyz &a = arg<RecXyz>(h);
+            cl.dispatch(a.x, a.y, a.z);
+            break;
+        }
+        case RecOp::Draw: {
+            const RecDraw &a = arg<RecDraw>(h);
+            cl.drawInstanced(a.count, a.instances, a.first, a.firstInstance);
+            break;
+        }
+        case RecOp::DrawIndexed: {
+            const RecDraw &a = arg<RecDraw>(h);
+            cl.drawIndexedInstanced(a.count, a.instances, a.first, a.baseVertex, a.firstInstance);
+            break;
+        }
+        case RecOp::Pipeline:
+            cl.setPipeline(static_cast<const RenderPipeline *>(arg<RecPtr>(h).p));
+            break;
+        case RecOp::ComputeLayout:
+            cl.setComputePipelineLayout(static_cast<const RenderPipelineLayout *>(arg<RecPtr>(h).p));
+            break;
+        case RecOp::GraphicsLayout:
+            cl.setGraphicsPipelineLayout(static_cast<const RenderPipelineLayout *>(arg<RecPtr>(h).p));
+            break;
+        case RecOp::ComputePush:
+        case RecOp::GraphicsPush: {
+            const RecPush &a = arg<RecPush>(h);
+            const uint8_t *bytes = items<RecPush, uint8_t>(h);
+            if (h->op == RecOp::ComputePush)
+                cl.setComputePushConstants(a.rangeIndex, bytes, a.offset, a.size);
+            else
+                cl.setGraphicsPushConstants(a.rangeIndex, bytes, a.offset, a.size);
+            break;
+        }
+        case RecOp::ComputeSet:
+            cl.setComputeDescriptorSet(arg<RecSet>(h).set, arg<RecSet>(h).setIndex);
+            break;
+        case RecOp::GraphicsSet:
+            cl.setGraphicsDescriptorSet(arg<RecSet>(h).set, arg<RecSet>(h).setIndex);
+            break;
+        case RecOp::GraphicsSetDynamic: {
+            const RecSet &a = arg<RecSet>(h);
+            cl.setGraphicsDescriptorSetDynamic(a.set, a.setIndex, items<RecSet, uint32_t>(h), a.count);
+            break;
+        }
+        case RecOp::IndexBuffer: {
+            const RecIndexBuffer &a = arg<RecIndexBuffer>(h);
+            cl.setIndexBuffer(a.present ? &a.view : nullptr);
+            break;
+        }
+        case RecOp::VertexBuffers: {
+            const RecVertexBuffers &a = arg<RecVertexBuffers>(h);
+            cl.setVertexBuffers(a.startSlot, items<RecVertexBuffers, RenderVertexBufferView>(h), a.count, nullptr);
+            break;
+        }
+        case RecOp::Viewports:
+            cl.setViewports(items<RecCount, RenderViewport>(h), arg<RecCount>(h).count);
+            break;
+        case RecOp::Scissors:
+            cl.setScissors(items<RecCount, RenderRect>(h), arg<RecCount>(h).count);
+            break;
+        case RecOp::Framebuffer:
+            cl.setFramebuffer(static_cast<const RenderFramebuffer *>(arg<RecPtr>(h).p));
+            break;
+        case RecOp::DepthBias: {
+            const RecFloats &a = arg<RecFloats>(h);
+            cl.setDepthBias(a.v[0], a.v[1], a.v[2]);
+            break;
+        }
+        case RecOp::StencilReference:
+            cl.setStencilReference(arg<RecU32>(h).v);
+            break;
+        case RecOp::ClearColor: {
+            const RecClearColor &a = arg<RecClearColor>(h);
+            cl.clearColor(a.attachment, a.color, a.count ? items<RecClearColor, RenderRect>(h) : nullptr, a.count);
+            break;
+        }
+        case RecOp::ClearDepthStencil: {
+            const RecClearDepth &a = arg<RecClearDepth>(h);
+            cl.clearDepthStencil(a.depth, a.stencil, a.value, a.stencilValue, a.count ? items<RecClearDepth, RenderRect>(h) : nullptr, a.count);
+            break;
+        }
+        case RecOp::CopyBufferRegion: {
+            const RecCopyBufferRegion &a = arg<RecCopyBufferRegion>(h);
+            cl.copyBufferRegion(a.dst, a.src, a.size);
+            break;
+        }
+        case RecOp::CopyTextureRegion: {
+            const RecCopyTextureRegion &a = arg<RecCopyTextureRegion>(h);
+            cl.copyTextureRegion(a.dst, a.src, a.x, a.y, a.z, a.hasBox ? &a.box : nullptr);
+            break;
+        }
+        case RecOp::CopyBuffer:
+            cl.copyBuffer(static_cast<const RenderBuffer *>(arg<RecPair>(h).dst), static_cast<const RenderBuffer *>(arg<RecPair>(h).src));
+            break;
+        case RecOp::CopyTexture:
+            cl.copyTexture(static_cast<const RenderTexture *>(arg<RecPair>(h).dst), static_cast<const RenderTexture *>(arg<RecPair>(h).src));
+            break;
+        case RecOp::ResolveTexture:
+            cl.resolveTexture(static_cast<const RenderTexture *>(arg<RecPair>(h).dst), static_cast<const RenderTexture *>(arg<RecPair>(h).src));
+            break;
+        case RecOp::ResolveTextureRegion: {
+            const RecResolveRegion &a = arg<RecResolveRegion>(h);
+            cl.resolveTextureRegion(a.dst, a.x, a.y, a.src, a.hasRect ? &a.rect : nullptr, a.mode);
+            break;
+        }
+        case RecOp::Timestamp:
+            cl.writeTimestamp(arg<RecTimestamp>(h).pool, arg<RecTimestamp>(h).index);
+            break;
+        case RecOp::BlendConstant:
+            cl.setBlendConstant(arg<RecFloats>(h).v);
+            break;
+        case RecOp::EarlyFragmentTests:
+            cl.earlyFragmentTests = arg<RecU32>(h).v != 0;
+            break;
+        case RecOp::MemExport:
+            Deko3DBindMemExport(&cl, static_cast<const RenderBuffer *>(arg<RecPtr>(h).p));
+            break;
+        case RecOp::FetchData:
+            Deko3DBindFetchData(&cl, arg<RecRange>(h).address, arg<RecRange>(h).size);
+            break;
+        case RecOp::BindUniform: {
+            const RecRange &a = arg<RecRange>(h);
+            Deko3DBindUniform(&cl, a.slot, a.address, a.size);
+            break;
+        }
+        case RecOp::PushUniform: {
+            const RecPushUniform &a = arg<RecPushUniform>(h);
+            Deko3DPushUniform(&cl, a.address, a.uboSize, a.offset, items<RecPushUniform, uint8_t>(h), a.size);
+            break;
+        }
+        case RecOp::SharedWords:
+            Deko3DSetSharedWords(&cl, arg<RecSharedWords>(h).cpu, arg<RecSharedWords>(h).size);
+            break;
+        }
+    }
+
+    // Every 2048 submits: what was recorded and what waited for the worker (count and milliseconds by reason).
+    static void logRecordStats(Deko3DRecorder &r) {
+        static const char *const names[size_t(Deko3DRecordWait::Count)] = {
+            "submit", "list destroyed", "swapchain destroyed", "texture destroyed", "buffer destroyed", "set destroyed",
+            "set written", "framebuffer destroyed", "pipeline destroyed", "layout destroyed", "query pool destroyed",
+            "shared words", "ring full", "shutdown"};
+        uint64_t records = 0, bytes = 0;
+        for (const Deko3DRecordRing &ring : r.rings) {
+            records += ring.records.load(std::memory_order_relaxed);
+            bytes += ring.head.load(std::memory_order_relaxed);
+        }
+        char waits[512];
+        int n = 0;
+        waits[0] = 0;
+        for (size_t i = 0; i < size_t(Deko3DRecordWait::Count) && n >= 0 && size_t(n) < sizeof(waits); i++) {
+            const uint64_t count = r.waits[i].load(std::memory_order_relaxed);
+            if (count)
+                n += snprintf(waits + n, sizeof(waits) - n, "%s%s %" PRIu64 " (%.1f ms)", n ? ", " : "", names[i], count,
+                              double(r.waitNs[i].load(std::memory_order_relaxed)) / 1e6);
+        }
+        logf("record thread: %" PRIu64 " submits, %" PRIu64 " calls recorded (%" PRIu64 " MB), %" PRIu64 " wakes; waits: %s",
+             r.submits.load(std::memory_order_relaxed), records, bytes >> 20, r.wakes.load(std::memory_order_relaxed),
+             waits[0] ? waits : "none");
     }
 
     // ---- Deko3DCommandQueue
@@ -1395,6 +2203,17 @@ namespace plume {
     void Deko3DCommandQueue::executeCommandLists(const RenderCommandList **commandLists, uint32_t count, RenderCommandSemaphore **, uint32_t, RenderCommandSemaphore **, uint32_t, RenderCommandFence *signalFence) {
         // One queue: its order already serialises what semaphores order in Vulkan (acquires and presents are queue
         // operations in deko3d).
+        // LostOdysseyRecomp (2026-11-03): a list on the record thread is submitted once the worker has replayed all of
+        // it (its end() makes cl->list).
+        if (Deko3DRecorder *r = g_recorder) {
+            for (uint32_t i = 0; i < count; i++) {
+                const Deko3DCommandList *cl = static_cast<const Deko3DCommandList *>(commandLists[i]);
+                if (cl && cl->ring)
+                    waitReplayed(*cl->ring, cl->ring->head.load(std::memory_order_acquire), Deko3DRecordWait::Submit);
+            }
+            if ((r->submits.fetch_add(1, std::memory_order_relaxed) + 1) % 2048 == 0)
+                logRecordStats(*r);
+        }
         for (uint32_t i = 0; i < count; i++) {
             const Deko3DCommandList *cl = static_cast<const Deko3DCommandList *>(commandLists[i]);
             if (cl && cl->list)
@@ -1452,6 +2271,8 @@ namespace plume {
     void Deko3DSwapChain::destroy() {
         if (!swapchain)
             return;
+        // LostOdysseyRecomp (2026-11-03): recorded calls (framebuffers of its images) replayed before the images go.
+        Deko3DRecordDrain(Deko3DRecordWait::SwapchainDestroyed);
         dkQueueWaitIdle(device->queue);
         dkSwapchainDestroy(swapchain);
         swapchain = nullptr;

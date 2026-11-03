@@ -493,6 +493,9 @@ namespace gpu::renderer
             scene_aa::Provenance aaProvenance;
             uint32_t aaValidWidth=0,aaValidHeight=0; // Proven scene domain; allocation may contain padding.
             std::unique_ptr<RenderTexture> texture;
+            // A blit resolve (LO_RESOLVE_BLIT) read this target and nothing has written it since: the restore skip's
+            // proof, as COPY_SOURCE is after a copy.
+            bool unwrittenSinceResolve = false;
             RenderTextureLayout layout = RenderTextureLayout::UNKNOWN;
             RenderFormat format = RenderFormat::UNKNOWN;
             uint32_t width = 0, height = 0;
@@ -1122,6 +1125,11 @@ namespace gpu::renderer
                 return !value || std::string_view(value) != "0";
             }();
             uint32_t resolveCopiesRecorded = 0, resolveCopiesSkipped = 0;
+            // DrawImpl's render target reuse (rtMemo): any change to the targets bumps targetEpoch.
+            uint64_t targetEpoch = 1;
+            struct RtMemo { uint32_t inputs[6]{}; HostTexture* color = nullptr; HostTexture* depth = nullptr;
+                uint64_t epoch = 0, frame = 0, plan = 0; } rtMemo;
+            uint64_t rtReuseHits = 0, rtReuseMisses = 0;
             temporal::SceneObservation temporalScene;
             temporal::DrawTemporalTracker drawTemporalTracker;
             temporal::SuspectTracker suspectTracker;
@@ -1745,6 +1753,7 @@ namespace gpu::renderer
 
             void DropResolved(uint32_t base, uint32_t destFormat)
             {
+                ++targetEpoch;
                 auto it = resolved.find(base);
                 if (it == resolved.end())
                     return;
@@ -3460,6 +3469,7 @@ namespace gpu::renderer
             // has borrowed the current slot (as the restore itself is).
             bool SettleRestoreDebt()
             {
+                ++targetEpoch;
                 if (!restoreDebt.target) return true;
                 auto& target = *restoreDebt.target;
                 auto& source = *restoreDebt.source;
@@ -4264,11 +4274,15 @@ namespace gpu::renderer
 
             // Copies rect (x0,y0,w,h) from src into dst at the same position,
             // converting formats along the way.
-            bool BlitRegion(HostTexture& src, HostTexture& dst, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            // forResolve: a same-format resolve (ResolveOnGpu, LO_RESOLVE_BLIT), which keeps its own SDR state and copy
+            // tracking.
+            bool BlitRegion(HostTexture& src, HostTexture& dst, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, bool forResolve = false)
             {
                 FlushMotionReplayQueue();
-                dst.sdrProducerFrame = ~0ull;
-                consecutiveResolveCopies.Invalidate();
+                if (!forResolve) {
+                    dst.sdrProducerFrame = ~0ull;
+                    consecutiveResolveCopies.Invalidate();
+                }
                 RenderPipeline* pipeline = GetBlitPipeline(dst.format);
                 if (!pipeline)
                     return false;
@@ -4294,7 +4308,7 @@ namespace gpu::renderer
                 if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
                 commandList->drawInstanced(3, 1, 0, 0);
 #if defined(LO_GPU_PLUME)
-                HandleFsrAlphaRgbWriter(dst, "blit_region");
+                if (!forResolve) HandleFsrAlphaRgbWriter(dst, "blit_region");
 #endif
                 return true;
             }
@@ -5095,6 +5109,7 @@ void main()
 
             bool Flush()
             {
+                ++targetEpoch;
                 FlushMotionReplayQueue();
                 consecutiveResolveCopies.Invalidate();
                 if (video::GpuWorkStopped()) {
@@ -5492,8 +5507,10 @@ void main()
                     layout != RenderTextureLayout::DEPTH_WRITE)
                     RunPendingClears(tex);
                 if (layout == RenderTextureLayout::COLOR_WRITE || layout == RenderTextureLayout::COPY_DEST ||
-                    layout == RenderTextureLayout::GENERAL || layout == RenderTextureLayout::DEPTH_WRITE)
+                    layout == RenderTextureLayout::GENERAL || layout == RenderTextureLayout::DEPTH_WRITE) {
                     MarkFgWritable(tex, "writable_transition");
+                    tex.unwrittenSinceResolve = false;
+                }
                 if (tex.layout == layout)
                     return;
                 commandList->barriers(stages, RenderTextureBarrier(tex.texture.get(), layout));
@@ -5511,6 +5528,7 @@ void main()
 
             void QueueClear(HostTexture& tex, pending_clear::Op op)
             {
+                ++targetEpoch;
                 // A depth fill leaves a surface no replay draws; the clear value 0 is "nothing".
                 // Only a frame with a motion consumer tracks it.
                 if (motionOptions.staticSkip && (temporalExperiment || temporalInputProbe || dlssSrRequested || nativeFgInputs) &&
@@ -7858,6 +7876,7 @@ void main()
                     framebuffers.clear();
                     lastFramebuffer = nullptr;
                     renderTargets.clear();
+                    ++targetEpoch;
                     resolved.clear();
                     resolvedBases.reset();
                     tileOwner.clear();
@@ -7936,6 +7955,7 @@ void main()
             struct CatalogRoleCache { uint64_t key = ~0ull, generation = 0; resolution::TargetRole role{}; } catalogRoleCache[2];
             HostTexture* GetRenderTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool depth)
             {
+                ++targetEpoch;
                 // EDRAM targets have no intrinsic height and ours is only guessed
                 // from the scissor, so draws and resolves may disagree on it: key
                 // by tile base, format and pitch only and grow the texture when a
@@ -8043,6 +8063,7 @@ void main()
             HostTexture* AcquireColorTarget(uint32_t base, uint32_t format, uint32_t pitch, uint32_t height, bool forRead = false,
                 bool touchesColor = true)
             {
+                ++targetEpoch;
                 const uint32_t colorClass = ColorClassOf(format);
                 HostTexture* target = GetRenderTarget(base, format, pitch, height, false);
                 // Convert on both draw and resolve by default. The old resolve-only
@@ -9776,7 +9797,8 @@ void main()
                     uint32_t fetch[6];
                     g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS, 6, fetch);
                     const ResolvedSurface* rs = FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F);
-                    if (target != renderTargets.end() && target->second->layout == RenderTextureLayout::COPY_SOURCE &&
+                    if (target != renderTargets.end() &&
+                        (target->second->layout == RenderTextureLayout::COPY_SOURCE || target->second->unwrittenSinceResolve) &&
                         rs && rs->tex && rs->frame == frame && rs->sourceSerial == target->second->allocationSerial &&
                         !rs->writeX && !rs->writeY && rs->writeWidth == rs->tex->width && rs->writeHeight == rs->tex->height)
                     {
@@ -9784,6 +9806,7 @@ void main()
                         // The draw would have made this format the tiles' owner; without that, the next draw converts
                         // whatever another format left there over this image.
                         tileOwner[{ colorInfo & 0xFFF, pitch }] = ColorClassOf((colorInfo >> 16) & 0xF);
+                        ++targetEpoch;
                         return;
                     }
                 }
@@ -9793,15 +9816,38 @@ void main()
                     ScopedTimer rtTimer{ tRt, cpuTimingEnabled };
                     // Restore before taking color: looking up depth afterwards
                     // must not retire the color pointer we just borrowed.
+                    const bool touchesColor = colorWrites && (Reg(REG_RB_COLOR_MASK) & 0xF) != 0;
+                    // A draw with the same targets as the last one, with nothing in between that could change them
+                    // (every change bumps targetEpoch), gets the same textures without the lookups. LO_RT_REUSE=0: off.
+                    static const bool rtReuse = !(getenv("LO_RT_REUSE") && getenv("LO_RT_REUSE")[0] == '0');
+                    const uint32_t memoInputs[6] = {colorInfo, pitch, rtHeight, depthInfo, depthControl & 3, touchesColor};
+                    const uint64_t memoPlan = activePlan.geometryEpoch ^ (uint64_t(catalogGeneration.load(std::memory_order_acquire)) << 32);
+                    if (rtReuse && rtMemo.color && rtMemo.epoch == targetEpoch && rtMemo.frame == frame && rtMemo.plan == memoPlan &&
+                        !restoreDebt.target && !sceneCopyPromotion.activeMapping && std::memcmp(rtMemo.inputs, memoInputs, sizeof(memoInputs)) == 0)
+                    {
+                        color = rtMemo.color;
+                        depth = rtMemo.depth;
+                        ++rtReuseHits;
+                    }
+                    else
+                    {
                     const RenderTargetKey drawKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
                     if (!PreparePromotionAccess(drawKey, rtHeight, (depthControl & 3) != 0)) return;
                     // A colour clear rectangle is replayed into every view of its
                     // tiles after the draw, when settling would rotate a borrowed slot.
-                    const bool touchesColor = colorWrites && (Reg(REG_RB_COLOR_MASK) & 0xF) != 0;
                     if (touchesColor && restoreDebt.target && restoreDebt.base == (colorInfo & 0xFFF) && info.primitiveType == 8 &&
                         !info.indexed && info.indexCount <= 6 && (Reg(REG_PA_CL_VTE_CNTL) & 0x100) && !SettleRestoreDebt()) return;
                     color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, false, touchesColor);
                     depth = (depthControl & 3) ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true) : nullptr;
+                    rtMemo = {};
+                    if (color && color->texture && (!(depthControl & 3) || (depth && depth->texture)))
+                    {
+                        std::memcpy(rtMemo.inputs, memoInputs, sizeof(memoInputs));
+                        rtMemo.color = color; rtMemo.depth = depth;
+                        rtMemo.epoch = targetEpoch; rtMemo.frame = frame; rtMemo.plan = memoPlan;
+                    }
+                    ++rtReuseMisses;
+                    }
                     if (!color || !color->texture || ((depthControl & 3) && (!depth || !depth->texture))) {
                         ++drops.pitch;
                         return;
@@ -14191,6 +14237,7 @@ void main()
             bool ResolveDepthOnGpu(HostTexture& depth, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
                                    uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
+                ++targetEpoch;
                 consecutiveResolveCopies.Invalidate();
                 if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
@@ -14285,6 +14332,7 @@ void main()
             bool ResolveOnGpu(HostTexture& color, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
                               uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
             {
+                ++targetEpoch;
                 if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
                 const uint32_t guestH = std::clamp<uint32_t>(std::max(destHeight, y0 + h), 1, 8192);
@@ -14350,11 +14398,27 @@ void main()
                 const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
                 if (rs.tex->format == color.format)
                 {
-                    Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    // LO_RESOLVE_BLIT=1: the same pixels through the blit shader on the 3D engine, not a copy-engine copy
+                    // between two barriers (exact for these formats: each value round-trips through float32).
+                    static const bool resolveBlit = video::IsDeko3d() && getenv("LO_RESOLVE_BLIT") && getenv("LO_RESOLVE_BLIT")[0] == '1';
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
-                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy)) {
+                    const bool reuse = resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy);
+                    if (resolveBlit && !reuse)
+                    {
+                        if (!BlitRegion(color, *rs.tex, x0, y0, w, h, true)) return false;
+                        // A blit leaves the target readable, not in COPY_SOURCE: the restore skip checks this instead.
+                        color.unwrittenSinceResolve = true;
+                        ++resolveCopiesRecorded;
+                        resolveOperation = "blit_resolve";
+                    }
+                    else
+                    {
+                        Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                        Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    }
+                    if (resolveBlit && !reuse) {}
+                    else if (reuse) {
                         ++resolveCopiesSkipped;
                         resolveOperation = "copy_reused";
                     }
@@ -14715,6 +14779,7 @@ void main()
                                 float x, float y, float width, float height, float safeLeft, float safeRight,
                                 float safeTop, float safeBottom)
             {
+                ++targetEpoch;
                 if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) ||
                     !std::isfinite(safeLeft) || !std::isfinite(safeRight) || !std::isfinite(safeTop) ||
                     !std::isfinite(safeBottom) || width <= 0.0f || height <= 0.0f)
@@ -14839,6 +14904,7 @@ void main()
             void DrawMovieReplacement(uint32_t surfaceInfo, uint32_t colorInfo, float x, float y, float width, float height,
                                       uint32_t session, int64_t timeUs)
             {
+                ++targetEpoch;
                 if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) ||
                     width <= 0.0f || height <= 0.0f)
                     return;
@@ -15424,6 +15490,12 @@ void main()
             {
                 LOG_INFO("renderer: {} no-op draws skipped in the last 300 frames", g_renderer->noopDrawsSkipped);
                 g_renderer->noopDrawsSkipped = 0;
+            }
+            if (g_renderer->frame % 300 == 0 && (g_renderer->rtReuseHits || g_renderer->rtReuseMisses))
+            {
+                LOG_INFO("renderer: render targets reused for {} of {} draws in the last 300 frames", g_renderer->rtReuseHits,
+                    g_renderer->rtReuseHits + g_renderer->rtReuseMisses);
+                g_renderer->rtReuseHits = g_renderer->rtReuseMisses = 0;
             }
             if ((stats || render_timing::Enabled()) && (render_timing::Enabled() || g_renderer->frame % 60 == 0))
             {

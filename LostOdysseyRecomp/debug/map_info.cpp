@@ -157,6 +157,21 @@ void debug_menu::UpdateMapInfo(uint8_t* base) {
     std::lock_guard lock(mutex);
     if (now - lastUpdate < std::chrono::milliseconds(250)) return;
     lastUpdate = now;
+    // The walk below runs on the game thread: skip it while the world's level list is the same as last time.
+    {
+        static std::vector<uint32_t> lastLevels;
+        std::vector<uint32_t> levelsNow;
+        const auto worldNow = PPC_LOAD_U32(0x83318744);
+        levelsNow.push_back(worldNow);
+        if (Address(worldNow)) {
+            const auto levels = PPC_LOAD_U32(worldNow + 0x44), count = PPC_LOAD_U32(worldNow + 0x48);
+            levelsNow.push_back(levels); levelsNow.push_back(count);
+            if (Address(levels) && count <= 256)
+                for (uint32_t i = 0; i < count; ++i) levelsNow.push_back(PPC_LOAD_U32(levels + i * 4));
+        }
+        if (levelsNow == lastLevels) return;
+        lastLevels = std::move(levelsNow);
+    }
     MapInfo current;
     std::vector<uint32_t> present;
     const auto world = PPC_LOAD_U32(0x83318744);

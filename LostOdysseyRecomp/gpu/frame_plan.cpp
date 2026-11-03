@@ -283,8 +283,8 @@ namespace gpu::frame_plan
     void ResetSizing(uint64_t deviceEpoch) { sizingCache.ResetSizing(deviceEpoch); }
     void TagReservedCommand(uint32_t ring, uint32_t commandAddress)
     {
-        const auto plan = CurrentProducerPlan();
-        if (ring == 0x8336A7A4 && commandAddress && plan) tags.Store(commandAddress, *plan);
+        if (ring != 0x8336A7A4 || !commandAddress) return;
+        if (const auto plan = CurrentProducerPlan()) tags.Store(commandAddress, *plan);
     }
     bool BeginRenderCommand(uint32_t commandAddress)
     {
@@ -321,6 +321,11 @@ namespace gpu::frame_plan
         const auto plan = CurrentProducerPlan();
         PPCContext* current = GetPPCContext();
         if (!plan || !current) return;
+        // The plan is almost always the one already queued: check before copying the whole context.
+        { std::lock_guard lock(deviceMutex);
+            if (device != readyDevice || (emittedSerial == plan->cpuSerial && emittedEpoch == plan->geometryEpoch &&
+                 emittedSignature == plan->requestSignature && emittedSizingRevision == plan->sizingRevision &&
+                 emittedGeneration == streamGeneration && emittedCinematicBars == plan->cinematicBars)) return; }
         PPCContext context = *current;
         if (currentStack) context.r1.u32 = currentStack;
         QueuePlanOnDevice(context, device, *plan);
