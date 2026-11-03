@@ -35,7 +35,7 @@ def checkNativeLibraries = tasks.register('checkNativeLibraries') {
 // Release packaging (tools/android/ci_build.sh) passes the version tag:
 // -PloVersionName=v0.8.0 gives versionName 0.8.0 and versionCode 80000
 // (major*1000000 + minor*10000 + patch), so updates install over each other.
-def loVersionName = (project.findProperty('loVersionName') ?: '0.1.0-dev').toString().replaceFirst(/^v/, '')
+def loVersionName = (project.findProperty('loVersionName') ?: '1.1.0').toString().replaceFirst(/^v/, '')
 def loVersionMatch = loVersionName =~ /^(\d+)\.(\d+)\.(\d+)/
 def loVersionCode = loVersionMatch.find()
     ? loVersionMatch.group(1).toInteger() * 1000000 + loVersionMatch.group(2).toInteger() * 10000 + loVersionMatch.group(3).toInteger()
