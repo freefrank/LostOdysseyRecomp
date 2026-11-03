@@ -24,9 +24,11 @@ Targets that touch `settings.ini` or other files (for example `LoSaveAnywhereCon
   graphics parser and early startup preferences, respectively.
 - On Linux, `python3 -B tools/tests/recomplauncher_config_test.py --out out/launcher-config`
   compiles production parser/writer and early DXGI-selection bodies with the platform loader/log
-  sink stubbed. It round-trips profile choices and checks provider-dependent quality rows.
+  sink stubbed. It round-trips Windows and Linux profile choices and checks provider-dependent quality rows.
 - `python -B tools/tests/package_release_test.py` checks that the Windows ZIP contains the profile
   beside the executable and records its checksum. It assembles a synthetic package, not a real release.
+- `python -B tools/tests/package_appimage_test.py` checks the Linux `.tar.gz` bundle contains
+  the same AppImage with executable permissions and a loose Linux profile using the XDG paths.
 
 The profile test and packaging fixture are part of `review_regressions/`. Linux fixture coverage
 does not establish end-to-end Linux launcher support. Player-side checks and limitations are in

@@ -38,7 +38,7 @@ You need Windows x64 and a CPU with AVX. The game uses Vulkan by default; Direct
 
 The ZIP also contains an `mo2` folder with the plugins for Mod Organizer 2; see [Mod Organizer 2](wiki/Mod-Organizer-2.md).
 
-**Playing through RecompLauncher:** Windows ZIPs built from this source include `recomplauncher.json` for importing discs and DLC from a source folder without opening the game, and changing graphics settings on its game page. The launcher's backup filter excludes our `save.bin` files even when it reports a successful thumbnail backup: back up the complete `save/` folder manually. See [integration details and delivery status](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md).
+**Playing through RecompLauncher:** Windows ZIPs and Linux launcher `.tar.gz` bundles built from this source include `recomplauncher.json` for headless disc/DLC import and graphics settings. On Linux, choose the `.tar.gz` package, which includes the AppImage and its Linux profile. Use a launcher build with the `save.bin` backup fix and verify a fresh backup. See [integration details, package selection and delivery status](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md).
 
 <a id="automatic-content-import"></a>
 

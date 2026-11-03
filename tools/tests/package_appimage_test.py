@@ -7,6 +7,8 @@ import os
 import shutil
 import subprocess
 import tempfile
+import json
+import tarfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -137,6 +139,20 @@ class PackageAppImageTests(unittest.TestCase):
                 self.assertTrue(link.is_symlink())
                 self.assertEqual(os.readlink(link), 'libcurl.so.4')
             self.assertTrue((output / 'LostOdysseyRecomp-linux-x64-v0.7.3.AppImage').is_file())
+            with tarfile.open(output / 'LostOdysseyRecomp-linux-x64-v0.7.3.tar.gz') as archive:
+                self.assertEqual(set(archive.getnames()), {'LostOdysseyRecomp.AppImage', 'recomplauncher.json'})
+                self.assertEqual(archive.extractfile('LostOdysseyRecomp.AppImage').read(),
+                                 (output / 'LostOdysseyRecomp-linux-x64-v0.7.3.AppImage').read_bytes())
+                self.assertEqual(archive.getmember('LostOdysseyRecomp.AppImage').mode & 0o777, 0o755)
+                profile = json.load(archive.extractfile('recomplauncher.json'))
+                self.assertEqual(profile['prepare']['program'], ['LostOdysseyRecomp.AppImage'])
+                self.assertEqual(profile['config'][0]['file'][0]['path'], '{config}/lost-odyssey-recomp/settings.ini')
+                self.assertEqual(profile['saves'], ['{local}/lost-odyssey-recomp/save'])
+                rows = {row['id']: row for row in profile['settings']}
+                self.assertNotIn('backend', rows)
+                self.assertNotIn('frame_generation', rows)
+                self.assertNotIn('xess_quality', rows)
+                self.assertFalse(any(key.startswith('dlss_n') for key in rows))
 
     def test_explicit_appdir_rejects_existing_destination_without_overwrite(self):
         module = load_packager()
