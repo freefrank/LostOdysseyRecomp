@@ -242,6 +242,8 @@ bool DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t w
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
 bool IsTitleQuitOpen();
+// A keyboard key's name in the current layout (hid::KeyName), any thread.
+std::wstring KeyboardKeyName(uint16_t scancode);
 // The menu is drawn over the live game frame, which shows the retail header
 // above MenuGameHeaderBottom (layout pixels): presentation clears the menu's
 // alpha there. Otherwise the menu replaces the frame.

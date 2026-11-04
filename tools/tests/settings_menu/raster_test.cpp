@@ -104,5 +104,26 @@ int main() {
         Check(changed && inside, "speaker marker stays inside its bounds");
         Check((r.x1 - r.x0 > 80) == (position != 2.5f), "the marker frames a speaker only while resting on it");
     }
+    // Battle intro skip legend: only its own rectangle, straight alpha with
+    // visible ink, inside the centred 16:9 layout at 4:3 and 21:9 too.
+    for (auto [w,h] : {std::pair{1280u,720u}, {1440u,1080u}, {3440u,1440u}}) {
+        settings::MenuSnapshot skip;
+        skip.skipPrompt = true;
+        skip.help = L": Skip";
+        skip.skipKey = L"B";
+        std::vector<uint32_t> pixels;
+        const auto r = settings::SkipPromptBounds(w,h);
+        Check(settings::RasterizeMenu(skip,w,h,pixels) && pixels.size() == (r.x1-r.x0)*(r.y1-r.y0),
+              "skip legend rasterizes its bounds");
+        Check(std::any_of(pixels.begin(),pixels.end(),[](uint32_t p) { return (p >> 24) > 200; }) &&
+              std::any_of(pixels.begin(),pixels.end(),[](uint32_t p) { return (p >> 24) == 0; }),
+              "skip legend is straight alpha text");
+        const double scale = std::min(w/1280.0, h/720.0), left = (w-1280*scale)/2, top = (h-720*scale)/2;
+        Check(r.x0 >= left + 64*scale && r.x1 <= left + 1240*scale && r.y0 >= top + 600*scale && r.y1 <= top + 690*scale,
+              "skip legend stays in the 16:9 layout's lower right");
+        skip.skipKey = L"Right Shift"; skip.skipKeyName = true;
+        std::vector<uint32_t> keyed;
+        Check(settings::RasterizeMenu(skip,w,h,keyed) && keyed != pixels, "a keyboard key name replaces the icon");
+    }
     std::printf("PASS: %u native-resolution backdrop cache checks\n",checks);
 }
