@@ -28,6 +28,7 @@
 #include <os/user_paths.h>
 #include <host_ui/host_ui.h>
 #include <achievements/achievements.h>
+#include <atomic>
 #include <csetjmp>
 
 // Kernel HLE for xboxkrnl.exe / xam.xex imports. Reference behaviour: Xenia
@@ -47,7 +48,7 @@ struct ThreadWaitState
     uint32_t object = 0;
     uint32_t lr = 0;
     uint32_t r1 = 0;
-    uint64_t since = 0;
+    std::atomic<uint64_t> since{0};
     PPCContext* ctx = nullptr; // live context, read racily for diagnostics only
 };
 
@@ -94,7 +95,7 @@ struct WaitScope
         st.lr = g_ppcContext ? uint32_t(g_ppcContext->lr) : 0;
         st.pcr = g_ppcContext ? g_ppcContext->r13.u32 : 0;
         st.r1 = g_ppcContext ? g_ppcContext->r1.u32 : 0;
-        st.since = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        st.since.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_relaxed);
     }
     ~WaitScope() { st.what = "running"; st.object = 0; }
 };
@@ -126,7 +127,11 @@ void DumpGuestThreadStates()
             bt += fmt::format(" {:#x}", ret);
             frame = caller;
         }
-        LOG_WARNING("  tid={:#x} pcr={:#x} {} obj={:#x} lr={:#x} liveLr={:#x} for {} ms bt:{}", st->threadId, st->pcr, st->what, st->object, st->lr, liveLr, running ? 0 : now - st->since, bt);
+        const uint64_t since = st->since.load(std::memory_order_relaxed);
+        // A wait may start after the watchdog captured 'now'. Avoid unsigned
+        // wraparound in the diagnostic without altering the guest wait.
+        const uint64_t elapsed = !running && now >= since ? now - since : 0;
+        LOG_WARNING("  tid={:#x} pcr={:#x} {} obj={:#x} lr={:#x} liveLr={:#x} for {} ms bt:{}", st->threadId, st->pcr, st->what, st->object, st->lr, liveLr, elapsed, bt);
     }
 }
 
