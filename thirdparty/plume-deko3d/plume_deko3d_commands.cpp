@@ -50,6 +50,138 @@
 #include <memory>
 #include <new>
 
+// LostOdysseyRecomp (2026-11-04): LO_DEKO3D_PRESENT_THREAD=1 takes the compositor's buffer-queue calls off the thread
+// that presents (GPU CmdProc, where bqQueueBuffer and bqDequeueBuffer were about 1.5 ms a frame of binder calls).
+// dkQueuePresentImage still decompresses, signals and flushes on the caller; the nwindowQueueBuffer it ends with
+// (linked with --wrap) is handed to a worker, which then dequeues the next buffer at once, and the next
+// nwindowDequeueBuffer takes that buffer, waiting for it if needed. The window sees the same calls in the same order.
+namespace plume { void deko3dLog(const char *fmt, ...); }
+extern "C" {
+Result __real_nwindowQueueBuffer(NWindow *nw, s32 slot, const NvMultiFence *fence);
+Result __real_nwindowDequeueBuffer(NWindow *nw, s32 *out_slot, NvMultiFence *out_fence);
+}
+namespace {
+    struct PresentWorker {
+        Mutex mutex;
+        CondVar wake, done;
+        Thread thread;
+        bool started = false, failed = false;
+        bool queued = false, busy = false;      // a queue call handed over / being made
+        NWindow *window = nullptr;
+        s32 slot = 0;
+        NvMultiFence fence{};
+        bool prefetched = false;                // the next buffer, dequeued after that queue call
+        Result prefetchRc = 0;
+        s32 prefetchSlot = 0;
+        NvMultiFence prefetchFence{};
+    } g_present;
+
+    bool PresentThreadEnabled() {
+        static const bool on = [] {
+            const char *v = std::getenv("LO_DEKO3D_PRESENT_THREAD");
+            return v && v[0] == '1';
+        }();
+        return on;
+    }
+
+    void PresentThreadMain(void *) {
+        PresentWorker &w = g_present;
+        mutexLock(&w.mutex);
+        for (;;) {
+            while (!w.queued)
+                condvarWait(&w.wake, &w.mutex);
+            w.queued = false;
+            w.busy = true;
+            NWindow *window = w.window;
+            const s32 slot = w.slot;
+            const NvMultiFence fence = w.fence;
+            mutexUnlock(&w.mutex);
+            const Result rc = __real_nwindowQueueBuffer(window, slot, &fence);
+            if (R_FAILED(rc))
+                plume::deko3dLog("present thread: nwindowQueueBuffer(%d) failed: 0x%x", int(slot), rc);
+            s32 next = 0;
+            NvMultiFence nextFence{};
+            const Result nextRc = __real_nwindowDequeueBuffer(window, &next, &nextFence);
+            mutexLock(&w.mutex);
+            w.prefetched = true;
+            w.prefetchRc = nextRc;
+            w.prefetchSlot = next;
+            w.prefetchFence = nextFence;
+            w.busy = false;
+            condvarWakeAll(&w.done);
+        }
+    }
+
+    // Called with the mutex held: until the handed-over queue call and its dequeue are done.
+    void PresentThreadIdle(PresentWorker &w) {
+        while (w.queued || w.busy)
+            condvarWait(&w.done, &w.mutex);
+    }
+}
+
+extern "C" Result __wrap_nwindowQueueBuffer(NWindow *nw, s32 slot, const NvMultiFence *fence) {
+    PresentWorker &w = g_present;
+    if (!PresentThreadEnabled() || w.failed)
+        return __real_nwindowQueueBuffer(nw, slot, fence);
+    mutexLock(&w.mutex);
+    if (!w.started) {
+        // Core 2 (GPU CmdProc's) by preference, core 1 allowed: it mostly waits in binder calls.
+        const Result rc = threadCreate(&w.thread, PresentThreadMain, nullptr, nullptr, 0x10000, 0x2C, 2);
+        if (R_FAILED(rc) || R_FAILED(threadStart(&w.thread))) {
+            w.failed = true;
+            mutexUnlock(&w.mutex);
+            plume::deko3dLog("present thread: not started (0x%x)", rc);
+            return __real_nwindowQueueBuffer(nw, slot, fence);
+        }
+        svcSetThreadCoreMask(w.thread.handle, 2, 0b110);
+        w.started = true;
+        plume::deko3dLog("present thread: on");
+    }
+    PresentThreadIdle(w);
+    w.window = nw;
+    w.slot = slot;
+    w.fence = fence ? *fence : NvMultiFence{};
+    w.queued = true;
+    condvarWakeOne(&w.wake);
+    mutexUnlock(&w.mutex);
+    return 0;
+}
+
+extern "C" Result __wrap_nwindowDequeueBuffer(NWindow *nw, s32 *out_slot, NvMultiFence *out_fence) {
+    PresentWorker &w = g_present;
+    if (!PresentThreadEnabled() || !w.started)
+        return __real_nwindowDequeueBuffer(nw, out_slot, out_fence);
+    mutexLock(&w.mutex);
+    PresentThreadIdle(w);
+    if (w.prefetched && w.window == nw) {
+        w.prefetched = false;
+        const Result rc = w.prefetchRc;
+        if (out_slot) *out_slot = w.prefetchSlot;
+        if (out_fence) *out_fence = w.prefetchFence;
+        mutexUnlock(&w.mutex);
+        return rc;
+    }
+    mutexUnlock(&w.mutex);
+    return __real_nwindowDequeueBuffer(nw, out_slot, out_fence);
+}
+
+namespace plume {
+    // Before the swapchain lets go of the window: the handed-over calls done, a buffer dequeued ahead given back.
+    static void Deko3DPresentThreadDrain() {
+        PresentWorker &w = g_present;
+        if (!w.started)
+            return;
+        mutexLock(&w.mutex);
+        PresentThreadIdle(w);
+        if (w.prefetched) {
+            w.prefetched = false;
+            if (R_SUCCEEDED(w.prefetchRc))
+                nwindowCancelBuffer(w.window, w.prefetchSlot, &w.prefetchFence);
+        }
+        mutexUnlock(&w.mutex);
+    }
+}
+
 namespace plume {
     DkImageFormat toDkFormat(RenderFormat format);
 
@@ -2371,6 +2503,7 @@ namespace plume {
         // LostOdysseyRecomp (2026-11-03): recorded calls (framebuffers of its images) replayed before the images go.
         Deko3DRecordDrain(Deko3DRecordWait::SwapchainDestroyed);
         dkQueueWaitIdle(device->queue);
+        Deko3DPresentThreadDrain();
         dkSwapchainDestroy(swapchain);
         swapchain = nullptr;
         textures.clear();
