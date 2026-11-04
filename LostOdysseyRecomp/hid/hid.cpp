@@ -421,6 +421,14 @@ void hid::PumpHostInput()
     lt = std::max(lt, touch.leftTrigger);
     rt = std::max(rt, touch.rightTrigger);
 #endif
+    // The debug server's "press" and "hold" reach the host overlay too (LB+RB, its navigation), also while it has
+    // paused the guest.
+    if (os::debug_server::Held held; os::debug_server::HeldInput(held))
+    {
+        buttons |= held.buttons;
+        lt = std::max(lt, held.leftTrigger);
+        rt = std::max(rt, held.rightTrigger);
+    }
     ProcessHostInput(buttons, lt, rt);
 }
 

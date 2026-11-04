@@ -92,6 +92,18 @@ namespace gpu
 #endif
         return true;
     }
+    // A host overlay's frame while the guest is paused under it, and the debug server's "shot" of it: no guest swap
+    // presents one meanwhile.
+    static void PresentHostOverlayFrame()
+    {
+        video::PresentHostOverlay();
+        if (const char* debugShot = nullptr; os::debug_server::TakeShotRequest(debugShot))
+        {
+            const bool saved = video::SaveScreenshot(debugShot);
+            LOG_INFO("debug server screenshot of the host overlay -> {} ({})", debugShot, saved ? "ok" : "failed");
+            os::debug_server::ShotDone(0, saved);
+        }
+    }
     static const bool g_capturePacketHistory = getenv("LO_GPU_TRACE") != nullptr;
 
     // Opt-in ring of recently executed packets, dumped when the parser derails.
@@ -846,7 +858,7 @@ namespace gpu
                         if (now - s_lastOverlayPresent >= std::chrono::milliseconds(16))
                         {
                             s_lastOverlayPresent = now;
-                            video::PresentHostOverlay();
+                            PresentHostOverlayFrame();
                         }
                     }
                 }
@@ -1475,7 +1487,7 @@ namespace gpu
                     if (now - s_lastWaitOverlayPresent >= std::chrono::milliseconds(16))
                     {
                         s_lastWaitOverlayPresent = now;
-                        video::PresentHostOverlay();
+                        PresentHostOverlayFrame();
                     }
                 }
                 if (std::chrono::steady_clock::now() > deadline)
