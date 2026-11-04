@@ -115,6 +115,8 @@ LO_PIPELINE_PREBUILD=all
 
 Open **Settings → Graphics → Graphics preset** and choose **Low-end**. It turns off dynamic shadows, motion blur, depth of field and bloom, which gives about 10–20% more speed. Choose **Original** to get the full effects back.
 
+**Settings → Graphics** also has **Render resolution** (Auto is 540p handheld and 720p docked; each mode keeps its own), **Dynamic resolution** with its **Minimum resolution**, and **FSR** with **FSR sharpness**, which sharpens a scene rendered below 720p. A line in `env.txt` wins over its row, which then shows greyed out: delete `LO_SWITCH_RENDER_HEIGHT=540` or `LO_DYNAMIC_RESOLUTION=0` to choose those in the menu.
+
 ### Overclocking
 
 The graphics chip is the limit, so a GPU overclock (for example with sys-clk) helps most. Overclock tools apply their settings per title ID, and a homebrew app runs under the title ID of the game you launched it from with title takeover, so set the profile for that title ID. Only overclock within what your console and cooling can handle.

@@ -38,6 +38,52 @@ std::string PackId(std::string text)
         });
     return valid ? text : std::string{};
 }
+} // namespace
+bool Docked()
+{
+#if LO_PLATFORM_SWITCH
+    return os::switch_platform::IsDocked();
+#else
+    return false;
+#endif
+}
+uint32_t RenderHeightOverride()
+{
+#if LO_PLATFORM_SWITCH
+    // LO_SWITCH_RENDER_HEIGHT=540 or 720, or any height dynamic resolution renders at (360 to 1071 rows, a multiple
+    // of 9: 360, 450, 504, ...), for measuring how a scene's cost follows its pixels.
+    static const uint32_t height = [] {
+        const char *text = std::getenv("LO_SWITCH_RENDER_HEIGHT");
+        const uint32_t rows = text && *text ? uint32_t(std::strtoul(text, nullptr, 10)) : 0;
+        return rows == 540 || rows == 720 || gpu::dynamic_resolution::IsDynamicHeight(rows) ? rows : 0u;
+    }();
+    return height;
+#else
+    return 0;
+#endif
+}
+uint32_t SwitchMaximumHeight(const Config &config, bool docked)
+{
+    const uint32_t height = config.maximumHeight[docked ? 1 : 0];
+    return height ? height : SwitchAutomaticHeight(docked);
+}
+uint32_t SwitchMinimumHeight(const Config &config, bool docked)
+{
+    const uint32_t base = SwitchMaximumHeight(config, docked);
+    const uint32_t minimum = config.minimumHeight[docked ? 1 : 0];
+    return gpu::dynamic_resolution::Floor(base, minimum ? minimum : gpu::dynamic_resolution::DefaultMinimum(base));
+}
+uint32_t DynamicResolutionMinimum(const Config &config)
+{
+#if LO_PLATFORM_SWITCH
+    return config.minimumHeight[Docked() ? 1 : 0];
+#else
+    (void)config;
+    return 0;
+#endif
+}
+namespace
+{
 Config Validate(Config value)
 {
     value.encounterRate = ValidEncounterRate(value.encounterRate);
@@ -147,21 +193,23 @@ Config Validate(Config value)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
 #if LO_PLATFORM_SWITCH
-    // The Xbox 360 image: the game's own 720p scene, retail shadow maps and none
+    // The Xbox 360 image: the game's own scene, retail shadow maps and none
     // of the host AA, AO, filtering, upscaling or HDR passes. The menu hides them.
-    // The scene renders at 960x540 in handheld mode (the GPU-bound console
-    // gains about a third in battle) and at the Xbox 360's 720p when docked,
-    // where the GPU clocks higher; the final pass scales to the 720p output.
-    // main.cpp re-applies this when the console is docked or undocked.
-    // LO_SWITCH_RENDER_HEIGHT=540 or 720 (env.txt) forces one of them; any other
-    // height dynamic resolution renders at (360 to 1071 rows, a multiple of 9: 360,
-    // 450, 504, ...) forces that, for measuring how a scene's cost follows its pixels.
-    {
-        const char* height = std::getenv("LO_SWITCH_RENDER_HEIGHT");
-        const uint32_t rows = height && *height ? uint32_t(std::strtoul(height, nullptr, 10)) : 0;
-        if (rows == 540 || rows == 720 || gpu::dynamic_resolution::IsDynamicHeight(rows)) value.internalResolution = int(rows);
-        else value.internalResolution = os::switch_platform::IsDocked() ? 720 : 540;
-    }
+    // The scene renders at Graphics → Maximum resolution for the current mode:
+    // automatically 960x540 in handheld mode (the GPU-bound console gains about a
+    // third in battle) and the Xbox 360's 720p when docked, where the GPU clocks
+    // higher; the final pass scales to the 720p output (bilinear, or FSR 1).
+    // gpu/video.cpp re-applies this when the console is docked or undocked.
+    // LO_SWITCH_RENDER_HEIGHT (env.txt, RenderHeightOverride) wins over the menu.
+    for (uint32_t *heights : {value.maximumHeight, value.minimumHeight})
+        for (uint32_t mode = 0; mode < 2; ++mode)
+            if (std::find(std::begin(SwitchSceneHeights), std::end(SwitchSceneHeights), heights[mode]) == std::end(SwitchSceneHeights))
+                heights[mode] = 0;
+    // A minimum above its maximum is the maximum: no dynamic range.
+    for (uint32_t mode = 0; mode < 2; ++mode)
+        value.minimumHeight[mode] = std::min(value.minimumHeight[mode], SwitchMaximumHeight(value, mode == 1));
+    if (const uint32_t rows = RenderHeightOverride()) value.internalResolution = int(rows);
+    else value.internalResolution = int(SwitchMaximumHeight(value, Docked()));
     value.shadowResolution = 1;
     value.antialiasing = 0;
     value.fxaa = false;
@@ -207,6 +255,7 @@ Config Read()
     bool hasEncounterRate = false, legacyNoEncounters = false;
     bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
     bool hasLanguageChosen = false;
+    bool hasSwitchFsr = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
     std::string key;
@@ -399,6 +448,17 @@ Config Read()
         else if (key == "menu_animation_rate")
             value.menuAnimationRate = number;
 #if LO_PLATFORM_SWITCH
+        else if (key == "switch_fsr" && number <= 1)
+        {
+            hasSwitchFsr = true;
+            value.switchFsr = number == 1;
+        }
+        else if (key == "dynamic_resolution" && number <= 1)
+            value.dynamicResolution = number == 1;
+        else if (key == "maximum_height_handheld" || key == "maximum_height_docked")
+            value.maximumHeight[key == "maximum_height_docked" ? 1 : 0] = number;
+        else if (key == "minimum_height_handheld" || key == "minimum_height_docked")
+            value.minimumHeight[key == "minimum_height_docked" ? 1 : 0] = number;
         else if (key == "debug_deko3d_merge_barriers" && number <= 1)
             value.debug.deko3dMergeBarriers = number == 1;
         else if (key == "debug_deko3d_lean_barriers" && number <= 1)
@@ -451,8 +511,11 @@ Config Read()
         value.debugLanguageChosen = value.debugLanguage != Config{}.debugLanguage;
     }
 #if LO_PLATFORM_SWITCH
+    // Files from before the FSR row saved fsr_sharpness=0 while the row was hidden: take the Switch's default.
+    if (!hasSwitchFsr) value.fsrSharpnessPercent = Config{}.fsrSharpnessPercent;
     FollowSystemLanguage(value);
 #endif
+    (void)hasSwitchFsr;
     return Validate(value);
 }
 Config &Current()
@@ -626,6 +689,12 @@ static bool WriteConfig(const Config &value)
            << "\ndebug_deko3d_color_compression=" << (debug.deko3dColorCompression ? 1 : 0)
            << "\ndebug_deko3d_vs_outputs=" << (debug.deko3dVsOutputs ? 1 : 0)
            << "\ndebug_server=" << (debug.debugServer ? 1 : 0)
+           << "\nswitch_fsr=" << (value.switchFsr ? 1 : 0)
+           << "\ndynamic_resolution=" << (value.dynamicResolution ? 1 : 0)
+           << "\nmaximum_height_handheld=" << value.maximumHeight[0]
+           << "\nmaximum_height_docked=" << value.maximumHeight[1]
+           << "\nminimum_height_handheld=" << value.minimumHeight[0]
+           << "\nminimum_height_docked=" << value.minimumHeight[1]
            << "\nui_language_chosen=" << (value.uiLanguageChosen ? 1 : 0)
            << "\ngame_language_chosen=" << (value.gameLanguageChosen ? 1 : 0)
            << "\ndebug_language_chosen=" << (value.debugLanguageChosen ? 1 : 0) << '\n';

@@ -18,10 +18,11 @@ Switch layer follows the Sonic Unleashed Switch ports
 
 The Switch build keeps the Xbox 360 image and its own effects (bloom, depth of
 field, motion blur, shadows). The scene defaults to 540p in handheld mode and
-720p when docked; `LO_SWITCH_RENDER_HEIGHT` can force either mode. The PC
-additions are off and hidden in the Graphics menu: anti-aliasing, ambient
-occlusion, anisotropic filtering, render and shadow resolution, upscalers,
-frame generation and HDR.
+720p when docked; see [Graphics menu](#graphics-menu) for the Switch's own
+resolution and FSR rows. The PC additions are off and hidden in the Graphics
+menu: anti-aliasing, ambient occlusion, anisotropic filtering, shadow
+resolution, the PC upscalers (DLSS, FSR 3.1, XeSS, MetalFX), DLSS neural
+rendering, frame generation, HDR and the window and display options.
 
 ## What you need
 
@@ -63,6 +64,35 @@ any installed game, then pick Lost Odyssey Recomp. The port reserves a 4 GiB
 guest address space and backs it with console memory, which needs the full
 application memory pool and the process-memory system calls. Started from
 the Album applet it stops with a message that says so.
+
+## Graphics menu
+
+Settings (Y on the title screen, or the in-game menu) → Graphics shows the rows
+that do something on the console. Each is saved in `settings.ini` and applies
+when you save; env.txt's variables (below) win over them for scripted runs, and
+the rows they set show their value greyed out.
+
+| Row | Choices | Default | env.txt that wins |
+|---|---|---|---|
+| Render resolution (Maximum resolution with dynamic resolution on) | Auto, 360p, 432p, 504p, 540p, 576p, 648p, 720p | Auto: 540p handheld, 720p docked | `LO_SWITCH_RENDER_HEIGHT` |
+| Dynamic resolution | On, Off | Off | `LO_DYNAMIC_RESOLUTION` |
+| Minimum resolution (shown with dynamic resolution) | Auto, then the heights up to the maximum | Auto: 80% of the maximum (432p, 576p) | `LO_DYNAMIC_RESOLUTION_MIN` |
+| FSR | On, Off | Off (bilinear) | `LO_SWITCH_UPSCALER` |
+| FSR sharpness (shown with FSR) | Off, 1% to 100% | 88% (RCAS 0.24 stops) | `LO_SWITCH_RCAS_STOPS` |
+
+Handheld and docked mode keep their own Render / Minimum resolution: the rows
+show and change the current mode's, and the status line under the menu names
+it. The heights are multiples of 36 rows, dynamic resolution's step, so each is
+a whole 16:9 width. FSR runs only when the scene is smaller than the 720p
+output; FSR sharpness p% is RCAS at 2 − p/50 stops (FSR 2 and 3's mapping),
+and Off runs EASU alone. The log shows the result: `video: Switch upscaler`,
+`presentation: FSR 1`, and `dynamic resolution: on` / `off`.
+
+Also on the tab: Graphics preset, Dynamic shadows, Depth of field, Bloom,
+Motion blur, Culling, Scaling filter, Frame rate, Loading speed, Performance
+overlay and Brightness / Gamma. The preset leaves the scaling filter alone on
+the console (bicubic costs about 7 ms). System hides Automatic updates, log
+upload, Import discs & DLC and Shader bundle, which have nothing to do here.
 
 ## Shaders
 
@@ -194,15 +224,15 @@ Switch-specific options and diagnostics:
 | Variable | Default | Effect |
 |---|---|---|
 | `LO_SWITCH_BACKEND` | NVK | `deko3d` renders with deko3d instead of Mesa NVK (experimental; see "deko3d back end" below) |
-| `LO_SWITCH_RENDER_HEIGHT` | automatic | `540` or `720` forces the scene height; otherwise handheld uses 540 and docked uses 720 |
-| `LO_DYNAMIC_RESOLUTION` | off | `1`: the scene height follows the GPU's time per frame, in steps of 36 rows from the configured height (540 or 720) down to `LO_DYNAMIC_RESOLUTION_MIN` (default 80% of it: 432 or 576); the final pass scales it to the output as usual. The runtime log's `dynamic resolution:` lines show each change |
-| `LO_DYNAMIC_RESOLUTION_MIN` | 80% | The lowest scene height dynamic resolution uses (rows; 360 at the least) |
+| `LO_SWITCH_RENDER_HEIGHT` | Graphics menu | `540` or `720` (or a dynamic resolution height) forces the scene height over Graphics → Render resolution; without either, handheld uses 540 and docked uses 720 |
+| `LO_DYNAMIC_RESOLUTION` | Graphics menu (off) | `0` or `1` wins over Graphics → Dynamic resolution. `1`: the scene height follows the GPU's time per frame, in steps of 36 rows from the configured height (540 or 720) down to `LO_DYNAMIC_RESOLUTION_MIN` (default 80% of it: 432 or 576); the final pass scales it to the output as usual. The runtime log's `dynamic resolution:` lines show each change |
+| `LO_DYNAMIC_RESOLUTION_MIN` | Graphics menu (80%) | The lowest scene height dynamic resolution uses (rows; 360 at the least), over Graphics → Minimum resolution |
 | `LO_DYNAMIC_RESOLUTION_STEP` | `36` | Rows per dynamic resolution step (a multiple of 9, so 16:9 widths stay whole; `90` gives 540, 450, 360) |
 | `LO_TRIM_VARYINGS` | `1` | Keeps only vertex outputs used by the paired fragment shader; set to `0` to disable the Switch Vulkan optimisation |
 | `LO_SWITCH_OUTPUT_HEIGHT` | off | `540` presents 960x540 and leaves the scaling to the display (deko3d) |
-| `LO_SWITCH_UPSCALER` | `bilinear` | AMD FSR 1 for a scene rendered smaller than the output (for example `LO_SWITCH_RENDER_HEIGHT=360`): `fsr` EASU then RCAS (two passes), `easu` EASU alone, `rcas` RCAS at the scene's size then the bilinear upscale. The log's `presentation: FSR 1` line shows what is applied |
-| `LO_SWITCH_RCAS_STOPS` | `0.25` | RCAS sharpness for `fsr` and `rcas`, in stops: 0 is the sharpest, each stop halves it (AMD's default is 0.2) |
-| `LO_SWITCH_UI_NATIVE` | `0` | `1`: text, HUD and menus at the output's size while the scene stays smaller. At the game's scene copy (the finished scene into the display target, before the UI) the scene is upscaled with `LO_SWITCH_UPSCALER` (bilinear when unset) and the display target is swapped for an output-size one, so the UI after it is never scaled. Frames without a scene copy (movies, title) keep the final-pass upscale. Log: `renderer: LO_SWITCH_UI_NATIVE`, plus `restores the scene-size target before the frame ends` when a UI draw needs depth or another target first |
+| `LO_SWITCH_UPSCALER` | Graphics menu (`bilinear`) | Wins over Graphics → FSR. AMD FSR 1 for a scene rendered smaller than the output (for example `LO_SWITCH_RENDER_HEIGHT=360`): `fsr` EASU then RCAS (two passes), `easu` EASU alone, `rcas` RCAS at the scene's size then the bilinear upscale. The log's `video: Switch upscaler` and `presentation: FSR 1` lines show what is applied |
+| `LO_SWITCH_RCAS_STOPS` | Graphics menu (`0.25` with `LO_SWITCH_UPSCALER`) | RCAS sharpness for `fsr` and `rcas`, in stops: 0 is the sharpest, each stop halves it (AMD's default is 0.2). Wins over Graphics → FSR sharpness |
+| `LO_SWITCH_UI_NATIVE` | `0` | `1`: text, HUD and menus at the output's size while the scene stays smaller. At the game's scene copy (the finished scene into the display target, before the UI) the scene is upscaled with `LO_SWITCH_UPSCALER` (bilinear when unset; Graphics → FSR does not reach this path) and the display target is swapped for an output-size one, so the UI after it is never scaled. Frames without a scene copy (movies, title) keep the final-pass upscale. Log: `renderer: LO_SWITCH_UI_NATIVE`, plus `restores the scene-size target before the frame ends` when a UI draw needs depth or another target first |
 | `LO_DEKO3D_PRESENT_THREAD` | `1` | The compositor's buffer-queue calls (queue the finished image, dequeue the next) run on a worker instead of `GPU CmdProc`; `0` makes them there. Street at 540 output: present 2.4 to 0.8 ms on `GPU CmdProc`, 28.77 to 29.1 FPS; the busiest street spot (about 2,030 draws): 24.02 to 24.67 FPS |
 | `LO_DRAW_REUSE` | `0` | `1`: a draw takes the shader, pipeline and texture lookups the draw at its position made in the previous frame. Street: 28.97 against 29.0 FPS, no gain measured. `2` still looks everything up and logs every result that differs |
 | `LO_SKIP_RESTORE` | on | `0` draws the game's EDRAM restores instead of skipping them (deko3d) |
@@ -478,7 +508,7 @@ instructions per call, so it shifts little time.
 | Shaders | Prebuilt SPIR-V pack plus the PC's Vulkan shader cache; DXC is not available (`LO_SWITCH_DXC_IDENTITY`). Guest shaders read their constants from dynamic uniform buffers in descriptor set 5 (`gpu/shader/common_hlsl.h`, `cache::UboConstants()`), which NVK keeps in the Maxwell constant banks |
 | Window, input, audio | devkitPro's SDL 3.4 fork (`thirdparty/SDL-switch`), built without EGL (`tools/patches/sdl-switch-no-egl.patch`) |
 | XMA audio | Xenia's FFmpeg fork with `thirdparty/ffmpeg-config/switch-aarch64` |
-| Graphics settings | `settings::Validate()` selects 540p handheld or 720p docked (override with `LO_SWITCH_RENDER_HEIGHT`), 1x shadow maps and no AA, AO, anisotropic filtering, upscaling, frame generation or HDR; `GraphicsRowHidden()` hides those rows |
+| Graphics settings | `settings::Validate()` selects the current mode's Render resolution (Auto: 540p handheld, 720p docked; override with `LO_SWITCH_RENDER_HEIGHT`), 1x shadow maps and no AA, AO, anisotropic filtering, PC upscalers, frame generation or HDR; `GraphicsRowHidden()` shows only the rows that apply (see [Graphics menu](#graphics-menu)) |
 | Not on Switch | Updater, network downloads, importer, D3D12, DLSS/FSR/XeSS, frame generation, HDR |
 
 ## deko3d back end (experimental)
@@ -572,7 +602,7 @@ In the renderer, on deko3d (`LostOdysseyRecomp/gpu`):
 | Scene renderer's occlusion reads answered at once while counts are made up | `LO_EARLY_QUERY_ANSWER` | +6.9% in a busy street |
 | Constant runs in one pass, lock-free write pointer, wide upload copies | `LO_CP_FUSED_PLAIN_RUN`, `LO_CP_WPTR_LOCKFREE`, `LO_UPLOAD_VECTOR_COPY` | part of +3.6% in a busy street |
 | Dynamic resolution without flicker after a size change | `LO_RESIZE_FIX` | checked on the console |
-| FSR 1 (EASU and RCAS) from a smaller scene, off by default | `LO_SWITCH_UPSCALER=fsr\|easu\|rcas`, `LO_SWITCH_RCAS_STOPS` | sharp picture from 360 rows |
+| FSR 1 (EASU and RCAS) from a smaller scene, off by default | Graphics → FSR; `LO_SWITCH_UPSCALER=fsr\|easu\|rcas`, `LO_SWITCH_RCAS_STOPS` | sharp picture from 360 rows |
 | Display scaling: present a smaller image and let the display scale it | `LO_SWITCH_OUTPUT_HEIGHT` | GPU -0.75 to -1.3 ms, slightly softer |
 
 ## Known gaps

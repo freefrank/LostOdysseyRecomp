@@ -79,6 +79,11 @@ inline uint32_t GameLanguageChoiceIndex(const std::vector<GameLanguageChoice> &c
 // Scaling filter: MetalFX spatial upscaling before presentation (macOS only).
 inline constexpr uint32_t ScalingMetalFx = 2;
 inline constexpr int InternalResolutionNative = 1;
+// The Switch's Minimum and Maximum resolution rows: scene heights in rows. Each is a multiple of 36, dynamic
+// resolution's step, so every one is a 16:9 width and a rung down from 540 and 720 (no 480: 853.3 columns).
+inline constexpr uint32_t SwitchSceneHeights[] = {360, 432, 504, 540, 576, 648, 720};
+// Automatic maximum: 540 rows in handheld mode, the Xbox 360's 720 docked.
+inline constexpr uint32_t SwitchAutomaticHeight(bool docked) { return docked ? 720 : 540; }
 // Audio output: the stereo downmix, the game's 5.1 channels passed through,
 // or 5.1 matrix-encoded into stereo for a receiver to decode.
 inline constexpr uint32_t AudioOutputStereo = 0;
@@ -174,7 +179,23 @@ struct Config
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     uint32_t dlssModel = 0; // DLSS SR model (render preset): 0 M, 1 L. Applied after saving.
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
+#if defined(__SWITCH__)
+    // The Switch's FSR row: 88% is RCAS at 0.24 stops, about LO_SWITCH_RCAS_STOPS's tested 0.25.
+    uint32_t fsrSharpnessPercent = 88;
+#else
     uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
+#endif
+    // The Switch's Graphics rows, saved on the Switch only. switchFsr: FSR 1 (EASU, then RCAS at fsrSharpnessPercent,
+    // gpu/switch_upscaler.h) scales a scene smaller than the output, in place of the bilinear scale.
+    // dynamicResolution: the scene height follows the GPU's time per frame (gpu/dynamic_resolution.h) from the
+    // maximum height down to the minimum. Heights are SwitchSceneHeights rows per operation mode ([0] handheld,
+    // [1] docked), 0 automatic: maximum SwitchAutomaticHeight, minimum 80% of the maximum. With dynamic resolution
+    // off the maximum is the scene height. env.txt's LO_SWITCH_UPSCALER, LO_SWITCH_RCAS_STOPS,
+    // LO_SWITCH_RENDER_HEIGHT and LO_DYNAMIC_RESOLUTION(_MIN) win over them. Applied when saved.
+    bool switchFsr = false;
+    bool dynamicResolution = false;
+    uint32_t maximumHeight[2] = {0, 0};
+    uint32_t minimumHeight[2] = {0, 0};
     // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the
     // player's nvngx_dlssnr.dll; Windows only. Applied after saving.
     uint32_t dlssNeuralRendering = 0;
@@ -248,6 +269,17 @@ bool SaveDisplayChoice(const std::string &name, uint32_t index);
 // saves only graphics_backend, merged with the persisted settings.
 bool SaveGraphicsBackend(GraphicsBackend backend);
 uint32_t GameLanguage();
+// The Switch's operation mode: docked (Config's height index 1) or handheld. False off the Switch.
+bool Docked();
+// LO_SWITCH_RENDER_HEIGHT (env.txt): the scene height it forces over the Maximum resolution row, 0 when unset or
+// not a height the renderer takes. Always 0 off the Switch.
+uint32_t RenderHeightOverride();
+// The Maximum and Minimum resolution rows for one operation mode with automatic resolved: the maximum, and the
+// lowest height dynamic resolution steps down to from it (gpu::dynamic_resolution::Floor).
+uint32_t SwitchMaximumHeight(const Config &config, bool docked);
+uint32_t SwitchMinimumHeight(const Config &config, bool docked);
+// The Minimum resolution row in the current mode, 0 when automatic; dynamic resolution then takes 80%. 0 off the Switch.
+uint32_t DynamicResolutionMinimum(const Config &config);
 // The selected language pack's id, if it is installed and its base is
 // GameLanguage(); empty otherwise. Fixed at the first call, after LanguagePacks.
 std::string GameLanguagePack();

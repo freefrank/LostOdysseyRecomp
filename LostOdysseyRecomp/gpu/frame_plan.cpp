@@ -110,39 +110,40 @@ namespace gpu::frame_plan
 
     namespace
     {
-        // LO_DYNAMIC_RESOLUTION=1 (env.txt): the render height follows the GPU's busy time (gpu/dynamic_resolution.h).
-        // LO_DYNAMIC_RESOLUTION_MIN=<rows> sets the lowest height (default 80% of the configured one) and
-        // LO_DYNAMIC_RESOLUTION_STEP=<rows> the step (a multiple of 9, default 36). Only without
+        // Dynamic resolution (gpu/dynamic_resolution.h): the render height follows the GPU's busy time. The Switch's
+        // Graphics menu turns it on and sets the lowest height (Dynamic / Minimum resolution; default 80% of the
+        // configured height); env.txt's LO_DYNAMIC_RESOLUTION and LO_DYNAMIC_RESOLUTION_MIN win over it, and
+        // LO_DYNAMIC_RESOLUTION_STEP=<rows> sets the step (a multiple of 9, default 36). Only without
         // an upscaler, which sizes its own input.
         uint32_t DynamicHeight(uint32_t configured, const settings::Config& config)
         {
-            static const bool enabled = [] {
-                const char* value = std::getenv("LO_DYNAMIC_RESOLUTION");
-                return value && *value && std::string_view(value) != "0";
-            }();
-            static const uint32_t minimumSetting = [] {
-                const char* value = std::getenv("LO_DYNAMIC_RESOLUTION_MIN");
-                return value && *value ? uint32_t(std::strtoul(value, nullptr, 10)) : 0u;
-            }();
-            static const uint32_t step = [] {
-                const char* value = std::getenv("LO_DYNAMIC_RESOLUTION_STEP");
-                return value && *value ? uint32_t(std::strtoul(value, nullptr, 10)) : dynamic_resolution::Rung;
-            }();
+            static const int environmentEnabled = dynamic_resolution::EnvironmentEnabled();
+            static const uint32_t environmentMinimum = dynamic_resolution::EnvironmentMinimum();
+            static const uint32_t step = dynamic_resolution::EnvironmentStep();
             static dynamic_resolution::Controller controller;
-            static bool announced = false;
+            static uint32_t announcedMinimum = 0, announcedBase = 0;
+            const bool enabled = environmentEnabled >= 0 ? environmentEnabled == 1 : config.dynamicResolution;
             if (!enabled || config.upscaler != upscaling::Upscaler::Off || !dynamic_resolution::Supports(configured)) {
                 gpu_busy::g_dynamicResolution.store(false, std::memory_order_relaxed);
+                if (announcedBase) {
+                    // Turned off, or a height it does not take: on again, it starts from the full height.
+                    LOG_NOTICE("dynamic resolution: off, scene at {} rows", configured);
+                    controller = {};
+                    announcedMinimum = announcedBase = 0;
+                }
                 return configured;
             }
             gpu_busy::g_dynamicResolution.store(true, std::memory_order_relaxed);
+            const uint32_t minimumSetting = environmentMinimum ? environmentMinimum : settings::DynamicResolutionMinimum(config);
             const uint32_t minimum = minimumSetting ? minimumSetting : dynamic_resolution::DefaultMinimum(configured);
             const double budgetMs = 1000.0 / double(config.frameRate ? std::clamp(config.frameRate, 20u, 240u) : 30u);
             const uint64_t now = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
             bool changed = false;
             const uint32_t height = controller.Update(now, gpu_busy::Total(), configured, minimum, budgetMs, changed, step);
-            if (!announced) {
-                announced = true;
+            if (controller.minimum != announcedMinimum || configured != announcedBase) {
+                announcedMinimum = controller.minimum;
+                announcedBase = configured;
                 LOG_NOTICE("dynamic resolution: on, {} to {} rows in steps of {}, GPU budget {:.1f} ms per frame",
                     controller.minimum, configured, controller.step, budgetMs);
             }

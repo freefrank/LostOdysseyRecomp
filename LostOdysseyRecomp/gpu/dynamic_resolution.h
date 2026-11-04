@@ -1,8 +1,10 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <string_view>
 
-// Dynamic render resolution (LO_DYNAMIC_RESOLUTION=1, opt-in): the scene's render height follows the GPU's busy time
+// Dynamic render resolution (the Switch's Graphics → Dynamic resolution, or LO_DYNAMIC_RESOLUTION=1; opt-in): the scene's render height follows the GPU's busy time
 // per frame. Above the frame budget it steps down a rung (36 rows), and with room to spare it steps back up, never
 // above the configured height nor below the minimum. The presentation pass scales the scene to the output as it does
 // for any render height (bicubic by default). Each change resizes the scene targets (a new geometry epoch), so changes
@@ -18,10 +20,33 @@ namespace gpu::dynamic_resolution
     {
         return height >= Lowest && height < 1080 && height % 9 == 0;
     }
-    // The base heights it works from (the Switch's 540 and 720, and 1080).
-    inline constexpr bool Supports(uint32_t base) { return base >= 540 && base <= 1080 && base % 9 == 0; }
+    // The base heights it works from (the Switch's Maximum resolution rows, 360 to 720, and 1080).
+    inline constexpr bool Supports(uint32_t base) { return base >= Lowest && base <= 1080 && base % 9 == 0; }
     // The default minimum: 80% of the base height (540 -> 432, 720 -> 576).
     inline constexpr uint32_t DefaultMinimum(uint32_t base) { return std::max(Lowest, base * 4 / 5); }
+    // The lowest height it steps down to: whole steps below the base that stay at or above the minimum (and 360).
+    inline constexpr uint32_t Floor(uint32_t base, uint32_t minimum, uint32_t step = Rung)
+    {
+        const uint32_t floorHeight = std::clamp(minimum, Lowest, std::max(base, Lowest));
+        return base > floorHeight ? base - (base - floorHeight) / step * step : base;
+    }
+    // env.txt wins over the settings, for scripted runs: LO_DYNAMIC_RESOLUTION (-1 unset, else 0 or 1),
+    // LO_DYNAMIC_RESOLUTION_MIN (0 unset) and LO_DYNAMIC_RESOLUTION_STEP (Rung unset).
+    inline int EnvironmentEnabled()
+    {
+        const char* value = std::getenv("LO_DYNAMIC_RESOLUTION");
+        return value && *value ? std::string_view(value) != "0" : -1;
+    }
+    inline uint32_t EnvironmentMinimum()
+    {
+        const char* value = std::getenv("LO_DYNAMIC_RESOLUTION_MIN");
+        return value && *value ? uint32_t(std::strtoul(value, nullptr, 10)) : 0u;
+    }
+    inline uint32_t EnvironmentStep()
+    {
+        const char* value = std::getenv("LO_DYNAMIC_RESOLUTION_STEP");
+        return value && *value ? uint32_t(std::strtoul(value, nullptr, 10)) : Rung;
+    }
 
     struct Controller
     {
@@ -47,9 +72,7 @@ namespace gpu::dynamic_resolution
                 base = baseHeight;
                 step = stepRows;
                 requestedMinimum = minimumHeight;
-                // The lowest whole number of steps below the base that stays at or above the minimum (and 360).
-                const uint32_t floorHeight = std::clamp(minimumHeight, Lowest, base);
-                minimum = base - (base - floorHeight) / step * step;
+                minimum = Floor(base, minimumHeight, step);
                 changed = height && height != base;
                 height = base;
                 Restart(nowNs, busyTotalNs);

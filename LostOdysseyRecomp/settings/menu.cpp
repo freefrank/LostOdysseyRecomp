@@ -1261,7 +1261,12 @@ std::wstring DlssNotice()
 }
 bool SystemRowHidden(int r)
 {
-#if !LO_PLATFORM_SWITCH
+#if LO_PLATFORM_SWITCH
+    // No updater, network download, log upload or disc importer on the console (docs/SWITCH.md): the discs and
+    // the shader pack are copied to the SD card.
+    if (r == SystemUpdatesRow || r == SystemCollectionRow || r == SystemImportRow || r == SystemShaderBundleRow)
+        return true;
+#else
     if (r == SystemDebugRow) return true;
 #endif
 #if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
@@ -1270,29 +1275,53 @@ bool SystemRowHidden(int r)
     return false;
 #endif
 }
+#if LO_PLATFORM_SWITCH
+// A Graphics row env.txt sets (graphics_menu.h): its help names the variable.
+void SwitchEnvironmentHelp(std::wstring &help, bool fromEnvironment, const wchar_t *variable)
+{
+    if (!fromEnvironment) return;
+    AppendSentence(help, std::wstring(Tr(L"Set by env.txt:", L"由 env.txt 設定：")) + L" " + variable);
+}
+// The Graphics tab's status line: which operation mode's heights the resolution rows show, and whether env.txt
+// holds some rows. The PC's upscaler status does not apply.
+std::wstring SwitchNotice()
+{
+    std::wstring text = Docked() ? Tr(L"Docked: the resolution rows set the docked heights.", L"TV 模式：解析度選項設定 TV 模式的高度。")
+                                 : Tr(L"Handheld: the resolution rows set the handheld heights.", L"手提模式：解析度選項設定手提模式的高度。");
+    if (graphics_menu::MaximumHeightFromEnvironment() || graphics_menu::DynamicResolutionFromEnvironment() ||
+        graphics_menu::MinimumHeightFromEnvironment() || graphics_menu::FsrSharpnessFromEnvironment())
+        AppendSentence(text, Tr(L"Greyed-out rows are set by env.txt.", L"灰色選項由 env.txt 設定。"));
+    return text;
+}
+#endif
 bool GraphicsRowHidden(int r)
 {
     // A page entry row shows with the setting it belongs to.
     if (r == int(GraphicsRow::NeuralRenderingTuning)) r = int(GraphicsRow::DlssNeuralRendering);
     if (r == int(GraphicsRow::HdrCalibration)) r = int(GraphicsRow::HdrPeak);
 #if LO_PLATFORM_SWITCH
-    // The console owns the display and output size, and settings::Validate pins
-    // the Xbox 360 image (720p scene, no host AA, AO, filtering, upscaling, HDR).
+    // The console owns the display and output size, and settings::Validate pins the Xbox 360 image (retail shadow
+    // maps, no host AA, AO, filtering, HDR or PC upscalers). The rows that do something here, and the Switch's own:
+    // the scene height (Render / Maximum, Dynamic and Minimum resolution) and FSR 1 with its sharpness.
     switch (GraphicsRow(r))
     {
-    case GraphicsRow::Backend: case GraphicsRow::Gpu: case GraphicsRow::DisplayMode:
-    case GraphicsRow::Display: case GraphicsRow::AspectRatio: case GraphicsRow::OutputResolution:
-    case GraphicsRow::RenderResolution: case GraphicsRow::ShadowResolution: case GraphicsRow::AntiAliasing:
-    case GraphicsRow::DlssQuality: case GraphicsRow::FsrSharpness: case GraphicsRow::DlssNeuralRendering:
-    case GraphicsRow::FrameGeneration: case GraphicsRow::FrameGenerationMultiplier:
-    case GraphicsRow::AmbientOcclusion: case GraphicsRow::AnisotropicFiltering:
-    case GraphicsRow::VariableRefreshRate: case GraphicsRow::Hdr: case GraphicsRow::HdrPaperWhite:
-    case GraphicsRow::HdrPeak: case GraphicsRow::RgbRange:
-        return true;
-    default:
+    case GraphicsRow::Preset: case GraphicsRow::RenderResolution: case GraphicsRow::DynamicResolution:
+    case GraphicsRow::DynamicShadows: case GraphicsRow::AntiAliasing: case GraphicsRow::DepthOfField:
+    case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::Culling: case GraphicsRow::ScalingQuality:
+    case GraphicsRow::FrameRate: case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
+    case GraphicsRow::Brightness: case GraphicsRow::Save:
         return false;
+    case GraphicsRow::MinimumResolution:
+        return !graphics_menu::DynamicResolutionOn(edit);
+    case GraphicsRow::FsrSharpness:
+        return !graphics_menu::FsrOn(edit);
+    default:
+        return true;
     }
 #endif
+    // The Switch's own rows.
+    if (r == int(GraphicsRow::DynamicResolution) || r == int(GraphicsRow::MinimumResolution))
+        return true;
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
@@ -1379,7 +1408,7 @@ void SkipHiddenGraphicsRow()
 }
 void Publish(uint8_t *base, uint32_t config)
 {
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
@@ -1653,6 +1682,10 @@ void Publish(uint8_t *base, uint32_t config)
                 std::to_wstring(height) + L"p");
         placeGraphics(GraphicsRow::RenderResolution, makeChoices(L"Render resolution", L"渲染解析度",
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
+        // The Switch's rows (filled in below there); hidden elsewhere.
+        placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                   edit.dynamicResolution ? 0 : 1));
+        placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度", {}, 0));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
         placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
@@ -1694,6 +1727,62 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
+#if LO_PLATFORM_SWITCH
+        {
+            // The scene height rows for the current operation mode, and FSR 1 in the Anti-aliasing row's place
+            // (graphics_menu.h). A row env.txt sets shows that value, greyed out, and does not change.
+            const bool docked = Docked();
+            const bool dynamic = graphics_menu::DynamicResolutionOn(edit);
+            const auto rows = [](uint32_t height) { return std::to_wstring(height) + L"p"; };
+            const auto automatic = [&](uint32_t height) { return std::wstring(Tr(L"Auto", L"自動")) + L" (" + rows(height) + L")"; };
+            const auto fixed = [&](const wchar_t *en, const wchar_t *zh, std::wstring value) {
+                return makeChoices(en, zh, {std::move(value)}, 0, false);
+            };
+            const wchar_t *maximumEn = dynamic ? L"Maximum resolution" : L"Render resolution";
+            const wchar_t *maximumZh = dynamic ? L"最高解析度" : L"渲染解析度";
+            if (graphics_menu::MaximumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::RenderResolution, fixed(maximumEn, maximumZh, rows(RenderHeightOverride())));
+            else
+            {
+                std::vector<std::wstring> choices{automatic(SwitchAutomaticHeight(docked))};
+                for (const uint32_t height : SwitchSceneHeights) choices.push_back(rows(height));
+                placeGraphics(GraphicsRow::RenderResolution, makeChoices(maximumEn, maximumZh, std::move(choices),
+                    graphics_menu::SwitchHeightChoice(edit.maximumHeight[docked ? 1 : 0])));
+            }
+            placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                dynamic ? 0 : 1, !graphics_menu::DynamicResolutionFromEnvironment()));
+            if (graphics_menu::MinimumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::MinimumResolution, fixed(L"Minimum resolution", L"最低解析度",
+                    rows(gpu::dynamic_resolution::EnvironmentMinimum())));
+            else
+            {
+                Config automaticMinimum = edit;
+                automaticMinimum.minimumHeight[docked ? 1 : 0] = 0;
+                std::vector<std::wstring> choices{automatic(SwitchMinimumHeight(automaticMinimum, docked))};
+                for (uint32_t i = 1; i < graphics_menu::MinimumHeightChoiceCount(edit, docked); ++i)
+                    choices.push_back(rows(graphics_menu::SwitchHeightAt(i)));
+                placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度",
+                    std::move(choices), graphics_menu::SwitchHeightChoice(edit.minimumHeight[docked ? 1 : 0])));
+            }
+            if (graphics_menu::FsrFromEnvironment())
+            {
+                using gpu::SpatialUpscaler;
+                const auto mode = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).mode;
+                placeGraphics(GraphicsRow::AntiAliasing, fixed(L"FSR", L"FSR", mode == SpatialUpscaler::Off ? Tr(L"Off", L"關") :
+                    mode == SpatialUpscaler::Easu ? L"EASU" : mode == SpatialUpscaler::Rcas ? L"RCAS" : Tr(L"On", L"開")));
+            }
+            else
+                placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"FSR", L"FSR", onOff(), edit.switchFsr ? 0 : 1));
+            if (graphics_menu::FsrSharpnessFromEnvironment())
+            {
+                // RCAS's stops as the row's percent (gpu/switch_upscaler.h FromSettings).
+                const float stops = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).rcasStops;
+                const int percent = std::clamp(int(std::lround((2.0f - stops) * 50.0f)), 0, 100);
+                placeGraphics(GraphicsRow::FsrSharpness, fixed(L"FSR sharpness", L"FSR 銳化",
+                    percent ? std::to_wstring(percent) + L"%" : std::wstring(Tr(L"Off", L"關"))));
+            }
+        }
+#endif
         auto neuralRendering = makeChoices(L"DLSS 5 neural rendering", L"DLSS 5 神經渲染",
                    {Tr(L"Off", L"關"), L"1×", L"2×", L"3×", L"4×"},
                    std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses));
@@ -1822,6 +1911,8 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
+        for (int i = 0; i < SystemRowCount && i < int(next.rows.size()); ++i)
+            if (SystemRowHidden(i)) next.rows[i].hidden = true;
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
     // so returning to a long list restores its position.
@@ -1946,10 +2037,24 @@ void Publish(uint8_t *base, uint32_t config)
                            L"設定輸出尺寸；全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::Preset:
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"Both run at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom.",
+                           L"兩者皆為 30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈。");
+#else
             next.help = Tr(L"Both use 720p at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
                            L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
+#endif
             break;
         case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+            next.help = graphics_menu::DynamicResolutionOn(edit)
+                ? Tr(L"The highest scene height dynamic resolution uses. Auto: 540p handheld, 720p docked.",
+                     L"動態解析度使用的最高場景高度。自動：手提模式 540p，TV 模式 720p。")
+                : Tr(L"Scene height, scaled to the 720p screen. Auto: 540p handheld, 720p docked.",
+                     L"場景高度，縮放至 720p 畫面。自動：手提模式 540p，TV 模式 720p。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::MaximumHeightFromEnvironment(), L"LO_SWITCH_RENDER_HEIGHT");
+            break;
+#endif
 #if LO_PLATFORM_MACOS
             next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
                            L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
@@ -1960,6 +2065,20 @@ void Publish(uint8_t *base, uint32_t config)
             next.help += Tr(L" An upscaler supersamples above it.",
                             L"開啟縮放器時，高於輸出即為超取樣。");
             break;
+        case GraphicsRow::DynamicResolution:
+            next.help = Tr(L"Lowers the scene height in steps while the GPU runs over the frame time, and raises it again with room to spare.",
+                           L"GPU 超出影格時間時逐步降低場景高度，有餘裕時再提高。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::DynamicResolutionFromEnvironment(), L"LO_DYNAMIC_RESOLUTION");
+#endif
+            break;
+        case GraphicsRow::MinimumResolution:
+            next.help = Tr(L"The lowest scene height dynamic resolution steps down to. Auto: 80% of the maximum.",
+                           L"動態解析度降低時的最低場景高度。自動：最高解析度的 80%。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::MinimumHeightFromEnvironment(), L"LO_DYNAMIC_RESOLUTION_MIN");
+#endif
+            break;
         case GraphicsRow::ShadowResolution:
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
@@ -1969,7 +2088,11 @@ void Publish(uint8_t *base, uint32_t config)
                            L"角色與物件的陰影。「低」只保留畫面上最大的幾個，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"AMD FSR 1 scales a scene below 720p to the screen with sharper edges. Costs some GPU time.",
+                           L"AMD FSR 1 將低於 720p 的場景放大至畫面，邊緣更銳利。會使用少許 GPU 時間。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrFromEnvironment(), L"LO_SWITCH_UPSCALER");
+#elif LO_PLATFORM_ANDROID
             if (graphics_menu::AndroidFsrAvailable && edit.upscaler == gpu::upscaling::Upscaler::Fsr)
                 next.help = Tr(L"FSR 3.1 needs D3D12 or Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
                               L"FSR 3.1 需要 D3D12 或 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。");
@@ -2010,6 +2133,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
                            L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrSharpnessFromEnvironment(),
+                graphics_menu::FsrFromEnvironment() ? L"LO_SWITCH_UPSCALER" : L"LO_SWITCH_RCAS_STOPS");
+#endif
             break;
         case GraphicsRow::DlssNeuralRendering:
         {
@@ -2277,7 +2404,9 @@ void Publish(uint8_t *base, uint32_t config)
                               std::wstring(Tr(L"Revert", L"還原")) + L" (" + std::to_wstring(seconds) + L")"};
         next.dialogSelection = displayConfirmChoice;
     }
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+    next.notice = tab == 2 ? SwitchNotice() : std::wstring{};
+#elif LO_PLATFORM_ANDROID
     next.notice = tab == 2 && graphics_menu::AndroidFsrAvailable &&
         edit.upscaler == gpu::upscaling::Upscaler::Fsr ? DlssNotice() : std::wstring{};
 #else
@@ -3927,8 +4056,32 @@ PPC_FUNC(sub_822F19B0)
                 break;
             }
             case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+                // The current operation mode's maximum; a lower one takes the minimum down with it.
+                if (!graphics_menu::MaximumHeightFromEnvironment())
+                    graphics_menu::SelectMaximumHeight(edit, Docked(), cycle(
+                        graphics_menu::SwitchHeightChoice(edit.maximumHeight[Docked() ? 1 : 0]), graphics_menu::SwitchHeightChoiceCount));
+#else
                 edit.internalResolution = graphics_menu::RenderResolutions[
                     cycle(graphics_menu::RenderResolutionChoice(edit), uint32_t(std::size(graphics_menu::RenderResolutions)))];
+#endif
+                break;
+            case GraphicsRow::DynamicResolution:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::DynamicResolutionFromEnvironment())
+                    edit.dynamicResolution = !edit.dynamicResolution;
+#endif
+                break;
+            case GraphicsRow::MinimumResolution:
+#if LO_PLATFORM_SWITCH
+                // Automatic, then the heights up to the maximum.
+                if (!graphics_menu::MinimumHeightFromEnvironment())
+                {
+                    const uint32_t mode = Docked() ? 1 : 0;
+                    edit.minimumHeight[mode] = graphics_menu::SwitchHeightAt(cycle(
+                        graphics_menu::SwitchHeightChoice(edit.minimumHeight[mode]), graphics_menu::MinimumHeightChoiceCount(edit, mode == 1)));
+                }
+#endif
                 break;
             case GraphicsRow::ShadowResolution:
                 edit.shadowResolution = graphics_menu::ShadowResolutions[
@@ -3939,7 +4092,12 @@ PPC_FUNC(sub_822F19B0)
                     cycle(graphics_menu::DynamicShadowsChoice(edit), uint32_t(std::size(graphics_menu::DynamicShadowsValues)))];
                 break;
             case GraphicsRow::AntiAliasing:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::FsrFromEnvironment())
+                    edit.switchFsr = !edit.switchFsr;
+#else
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
+#endif
                 break;
             case GraphicsRow::AmbientOcclusion:
                 edit.ambientOcclusion = cycle(std::min(edit.ambientOcclusion, 2u), 3);
@@ -3955,6 +4113,10 @@ PPC_FUNC(sub_822F19B0)
                 edit.dlssModel = cycle(std::min(edit.dlssModel, 1u), 2);
                 break;
             case GraphicsRow::FsrSharpness:
+#if LO_PLATFORM_SWITCH
+                if (graphics_menu::FsrSharpnessFromEnvironment())
+                    break;
+#endif
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
                 break;
             case GraphicsRow::DlssNeuralRendering:

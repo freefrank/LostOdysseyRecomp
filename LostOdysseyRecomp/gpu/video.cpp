@@ -5540,14 +5540,18 @@ namespace gpu::video
                     sourceOptions.displayGamma = presentationOptions.displayGamma;
                     sourceOptions.storageTarget = g_swapChain->hasStorageTextures();
 #if LO_PLATFORM_SWITCH
-                    // LO_SWITCH_UPSCALER=fsr|easu|rcas: FSR 1 when the scene is smaller than the output
-                    // (gpu/switch_upscaler.h); bilinear, the default, keeps the filter above.
-                    static const auto switchUpscaler = [] {
-                        const auto choice = gpu::switch_upscaler::FromEnvironment();
-                        LOG_INFO("video: LO_SWITCH_UPSCALER={} (RCAS {} stops)",
-                            gpu::switch_upscaler::Name(choice.mode), choice.rcasStops);
-                        return choice;
-                    }();
+                    // FSR 1 when the scene is smaller than the output (gpu/switch_upscaler.h): Graphics → FSR and
+                    // FSR sharpness, or env.txt's LO_SWITCH_UPSCALER=fsr|easu|rcas, which wins; bilinear, the
+                    // default, keeps the filter above.
+                    const auto switchUpscaler = gpu::switch_upscaler::Resolve(presentationConfig.switchFsr,
+                        presentationConfig.fsrSharpnessPercent);
+                    static gpu::switch_upscaler::Choice loggedUpscaler{SpatialUpscaler(~0u), -1.0f};
+                    if (switchUpscaler.mode != loggedUpscaler.mode || switchUpscaler.rcasStops != loggedUpscaler.rcasStops) {
+                        loggedUpscaler = switchUpscaler;
+                        LOG_INFO("video: Switch upscaler {} (RCAS {} stops, from {})",
+                            gpu::switch_upscaler::Name(switchUpscaler.mode), switchUpscaler.rcasStops,
+                            gpu::switch_upscaler::UpscalerFromEnvironment() ? "LO_SWITCH_UPSCALER" : "settings");
+                    }
                     sourceOptions.spatialUpscaler = switchUpscaler.mode;
                     sourceOptions.rcasStops = switchUpscaler.rcasStops;
 #endif
