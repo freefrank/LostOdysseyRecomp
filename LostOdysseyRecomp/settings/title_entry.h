@@ -22,4 +22,11 @@ struct Hint
     uint64_t revision = 0;
 };
 const Hint *DrawHint(uint32_t outputWidth, uint32_t outputHeight);
+// The battle intro's "B: Skip" legend in the same style, while the skip window
+// is open (battle_intro_gate.h): the same delay and fade-in, gone at once when the
+// window closes. Redrawn only when the size, language, button style, cancel
+// button or menu assets change. Presentation thread.
+bool SkipShown();
+float SkipOpacity();
+const Hint *DrawSkip(uint32_t outputWidth, uint32_t outputHeight);
 } // namespace settings::title_entry

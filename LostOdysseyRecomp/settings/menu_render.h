@@ -114,6 +114,11 @@ struct MenuSnapshot
     // is just TitleHintBounds of the output.
     bool titleHint = false;
     std::wstring titleQuitKey, titleQuitLabel;
+    // The battle intro's skip legend in the same style (title_entry.cpp): help is
+    // the label (": Skip"), skipKey a button name drawn as its icon, or with
+    // skipKeyName a keyboard key's name. The raster is just SkipPromptBounds.
+    bool skipPrompt = false, skipKeyName = false;
+    std::wstring skipKey;
 };
 // How a single line of explanatory text fits its box: scale 1 when it is drawn
 // at its normal size, below 1 when the renderer shrinks it to fit the width.
@@ -165,6 +170,8 @@ void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t heigh
 // The output pixels of the title menu's credit and shortcut legends: with titleHint,
 // RasterizeMenu returns only this rectangle, row by row.
 MenuRect TitleHintBounds(uint32_t width, uint32_t height);
+// The output pixels of the battle intro's skip legend (skipPrompt).
+MenuRect SkipPromptBounds(uint32_t width, uint32_t height);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);
 // The speaker test marker where a matrix decoder puts the test sound at
 // `position` along its circle (apu::SpeakerPan) with the surrounds encoded for

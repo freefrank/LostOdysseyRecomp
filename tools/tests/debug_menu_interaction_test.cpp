@@ -43,6 +43,8 @@ struct MockServices
     settings::EncounterRate encounterRate = settings::EncounterRate::Normal;
     int encounterRateSaveCalls = 0;
     bool battleExpDouble = false;
+    settings::BattleIntroSkip battleIntroSkip = settings::BattleIntroSkip::Off;
+    int battleIntroSkipSaveCalls = 0;
     bool everyStep = false;
     bool allowVictory = true;
     bool victoryRequested = false;
@@ -126,6 +128,12 @@ void SetEncounterRate(settings::EncounterRate rate)
 }
 bool BattleExpDoubleEnabled() { return g_mock.battleExpDouble; }
 void SetBattleExpDoubleEnabled(bool enabled) { g_mock.battleExpDouble = enabled; }
+settings::BattleIntroSkip GetBattleIntroSkip() { return g_mock.battleIntroSkip; }
+void SetBattleIntroSkip(settings::BattleIntroSkip mode)
+{
+    g_mock.battleIntroSkip = mode;
+    ++g_mock.battleIntroSkipSaveCalls;
+}
 bool EncounterEveryStepEnabled() { return g_mock.everyStep; }
 void SetEncounterEveryStepEnabled(bool enabled) { g_mock.everyStep = enabled; }
 
@@ -460,6 +468,17 @@ int main()
         for (const auto* value : {L"ON", L"OFF"})
             Require(rasterizer.MeasureWString(value) <= 350,
                 "Battle EXP value exceeds the Cheats value column");
+        // Every category title fits the side column without an ellipsis.
+        for (const auto& category : debug_menu::cheat_overlay::Categories)
+            Require(rasterizer.MeasureWString(category[zh]) <= debug_menu::cheat_overlay::CategoryColumnWidth - 20,
+                "Cheats category title exceeds the side column");
+        Require(rasterizer.MeasureWString(debug_menu::cheat_overlay::BattleIntroSkipLabel[zh]) <=
+                debug_menu::cheat_overlay::BattleLabelColumnWidth - 10,
+            "Skip battle animation label exceeds the Battle label column");
+        for (const auto& value : debug_menu::cheat_overlay::BattleIntroSkipValues)
+            Require(rasterizer.MeasureWString(value[zh]) <= 700 - debug_menu::cheat_overlay::CategoryColumnWidth - 16 -
+                    debug_menu::cheat_overlay::BattleLabelColumnWidth - 12,
+                "Skip battle animation value exceeds the Cheats value column");
         const std::wstring help = debug_menu::cheat_overlay::MenuAnimationHelp[zh];
         Require(help.find(L'\n') == std::wstring::npos && rasterizer.MeasureWString(help) <= 700,
             "Menu animations help must fit one complete line");
@@ -574,10 +593,64 @@ int main()
         "Menu animation changes affected another quick-tool option or enabled memory edits");
     debug_menu::RenderOverlay(rasterizer);
 
+    // Category order: Quick tools, Characters, Inventory, Equipment, Party, Battle, Developer.
+    {
+        using debug_menu::cheat_overlay::Categories;
+        const wchar_t* order[] = {L"Quick tools", L"Characters", L"Inventory", L"Equipment", L"Party", L"Battle", L"Developer"};
+        Require(std::size(Categories) == std::size(order), "Cheats category count changed");
+        for (size_t i = 0; i < std::size(order); ++i)
+            Require(std::wstring(Categories[i][0]) == order[i], "Cheats category order changed");
+        Require(std::wstring(Categories[debug_menu::cheat_overlay::BattleCategory][0]) == L"Battle" &&
+                std::wstring(Categories[debug_menu::cheat_overlay::DeveloperCategory][0]) == L"Developer",
+            "Battle and Developer category indexes do not match their titles");
+        debug_menu::cheat_overlay::Model developer;
+        developer.category = debug_menu::cheat_overlay::DeveloperCategory;
+        debug_menu::cheat_overlay::Model battle;
+        battle.category = debug_menu::cheat_overlay::BattleCategory;
+        Require(developer.Rows() == 2 && battle.Rows() == 2, "Battle and Developer have the Category row and one option");
+    }
+
+    // Cheats / Battle / Skip battle animation: two categories back from Quick tools
+    // (Developer is the last one). Each change saves once; the value wraps over
+    // Off, Press to skip and Always.
+    using settings::BattleIntroSkip;
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Off, "Skip battle animation should initially be Off");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Press, "Confirm should select and save Press to skip");
+    debug_menu::RenderOverlay(rasterizer);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Always, "Right should select Always");
+    debug_menu::RenderOverlay(rasterizer);
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Off, "Right should wrap back to Off");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Always, "Left should wrap to Always");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Press, "Left should select Press to skip");
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Off && g_mock.battleIntroSkipSaveCalls == 6,
+        "Skip battle animation should persist once per change");
+    Require(g_mock.encounterRate == settings::EncounterRate::None && !g_mock.battleExpDouble &&
+            !debug_menu::cheats::session.Get().enabled,
+        "Skip battle animation changed another option or enabled memory edits");
+    // Developer follows Battle: its editor row still asks for memory edits first.
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_mock.battleIntroSkip == BattleIntroSkip::Off && !debug_menu::cheats::session.Get().editorRequested,
+        "Developer row changed the battle option or started the editor without memory edits");
+    debug_menu::RenderOverlay(rasterizer);
+    debug_menu::HandleInput(debug_menu::InputAction::Up);
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
+
     // Both debug-menu languages must show the complete two-line help at the
     // production 700px content width, without an ellipsis or discarded text.
-    for(bool zh : {false,true}) for(unsigned row : {3u,5u,6u,7u,8u}) {
-        std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
+    for(bool zh : {false,true}) for(unsigned row : {3u,5u,6u,7u,8u,100u,101u,102u}) {
+        std::wstring remaining=row>=100u ? debug_menu::cheat_overlay::BattleIntroSkipHelp[row-100u][zh]
+            : debug_menu::cheat_overlay::QuickToolHelp(row,zh);
         Require(!remaining.empty(), "Quick-tool help is missing a language");
         for(int line=0;!remaining.empty() && line<2;++line) {
             size_t n=remaining.size();
