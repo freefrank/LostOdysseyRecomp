@@ -79,7 +79,7 @@ namespace {
     bool PresentThreadEnabled() {
         static const bool on = [] {
             const char *v = std::getenv("LO_DEKO3D_PRESENT_THREAD");
-            return v && v[0] == '1';
+            return !v || v[0] != '0';
         }();
         return on;
     }
