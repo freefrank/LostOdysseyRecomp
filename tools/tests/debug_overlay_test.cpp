@@ -24,6 +24,7 @@ debug_menu::TeleportSnapshot g_teleport;
 std::atomic<bool> g_saveAnywhere{false};
 std::atomic<bool> g_playStation{false};
 std::atomic<settings::EncounterRate> g_encounterRate{settings::EncounterRate::Normal};
+std::atomic<settings::BattleIntroSkip> g_battleIntroSkip{settings::BattleIntroSkip::Off};
 std::atomic<bool> g_everyStep{false};
 std::atomic<uint32_t> g_debugLanguage{0};
 std::atomic<const wchar_t*> g_resetRefusal{nullptr};
@@ -120,6 +121,8 @@ settings::EncounterRate GetEncounterRate() { return g_encounterRate.load(); }
 void SetEncounterRate(settings::EncounterRate rate) { g_encounterRate = rate; g_everyStep = false; }
 bool BattleExpDoubleEnabled() { return false; }
 void SetBattleExpDoubleEnabled(bool) {}
+settings::BattleIntroSkip GetBattleIntroSkip() { return g_battleIntroSkip.load(); }
+void SetBattleIntroSkip(settings::BattleIntroSkip mode) { g_battleIntroSkip = mode; }
 bool EncounterEveryStepEnabled() { return g_everyStep.load(); }
 void SetEncounterEveryStepEnabled(bool enabled) { g_everyStep = enabled; }
 bool RequestVictory() { return true; }
@@ -312,6 +315,20 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     renderFrame();
     capture("menu-animations-zh-playstation.ppm");
+    // Battle is the category before Developer, the last one.
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory); // Skip battle animation
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    renderFrame();
+    capture("battle-intro-skip-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_battleIntroSkip == settings::BattleIntroSkip::Always, "Chinese Battle row did not select Always");
+    renderFrame();
+    capture("battle-intro-skip-always-zh-playstation.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore Off
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory); // Developer
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory); // Back to Quick tools, row 0
     for (int i = 0; i < 8; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
@@ -348,6 +365,22 @@ int main(int argc, char** argv)
     debug_menu::HandleInput(debug_menu::InputAction::Right);
     renderFrame();
     capture("menu-animations-en-faster.ppm");
+    // Cheats -> Battle (before Developer) -> Skip battle animation: Press to skip, then Always.
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::PrevCategory);
+    debug_menu::HandleInput(debug_menu::InputAction::Down);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    Require(g_battleIntroSkip == settings::BattleIntroSkip::Press, "Skip battle animation did not select Press to skip");
+    renderFrame();
+    capture("battle-intro-skip-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right);
+    Require(g_battleIntroSkip == settings::BattleIntroSkip::Always, "Skip battle animation did not select Always");
+    renderFrame();
+    capture("battle-intro-skip-always-en.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::Right); // Restore Off
+    Require(g_battleIntroSkip == settings::BattleIntroSkip::Off, "Skip battle animation did not wrap to Off");
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory); // Developer
+    debug_menu::HandleInput(debug_menu::InputAction::NextCategory); // Back to Quick tools
     debug_menu::HandleInput(debug_menu::InputAction::NextCategory);
     debug_menu::HandleInput(debug_menu::InputAction::Down);
     debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Character picker
