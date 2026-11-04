@@ -21,7 +21,13 @@ enum class WindowMode : uint32_t
 };
 using GraphicsBackend = gpu::backend::Backend;
 // Stable persisted IDs: retain the original EN/TW UI values.
-inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"};
+inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文", L"Español"};
+inline constexpr uint32_t UiLanguageSpanish = 5;
+// The debug menu's own languages (debug/translations.h): 0 English, 1 Simplified Chinese, 2 Spanish.
+inline constexpr uint32_t DebugLanguageCount = 3;
+inline constexpr uint32_t DebugLanguageSpanish = 2;
+// The game's Spanish (loc/spa/, XC_LANGUAGE_SPANISH); only the USA/Europe edition has it.
+inline constexpr uint32_t GameLanguageSpanish = 5;
 // Guest table at 832455F0 maps IDs 1-9 to INT/JPN/DEU/FRA/SPA/ITA/KOR/CHI/SCH.
 inline constexpr uint32_t AsiaLanguageIds[] = {1, 2, 7, 8, 9};
 inline constexpr const wchar_t *AsiaLanguageNames[] = {L"English", L"日本語", L"한국어", L"繁體中文", L"简体中文"};
@@ -101,8 +107,11 @@ struct DebugOptions
 struct Config
 {
     uint32_t uiLanguage = 0;
-    uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
+    uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese, 2 Spanish.
     uint32_t gameLanguage = 1;
+    // The Switch follows the console's system language (Spanish) for each of the three until it is
+    // picked in a menu; settings.ini then keeps the pick (*_language_chosen=1). Unused elsewhere.
+    bool uiLanguageChosen = false, gameLanguageChosen = false, debugLanguageChosen = false;
     // Language pack id shown in place of gameLanguage's text (the game still
     // runs as gameLanguage, the pack's base); empty for none. Applied on the next start.
     std::string gameLanguagePack;

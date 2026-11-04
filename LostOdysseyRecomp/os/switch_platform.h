@@ -24,6 +24,9 @@ namespace os::switch_platform
     // Docked (true) or handheld (false).
     bool IsDocked();
 
+    // The console's system language is Spanish (Spain or Latin America). False if set is not available.
+    bool SystemLanguageIsSpanish();
+
     // The libnx operation-mode hook only records a notification. Consume it
     // from the SDL event pump after appletMainLoop has processed the message.
     bool TakeOperationModeChanged();

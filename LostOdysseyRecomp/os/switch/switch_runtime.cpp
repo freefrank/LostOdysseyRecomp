@@ -551,6 +551,18 @@ bool IsDocked()
     return appletGetOperationMode() == AppletOperationMode_Console;
 }
 
+bool SystemLanguageIsSpanish()
+{
+    if (R_FAILED(setInitialize()))
+        return false;
+    u64 code = 0;
+    SetLanguage language = SetLanguage_ENUS;
+    const bool spanish = R_SUCCEEDED(setGetSystemLanguage(&code)) && R_SUCCEEDED(setMakeLanguage(code, &language)) &&
+                         (language == SetLanguage_ES || language == SetLanguage_ES419);
+    setExit();
+    return spanish;
+}
+
 bool TakeOperationModeChanged()
 {
     return g_operationModeChanged.exchange(false, std::memory_order_acq_rel);

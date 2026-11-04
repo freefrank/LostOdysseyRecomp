@@ -106,7 +106,7 @@ struct Setup
                         const wchar_t *kr, const wchar_t *sc) const
     {
         const wchar_t *values[] = {en, tw, jp, kr, sc};
-        return values[std::min(config.uiLanguage, 4u)];
+        return config.uiLanguage < std::size(values) ? values[config.uiLanguage] : en;
     }
 
     void rebuildGameLanguages()

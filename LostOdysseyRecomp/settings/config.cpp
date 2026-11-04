@@ -110,7 +110,7 @@ Config Validate(Config value)
     value.fxaa = value.antialiasing == 1;
     value.frameRate = gpu::frame_rate::Normalize(value.frameRate);
     if (value.loadingTransitions != 0) value.loadingTransitions = 2;
-    if (value.debugLanguage > 1) value.debugLanguage = 0;
+    if (value.debugLanguage >= DebugLanguageCount) value.debugLanguage = 0;
     if (value.fastForwardMode > 1) value.fastForwardMode = 0;
     namespace ff = debug_menu::fast_forward;
     if (value.fastForwardButton > uint32_t(ff::Button::LB)) value.fastForwardButton = 0;
@@ -118,7 +118,7 @@ Config Validate(Config value)
         value.fastForwardRate = 2;
     if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
         value.menuAnimationRate = 1;
-    if (value.uiLanguage > 4)
+    if (value.uiLanguage >= std::size(UiLanguageNames))
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
         value.gameLanguage = 1;
@@ -181,12 +181,32 @@ Config Validate(Config value)
 #endif
     return value;
 }
+#if LO_PLATFORM_SWITCH
+// A Spanish console (Spain or Latin America) starts the game, the settings and the debug menu in
+// Spanish; each one picked in a menu stays as picked. The USA/Europe edition alone has Spanish game
+// text (ConfigureGameLanguages runs before the settings are first read), and a language pack is a pick.
+void FollowSystemLanguage(Config &value)
+{
+    static const bool spanish = [] {
+        const bool result = os::switch_platform::SystemLanguageIsSpanish();
+        LOG_NOTICE("settings: console language is {}Spanish", result ? "" : "not ");
+        return result;
+    }();
+    if (!spanish) return;
+    if (!value.uiLanguageChosen) value.uiLanguage = UiLanguageSpanish;
+    if (!value.debugLanguageChosen) value.debugLanguage = DebugLanguageSpanish;
+    if (!value.gameLanguageChosen && value.gameLanguagePack.empty() &&
+        GameLanguageIds[GameLanguageIndex(GameLanguageSpanish)] == GameLanguageSpanish)
+        value.gameLanguage = GameLanguageSpanish;
+}
+#endif
 Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
     bool hasEncounterRate = false, legacyNoEncounters = false;
     bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
+    bool hasLanguageChosen = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
     std::string key;
@@ -237,6 +257,12 @@ Config Read()
             value.uiLanguage = number;
         else if (key == "debug_language")
             value.debugLanguage = number;
+        else if ((key == "ui_language_chosen" || key == "game_language_chosen" || key == "debug_language_chosen") && number <= 1)
+        {
+            hasLanguageChosen = true;
+            (key == "ui_language_chosen" ? value.uiLanguageChosen : key == "game_language_chosen" ? value.gameLanguageChosen
+                                                                                                : value.debugLanguageChosen) = number == 1;
+        }
         else if (key == "game_language")
             value.gameLanguage = number;
         else if (key == "width")
@@ -417,6 +443,16 @@ Config Read()
     if (!hasAspectRatio) value.aspectRatio = gpu::aspect_ratio::Migrated(value.width, value.height);
     // Before the VSync setting, 90/120 FPS presented without display sync.
     if (!hasVsync) value.vsync = value.frameRate <= 60;
+    // Files from before the console's language was followed: a language other than the default was picked.
+    if (!hasLanguageChosen)
+    {
+        value.uiLanguageChosen = value.uiLanguage != Config{}.uiLanguage;
+        value.gameLanguageChosen = value.gameLanguage != Config{}.gameLanguage;
+        value.debugLanguageChosen = value.debugLanguage != Config{}.debugLanguage;
+    }
+#if LO_PLATFORM_SWITCH
+    FollowSystemLanguage(value);
+#endif
     return Validate(value);
 }
 Config &Current()
@@ -482,6 +518,7 @@ void PreviewConfig(const Config &value)
     std::lock_guard lock(mutex);
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
+    merged.debugLanguageChosen = Current().debugLanguageChosen;
     merged.saveAnywhere = Current().saveAnywhere;
     merged.encounterRate = Current().encounterRate;
     merged.battleExpDouble = Current().battleExpDouble;
@@ -588,7 +625,10 @@ static bool WriteConfig(const Config &value)
            << "\ndebug_deko3d_depth_compression=" << (debug.deko3dDepthCompression ? 1 : 0)
            << "\ndebug_deko3d_color_compression=" << (debug.deko3dColorCompression ? 1 : 0)
            << "\ndebug_deko3d_vs_outputs=" << (debug.deko3dVsOutputs ? 1 : 0)
-           << "\ndebug_server=" << (debug.debugServer ? 1 : 0) << '\n';
+           << "\ndebug_server=" << (debug.debugServer ? 1 : 0)
+           << "\nui_language_chosen=" << (value.uiLanguageChosen ? 1 : 0)
+           << "\ngame_language_chosen=" << (value.gameLanguageChosen ? 1 : 0)
+           << "\ndebug_language_chosen=" << (value.debugLanguageChosen ? 1 : 0) << '\n';
 #endif
     output.flush();
     if (!output)
@@ -613,6 +653,11 @@ bool SaveConfig(const Config &requested)
     std::lock_guard lock(mutex);
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
+    value.debugLanguageChosen = Current().debugLanguageChosen;
+    // A language other than the one in use was picked: it no longer follows the console.
+    value.uiLanguageChosen = Current().uiLanguageChosen || value.uiLanguage != Current().uiLanguage;
+    value.gameLanguageChosen = Current().gameLanguageChosen || value.gameLanguage != Current().gameLanguage ||
+                               value.gameLanguagePack != Current().gameLanguagePack;
     value.saveAnywhere = Current().saveAnywhere;
     value.encounterRate = Current().encounterRate;
     value.battleExpDouble = Current().battleExpDouble;
@@ -665,9 +710,12 @@ bool SaveDebugLanguage(uint32_t language)
     std::lock_guard lock(mutex);
     // Merge with disk, not an unrelated unconfirmed graphics preview.
     auto persisted = Read();
-    persisted.debugLanguage = language <= 1 ? language : 0;
+    const uint32_t chosen = language < DebugLanguageCount ? language : 0;
+    persisted.debugLanguageChosen = persisted.debugLanguageChosen || chosen != persisted.debugLanguage;
+    persisted.debugLanguage = chosen;
     if (!WriteConfig(persisted)) return false;
     Current().debugLanguage = persisted.debugLanguage;
+    Current().debugLanguageChosen = persisted.debugLanguageChosen;
     return true;
 }
 bool SaveSaveAnywhere(bool enabled)

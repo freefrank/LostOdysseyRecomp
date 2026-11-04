@@ -213,7 +213,8 @@ int main()
     Require(host_ui::IsGamePaused(), "ToggleOverlay did not pause the game");
 
     // 2. Tab 0 (Overview) Row 0: Language Toggle & failure handling
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm);
+    // English, Chinese, Spanish: Left steps back from Chinese.
+    debug_menu::HandleInput(debug_menu::InputAction::Left);
     Require(g_mock.selectedLanguage == 0, "Language toggle did not change to English");
 
     g_mock.saveLanguageSuccess = false;
@@ -415,6 +416,12 @@ int main()
     Require(std::wstring(debug_menu::translations::Text(L"Win Current Battle", true)) == L"当前战斗判胜", "Win battle translation to Chinese");
     Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", false)) == L"Save point 1", "POI translation to English");
     Require(std::wstring(debug_menu::translations::Poi(L"Save Point 1", true)) == L"存档点 1", "POI translation to Chinese");
+    Require(std::wstring(debug_menu::translations::Text(L"当前战斗判胜", debug_menu::translations::Spanish)) ==
+            L"Ganar el combate actual", "Win battle translation to Spanish");
+    Require(std::wstring(debug_menu::translations::Poi(L"存档点 1", debug_menu::translations::Spanish)) == L"Punto de guardado 1",
+        "POI translation to Spanish");
+    Require(debug_menu::translations::Capture(L"归档已保存 / Archive saved: x.zip", debug_menu::translations::Spanish) ==
+            L"Archivo guardado: x.zip", "Capture status translation to Spanish");
 
     for (const auto& notice : {
         std::pair{L"Return to title unavailable", L"当前无法返回标题"},
@@ -427,13 +434,13 @@ int main()
     {
         Require(std::wstring(debug_menu::translations::Text(notice.first, true)) == notice.second,
             "Return to title notice lacks its Chinese translation");
-        for (bool zh : {false, true})
+        for (uint32_t zh : {0u, 1u, 2u})
             Require(rasterizer.MeasureWString(debug_menu::translations::Text(notice.first, zh)) <= 700,
                 "Return to title notice exceeds the Overview text width");
     }
 
-    // Live quick-tool options must fit their production text columns.
-    for (bool zh : {false, true})
+    // Live quick-tool options must fit their production text columns, in English, Chinese and Spanish.
+    for (uint32_t zh : {0u, 1u, 2u})
     {
         for (const auto* key : {L"Return to title", L"Unsaved progress will be lost"})
             Require(rasterizer.MeasureWString(debug_menu::translations::Text(key, zh)) <= 520,
@@ -457,7 +464,7 @@ int main()
         for (const auto& mode : debug_menu::cheat_overlay::FastForwardAudioValues)
             Require(rasterizer.MeasureWString(mode[zh]) <= 350,
                 "Fast-forward audio value exceeds the Cheats value column");
-        for (const auto* value : {L"ON", L"OFF"})
+        for (const auto* value : {debug_menu::cheat_overlay::OnOff(true, zh), debug_menu::cheat_overlay::OnOff(false, zh)})
             Require(rasterizer.MeasureWString(value) <= 350,
                 "Battle EXP value exceeds the Cheats value column");
         const std::wstring help = debug_menu::cheat_overlay::MenuAnimationHelp[zh];
@@ -576,7 +583,7 @@ int main()
 
     // Both debug-menu languages must show the complete two-line help at the
     // production 700px content width, without an ellipsis or discarded text.
-    for(bool zh : {false,true}) for(unsigned row : {3u,5u,6u,7u,8u}) {
+    for(uint32_t zh : {0u,1u,2u}) for(unsigned row : {3u,5u,6u,7u,8u}) {
         std::wstring remaining=debug_menu::cheat_overlay::QuickToolHelp(row,zh);
         Require(!remaining.empty(), "Quick-tool help is missing a language");
         for(int line=0;!remaining.empty() && line<2;++line) {

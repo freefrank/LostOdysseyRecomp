@@ -315,8 +315,21 @@ int main(int argc, char** argv)
     for (int i = 0; i < 8; ++i) debug_menu::HandleInput(debug_menu::InputAction::Up);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
     debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
-    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Spanish debug UI
     g_playStation = false;
+    Require(g_debugLanguage == 2, "language row did not advance from Chinese to Spanish");
+    renderFrame();
+    capture("overview-es.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    renderFrame();
+    capture("teleport-es.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::NextTab);
+    renderFrame();
+    capture("cheats-es.ppm");
+    debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
+    debug_menu::HandleInput(debug_menu::InputAction::PrevTab);
+    debug_menu::HandleInput(debug_menu::InputAction::Confirm); // Restore English
+    Require(g_debugLanguage == 0, "language row did not wrap from Spanish to English");
 
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);
     debug_menu::HandleInput(debug_menu::InputAction::NextTab);

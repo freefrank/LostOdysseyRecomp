@@ -4061,7 +4061,7 @@ PPC_FUNC(sub_822F19B0)
         else
         {
             if (row == SystemUiLanguageRow)
-                edit.uiLanguage = cycle(edit.uiLanguage, 5);
+                edit.uiLanguage = cycle(edit.uiLanguage, uint32_t(std::size(UiLanguageNames)));
             if (row == SystemGameLanguageRow)
             {
                 const auto choices = GameLanguageChoices();
