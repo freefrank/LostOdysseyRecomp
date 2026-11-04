@@ -290,11 +290,22 @@ namespace gpu::pipeline_cache
         }
     }
 
+    // In-memory tables only (the files store keys, not hashes). Word products instead of FNV over the 64-byte
+    // encoding: GPU CmdProc hashes a key on each pipeline lookup that misses the renderer's recent-key array.
     struct KeyHash
     {
         size_t operator()(const Key& key) const noexcept
         {
-            return static_cast<size_t>(detail::Hash(detail::Encode(key)));
+            const auto pair = [](uint32_t high, uint32_t low) { return uint64_t(high) << 32 | low; };
+            uint64_t h = key.vs * 0x9E3779B97F4A7C15ull ^ (key.ps + 0x632BE59BD9B4E019ull) * 0xC2B2AE3D27D4EB4Full;
+            h ^= pair(key.blend, key.depthControl) * 0x165667B19E3779F9ull;
+            h ^= pair(key.modeCull, key.colorMask) * 0x27D4EB2F165667C5ull;
+            h ^= pair(key.prim, key.rtFormat) * 0x94D049BB133111EBull;
+            h ^= pair(key.depthFormat, key.flags) * 0xBF58476D1CE4E5B9ull;
+            h ^= pair(key.stencilRefMask, key.stencilRefMaskBack) * 0x9FB21C651E98DF25ull;
+            h ^= pair(std::bit_cast<uint32_t>(key.depthBias), key.slopeBias) * 0xD6E8FEB86659FD93ull;
+            h = (h ^ (h >> 32)) * 0xD6E8FEB86659FD93ull;
+            return static_cast<size_t>(h ^ (h >> 32));
         }
     };
 
