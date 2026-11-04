@@ -579,6 +579,18 @@ namespace gpu::renderer
         using TextureKey = gpu::texture_cache::Key;
         using TextureKeyHash = gpu::texture_cache::KeyHash;
 
+        // Draw constants written only for the slots their shaders read (Renderer::UploadUnchanged). On by default on
+        // the Switch, where the ring is CPU-uncached; LO_SPARSE_CONSTANTS=1 / 0 forces it on / off.
+        bool SparseConstantsEnabled()
+        {
+            static const bool enabled = [] {
+                const char* value = getenv("LO_SPARSE_CONSTANTS");
+                if (!value || !value[0]) return bool(LO_PLATFORM_SWITCH);
+                return value[0] != '0';
+            }();
+            return enabled;
+        }
+
         // Writes into the upload ring, which plume-deko3d maps CPU-uncached. memcpy stores 16 bytes at a time and
         // stalled on those stores: the ring copy of Upload was 4.8% of GPU CmdProc in a busy street (cpu-street4).
         // 64 bytes per store instruction, the same bytes. LO_UPLOAD_VECTOR_COPY=0: memcpy.
@@ -2966,6 +2978,33 @@ namespace gpu::renderer
             static_assert(offsetof(SharedConstants,textureInfo)==768);
             static_assert(offsetof(SharedConstants,textureSize)==896);
 
+            // ALU constant slots a stage reads (xenos::TranslatedShader::constantSlots).
+            using ConstantSlots = std::array<uint64_t, 4>;
+            static constexpr ConstantSlots kAllConstantSlots{~0ull, ~0ull, ~0ull, ~0ull};
+            // Calls run(first, count) for each run of consecutive slots.
+            template <typename Run>
+            static void ForSlotRuns(const ConstantSlots& slots, Run&& run)
+            {
+                for (uint32_t slot = 0; slot < 256;)
+                {
+                    const uint64_t bits = slots[slot >> 6] >> (slot & 63);
+                    if (!bits) { slot = (slot | 63) + 1; continue; }
+                    slot += uint32_t(std::countr_zero(bits));
+                    uint32_t end = slot + 1;
+                    while (end < 256 && (slots[end >> 6] >> (end & 63) & 1)) ++end;
+                    run(slot, end - slot);
+                    slot = end;
+                }
+            }
+            static bool SlotsEqual(const uint32_t* a, const uint32_t* b, const ConstantSlots& slots)
+            {
+                bool equal = true;
+                ForSlotRuns(slots, [&](uint32_t first, uint32_t count) {
+                    equal = equal && std::memcmp(a + first * 4, b + first * 4, count * 16) == 0;
+                });
+                return equal;
+            }
+
             struct UploadedConstants
             {
                 uint32_t vs[256 * 4]{};
@@ -2980,6 +3019,8 @@ namespace gpu::renderer
                 // vs/ps hold the bytes at vsOffset/psOffset. Versioned uploads
                 // skip the copy: a new version almost never repeats old bytes.
                 bool vsCopy = false, psCopy = false;
+                // The slots written at vsOffset/psOffset (and copied to vs/ps); the rest of the bank there is stale.
+                ConstantSlots vsSlots{}, psSlots{};
             };
             UploadedConstants uploadedConstants[kGpuSlots];
 
@@ -2994,31 +3035,74 @@ namespace gpu::renderer
 
             // version: content version when data is the unmodified snapshot,
             // else 0. A matching version skips the compare.
-            uint64_t UploadUnchanged(int bank, const void* data, size_t size, uint64_t generation = 0)
+            // slots (ALU banks 0 and 1): the slots the draw's shader reads. Only those are compared and written; the
+            // bank's other slots at the returned offset are stale. Null: all of them.
+            uint64_t UploadUnchanged(int bank, const void* data, size_t size, uint64_t generation = 0,
+                const ConstantSlots* slots = nullptr)
             {
                 auto& before = uploadedConstants[gpuSlot];
                 uint64_t lastOffset = bank == 0 ? before.vsOffset : bank == 1 ? before.psOffset : before.sharedOffset;
                 const uint64_t lastGeneration = bank == 0 ? before.vsGeneration : bank == 1 ? before.psGeneration : 0;
-                if (CanReuseUploadedConstants(lastOffset, lastGeneration, generation))
-                    return lastOffset;
+                const bool sameVersion = CanReuseUploadedConstants(lastOffset, lastGeneration, generation);
                 const void* last = bank == 0 ? static_cast<const void*>(before.vs) :
                     bank == 1 ? static_cast<const void*>(before.ps) : static_cast<const void*>(&before.shared);
                 const bool lastCopy = bank == 0 ? before.vsCopy : bank == 1 ? before.psCopy : true;
-                if (lastOffset != UINT64_MAX && lastCopy && std::memcmp(last, data, size) == 0) {
-                    if (bank == 0) before.vsGeneration = generation;
-                    else if (bank == 1) before.psGeneration = generation;
-                    return lastOffset;
+                const auto* words = static_cast<const uint32_t*>(data);
+                if (slots && bank < 2 && lastOffset != UINT64_MAX)
+                {
+                    // The bytes at lastOffset hold lastSlots; no draw recorded with it reads any other slot. With the
+                    // same values in the slots both read, the missing ones are written there and the draw takes it.
+                    ConstantSlots& lastSlots = bank == 0 ? before.vsSlots : before.psSlots;
+                    ConstantSlots shared{}, missing{};
+                    for (size_t i = 0; i < shared.size(); ++i) {
+                        shared[i] = (*slots)[i] & lastSlots[i];
+                        missing[i] = (*slots)[i] & ~lastSlots[i];
+                    }
+                    if (sameVersion || (lastCopy && SlotsEqual(static_cast<const uint32_t*>(last), words, shared)))
+                    {
+                        uint32_t* copy = bank == 0 ? before.vs : before.ps;
+                        ForSlotRuns(missing, [&](uint32_t first, uint32_t count) {
+                            CopyToUploadRing(uploadMapped + lastOffset + first * 16, words + first * 4, count * 16);
+                            if (lastCopy) std::memcpy(copy + first * 4, words + first * 4, count * 16);
+                        });
+                        for (size_t i = 0; i < lastSlots.size(); ++i) lastSlots[i] |= missing[i];
+                        if (!sameVersion) (bank == 0 ? before.vsGeneration : before.psGeneration) = generation;
+                        return lastOffset;
+                    }
                 }
-                const uint64_t offset = Upload(data, size);
+                else if (bank == 2 || (bank == 0 ? before.vsSlots : before.psSlots) == kAllConstantSlots)
+                {
+                    if (sameVersion)
+                        return lastOffset;
+                    if (lastOffset != UINT64_MAX && lastCopy && std::memcmp(last, data, size) == 0) {
+                        if (bank == 0) before.vsGeneration = generation;
+                        else if (bank == 1) before.psGeneration = generation;
+                        return lastOffset;
+                    }
+                }
+                const ConstantSlots& written = slots ? *slots : kAllConstantSlots;
+                const uint64_t offset = Upload(slots ? nullptr : data, size);
+                if (slots && offset != UINT64_MAX)
+                    ForSlotRuns(written, [&](uint32_t first, uint32_t count) {
+                        CopyToUploadRing(uploadMapped + offset + first * 16, words + first * 4, count * 16);
+                    });
                 auto& after = uploadedConstants[gpuSlot];
                 if (offset != UINT64_MAX)
                 {
+                    const auto keep = [&](uint32_t* copy) {
+                        if (!slots) { std::memcpy(copy, data, size); return; }
+                        ForSlotRuns(written, [&](uint32_t first, uint32_t count) {
+                            std::memcpy(copy + first * 4, words + first * 4, count * 16);
+                        });
+                    };
                     if (bank == 0) {
-                        if (!generation) std::memcpy(after.vs, data, size);
+                        if (!generation) keep(after.vs);
                         after.vsCopy = !generation; after.vsOffset = offset; after.vsGeneration = generation;
+                        after.vsSlots = written;
                     } else if (bank == 1) {
-                        if (!generation) std::memcpy(after.ps, data, size);
+                        if (!generation) keep(after.ps);
                         after.psCopy = !generation; after.psOffset = offset; after.psGeneration = generation;
+                        after.psSlots = written;
                     } else { std::memcpy(&after.shared, data, size); after.sharedOffset = offset; }
                 }
                 return offset;
@@ -12382,10 +12466,20 @@ void main()
                 tBind0.AddTo(tBind);
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
+                // LO_SPARSE_CONSTANTS: write only the slots the shaders read (about 14 of 256 a vertex shader, 10 a
+                // pixel shader), which were 4 KB of stores to the CPU-uncached ring per bank and stalled GPU CmdProc.
+                // Not while motion replay or the FSR alpha passes exist: they draw again later with these constants
+                // and read other slots.
+                const bool sparseConstants = SparseConstantsEnabled() && !motionReplay && !fsrAlphaReplay &&
+                    !fsrAlphaPostprocess;
+                const ConstantSlots* vsSlots = sparseConstants && vs->info.constantSlotsKnown ?
+                    &vs->info.constantSlots : nullptr;
+                const ConstantSlots* psSlots = sparseConstants && ps && ps->info.constantSlotsKnown ?
+                    &ps->info.constantSlots : nullptr;
                 uint64_t vsOffset = UploadUnchanged(0, vsConstants, sizeof(vsConstants),
-                    drawConstantsModified[0] ? 0 : constantGeneration[0]);
+                    drawConstantsModified[0] ? 0 : constantGeneration[0], vsSlots);
                 uint64_t psOffset = UploadUnchanged(1, psConstants, sizeof(psConstants),
-                    drawConstantsModified[1] ? 0 : constantGeneration[1]);
+                    drawConstantsModified[1] ? 0 : constantGeneration[1], psSlots);
                 uint64_t sharedOffset = UploadUnchanged(2, &shared, sizeof(shared));
                 if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
                 {
