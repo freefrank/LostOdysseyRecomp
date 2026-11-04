@@ -292,7 +292,26 @@ namespace gpu::renderer
         // event takes the oldest. The command processor may run a frame behind
         // the guest, which has allocated the slot again by then.
         std::mutex g_occlusionOwnerMutex;
-        std::unordered_map<uint32_t, std::deque<uint64_t>> g_occlusionOwners;
+        // At most four a slot, oldest first: a deque per slot allocated and freed blocks on GPU CmdProc and the
+        // guest's rendering thread, under newlib's malloc lock.
+        struct OcclusionOwners
+        {
+            std::array<uint64_t, 4> owners{};
+            uint32_t first = 0, count = 0;
+            void Push(uint64_t owner)
+            {
+                if (count == owners.size()) { first = (first + 1) % owners.size(); --count; }
+                owners[(first + count++) % owners.size()] = owner;
+            }
+            uint64_t Pop()
+            {
+                const uint64_t owner = owners[first];
+                first = (first + 1) % owners.size();
+                --count;
+                return owner;
+            }
+        };
+        std::unordered_map<uint32_t, OcclusionOwners> g_occlusionOwners;
         // Policy::History: measured (owner, samples) for the guest hooks.
         std::atomic<bool> g_occlusionHistory{false};
         std::atomic<bool> g_occlusionFake{false};
@@ -5417,10 +5436,8 @@ void main(triangle V input[3], inout TriangleStream<V> stream)
                     {
                         std::lock_guard lock(g_occlusionOwnerMutex);
                         const auto known = g_occlusionOwners.find(gpu::occlusion::SlotOf(address));
-                        if (known != g_occlusionOwners.end() && !known->second.empty()) {
-                            owner = known->second.front();
-                            known->second.pop_front();
-                        }
+                        if (known != g_occlusionOwners.end() && known->second.count)
+                            owner = known->second.Pop();
                     }
                     const auto begin = occlusion.Begin(address, owner);
                     WriteOcclusionRecords({&begin, 1});
@@ -16090,9 +16107,8 @@ void main()
         std::lock_guard lock(g_occlusionOwnerMutex);
         auto& owners = g_occlusionOwners[gpu::occlusion::SlotOf(physicalSlot)];
         // Every allocation is issued, so the queue holds at most the frames the
-        // command processor is behind; a longer one lost its BEGIN events.
-        if (owners.size() >= 4) owners.pop_front();
-        owners.push_back(owner);
+        // command processor is behind; a longer one lost its BEGIN events (Push drops the oldest).
+        owners.Push(owner);
     }
 
     void NoteOcclusionWait(uint32_t physicalSlot)
