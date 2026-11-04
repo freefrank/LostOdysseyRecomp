@@ -47,6 +47,10 @@ namespace plume {
     // aren't shaded. Stays until changed.
     void Deko3DSetEarlyFragmentTests(RenderCommandList *list, bool allowed);
 
+    // LostOdysseyRecomp (2026-11-04): the CPU's copy of the uniform buffer at GPU 'address' (the draw's shared
+    // constants), where bound textures read their sampler words; nullptr when the draw is done (plume_deko3d.h).
+    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size, uint64_t address);
+
     // sa2-nx (2026-10-20): the swap chain's size, instead of the window's; 0, 0 goes back to the window's.
     void Deko3DSetSwapChainSize(uint32_t width, uint32_t height);
 

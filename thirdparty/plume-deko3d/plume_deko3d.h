@@ -434,6 +434,7 @@ namespace plume {
         // the next draws read, when the renderer pushes them (its uniform buffer holds them only on the GPU's side).
         const uint8_t *sharedWords = nullptr;
         uint32_t sharedWordsSize = 0;
+        DkGpuAddr sharedWordsAddr = 0;  // LostOdysseyRecomp (2026-11-04): the buffer they copy; 0: the bound one
         DkViewport viewports[16]{};
         uint32_t viewportCount = 0;
         DkScissor scissors[16]{};
@@ -750,10 +751,12 @@ namespace plume {
     // at 'slot' for the graphics stages that read it; the update of 'size' bytes at 'offset' of the 'uboSize'-byte
     // buffer at 'address'; and the CPU's copy of the shared constants bound textures are read from (bindTextures), for
     // a shared uniform buffer the renderer pushes (nullptr: read where the bound buffer's memory is, as before).
+    // LostOdysseyRecomp (2026-11-04): with 'address', the copy of the uniform buffer at that GPU address only: bound
+    // textures read their sampler words there instead of in the CPU-uncached memory behind it.
     bool Deko3DBindUniform(RenderCommandList *commandList, uint32_t slot, uint64_t address, uint32_t size);
     bool Deko3DPushUniform(RenderCommandList *commandList, uint64_t address, uint32_t uboSize, uint32_t offset,
                            const void *data, uint32_t size);
-    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size);
+    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size, uint64_t address = 0);
     // banjo-nx: the queue lost (dkQueueIsInErrorState).
     bool Deko3DDeviceLost(RenderDevice *device);
     // sa2-nx (2026-10-20, 1.0.3.1): the size the swapchain should have, the console display's (1920x1080 docked,

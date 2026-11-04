@@ -557,7 +557,7 @@ namespace plume {
     struct RecQueryReset { const RenderQueryPool *pool; uint32_t first, count; };
     struct RecRange { uint64_t address; uint32_t slot, size; };        // FetchData, BindUniform
     struct RecPushUniform { uint64_t address; uint32_t uboSize, offset, size; };  // + the bytes
-    struct RecSharedWords { const void *cpu; uint32_t size; };
+    struct RecSharedWords { const void *cpu; uint32_t size; uint64_t address; };
 
     // Rectangles per clear record (a record is at most a quarter of the ring).
     static constexpr uint32_t RecRectsPerClear = 1024;
@@ -675,6 +675,7 @@ namespace plume {
         cachedCpu = nullptr;
         sharedWords = nullptr;  // banjo-nx (2026-10-19)
         sharedWordsSize = 0;
+        sharedWordsAddr = 0;
         descriptorEpoch = 0;
         occlusionPool = occlusionLastPool = nullptr;  // LostOdysseyRecomp (2026-11-04): no report chains across lists
         // NaN: the first setBlendConstant of the list always writes it.
@@ -955,7 +956,11 @@ namespace plume {
                                 DkGpuAddr base = 0;
                                 uint32_t size = 0;
                                 const uint8_t *cpu = nullptr;
-                                if (findBufferCached(addr, base, size, cpu) && cpu && addr + 4 <= base + size)
+                                // LostOdysseyRecomp (2026-11-04): the renderer's copy of the shared constants first.
+                                if (sharedWords && sharedWordsAddr && addr >= sharedWordsAddr &&
+                                    addr + 4 <= sharedWordsAddr + sharedWordsSize)
+                                    memcpy(&word, sharedWords + (addr - sharedWordsAddr), 4);
+                                else if (findBufferCached(addr, base, size, cpu) && cpu && addr + 4 <= base + size)
                                     memcpy(&word, cpu + (addr - base), 4);
                             }
                             index += word;
@@ -979,11 +984,11 @@ namespace plume {
             return;
         const DkGpuAddr addr = graphicsUbo[SharedUboSlot].addr;
         // banjo-nx (2026-10-19, render-thread proposal 5): pushed shared constants: the renderer's copy.
-        if (sharedWords) {
+        if (sharedWords && (!sharedWordsAddr || sharedWordsAddr == addr)) {
             sharedCpu = sharedWords;
             sharedBase = addr;
             sharedSize = sharedWordsSize;
-        } else if (!sharedCpu || addr < sharedBase || addr >= sharedBase + sharedSize) {
+        } else if (!sharedCpu || sharedCpu == sharedWords || addr < sharedBase || addr >= sharedBase + sharedSize) {
             if (!device->findBuffer(addr, sharedBase, sharedSize, sharedCpu)) {
                 sharedCpu = nullptr;
                 static std::atomic<uint32_t> logged{0};
@@ -2145,7 +2150,7 @@ namespace plume {
         return true;
     }
 
-    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size) {
+    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size, uint64_t address) {
         Deko3DCommandList *cl = static_cast<Deko3DCommandList *>(commandList);
         if (!cl)
             return false;
@@ -2153,11 +2158,12 @@ namespace plume {
             // LostOdysseyRecomp (2026-11-03): the worker reads these words at each draw, after the call; while they
             // are bound each draw waits to be replayed (afterRecordedDraw), as the renderer may change them next.
             cl->recordSharedWords = cpu != nullptr;
-            put(*cl, RecOp::SharedWords, RecSharedWords{cpu, size});
+            put(*cl, RecOp::SharedWords, RecSharedWords{cpu, size, address});
             return true;
         }
         cl->sharedWords = static_cast<const uint8_t *>(cpu);
         cl->sharedWordsSize = size;
+        cl->sharedWordsAddr = cpu ? address : 0;
         if (!cpu)
             cl->sharedCpu = cl->cachedCpu = nullptr;  // looked up again where the bound buffer is
         return true;
@@ -2330,7 +2336,8 @@ namespace plume {
             break;
         }
         case RecOp::SharedWords:
-            Deko3DSetSharedWords(&cl, arg<RecSharedWords>(h).cpu, arg<RecSharedWords>(h).size);
+            Deko3DSetSharedWords(&cl, arg<RecSharedWords>(h).cpu, arg<RecSharedWords>(h).size,
+                                 arg<RecSharedWords>(h).address);
             break;
         }
     }

@@ -12879,6 +12879,17 @@ void main()
                     ~EarlyFragmentScope() { if (list) plume::Deko3DSetEarlyFragmentTests(list, false); }
                 } earlyFragmentScope{ earlyDepth && ps && !ps->mayDiscard && !(shared.flags & 1) ? commandList : nullptr };
                 if (earlyFragmentScope.list) plume::Deko3DSetEarlyFragmentTests(commandList, true);
+#if defined(LO_SWITCH_DEKO3D)
+                // The sampler words bound textures read (shared.samplerIndex): from this copy, not from the
+                // CPU-uncached upload ring, a read per texture of every draw.
+                struct SharedWordsScope
+                {
+                    RenderCommandList* list;
+                    ~SharedWordsScope() { if (list) plume::Deko3DSetSharedWords(list, nullptr, 0, 0); }
+                } sharedWordsScope{ video::IsDeko3d() && vulkan ? commandList : nullptr };
+                if (sharedWordsScope.list)
+                    plume::Deko3DSetSharedWords(commandList, &shared, sizeof(shared), uploadRing->getDeviceAddress() + sharedOffset);
+#endif
                 commandList->setPipeline(countingPipeline ? countingPipeline : pipeline);
                 if (auto* sample = recordProbe.Sample()) NoteRecordPipeline(*sample, key, genericPipeline, pipeline);
                 // The command list keeps the constant for later rebinds of this
