@@ -13,14 +13,13 @@
 
 namespace
 {
-// Formation table: TArray (data, count) at 0x83264978 + 128 with 160-byte
-// entries; RequestBattle 0x828278A0 indexes it with the formation id. FStrings:
+// Formation table (battle_tour.h). FStrings:
 // +0 battle stage (empty: the loader's area stage 0x832631F0 + 1604, then
 // u10_b3_scrw), +12 music, +60 AI script, +72/+84 start/end sequences.
 // +148/+152 is the enemy slot array: 32-byte slots of slot id (byte), enemy
 // config (the battle character's model resource) and enemy parameter id.
-constexpr uint32_t FormationArray = 0x83264978 + 128;
-constexpr uint32_t FormationBytes = 160;
+using debug_menu::battle_tour::FormationArray;
+using debug_menu::battle_tour::FormationBytes;
 constexpr uint32_t AreaStage = 0x832631F0 + 1604;
 std::atomic<int32_t> pending{-1};
 // Optional stage for the pending formation (guest game thread only).

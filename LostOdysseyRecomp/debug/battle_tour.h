@@ -9,6 +9,10 @@
 // in the field. A stage (battle map package) replaces the formation's own.
 namespace debug_menu::battle_tour
 {
+    // Formation table: TArray (data, count) at this address with 160-byte entries;
+    // RequestBattle 0x828278A0 indexes it with the formation id.
+    inline constexpr uint32_t FormationArray = 0x83264978 + 128;
+    inline constexpr uint32_t FormationBytes = 160;
     // Engine tick (guest game thread).
     void Poll(uint8_t* base);
     // Walking encounter hooks (guest game thread).
