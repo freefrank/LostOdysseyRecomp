@@ -333,13 +333,19 @@ namespace gpu::occlusion
         std::vector<Write> Collect()
         {
             std::vector<Write> writes;
-            for (auto it = pending_.begin(); it != pending_.end();) {
+            size_t kept = 0;
+            for (size_t i = 0; i < pending_.size(); ++i) {
+                Query* it = &pending_[i];
                 bool done = it->failed;
                 if (!done) {
                     done = true;
                     for (const auto& part : it->parts) done &= part.batch == 0;
                 }
-                if (!done) { ++it; continue; }
+                if (!done) {
+                    if (kept != i) pending_[kept] = std::move(*it);
+                    ++kept;
+                    continue;
+                }
                 const uint32_t samples = it->failed ? kUnmeasuredSamples : GuestSamples(it->samples);
                 if (!it->failed) {
                     if (!it->history) last_[it->owner] = samples;
@@ -352,8 +358,8 @@ namespace gpu::occlusion
                 }
                 if (!it->written) --unwritten_;
                 Keep(it->parts);
-                it = pending_.erase(it);
             }
+            pending_.resize(kept);
             return writes;
         }
 
@@ -370,7 +376,9 @@ namespace gpu::occlusion
         uint32_t counter_ = 0;
         size_t unwritten_ = 0; // pending queries whose END record waits for host results
         std::optional<Query> active_;
-        std::deque<Query> pending_;
+        // In issue order. A vector compacted by Collect: a deque allocated and freed a block every few queries on
+        // GPU CmdProc, under newlib's malloc lock that the game's threads take too.
+        std::vector<Query> pending_;
         // Queries wait in pending_ for their batch (a frame or more in Mode::History
         // and Strict), so a frame's worth of lists must fit here or every Begin past
         // the bound allocates again. Never more than the queries once in flight.
