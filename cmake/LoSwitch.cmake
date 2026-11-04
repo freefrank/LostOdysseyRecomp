@@ -66,6 +66,9 @@ if(LO_SWITCH_LTO)
     add_compile_options(-flto -fno-fat-lto-objects)
     add_link_options(-flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
 endif()
+# Link-time optimisation of the per-draw code only (LostOdysseyRecomp/CMakeLists.txt): the renderer, the command
+# processor and plume-deko3d, whose calls into each other are the GPU CmdProc thread's draw path.
+option(LO_SWITCH_LTO_GPU "Link-time optimisation of the renderer, command processor and plume-deko3d" OFF)
 
 include(cmake/LoSwitchPgo.cmake)
 

@@ -23,6 +23,8 @@
 #   PGO=GEN            build the training NRO in out/build/switch-pgo-gen
 #   PGO=USE            build the optimised NRO in out/build/switch-pgo-use, from the
 #                      profile in PGO_DIR (default out/pgo). See docs/SWITCH-PGO.md
+#   LTO_GPU=ON         link-time optimisation of the renderer, command processor and
+#                      plume-deko3d (LO_SWITCH_LTO_GPU)
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -132,6 +134,7 @@ cmake -S . -B "$build" -G Ninja \
     -DDEVKITPRO="$DEVKITPRO" \
     -DLO_SWITCH_NVK_LIBRARY="$NVK_LIBRARY" \
     -DLO_SWITCH_PGO="$PGO" \
+    -DLO_SWITCH_LTO_GPU="${LTO_GPU:-OFF}" \
     -DLO_SWITCH_PGO_DIR="$PGO_DIR"
 
 log "Build ($JOBS jobs)"

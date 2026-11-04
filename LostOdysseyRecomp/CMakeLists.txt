@@ -184,6 +184,13 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.
     lo_switch_pgo_target(LostOdysseyRecomp)
     lo_switch_pgo_target(lo_plume_deko3d)
+    # LO_SWITCH_LTO_GPU (cmake/LoSwitch.cmake). Fat objects: the plume archive keeps a symbol index made by plain ar.
+    if(LO_SWITCH_LTO_GPU AND NOT LO_SWITCH_LTO)
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/gpu/renderer.cpp ${LO_RUNTIME_ROOT}/gpu/command_processor.cpp
+            APPEND PROPERTY COMPILE_OPTIONS -flto -ffat-lto-objects)
+        target_compile_options(lo_plume_deko3d PRIVATE -flto -ffat-lto-objects)
+        target_link_options(LostOdysseyRecomp PRIVATE -flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
+    endif()
     if(LO_SWITCH_PGO STREQUAL "GEN")
         target_compile_definitions(LostOdysseyRecomp PRIVATE LO_SWITCH_PGO_GEN=1)
         target_link_options(LostOdysseyRecomp PRIVATE -fprofile-generate)
