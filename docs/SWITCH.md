@@ -529,6 +529,48 @@ built when devkitPro's deko3d library is installed (`dkp-pacman -S deko3d`; the 
 - Not on deko3d yet: host occlusion queries (`LO_ZPD_MODE` uses made-up counts), LSFG frame generation, the driver
   pipeline cache (not needed: no pipeline compiles).
 
+### LostOdysseyRecomp's changes for deko3d
+
+The back end in `thirdparty/plume-deko3d` and the renderer around it carry these changes. Each line names its
+switch; `=0` turns a default-on change off. Shader compiler changes are in `thirdparty/uam/PATCHES.md`, and the
+measurements in `SWITCH-BENCHMARKS.md`. Results are from the first battle or a busy street at 540 rows, stock clocks.
+
+In the back end (`thirdparty/plume-deko3d`):
+
+| Change | Switch | Effect |
+|---|---|---|
+| SPIR-V to GLSL for uam, combined texture handles, two device-wide descriptor heaps | — | how the back end works |
+| DKSH cache: the game's shaders compiled on the PC, the rest on the console and kept | — | no shader compiles while playing |
+| Texture-info specialization, pre-built variants | `LO_TEXINFO_SPEC` | about half the code of the heaviest pixel shaders |
+| Vertex shaders store only what their pixel shader reads | `LO_DEKO3D_VS_OUTPUTS` | less vertex work |
+| Compressed colour targets in memory blocks of their own | `LO_DEKO3D_COLOR_COMPRESSION` | bandwidth; no stripes after a resize |
+| Compressed depth, Zcull, merged and lean barriers | `LO_DEKO3D_GPU_FAST` and the per-option switches | GPU time |
+| Early depth test on draws that can't discard or write depth | `LO_DEKO3D_EARLY_Z` | about +20% FPS |
+| Lean shader translation, levels 1-3 | `LO_DEKO3D_LEAN_SHADERS` | about 4 ms of GPU in battle at level 3; needs its shader pack |
+| Copies and resolves cut to both images' bounds | — | no out-of-bounds copies |
+| Last buffer found cached per command list | — | less CPU per bind |
+| Zcull kept through copies, dropped only after a copy into a depth target (#29) | — | Zcull works across a frame's resolves |
+| Each texture's image descriptor made once | `LO_DEKO3D_DESCRIPTOR_CACHE` | part of +3.6% in a busy street |
+| Relaxed descriptor counters | `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` | same |
+| Re-binding the framebuffer already bound skipped | `LO_DEKO3D_FB_DEDUPE` | same |
+| Commands recorded on a second thread, off by default | `LO_DEKO3D_RECORD_THREAD=1` | lowers `GPU CmdProc` time, but measured slower overall |
+| Hardware occlusion queries, in testing | `LO_DEKO3D_OCCLUSION` | real culling in towns |
+| Barrier trace | `LO_DEKO3D_BARRIER_TRACE` | diagnostics |
+
+In the renderer, on deko3d (`LostOdysseyRecomp/gpu`):
+
+| Change | Switch | Effect |
+|---|---|---|
+| The game's EDRAM restore draws skipped when the target still holds the image | `LO_SKIP_RESTORE` | GPU 38.4 to 36.2 ms |
+| Same-format resolves through the blit shader, not the copy engine | `LO_RESOLVE_BLIT` | +4.1% FPS, GPU 37.0 to 35.3 ms |
+| Fewer resolve passes, off by default | `LO_RESOLVE_FOLD_TRANSFER=1`, `LO_RESOLVE_SHARE=1` | not measured yet |
+| Render targets reused for consecutive draws | `LO_RT_REUSE` | small |
+| Scene renderer's occlusion reads answered at once while counts are made up | `LO_EARLY_QUERY_ANSWER` | +6.9% in a busy street |
+| Constant runs in one pass, lock-free write pointer, wide upload copies | `LO_CP_FUSED_PLAIN_RUN`, `LO_CP_WPTR_LOCKFREE`, `LO_UPLOAD_VECTOR_COPY` | part of +3.6% in a busy street |
+| Dynamic resolution without flicker after a size change | `LO_RESIZE_FIX` | checked on the console |
+| FSR 1 (EASU and RCAS) from a smaller scene, off by default | `LO_SWITCH_UPSCALER=fsr\|easu\|rcas`, `LO_SWITCH_RCAS_STOPS` | sharp picture from 360 rows |
+| Display scaling: present a smaller image and let the display scale it | `LO_SWITCH_OUTPUT_HEIGHT` | GPU -0.75 to -1.3 ms, slightly softer |
+
 ## Known gaps
 
 - Slow: the opening battle remains well below 30 FPS in handheld mode. The
