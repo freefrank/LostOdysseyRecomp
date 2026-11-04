@@ -577,6 +577,9 @@ namespace gpu::video
         std::atomic<int> g_displayMode{-1};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
         std::atomic<bool> g_windowResizeRequested{false};
+#if LO_PLATFORM_SWITCH
+        uint32_t g_switchOutputHeight = 0; // LO_SWITCH_OUTPUT_HEIGHT on deko3d, 0 when off
+#endif
         std::atomic<uint64_t> g_settingsDisplayEpoch{0};
         std::atomic<bool> g_windowModeOverridden{false};
         uint64_t g_completedPresentCount = 0;
@@ -2934,8 +2937,8 @@ namespace gpu::video
             // games do, instead of a full-screen GPU pass into 1280x720.
             if (const char* output = getenv("LO_SWITCH_OUTPUT_HEIGHT"); output && IsDeko3d())
             {
-                const uint32_t height = uint32_t(atoi(output));
-                if (height) plume::Deko3DSetSwapChainSize(height * 16 / 9, height);
+                g_switchOutputHeight = uint32_t(atoi(output));
+                if (g_switchOutputHeight) plume::Deko3DSetSwapChainSize(g_switchOutputHeight * 16 / 9, g_switchOutputHeight);
             }
 #endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
@@ -4273,6 +4276,15 @@ namespace gpu::video
     // or rasterizing UI. The returned ticket belongs to these prepared operations.
     static bool PreparePresentation(uint64_t& displayTicket, uint32_t& width, uint32_t& height)
     {
+#if LO_PLATFORM_SWITCH
+        // LO_SWITCH_OUTPUT_HEIGHT's display scaling is for game frames. A host menu (settings, the debug menu) is drawn
+        // at 1280x720 and would be shrunk to the smaller size, then scaled back up by the display: while one is open the
+        // swapchain is 1280x720, and it returns to the smaller size with the first game frame (one resize each way).
+        if (g_switchOutputHeight) {
+            const uint32_t outputHeight = debug_menu::IsOverlayVisible() || settings::IsOpen() ? 720 : g_switchOutputHeight;
+            plume::Deko3DSetSwapChainSize(outputHeight * 16 / 9, outputHeight);
+        }
+#endif
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
         if (g_fgWindowChange.load() == 1) {
 #if defined(LO_ENABLE_STREAMLINE_FG)
@@ -4526,6 +4538,13 @@ namespace gpu::video
         }
         g_androidPlannedWidth = width;
         g_androidPlannedHeight = height;
+#endif
+#if LO_PLATFORM_SWITCH
+        // A host menu's 1280x720 swapchain (PreparePresentation) isn't the game's output: its targets keep their size.
+        if (g_switchOutputHeight) {
+            width = g_switchOutputHeight * 16 / 9;
+            height = g_switchOutputHeight;
+        }
 #endif
         renderer::SetOutputSize(width, height);
     }
