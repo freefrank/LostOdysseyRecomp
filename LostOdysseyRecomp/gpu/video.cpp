@@ -20,6 +20,9 @@
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "renderer.h"
 #include "presentation.h"
+#if LO_PLATFORM_SWITCH
+#include "switch_upscaler.h"
+#endif
 #include "aspect_layout.h"
 #include "device_loss_hint.h"
 #if defined(LO_GPU_PLUME)
@@ -5517,6 +5520,18 @@ namespace gpu::video
                     sourceOptions.displayBrightness = presentationOptions.displayBrightness;
                     sourceOptions.displayGamma = presentationOptions.displayGamma;
                     sourceOptions.storageTarget = g_swapChain->hasStorageTextures();
+#if LO_PLATFORM_SWITCH
+                    // LO_SWITCH_UPSCALER=fsr|easu|rcas: FSR 1 when the scene is smaller than the output
+                    // (gpu/switch_upscaler.h); bilinear, the default, keeps the filter above.
+                    static const auto switchUpscaler = [] {
+                        const auto choice = gpu::switch_upscaler::FromEnvironment();
+                        LOG_INFO("video: LO_SWITCH_UPSCALER={} (RCAS {} stops)",
+                            gpu::switch_upscaler::Name(choice.mode), choice.rcasStops);
+                        return choice;
+                    }();
+                    sourceOptions.spatialUpscaler = switchUpscaler.mode;
+                    sourceOptions.rcasStops = switchUpscaler.rcasStops;
+#endif
                     // With scene AA already applied this is DrawComposited's pass.
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);

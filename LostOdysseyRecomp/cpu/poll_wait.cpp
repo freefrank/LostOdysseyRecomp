@@ -12,16 +12,60 @@
 #include <os/logger.h>
 #include <kernel/memory.h>
 #include <patches/occlusion_history.h>
+#include <gpu/renderer.h>
 
 extern "C" PPC_FUNC(__imp__sub_823CF390);
+extern "C" PPC_FUNC(__imp__sub_823CF3F0);
 extern "C" PPC_FUNC(__imp__sub_82322478);
 
 // Retain the generated function, including register saves, return values and
 // query ordering. Only its repeated not-ready probes can pause on the host.
+// The scene renderer's reads of its occlusion queries (sub_823CE960). GetData only agrees once the
+// command processor has parsed the query's fence, so the rendering thread slept about 10 ms a frame in a busy street,
+// holding up Guest Main behind it. Without host queries every count is made up and never zero, and this site only
+// asks zero or not, so the answer is known: one GetData call still kicks the open segment, and if it isn't ready the
+// count the command processor will write (0x10000 per record) is stored now. LO_EARLY_QUERY_ANSWER=0 waits again.
+static bool AnswerSameFrameRead(PPCContext& ctx, uint8_t* base)
+{
+    // The six reads in the scene renderer sub_823CE960 (return addresses). The sun flare (sub_823D5430) keeps waiting.
+    constexpr uint32_t kReads[] = {0x823CEAD0, 0x823CEC48, 0x823CEEE8, 0x823CEF70, 0x823CF000, 0x823CF134};
+    // The count the command processor will write: 0x10000 per record without host queries (the default mode), or
+    // xenia's made-up 80-100 (gpu/command_processor.cpp, EVENT_WRITE_ZPD). Other modes keep waiting.
+    static const int mode = [] {
+        const char* zpd = getenv("LO_ZPD_MODE");
+        if (getenv("LO_EARLY_QUERY_ANSWER") && getenv("LO_EARLY_QUERY_ANSWER")[0] == '0') return 0;
+        if (!zpd || !*zpd || std::strcmp(zpd, "host") == 0) return 1;
+        if (std::strcmp(zpd, "xenia") == 0 || std::strcmp(zpd, "begin0") == 0) return 2;
+        return 0;
+    }();
+    const uint32_t lr = uint32_t(ctx.lr);
+    if (!mode || std::find(std::begin(kReads), std::end(kReads), lr) == std::end(kReads) || !gpu::renderer::OcclusionCountsFake())
+        return false;
+    const uint32_t query = ctx.r3.u32, out = ctx.r4.u32;
+    const auto r3 = ctx.r3, r4 = ctx.r4, r5 = ctx.r5, r6 = ctx.r6;
+    const uint64_t lrSaved = ctx.lr;
+    ctx.r5.u64 = 4;
+    ctx.r6.u64 = 1;
+    __imp__sub_823CF3F0(ctx, base);
+    const int32_t result = ctx.r3.s32;
+    ctx.r3 = r3; ctx.r4 = r4; ctx.r5 = r5; ctx.r6 = r6; ctx.lr = lrSaved;
+    static std::atomic<uint32_t> answered{0}, early{0};
+    if (result == 1 || result < 0)
+    {
+        PPC_STORE_U32(out, mode == 1 ? 0x10000u * std::max<uint32_t>(1, PPC_LOAD_U32(query + 148)) : 100u);
+        early.fetch_add(1, std::memory_order_relaxed);
+    }
+    if ((answered.fetch_add(1, std::memory_order_relaxed) & 0xFFFFF) == 0xFFFFF)
+        LOG_INFO("occlusion: {} same-frame reads, {} answered before the fence", answered.load(), early.load());
+    ctx.r3.u64 = 1; // what the loop returns once GetData succeeds
+    return true;
+}
+
 PPC_FUNC(sub_823CF390)
 {
     // Policy::History answers the game's deferred reads without the loop.
     if (occlusion_history::Read(ctx, base)) return;
+    if (AnswerSameFrameRead(ctx, base)) return;
     poll_wait::RunScoped(poll_wait::Kind::Query, [&] { __imp__sub_823CF390(ctx, base); });
 }
 

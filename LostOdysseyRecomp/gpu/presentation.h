@@ -13,6 +13,10 @@ namespace gpu
 {
 enum class Antialiasing : uint32_t { Off, FXAA, SMAA, TAA };
 enum class ScalingFilter : uint32_t { Bilinear, Bicubic };
+// FSR 1 at the final pass of an upscale (gpu/fsr1_shaders.h). Off keeps scalingFilter. Easu: EASU alone, one
+// pass. Fsr: EASU into an intermediate of the output's size, then RCAS (AMD's FSR 1). Rcas: RCAS at the
+// source's size, then scalingFilter's upscale.
+enum class SpatialUpscaler : uint32_t { Off, Easu, Fsr, Rcas };
 struct PresentationOptions
 {
     Antialiasing antialiasing = Antialiasing::Off;
@@ -57,6 +61,11 @@ struct PresentationOptions
     // shader as a compute pass (Vulkan, RGBA8 swap chains). The target
     // finishes in GENERAL instead of COLOR_WRITE.
     bool storageTarget = false;
+    // FSR 1 for an upscale into an SDR swap chain without a calibration view (the Switch's
+    // LO_SWITCH_UPSCALER); any other draw keeps scalingFilter. rcasStops: RCAS sharpness in stops
+    // (0 is the sharpest, each stop halves it; AMD's default is 0.2).
+    SpatialUpscaler spatialUpscaler = SpatialUpscaler::Off;
+    float rcasStops = 0.25f;
 };
 // Owned by the presentation thread. Resources stay alive until the present fence.
 class Presentation

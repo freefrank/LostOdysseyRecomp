@@ -291,6 +291,7 @@ namespace gpu::renderer
         std::unordered_map<uint32_t, std::deque<uint64_t>> g_occlusionOwners;
         // Policy::History: measured (owner, samples) for the guest hooks.
         std::atomic<bool> g_occlusionHistory{false};
+        std::atomic<bool> g_occlusionFake{false};
         std::vector<std::pair<uint64_t, uint32_t>> g_occlusionCompleted;
 
         // ---- register indices ---------------------------------------------
@@ -1072,10 +1073,21 @@ namespace gpu::renderer
             // Resolve results kept on the GPU, keyed by guest physical address.
             // The game samples them through fetch constants pointing at the
             // same address, and the presenter copies the frontbuffer from here.
+            // The image a resolve slot shows. Not an owner: it is the slot's own allocation (ResolvedSurface::own) or,
+            // with LO_RESOLVE_SHARE, another slot's identical one (ShareResolvedSlot).
+            struct ResolvedTexRef
+            {
+                HostTexture* ptr = nullptr;
+                HostTexture* get() const { return ptr; }
+                HostTexture* operator->() const { return ptr; }
+                HostTexture& operator*() const { return *ptr; }
+                explicit operator bool() const { return ptr != nullptr; }
+            };
             struct ResolvedSurface
             {
                 uint64_t sourceSerial = 0; // allocationSerial of the target a copy came from (ResolveOnGpu)
-                std::unique_ptr<HostTexture> tex;
+                std::unique_ptr<HostTexture> own; // this slot's allocation (kept while it shows a shared one)
+                ResolvedTexRef tex;
                 std::unordered_map<uint64_t, std::unique_ptr<HostTexture>> fetchViews;
                 uint32_t destFormat = 0, destPitch = 0;
                 bool swapRedBlue = false;
@@ -1119,7 +1131,55 @@ namespace gpu::renderer
             uint64_t hdrSdrSourcesFrame = ~0ull;
             uint64_t resolveWriteOrdinal = 0;
             uint64_t nextTargetAllocation = 0;
-            resolve_copy::ConsecutiveCopies consecutiveResolveCopies;
+            // Adjacent resolves (resolve_copy::ConsecutiveCopies), plus the last full resolve another slot may show
+            // without writing (LO_RESOLVE_SHARE). Every Invalidate() of the copy record ends the share record too.
+            struct ResolveAdjacency : resolve_copy::ConsecutiveCopies
+            {
+                struct Share
+                {
+                    uint64_t sourceAllocation = 0;
+                    uint32_t width = 0, height = 0, guestWidth = 0, guestHeight = 0;
+                    resolution::Size resolutionSize{};
+                    RenderFormat format = RenderFormat::UNKNOWN;
+                    uint32_t slotBase = 0, slotFormat = 0; // the slot written
+                    HostTexture* image = nullptr;         // what it wrote
+                    uint64_t imageAllocation = 0;
+                    uint64_t sourceSerial = 0;            // ResolvedSurface::sourceSerial of that write
+                } share;
+                bool shareValid = false;
+                void Invalidate() { ConsecutiveCopies::Invalidate(); shareValid = false; }
+            } consecutiveResolveCopies;
+            // LO_RESOLVE_SHARE=1: a full resolve that repeats the previous one (same source, unchanged since, same size
+            // and host format) shows the previous slot's image instead of writing its own.
+            const bool resolveShare = [] {
+                const char* value = getenv("LO_RESOLVE_SHARE");
+                return video::IsDeko3d() && value && value[0] == '1';
+            }();
+            // LO_RESOLVE_FOLD_TRANSFER=1: the EDRAM ownership transfer a resolve's read triggers is owed (transferDebt),
+            // and the resolve draws the transfer straight into its destination.
+            const bool resolveFoldTransfer = [] {
+                const char* value = getenv("LO_RESOLVE_FOLD_TRANSFER");
+                return video::IsDeko3d() && value && value[0] == '1';
+            }();
+            // An owed TransferRegion(*source, *target, srcClass, dstClass): target is the tiles' owner and its texture is
+            // stale. Settled (drawn) before anything uses target or writes source, dropped when a whole clear replaces
+            // target. Only whole-target transfers are owed, and target's own clears were dropped as the transfer would.
+            struct TransferDebt
+            {
+                HostTexture* target = nullptr;
+                HostTexture* source = nullptr;
+                uint32_t base = 0, srcClass = 0, dstClass = 0;
+            } transferDebt;
+            // Set by ResolveImpl around its AcquireColorTarget: the transfer may be owed. clears: the resolve then clears
+            // the guest rectangle x0,y0 - x1,y1 (copyControl 0x100); a debt is made only if that covers the whole target.
+            // destHost: the resolve destination's host format (the fold needs the target's).
+            struct FoldRequest
+            {
+                bool active = false, clears = false;
+                uint32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+                RenderFormat destHost = RenderFormat::UNKNOWN;
+            } foldRequest;
+            uint32_t resolveTransfersFolded = 0, transferDebtsSettled = 0, transferDebtsDropped = 0, resolveShares = 0;
             const bool resolveCopyReuse = [] {
                 const char* value = getenv("LO_RESOLVE_COPY_REUSE");
                 return !value || std::string_view(value) != "0";
@@ -1759,7 +1819,10 @@ namespace gpu::renderer
                     return;
                 for (auto rs = it->second.begin(); rs != it->second.end(); ++rs)
                     if (rs->destFormat == destFormat) {
-                        if (rs->tex) Gpu().retiredTextures.push_back(std::move(rs->tex));
+                        // Slots showing this one's image keep it.
+                        UnshareResolvedSlot(*rs);
+                        rs->tex = {};
+                        if (rs->own) Gpu().retiredTextures.push_back(std::move(rs->own));
                         if (rs->hdrTex) Gpu().retiredTextures.push_back(std::move(rs->hdrTex));
                         for (auto& [key, view] : rs->fetchViews)
                             if (view) Gpu().retiredTextures.push_back(std::move(view));
@@ -1769,6 +1832,86 @@ namespace gpu::renderer
                 if (it->second.empty())
                     resolved.erase(it);
             }
+
+            // ---- shared resolve images (LO_RESOLVE_SHARE) -------------------------
+            // A slot shows `tex`, which is its own allocation or another slot's (aliasing). Every allocation has
+            // exactly one owner slot; ownership moves between slots instead of images being copied or freed.
+
+            // Another slot showing `image`, if any.
+            ResolvedSurface* FindAliaser(const HostTexture* image, const ResolvedSurface* except)
+            {
+                if (!resolveShare || !image) return nullptr;
+                for (auto& [base, list] : resolved)
+                    for (ResolvedSurface& other : list)
+                        if (&other != except && other.tex.get() == image) return &other;
+                return nullptr;
+            }
+
+            // Before `rs` is written or dropped: it shows a private allocation (its own, or none yet), and every other
+            // slot that showed its old image still shows it, now owned by one of them. Returns the old image when it
+            // stays alive elsewhere (a partial write must start from it), else null.
+            HostTexture* UnshareResolvedSlot(ResolvedSurface& rs)
+            {
+                HostTexture* shown = rs.tex.get();
+                if (!resolveShare || !shown) return nullptr;
+                if (shown != rs.own.get()) {
+                    rs.tex.ptr = rs.own.get();
+                    return shown;
+                }
+                ResolvedSurface* aliaser = FindAliaser(shown, &rs);
+                if (!aliaser) return nullptr;
+                std::swap(rs.own, aliaser->own); // the aliaser owns the image it shows; rs takes its parked allocation
+                rs.tex.ptr = rs.own.get();
+                ++targetEpoch;
+                return shown;
+            }
+
+            // `rs` shows `image` (another slot's last write, identical to what rs's resolve would write).
+            void ShareResolvedSlot(ResolvedSurface& rs, HostTexture* image)
+            {
+                if (rs.tex.get() == image) return;
+                HostTexture* shown = rs.tex.get();
+                if (shown && shown == rs.own.get())
+                    if (ResolvedSurface* aliaser = FindAliaser(shown, &rs))
+                        std::swap(rs.own, aliaser->own);
+                rs.tex.ptr = image;
+                ++targetEpoch;
+            }
+
+            // The slot the share record names still shows what that resolve wrote, and this resolve would write the
+            // same pixels into a texture of the same size and host format: returns that image.
+            HostTexture* ResolveShareSource(const HostTexture& color, const ResolvedSurface& rs, uint32_t texW, uint32_t texH,
+                                            uint32_t guestW, uint32_t guestH, RenderFormat destHost,
+                                            uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            {
+                const auto& share = consecutiveResolveCopies.share;
+                // Readers see the shown image's guest extent and scale: those the slot's own image would have.
+                const HostTexture* own = rs.own.get();
+                const bool ownFits = own && own->format == destHost && own->width == texW && own->height == texH;
+                const uint32_t expectGuestW = ownFits ? own->guestWidth : guestW, expectGuestH = ownFits ? own->guestHeight : guestH;
+                const resolution::Size expectScale = ownFits ? own->resolutionSize : color.resolutionSize;
+                if (!resolveShare || !consecutiveResolveCopies.shareValid || x0 || y0 || w < texW || h < texH ||
+                    share.guestWidth != expectGuestW || share.guestHeight != expectGuestH || share.resolutionSize != expectScale ||
+                    share.sourceAllocation != color.allocationSerial || share.width != texW || share.height != texH ||
+                    share.format != destHost || hdrSceneEnabled.load(std::memory_order_relaxed) ||
+                    activePlan.requestedUpscaler != upscaling::Upscaler::Off || sceneCopyPromotion.active == &color)
+                    return nullptr;
+#if defined(LO_GPU_PLUME)
+                if (fsrAlphaBridge) return nullptr;
+#endif
+                auto it = resolved.find(share.slotBase);
+                if (it == resolved.end()) return nullptr;
+                for (const ResolvedSurface& from : it->second)
+                    if (from.destFormat == share.slotFormat) {
+                        if (&from == &rs || from.tex.get() != share.image || !share.image->texture ||
+                            share.image->allocationSerial != share.imageAllocation ||
+                            share.image->format != destHost || share.image->width != texW || share.image->height != texH)
+                            return nullptr;
+                        return share.image;
+                    }
+                return nullptr;
+            }
+
             bool resolveReadback = false; // LO_RESOLVE_READBACK=1: legacy CPU write-back into guest memory
             bool textureBcFallback = false; // BC1-BC3 decoded to RGBA8 on the CPU (no device support, or LO_TEXTURE_BC=0)
             // LO_TEXTURE_FINGERPRINT_LOG=<file>: one CSV row per distinct uploaded
@@ -2805,6 +2948,7 @@ namespace gpu::renderer
                     device->getCapabilities().occlusionQueryPrecise, kOcclusionQueriesPerSlot,
                     getenv("LO_ZPD_MODE") ? getenv("LO_ZPD_MODE") : "unset", countingState);
                 g_occlusionHistory.store(hostOcclusion && occlusionPolicy == gpu::occlusion::Policy::History, std::memory_order_release);
+                g_occlusionFake.store(!hostOcclusion, std::memory_order_release);
                 BindGpuSlot();
                 // Cached index conversions live in the arena too (INDEX).
                 const auto vertexFlags = RenderBufferFlag::STORAGE |
@@ -3167,6 +3311,129 @@ namespace gpu::renderer
                 transfers++;
             }
             uint32_t transfers = 0;
+
+            // ---- owed transfers (LO_RESOLVE_FOLD_TRANSFER) --------------------------
+            // TransferRegion(src, dst) would draw over the whole of dst (not return early or owe a constant clear).
+            bool TransferDrawsWhole(const HostTexture& src, HostTexture& dst, uint32_t srcClass, uint32_t dstClass)
+            {
+                if (srcClass > kClass7e3 || dstClass > kClass7e3 || !src.texture || !dst.texture) return false;
+                if (dst.ScaleX(std::min(src.guestWidth, dst.guestWidth)) != dst.width ||
+                    dst.ScaleY(std::min(src.guestHeight, dst.guestHeight)) != dst.height)
+                    return false;
+                if (src.pendingClear.Size() == 1 && src.format == RenderFormat::R16G16B16A16_FLOAT &&
+                    dst.format == RenderFormat::R16G16B16A16_FLOAT)
+                {
+                    const pending_clear::Op& owed = src.pendingClear.Ops()[0];
+                    float value[4];
+                    if (owed.aspects == pending_clear::Color && owed.Whole() &&
+                        edram_transfer::ConstantTransfer(owed.color, srcClass, dstClass, value))
+                        return false;
+                }
+                return GetTransferPipeline(dst.format) != nullptr;
+            }
+
+            // Owes TransferRegion(src, dst) instead of drawing it. The bookkeeping that describes dst's contents happens
+            // now, as TransferRegion does it; the draw replaces every pixel of dst, so dst's queued clears are dead now.
+            void OweTransfer(HostTexture& src, HostTexture& dst, uint32_t srcClass, uint32_t dstClass, uint32_t base)
+            {
+                ++targetEpoch;
+                FlushMotionReplayQueue();
+                dst.sdrProducerFrame = ~0ull;
+                if (dst.sdrLoss.Lost(frame, SdrLossTrace::TileTransfer, (srcClass << 8) | dstClass))
+                    dst.sdrLoss.vs = src.allocationSerial;
+                dst.hdrValid = false;
+                consecutiveResolveCopies.Invalidate();
+                MarkFgWritable(dst, "writable_transition");
+                dst.unwrittenSinceResolve = false;
+                dst.pendingClear.Drop();
+                transferDebt = {&dst, &src, base, srcClass, dstClass};
+            }
+
+            // ResolveImpl's read of `dst` may owe this transfer instead of drawing it: the resolve's own clear, if any,
+            // covers dst (or the transfer would have to be drawn anyway, before that clear), and nothing else is pending.
+            bool FoldableTransfer(HostTexture& src, HostTexture& dst, uint32_t srcClass, uint32_t dstClass)
+            {
+                if (!resolveFoldTransfer || !foldRequest.active || resolveReadback || restoreDebt.target ||
+                    sceneCopyPromotion.activeMapping || hdrSceneEnabled.load(std::memory_order_relaxed) ||
+                    &src == transferDebt.target || &dst == transferDebt.source || dst.format != foldRequest.destHost)
+                    return false;
+                if (foldRequest.clears && !(dst.ScaleX(foldRequest.x0) == 0 && dst.ScaleY(foldRequest.y0) == 0 &&
+                    dst.ScaleX(foldRequest.x1) >= dst.width && dst.ScaleY(foldRequest.y1) >= dst.height))
+                    return false;
+                return TransferDrawsWhole(src, dst, srcClass, dstClass);
+            }
+
+            // Draws the owed transfer into its target: something is about to use the target or write the source.
+            void SettleTransferDebt()
+            {
+                if (!transferDebt.target) return;
+                ++targetEpoch;
+                const TransferDebt debt = transferDebt;
+                transferDebt = {};
+                // The transfer precedes the resolve that read the target: it does not end that resolve's proof.
+                const bool unwritten = debt.target->unwrittenSinceResolve;
+                TransferRegion(*debt.source, *debt.target, debt.srcClass, debt.dstClass);
+                debt.target->unwrittenSinceResolve = unwritten;
+                ++transferDebtsSettled;
+            }
+
+            // A whole clear (or retirement) replaces every pixel of the target: the transfer is never drawn.
+            void DropTransferDebt()
+            {
+                if (!transferDebt.target) return;
+                ++targetEpoch;
+                transferDebt = {};
+                ++transferDebtsDropped;
+            }
+
+            // Settles the debt if `tex` is its target, or its source about to be written.
+            void SettleTransferDebtFor(const HostTexture& tex, bool writes)
+            {
+                if (transferDebt.target && (&tex == transferDebt.target || (writes && &tex == transferDebt.source)))
+                    SettleTransferDebt();
+            }
+
+            // The owed transfer drawn into a resolve destination over (x0, y0, w, h), at the same pixel positions as in
+            // the target (dst has the target's host format, so the values are the ones the target would hold).
+            bool FoldTransferIntoResolve(HostTexture& dst, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+            {
+                const TransferDebt debt = transferDebt;
+                HostTexture& src = *debt.source;
+                RenderPipeline* pipeline = GetTransferPipeline(dst.format);
+                if (!pipeline)
+                    return false;
+                SharedConstants transferConstants{};
+                transferConstants.transfer[0] = debt.srcClass;
+                transferConstants.transfer[1] = debt.dstClass;
+                transferConstants.transfer[2] = std::bit_cast<uint32_t>(float(src.resolutionSize.width) / debt.target->resolutionSize.width);
+                transferConstants.transfer[3] = std::bit_cast<uint32_t>(float(src.resolutionSize.height) / debt.target->resolutionSize.height);
+                uint64_t offset = Upload(&transferConstants, sizeof(transferConstants));
+                if (offset == UINT64_MAX)
+                    return false;
+                if (!Begin()) return false;
+                FlushMotionReplayQueue();
+                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                RenderDescriptorSet* set1 = AcquireSet(1);
+                set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
+                BindTargets(&dst, nullptr);
+                RenderViewport viewport(static_cast<float>(x0), static_cast<float>(y0), static_cast<float>(w), static_cast<float>(h));
+                commandList->setViewports(&viewport, 1);
+                RenderRect scissor{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h) };
+                commandList->setScissors(&scissor, 1);
+                commandList->setPipeline(pipeline);
+                commandList->setGraphicsPipelineLayout(pipelineLayout.get());
+                SetConstantBuffer(offset, 0);
+                SetConstantBuffer(offset, 1);
+                SetConstantBuffer(offset, 2);
+                commandList->setGraphicsDescriptorSet(staticSet0.get(), 0);
+                commandList->setGraphicsDescriptorSet(set1, 1);
+                commandList->setGraphicsDescriptorSet(AcquireSet(2), 2);
+                commandList->setGraphicsDescriptorSet(AcquireSet(3), 3);
+                if(vulkan) commandList->setGraphicsDescriptorSet(staticSamplerSet.get(),4);
+                commandList->drawInstanced(3, 1, 0, 0);
+                return true;
+            }
 
             void CompileBlitShaders()
             {
@@ -5500,6 +5767,9 @@ void main()
             }
             void Transition(HostTexture& tex, RenderTextureLayout layout, RenderBarrierStages stages)
             {
+                if (transferDebt.target)
+                    SettleTransferDebtFor(tex, layout == RenderTextureLayout::COLOR_WRITE || layout == RenderTextureLayout::COPY_DEST ||
+                        layout == RenderTextureLayout::GENERAL || layout == RenderTextureLayout::DEPTH_WRITE);
                 // Every use outside a pass that binds the target reads or
                 // partly overwrites it, so owed clears go first. Attachment
                 // writes leave them to the pass (BindTargets).
@@ -5529,6 +5799,17 @@ void main()
             void QueueClear(HostTexture& tex, pending_clear::Op op)
             {
                 ++targetEpoch;
+                // An owed transfer is dead once a colour clear covers its whole target; any other clear of the target or
+                // its source comes after the transfer.
+                if (transferDebt.target && (&tex == transferDebt.target || &tex == transferDebt.source)) {
+                    const bool whole = op.rects.empty() || (op.rects.size() == 1 && op.rects[0].left <= 0 && op.rects[0].top <= 0 &&
+                        op.rects[0].right >= int32_t(tex.width) && op.rects[0].bottom >= int32_t(tex.height));
+                    if (&tex == transferDebt.target && (op.aspects & pending_clear::Color) && whole) DropTransferDebt();
+                    else SettleTransferDebt();
+                }
+                // A queued clear changes the target before any copy record sees it run: no later resolve shows an image
+                // taken before it.
+                consecutiveResolveCopies.shareValid = false;
                 // A depth fill leaves a surface no replay draws; the clear value 0 is "nothing".
                 // Only a frame with a motion consumer tracks it.
                 if (motionOptions.staticSkip && (temporalExperiment || temporalInputProbe || dlssSrRequested || nativeFgInputs) &&
@@ -5593,6 +5874,9 @@ void main()
             // the target's own framebuffer.
             RenderFramebuffer* BindTargets(HostTexture* color, HostTexture* depth)
             {
+                if (transferDebt.target)
+                    for (HostTexture* tex : {color, depth})
+                        if (tex) SettleTransferDebtFor(*tex, true);
                 const HostTexture* area = color ? color : depth;
                 for (HostTexture* tex : {color, depth})
                     if (tex && !tex->pendingClear.Empty() &&
@@ -7797,20 +8081,44 @@ void main()
                 }
             }
 
+            // The frame of the last draw, resolve or clear that applied the plan, and the frame a new scene size was
+            // last held back in (ApplyInternalResolution).
+            uint64_t planWorkFrame = ~0ull, planDeferredFrame = ~0ull;
+            // LO_RESIZE_FIX=1: the dynamic-resolution flicker fix, until it's been checked on the console. Without it a
+            // scene size change happens as before (at once, dropping every resolve; new targets uncleared).
+            const bool resizeFix = [] {
+                const char* value = getenv("LO_RESIZE_FIX");
+                return value && value[0] == '1';
+            }();
+
             bool ApplyInternalResolution()
             {
                 if (video::GpuWorkStopped()) return false;
-                if (framePlanGeneration.load(std::memory_order_acquire) != activePlanGeneration) {
+                if (framePlanGeneration.load(std::memory_order_acquire) != activePlanGeneration && planDeferredFrame != frame) {
                     std::lock_guard lock(framePlanMutex);
-                    activePlan = committedPlan;
-                    activePlanFailed = activePlan.geometryEpoch != 0 && failedPlanEpochs.contains(activePlan.geometryEpoch);
-                    activePlanGeneration = framePlanGeneration.load(std::memory_order_relaxed);
+                    // A new scene size (dynamic resolution) that arrives after this frame has drawn waits for the next
+                    // frame: the change replaces every EDRAM target, so the rest of the frame would draw over and resolve
+                    // new empty targets, losing what it drew before (shadow maps, depth, the half-drawn scene).
+                    if (resizeFix && planWorkFrame == frame && activePlan.cpuSerial &&
+                        activePlan.requestedUpscaler == upscaling::Upscaler::Off &&
+                        committedPlan.requestedUpscaler == upscaling::Upscaler::Off &&
+                        (committedPlan.width != activePlan.width || committedPlan.height != activePlan.height)) {
+                        planDeferredFrame = frame;
+                        LOG_INFO("renderer: scene size {}x{} waits for frame {} (frame {} has drawn {} draws at {}x{})",
+                            committedPlan.width, committedPlan.height, frame + 1, frame, drawsThisFrame,
+                            activePlan.width, activePlan.height);
+                    } else {
+                        activePlan = committedPlan;
+                        activePlanFailed = activePlan.geometryEpoch != 0 && failedPlanEpochs.contains(activePlan.geometryEpoch);
+                        activePlanGeneration = framePlanGeneration.load(std::memory_order_relaxed);
 #if defined(LO_GPU_PLUME)
-                    // Only FSR publishes or reads FSR alpha; leaving it drops what it left.
-                    if (fsrAlphaBridge && activePlan.requestedUpscaler != upscaling::Upscaler::Fsr)
-                        fsrAlphaBridge->Invalidate();
+                        // Only FSR publishes or reads FSR alpha; leaving it drops what it left.
+                        if (fsrAlphaBridge && activePlan.requestedUpscaler != upscaling::Upscaler::Fsr)
+                            fsrAlphaBridge->Invalidate();
 #endif
+                    }
                 }
+                planWorkFrame = frame;
                 if (activePlanFailed)
                     return false;
                 const frame_plan::FramePlan& selected = activePlan;
@@ -7875,10 +8183,19 @@ void main()
                     promotionPool.clear();
                     framebuffers.clear();
                     lastFramebuffer = nullptr;
+                    transferDebt = {}; // its textures go with renderTargets
                     renderTargets.clear();
                     ++targetEpoch;
-                    resolved.clear();
-                    resolvedBases.reset();
+                    // Without an upscaler or frame generation, resolves keep their images across a size change: the
+                    // game samples last frame's resolves (and ones it made once) before it writes them again, and a
+                    // dropped one reads guest memory, which never holds the GPU's result, until its next resolve. Each
+                    // image is sampled at its own scale meanwhile, and its slot takes the new size at its next write.
+                    consecutiveResolveCopies.Invalidate();
+                    if (!resizeFix || activePlan.requestedUpscaler != upscaling::Upscaler::Off ||
+                        activePlan.frameGeneration != upscaling::FrameGeneration::Off) {
+                        resolved.clear();
+                        resolvedBases.reset();
+                    }
                     tileOwner.clear();
                     if (temporalHistory) temporalHistory->Reset();
                     temporalScene.Reset(frame);
@@ -7989,11 +8306,17 @@ void main()
                     // A catalog publication can arrive after a target's first
                     // use. Test its effective mapping before returning a cache
                     // hit so the old native/square allocation is never reused.
+                    // An owed transfer is drawn before its target or source is used (the resolve that owes it may read
+                    // the target again: ResolveOnGpu folds the transfer into that read too).
+                    if (transferDebt.target && (it->second.get() == transferDebt.source ||
+                        (it->second.get() == transferDebt.target && !foldRequest.active)))
+                        SettleTransferDebt();
                     if (it->second->guestHeight >= height && it->second->resolutionSize == desiredSize) {
                         it->second->shadowMap = role == resolution::TargetRole::Shadow;
                         return it->second.get();
                     }
-                    // The growth copy below reads the old pixels.
+                    // The growth copy below reads the old pixels, and the old texture leaves.
+                    if (transferDebt.target && it->second.get() == transferDebt.target) SettleTransferDebt();
                     if (it->second.get() == restoreDebt.target) SettleRestoreDebt();
                     oldTarget = std::move(it->second);
                     renderTargets.erase(it);
@@ -8043,6 +8366,14 @@ void main()
                     }
                 }
                 if (oldTarget) Gpu().retiredTextures.push_back(std::move(oldTarget));
+                // deko3d: a new target's memory still holds what an earlier image left there, in that image's layout (the
+                // targets a size change replaces show as stripes and blocks) until the game clears it. It starts cleared
+                // to zero instead, as a queued clear that the game's own whole clear replaces at no cost.
+                if (resizeFix && video::IsDeko3d() && !preserveOverlap) {
+                    static constexpr float zero[4]{};
+                    tex->pendingClear.Record(depth ? pending_clear::DepthOp(true, true, 0.0f, 0) : pending_clear::ColorOp(zero),
+                        tex->width, tex->height);
+                }
                 LOG_INFO("renderer: new {} target base={:#x} fmt={} guest={}x{} physical={}x{} scale={}x{} shadow={}", depth ? "depth" : "color", base, format, pitch, effectiveHeight, tex->width, tex->height, tex->resolutionSize.width, tex->resolutionSize.height, tex->shadowMap);
                 HostTexture* result = tex.get();
                 renderTargets.emplace(key, std::move(tex));
@@ -8080,7 +8411,13 @@ void main()
                     if (prev != renderTargets.end() && prev->second && prev->second->texture && target && target->texture) {
                         // The transfer reads the old owner and may cover only part of the new one.
                         if (prev->second.get() == restoreDebt.target || target == restoreDebt.target) SettleRestoreDebt();
-                        TransferRegion(*prev->second, *target, owner->second, colorClass);
+                        // LO_RESOLVE_FOLD_TRANSFER: a resolve's read owes the transfer (ResolveOnGpu draws it into the
+                        // resolve destination); only one is owed at a time.
+                        if (FoldableTransfer(*prev->second, *target, owner->second, colorClass)) {
+                            SettleTransferDebt();
+                            OweTransfer(*prev->second, *target, owner->second, colorClass, base);
+                        }
+                        else TransferRegion(*prev->second, *target, owner->second, colorClass);
                     }
                 }
                 owner->second = colorClass;
@@ -9822,6 +10159,11 @@ void main()
                     static const bool rtReuse = !(getenv("LO_RT_REUSE") && getenv("LO_RT_REUSE")[0] == '0');
                     const uint32_t memoInputs[6] = {colorInfo, pitch, rtHeight, depthInfo, depthControl & 3, touchesColor};
                     const uint64_t memoPlan = activePlan.geometryEpoch ^ (uint64_t(catalogGeneration.load(std::memory_order_acquire)) << 32);
+                    // LO_RESOLVE_FOLD_TRANSFER: a colour clear rectangle at an owed target's tiles is replayed into the other
+                    // views after the draw, under this draw's pipeline state; the owed transfer is drawn before that state.
+                    if (colorWrites && transferDebt.target && transferDebt.base == (colorInfo & 0xFFF) && info.primitiveType == 8 &&
+                        !info.indexed && info.indexCount <= 6 && (Reg(REG_PA_CL_VTE_CNTL) & 0x100))
+                        SettleTransferDebt();
                     if (rtReuse && rtMemo.color && rtMemo.epoch == targetEpoch && rtMemo.frame == frame && rtMemo.plan == memoPlan &&
                         !restoreDebt.target && !sceneCopyPromotion.activeMapping && std::memcmp(rtMemo.inputs, memoInputs, sizeof(memoInputs)) == 0)
                     {
@@ -13683,6 +14025,8 @@ void main()
                         const uint32_t depth24 = depthFloat ? Float32To20e4(rectZ) : PackDepth24Unorm(rectZ);
                         const uint32_t word = (depth24 << 8) | (Reg(REG_RB_STENCILREFMASK) & 0xFF);
                         static uint32_t loggedFills = 0;
+                        // Every colour view of these tiles gets a whole clear, an owed transfer's target among them.
+                        if (transferDebt.target && transferDebt.base == (depthInfo & 0xFFF)) DropTransferDebt();
                         for (auto& [k, tex] : renderTargets)
                         {
                             if (!tex || k.depth || k.base != (depthInfo & 0xFFF))
@@ -14252,13 +14596,17 @@ void main()
                 x0 = depth.ScaleX(x0); y0 = depth.ScaleY(y0);
                 ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 InvalidateFgResolve(rs);
+                // Only colour slots are shared; a depth slot always shows its own allocation.
+                UnshareResolvedSlot(rs);
                 if (!rs.tex || rs.tex->format != RenderFormat::R32_FLOAT || rs.tex->width != texW || rs.tex->height != texH)
                 {
-                    if (rs.tex) Gpu().retiredTextures.push_back(std::move(rs.tex));
+                    rs.tex = {};
+                    if (rs.own) Gpu().retiredTextures.push_back(std::move(rs.own));
                     rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
                     rs.sdrWriteOrdinal = 0;
                     rs.writeWidth = rs.writeHeight = 0;
-                    rs.tex = std::make_unique<HostTexture>();
+                    rs.own = std::make_unique<HostTexture>();
+                    rs.tex.ptr = rs.own.get();
                     rs.tex->format = RenderFormat::R32_FLOAT;
                     rs.tex->width = texW;
                     rs.tex->height = texH;
@@ -14349,14 +14697,22 @@ void main()
                 const RenderFormat destHost = (destFormat == 32 || destFormat == 7) ? RenderFormat::R16G16B16A16_FLOAT : RenderFormat::R8G8B8A8_UNORM;
                 ResolvedSurface& rs = ResolvedSlot(destBase, destFormat);
                 InvalidateFgResolve(rs);
+                // LO_RESOLVE_SHARE: a repeat of the previous full resolve shows that slot's image. Any other write first
+                // gives this slot a private allocation; slots that showed its image keep it.
+                HostTexture* const sharedImage = ResolveShareSource(color, rs, texW, texH, guestW, guestH, destHost, x0, y0, w, h);
+                HostTexture* previousImage = nullptr;
+                if (sharedImage) ShareResolvedSlot(rs, sharedImage);
+                else previousImage = UnshareResolvedSlot(rs);
                 if (!rs.tex || rs.tex->format != destHost || rs.tex->width != texW || rs.tex->height != texH)
                 {
                     consecutiveResolveCopies.Invalidate();
-                    if (rs.tex) Gpu().retiredTextures.push_back(std::move(rs.tex));
+                    rs.tex = {};
+                    if (rs.own) Gpu().retiredTextures.push_back(std::move(rs.own));
                     rs.writeOrdinal = 0; // The replacement allocation contains no previous resolve.
                     rs.sdrWriteOrdinal = 0;
                     rs.writeWidth = rs.writeHeight = 0;
-                    rs.tex = std::make_unique<HostTexture>();
+                    rs.own = std::make_unique<HostTexture>();
+                    rs.tex.ptr = rs.own.get();
                     rs.tex->allocationSerial = ++nextTargetAllocation;
                     rs.tex->format = destHost;
                     rs.tex->width = texW;
@@ -14386,6 +14742,19 @@ void main()
                     if (created++ < 16)
                         LOG_INFO("renderer: resolved surface {:#x} guest={}x{} physical={}x{} host fmt={} dest fmt={}", destBase, guestW, guestH, texW, texH, uint32_t(color.format), destFormat);
                 }
+                // The slot left a shared image for its own allocation, which holds older pixels: a partial (or empty)
+                // write starts from the image it showed.
+                if (previousImage && previousImage->texture && previousImage->format == rs.tex->format &&
+                    previousImage->width == rs.tex->width && previousImage->height == rs.tex->height &&
+                    !(x0 == 0 && y0 == 0 && w >= texW && h >= texH))
+                {
+                    consecutiveResolveCopies.Invalidate();
+                    Transition(*previousImage, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    RenderBox box{ 0, 0, int32_t(texW), int32_t(texH), 0, 1 };
+                    commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
+                        RenderTextureCopyLocation::Subresource(previousImage->texture.get()), 0, 0, 0, &box);
+                }
                 rs.destFormat = destFormat;
                 rs.destPitch = destPitch;
                 rs.swapRedBlue = ((Reg(REG_RB_COPY_DEST_INFO) >> 24) & 1) != 0;
@@ -14396,11 +14765,34 @@ void main()
                 if (w == 0 || h == 0)
                     return true;
                 const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
-                if (rs.tex->format == color.format)
+                // LO_RESOLVE_FOLD_TRANSFER: the target's texture still owes the transfer that made it the tiles' owner;
+                // draw that transfer over the resolve rectangle straight into the destination (the transfer shader's
+                // output depends only on the pixel position, so these are the pixels the target would hold).
+                const bool foldTransfer = !sharedImage && transferDebt.target == &color && rs.tex->format == color.format &&
+                    x0 + w <= color.width && y0 + h <= color.height;
+                if (sharedImage)
                 {
-                    // LO_RESOLVE_BLIT=1: the same pixels through the blit shader on the 3D engine, not a copy-engine copy
-                    // between two barriers (exact for these formats: each value round-trips through float32).
-                    static const bool resolveBlit = video::IsDeko3d() && getenv("LO_RESOLVE_BLIT") && getenv("LO_RESOLVE_BLIT")[0] == '1';
+                    // The previous resolve wrote these pixels from this unchanged source into the image shown now.
+                    rs.sourceSerial = consecutiveResolveCopies.share.sourceSerial;
+                    ++resolveShares;
+                    resolveOperation = "shared";
+                }
+                else if (foldTransfer)
+                {
+                    if (!FoldTransferIntoResolve(*rs.tex, x0, y0, w, h)) return false;
+                    consecutiveResolveCopies.Invalidate();
+                    // As after a blit resolve: nothing wrote the target since (the owed transfer precedes the resolve).
+                    color.unwrittenSinceResolve = true;
+                    rs.sourceSerial = color.allocationSerial;
+                    ++resolveTransfersFolded;
+                    resolveOperation = "transfer_resolve";
+                }
+                else if (rs.tex->format == color.format)
+                {
+                    // The same pixels through the blit shader on the 3D engine, not a copy-engine copy between two barriers
+                    // (exact for these formats: each value round-trips through float32). First battle, 3 runs: 26.62 to
+                    // 27.72 FPS, GPU 37.01 to 35.34 ms. LO_RESOLVE_BLIT=0 goes back to the copy.
+                    static const bool resolveBlit = video::IsDeko3d() && !(getenv("LO_RESOLVE_BLIT") && getenv("LO_RESOLVE_BLIT")[0] == '0');
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
                     const bool reuse = resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy);
@@ -14443,6 +14835,22 @@ void main()
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
                 rs.sceneDraws = depthDrawFrame == frame ? depthDraws : 0;
                 const bool fullResolved = x0==0&&y0==0&&w==texW&&h==texH;
+                // LO_RESOLVE_SHARE: the next resolve may show this image if it repeats this one before anything changes
+                // the source (every such change invalidates consecutiveResolveCopies). Any other write ends the record:
+                // a partial one may have gone into the recorded image.
+                if (!sharedImage) consecutiveResolveCopies.shareValid = false;
+                if (resolveShare && !sharedImage && fullResolved) {
+                    auto& share = consecutiveResolveCopies.share;
+                    share.sourceAllocation = color.allocationSerial;
+                    share.width = texW; share.height = texH;
+                    share.guestWidth = rs.tex->guestWidth; share.guestHeight = rs.tex->guestHeight;
+                    share.resolutionSize = rs.tex->resolutionSize;
+                    share.format = rs.tex->format;
+                    share.slotBase = destBase; share.slotFormat = destFormat;
+                    share.image = rs.tex.get(); share.imageAllocation = rs.tex->allocationSerial;
+                    share.sourceSerial = rs.sourceSerial;
+                    consecutiveResolveCopies.shareValid = true;
+                }
                 const bool isSdrProducerResolved = color_qualification::IsHostTextureQualified(color.sdrProducerFrame, frame) &&
                     color.qualifiedSdrWidth >= texW && color.qualifiedSdrHeight >= texH &&
                     destFormat == 6 && fullResolved;
@@ -14629,7 +15037,11 @@ void main()
                             frame, srcSelect, colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, existed, destBase, destFormat, x0, y0, copyWidth, copyHeight, destPitch, destHeight, copyControl & 0x300);
                     }
                 }
+                // LO_RESOLVE_FOLD_TRANSFER: an ownership transfer this read triggers may be owed (FoldableTransfer).
+                foldRequest = {!resolveReadback, (copyControl & 0x100) != 0, x0, y0, x1, y1,
+                    (destFormat == 32 || destFormat == 7) ? RenderFormat::R16G16B16A16_FLOAT : RenderFormat::R8G8B8A8_UNORM};
                 HostTexture* color = AcquireColorTarget(colorInfo & 0xFFF, (colorInfo >> 16) & 0xF, pitch, rtHeight, true);
+                foldRequest = {};
                 if (!color || !color->texture) return;
                 if (!resolveReadback)
                 {
@@ -15100,6 +15512,7 @@ void main()
     }
 
     bool OcclusionHistoryEnabled() { return g_occlusionHistory.load(std::memory_order_acquire); }
+    bool OcclusionCountsFake() { return g_occlusionFake.load(std::memory_order_acquire); }
 
     void TakeOcclusionCompletions(std::vector<std::pair<uint64_t, uint32_t>>& out)
     {
@@ -15496,6 +15909,15 @@ void main()
                 LOG_INFO("renderer: render targets reused for {} of {} draws in the last 300 frames", g_renderer->rtReuseHits,
                     g_renderer->rtReuseHits + g_renderer->rtReuseMisses);
                 g_renderer->rtReuseHits = g_renderer->rtReuseMisses = 0;
+            }
+            if (g_renderer->frame % 300 == 0 && (g_renderer->resolveTransfersFolded || g_renderer->transferDebtsSettled ||
+                g_renderer->transferDebtsDropped || g_renderer->resolveShares))
+            {
+                LOG_INFO("renderer: in the last 300 frames, {} transfers folded into resolves ({} drawn later, {} never drawn), "
+                    "{} resolves shown from the previous one", g_renderer->resolveTransfersFolded, g_renderer->transferDebtsSettled,
+                    g_renderer->transferDebtsDropped, g_renderer->resolveShares);
+                g_renderer->resolveTransfersFolded = g_renderer->transferDebtsSettled = 0;
+                g_renderer->transferDebtsDropped = g_renderer->resolveShares = 0;
             }
             if ((stats || render_timing::Enabled()) && (render_timing::Enabled() || g_renderer->frame % 60 == 0))
             {

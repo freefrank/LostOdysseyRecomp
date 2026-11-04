@@ -1,6 +1,7 @@
 #include "presentation.h"
 #include "aspect_layout.h"
 #include "display_gamma.h"
+#include "fsr1_shaders.h"
 #include "shader/dxc_compiler.h"
 #include "shader/target_format.h"
 #include <os/logger.h>
@@ -35,6 +36,15 @@ struct Presentation::Impl
     // final passes (see Draw); null when one failed to build.
     std::unique_ptr<RenderShader> finalPs[2];
     std::unique_ptr<RenderPipeline> finalPipelines[2];
+    // FSR 1 (PresentationOptions::spatialUpscaler), built on first use from Init's source and fsr1::Shader:
+    // easuPixel [0] and rcasPixel [1], each into an SDR intermediate [0] or the swap chain format [1]. A
+    // failed build is not retried until Init.
+    const char *shaderSource = nullptr;
+    std::unique_ptr<RenderShader> fsrPs[2];
+    std::unique_ptr<RenderPipeline> fsrPipelines[2][2];
+    bool fsrFailed[2][2] = {};
+    SpatialUpscaler fsrLogged = SpatialUpscaler(~0u);  // none yet
+    RenderPipeline *FsrPipeline(uint32_t entry, bool swapchainTarget);
     // The final pass as a compute pass into a storage swap chain image (see
     // PresentationOptions::storageTarget). Vulkan with an RGBA8 swap chain
     // only; null elsewhere or when creation failed.
@@ -209,6 +219,9 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool
     p.computeLayout.reset();
     for (auto &pipeline : p.finalPipelines) pipeline.reset();
     for (auto &shader : p.finalPs) shader.reset();
+    for (auto &entry : p.fsrPipelines) for (auto &pipeline : entry) pipeline.reset();
+    for (auto &shader : p.fsrPs) shader.reset();
+    for (auto &entry : p.fsrFailed) entry[0] = entry[1] = false;
     const auto binaryFormat = p.vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil;
     const auto renderFormat = p.vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL;
     const char *source = R"(
@@ -484,6 +497,7 @@ float4 gainPixel(float4 position : SV_Position) : SV_Target {
     float weight = smoothstep(0.8, 1.0, max(sdr.r, max(sdr.g, sdr.b)));
     return float4(sdr * lerp(1.0.xxx, gain, weight), 1);
 })";
+    p.shaderSource = source;
     auto vs = xenos::CompileCachedHlsl(source, "vertex", "vs_6_0", binaryFormat);
     auto ps = xenos::CompileCachedHlsl(source, "pixel", "ps_6_0", binaryFormat);
     auto gainPs = xenos::CompileCachedHlsl(source, "gainPixel", "ps_6_0", binaryFormat);
@@ -624,6 +638,38 @@ void presentCompute(uint3 id : SV_DispatchThreadID) {
     computePipeline = device->createComputePipeline(RenderComputePipelineDesc(computeLayout.get(), computeCs.get(), kComputeGroupX, kComputeGroupY, 1));
     if (!computePipeline) return failed("pipeline");
     return true;
+}
+RenderPipeline *Presentation::Impl::FsrPipeline(uint32_t entry, bool swapchainTarget)
+{
+    auto &pipeline = fsrPipelines[entry][swapchainTarget ? 1 : 0];
+    bool &failed = fsrFailed[entry][swapchainTarget ? 1 : 0];
+    if (pipeline || failed || !initialized) return pipeline.get();
+    static const char *const entries[] = {"easuPixel", "rcasPixel"};
+    if (!fsrPs[entry]) {
+        auto shader = xenos::CompileCachedHlsl(std::string(shaderSource) + fsr1::Shader, entries[entry], "ps_6_0",
+            vulkan ? xenos::ShaderBinaryFormat::Spirv : xenos::ShaderBinaryFormat::Dxil);
+        if (shader.ok)
+            fsrPs[entry] = device->createShader(shader.bytecode.data(), shader.bytecode.size(), entries[entry],
+                vulkan ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL);
+        else
+            LOG_WARNING("presentation {}: {}", entries[entry], shader.errors);
+    }
+    if (fsrPs[entry]) {
+        RenderGraphicsPipelineDesc desc;
+        desc.pipelineLayout = layout.get();
+        desc.vertexShader = vs.get();
+        desc.pixelShader = fsrPs[entry].get();
+        desc.renderTargetCount = 1;
+        desc.renderTargetFormat[0] = swapchainTarget ? swapchainFormat : RenderFormat::R8G8B8A8_UNORM;
+        desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
+        desc.cullMode = RenderCullMode::NONE;
+        pipeline = device->createGraphicsPipeline(desc);
+    }
+    if (!pipeline) {
+        failed = true;
+        LOG_WARNING("presentation: FSR 1 {} unavailable; the upscale keeps its filter", entries[entry]);
+    }
+    return pipeline.get();
 }
 bool Presentation::Impl::EnsureUiPipelines()
 {
@@ -971,6 +1017,8 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
     RenderBuffer *ramp=p.UpdateGammaRamp(options.displayAdjust || options.brightnessPreview || options.hdrCalibration
         ? &options : nullptr);
     struct Parameters { float x,y,w,h,sw,sh;uint32_t aa,filter,expandRange,outputFlags;float outputScale,peakRatio;float calibrationRect[4]; };
+    // FSR's passes run without a calibration view and take the RCAS sharpness there (fsr1_shaders.h).
+    float calibrationX=options.calibrationRect[0];
     auto parameters=[&](float ox,float oy,float ew,float eh,uint32_t iw,uint32_t ih,uint32_t aa,uint32_t filter,
                         uint32_t expandRange,bool finalPass,bool linearOutput) {
         return Parameters{ox,oy,ew,eh,float(iw),float(ih),aa,filter,expandRange,
@@ -988,7 +1036,7 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
                 (((options.brightnessPreview && !options.calibrationSplitScene) || options.hdrCalibration) && p.curveActive ? 4096u : 0u) |
                 (options.calibrationSplitScene ? 8192u : 0u),
                 p.output.scale,p.output.peakRatio,
-                {options.calibrationRect[0],options.calibrationRect[1],options.calibrationRect[2],options.calibrationRect[3]}};
+                {calibrationX,options.calibrationRect[1],options.calibrationRect[2],options.calibrationRect[3]}};
     };
     auto render=[&](RenderTexture *input,RenderTexture *output,uint32_t iw,uint32_t ih,
                     uint32_t tw,uint32_t th,float ox,float oy,float ew,float eh,uint32_t aa,uint32_t filter,
@@ -1097,6 +1145,48 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
         return;
     }
+    // FSR 1 for an upscale into an SDR swap chain without a calibration view
+    // (fsr1_shaders.h). A pipeline that failed to build leaves the upscale to
+    // scalingFilter.
+    const bool fsrUpscale=options.spatialUpscaler!=SpatialUpscaler::Off && toSwapchain && !hdrScene &&
+        !p.output.linear && !options.hdrCalibration && !options.brightnessPreview && scale>1.001f;
+    // Logged when what a draw that asks for FSR gets changes ("off": the scene is not smaller, or no pipeline).
+    const auto applied=[&](SpatialUpscaler mode) {
+        if(options.spatialUpscaler==SpatialUpscaler::Off || mode==p.fsrLogged) return;
+        p.fsrLogged=mode;
+        static const char *const names[]={"off","EASU","EASU + RCAS","RCAS + filter"};
+        LOG_INFO("presentation: FSR 1 {} ({}x{} to {}x{}, RCAS {} stops)",names[uint32_t(mode)],sw,sh,
+            uint32_t(std::ceil(width)),uint32_t(std::ceil(height)),options.rcasStops);
+    };
+    SpatialUpscaler used=SpatialUpscaler::Off;
+    if(fsrUpscale) {
+        calibrationX=std::exp2(-std::max(options.rcasStops,0.0f));
+        const uint32_t expand=options.expandRgbRange ? 1u : 0u;
+        if(options.spatialUpscaler==SpatialUpscaler::Easu) {
+            if(auto *easu=p.FsrPipeline(0,true)) {
+                applied(SpatialUpscaler::Easu);
+                render(source,target,sw,sh,ow,oh,x,y,width,height,0,0,expand,true,easu);
+                commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
+                return;
+            }
+        } else if(options.spatialUpscaler==SpatialUpscaler::Fsr) {
+            auto *easu=p.FsrPipeline(0,false), *rcas=p.FsrPipeline(1,true);
+            if(easu && rcas) {
+                applied(SpatialUpscaler::Fsr);
+                // EASU at the viewport's size into an SDR intermediate, then RCAS 1:1 into the viewport
+                auto *upscaled=render(source,nullptr,sw,sh,desiredW,desiredH,0,0,width,height,0,0,0,false,easu);
+                render(upscaled,target,desiredW,desiredH,ow,oh,x,y,width,height,0,0,expand,true,rcas);
+                commands->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(original,RenderTextureLayout::COPY_SOURCE));
+                return;
+            }
+        } else if(auto *rcas=p.FsrPipeline(1,false)) {
+            // RCAS at the source's size, then the final pass below upscales the sharpened image
+            used=SpatialUpscaler::Rcas;
+            source=render(source,nullptr,sw,sh,sw,sh,0,0,float(sw),float(sh),0,0,0,false,rcas);
+        }
+    }
+    applied(used);
+    calibrationX=options.calibrationRect[0];
     // A native-size copy or an upscale into an SDR swap chain without a
     // calibration view runs pixelLinear or pixelCubic: the final pass never
     // runs AA, and scale >= 1 rules out pixel()'s reduction branch.

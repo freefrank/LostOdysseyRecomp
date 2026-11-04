@@ -200,6 +200,8 @@ Switch-specific options and diagnostics:
 | `LO_DYNAMIC_RESOLUTION_STEP` | `36` | Rows per dynamic resolution step (a multiple of 9, so 16:9 widths stay whole; `90` gives 540, 450, 360) |
 | `LO_TRIM_VARYINGS` | `1` | Keeps only vertex outputs used by the paired fragment shader; set to `0` to disable the Switch Vulkan optimisation |
 | `LO_SWITCH_OUTPUT_HEIGHT` | off | `540` presents 960x540 and leaves the scaling to the display (deko3d) |
+| `LO_SWITCH_UPSCALER` | `bilinear` | AMD FSR 1 for a scene rendered smaller than the output (for example `LO_SWITCH_RENDER_HEIGHT=360`): `fsr` EASU then RCAS (two passes), `easu` EASU alone, `rcas` RCAS at the scene's size then the bilinear upscale. The log's `presentation: FSR 1` line shows what is applied |
+| `LO_SWITCH_RCAS_STOPS` | `0.25` | RCAS sharpness for `fsr` and `rcas`, in stops: 0 is the sharpest, each stop halves it (AMD's default is 0.2) |
 | `LO_SKIP_RESTORE` | on | `0` draws the game's EDRAM restores instead of skipping them (deko3d) |
 | `LO_MAIN_CORE` | `-1` | core Guest Main stays on, `-1` leaves it free to move. Pinning gains 2% in battle but can stall the game: see `SWITCH-BENCHMARKS.md`, Milestone 4 |
 | `LO_RT32` | off | Set to `1` to use 32-bit formats for the two 10-bit render-target classes; on Switch the 7e3 class uses `R11G11B10_FLOAT`, so its 2-bit alpha is read as 1 |

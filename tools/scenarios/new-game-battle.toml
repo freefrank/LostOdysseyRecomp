@@ -2,7 +2,9 @@ description = "New Game: opening movie, then the first battle (Wohl Highlands) w
 timeout = 300
 # Seconds since launch. START opens the title menu, A picks New Game, which opens
 # the settings screen: B answers the first-run TAA collection prompt, B closes it.
-timeline = "s@10,a@20,b@26,b@32"
+# With a save on the console the menu opens on Continue, and UP (u, which wraps)
+# moves to New Game: on a console without a save, drop u@17.
+timeline = "s@10,u@17,a@20,b@26,b@32"
 
 [[step]]
 # The opening movie is playing (about 120 draws per frame until the battle).
@@ -33,7 +35,8 @@ min_fps = 25
 # Measured on a Switch OLED in handheld mode (2026-10-29): the title screen is up by 31 s; the settings screen
 # needs one B (no first-run prompt); START pauses the opening movie and BACK skips it. The run measures the
 # first battle's command menu, which waits for input (about 1,200 draws per frame).
-buttons = "s@40s,a@55s,b@70s,s@110s,k@114s"
+# With a save on the console the title menu opens on Continue; UP (wraps) at 50 s moves to New Game.
+buttons = "s@40s,u@50s,a@55s,b@70s,s@110s,k@114s"
 start_draws = 1000
 settle = 90
 frames = 450
