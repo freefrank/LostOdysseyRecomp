@@ -75,7 +75,7 @@ namespace plume {
         GraphicsPush, ComputeSet, GraphicsSet, GraphicsSetDynamic, IndexBuffer, VertexBuffers, Viewports, Scissors,
         Framebuffer, DepthBias, StencilReference, ClearColor, ClearDepthStencil, CopyBufferRegion, CopyTextureRegion,
         CopyBuffer, CopyTexture, ResolveTexture, ResolveTextureRegion, Timestamp, BlendConstant, EarlyFragmentTests,
-        MemExport, FetchData, BindUniform, PushUniform, SharedWords,
+        MemExport, FetchData, BindUniform, PushUniform, SharedWords, OcclusionBegin, OcclusionEnd, QueryReset,
     };
 
     struct RecHeader {
@@ -421,7 +421,8 @@ namespace plume {
     struct RecCopyTextureRegion { RenderTextureCopyLocation dst, src; uint32_t x, y, z; bool hasBox; RenderBox box; };
     struct RecPair { const void *dst, *src; };                         // CopyBuffer, CopyTexture, ResolveTexture
     struct RecResolveRegion { const RenderTexture *dst, *src; uint32_t x, y; bool hasRect; RenderRect rect; RenderResolveMode mode; };
-    struct RecTimestamp { const RenderQueryPool *pool; uint32_t index; };
+    struct RecTimestamp { const RenderQueryPool *pool; uint32_t index; };  // Timestamp, OcclusionBegin, OcclusionEnd
+    struct RecQueryReset { const RenderQueryPool *pool; uint32_t first, count; };
     struct RecRange { uint64_t address; uint32_t slot, size; };        // FetchData, BindUniform
     struct RecPushUniform { uint64_t address; uint32_t uboSize, offset, size; };  // + the bytes
     struct RecSharedWords { const void *cpu; uint32_t size; };
@@ -543,6 +544,7 @@ namespace plume {
         sharedWords = nullptr;  // banjo-nx (2026-10-19)
         sharedWordsSize = 0;
         descriptorEpoch = 0;
+        occlusionPool = occlusionLastPool = nullptr;  // LostOdysseyRecomp (2026-11-04): no report chains across lists
         // NaN: the first setBlendConstant of the list always writes it.
         blendConstant[0] = blendConstant[1] = blendConstant[2] = blendConstant[3] = __builtin_nanf("");
 
@@ -1835,7 +1837,80 @@ namespace plume {
     void Deko3DCommandList::buildBottomLevelAS(const RenderAccelerationStructure *, RenderBufferReference, const RenderBottomLevelASBuildInfo &) {}
     void Deko3DCommandList::buildTopLevelAS(const RenderAccelerationStructure *, RenderBufferReference, RenderBufferReference, const RenderTopLevelASBuildInfo &) {}
     void Deko3DCommandList::discardTexture(const RenderTexture *) {}
-    void Deko3DCommandList::resetQueryPool(const RenderQueryPool *, uint32_t, uint32_t) {}
+    // LostOdysseyRecomp (2026-11-04): occlusion queries. Maxwell counts the samples that pass the depth and stencil
+    // tests in one counter (enabled for good by deko3d's queue setup); a query is the difference between a
+    // SamplesPassed report written at its begin and one at its end (dkCmdBufReportCounter: the report reaches the
+    // counter after the draws before it, and flushes the tiled cache so binned draws are counted). The renderer wraps
+    // each measured draw in its own query and measures runs of them back to back, so a begin with no draw since the
+    // previous query's end takes that end report as its own (one report per measured draw instead of two). A query
+    // whose draw was dropped (no valid pipeline yet) has no count: it reads as unavailable, which the renderer answers
+    // as visible. Timestamp pools are unchanged; their reset needs nothing.
+    void Deko3DCommandList::resetQueryPool(const RenderQueryPool *queryPool, uint32_t queryFirstIndex, uint32_t queryCount) {
+        const Deko3DQueryPool *pool = static_cast<const Deko3DQueryPool *>(queryPool);
+        if (!pool || !pool->occlusion || queryFirstIndex >= pool->state.size())
+            return;
+        queryCount = std::min<uint32_t>(queryCount, uint32_t(pool->state.size()) - queryFirstIndex);
+        if (deferred(*this)) {
+            if (queryFirstIndex + queryCount >= pool->used)
+                pool->used = std::min(pool->used, queryFirstIndex);
+            put(*this, RecOp::QueryReset, RecQueryReset{queryPool, queryFirstIndex, queryCount});
+            return;
+        }
+        if (!ring && queryFirstIndex + queryCount >= pool->used)
+            pool->used = std::min(pool->used, queryFirstIndex);
+        memset(pool->state.data() + queryFirstIndex, 0, queryCount);
+        if (occlusionLastPool == pool)
+            occlusionLastPool = nullptr;
+    }
+
+    void Deko3DCommandList::beginOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) {
+        if (deferred(*this)) {
+            put(*this, RecOp::OcclusionBegin, RecTimestamp{queryPool, queryIndex});
+            return;
+        }
+        const Deko3DQueryPool *pool = static_cast<const Deko3DQueryPool *>(queryPool);
+        if (!pool || !pool->occlusion || !pool->block || queryIndex >= pool->state.size())
+            return;
+        occlusionPool = pool;
+        occlusionIndex = queryIndex;
+        occlusionDraws = statDraws;
+        if (occlusionLastPool == pool && occlusionLastIndex + 1 == queryIndex && occlusionLastDraws == statDraws) {
+            pool->state[queryIndex] = Deko3DQueryPool::OcclusionBegun | Deko3DQueryPool::OcclusionChained;
+            return;
+        }
+        pool->state[queryIndex] = Deko3DQueryPool::OcclusionBegun;
+        dkCmdBufReportCounter(cmd, DkCounter_SamplesPassed, dkMemBlockGetGpuAddr(pool->block) + uint64_t(queryIndex) * 32);
+    }
+
+    void Deko3DCommandList::endOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) {
+        const Deko3DQueryPool *pool = static_cast<const Deko3DQueryPool *>(queryPool);
+        if (!pool || !pool->occlusion || queryIndex >= pool->state.size())
+            return;
+        // The recording thread's count of the queries to read (Deko3DQueryPool::used).
+        if (deferred(*this)) {
+            pool->used = std::max(pool->used, queryIndex + 1);
+            put(*this, RecOp::OcclusionEnd, RecTimestamp{queryPool, queryIndex});
+            return;
+        }
+        if (!ring)
+            pool->used = std::max(pool->used, queryIndex + 1);
+        occlusionLastPool = nullptr;
+        if (!pool->block || occlusionPool != pool || occlusionIndex != queryIndex) {
+            pool->state[queryIndex] |= Deko3DQueryPool::OcclusionSkipped;
+            return;
+        }
+        occlusionPool = nullptr;
+        if (statDraws == occlusionDraws) {
+            // Nothing drawn: no report, and the query reads as unavailable.
+            pool->state[queryIndex] |= Deko3DQueryPool::OcclusionEnded | Deko3DQueryPool::OcclusionSkipped;
+            return;
+        }
+        dkCmdBufReportCounter(cmd, DkCounter_SamplesPassed, dkMemBlockGetGpuAddr(pool->block) + uint64_t(queryIndex) * 32 + 16);
+        pool->state[queryIndex] |= Deko3DQueryPool::OcclusionEnded;
+        occlusionLastPool = pool;
+        occlusionLastIndex = queryIndex;
+        occlusionLastDraws = statDraws;
+    }
 
     void Deko3DCommandList::writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) {
         if (deferred(*this)) {
@@ -2090,6 +2165,15 @@ namespace plume {
         }
         case RecOp::Timestamp:
             cl.writeTimestamp(arg<RecTimestamp>(h).pool, arg<RecTimestamp>(h).index);
+            break;
+        case RecOp::OcclusionBegin:
+            cl.beginOcclusionQuery(arg<RecTimestamp>(h).pool, arg<RecTimestamp>(h).index);
+            break;
+        case RecOp::OcclusionEnd:
+            cl.endOcclusionQuery(arg<RecTimestamp>(h).pool, arg<RecTimestamp>(h).index);
+            break;
+        case RecOp::QueryReset:
+            cl.resetQueryPool(arg<RecQueryReset>(h).pool, arg<RecQueryReset>(h).first, arg<RecQueryReset>(h).count);
             break;
         case RecOp::BlendConstant:
             cl.setBlendConstant(arg<RecFloats>(h).v);

@@ -851,7 +851,19 @@ namespace plume {
 
     // ---- Deko3DQueryPool
 
-    Deko3DQueryPool::Deko3DQueryPool(Deko3DDevice *device, uint32_t count) : device(device) {
+    Deko3DQueryPool::Deko3DQueryPool(Deko3DDevice *device, uint32_t count, bool occlusion) : device(device), occlusion(occlusion) {
+        if (occlusion) {
+            // LostOdysseyRecomp (2026-11-04): CPU-cached, so reading a batch's results takes cache-line fills instead
+            // of one uncached load per word. The CPU never writes it: cleaned and invalidated once here, and
+            // invalidated again before each read (queryResults), it holds no line the GPU's reports could be lost to.
+            results.assign(count, ResultUnavailable);
+            state.assign(count, 0);
+            const uint32_t size = alignUp(std::max<uint32_t>(count, 1) * 32, DK_MEMBLOCK_ALIGNMENT);
+            block = device->makeBlock(size, DkMemBlockFlags_CpuCached | DkMemBlockFlags_GpuCached, "occlusion queries");
+            if (block)
+                dkMemBlockFlushCpuCache(block, 0, size);
+            return;
+        }
         results.resize(count);
         // A counter report is 16 bytes: the counter, then the GPU timestamp.
         block = device->makeBlock(alignUp(std::max<uint32_t>(count, 1) * 16, DK_MEMBLOCK_ALIGNMENT), DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, "query pool");
@@ -867,10 +879,41 @@ namespace plume {
 
     void Deko3DQueryPool::queryResults() { queryResults(uint32_t(results.size())); }
 
+    // LostOdysseyRecomp (2026-11-04): samples passed between two SamplesPassed reports. A four-word counter report is
+    // the 64-bit count, then the timestamp (NVN's NVNcounterData, which deko3d mirrors). Mesa's nvc0 reads its
+    // occlusion reports as a 32-bit count in word 1 behind a payload word instead: there the low words (the payload,
+    // 0 from dkCmdBufReportCounter) match and the high words hold the count. Either way this is the count.
+    static uint64_t samplesBetween(uint64_t begin, uint64_t end) {
+        if (uint32_t(begin) != uint32_t(end))
+            return end - begin;
+        return uint32_t(uint32_t(end >> 32) - uint32_t(begin >> 32));
+    }
+
     bool Deko3DQueryPool::queryResults(uint32_t count) {
         count = std::min<uint32_t>(count, uint32_t(results.size()));
         if (!block)
             return true;
+        if (occlusion) {
+            // Called after the fence of the batch that used the pool. A query reads as unavailable (the renderer
+            // answers visible) unless it began and ended with a draw in between.
+            const uint32_t n = std::min(count, used);
+            std::fill(results.begin() + n, results.begin() + count, ResultUnavailable);
+            if (!n)
+                return true;
+            dkMemBlockFlushCpuCache(block, 0, alignUp(n * 32, 64));
+            const uint64_t *reports = static_cast<const uint64_t *>(dkMemBlockGetCpuAddr(block));
+            for (uint32_t i = 0; i < n; i++) {
+                const uint8_t s = state[i];
+                if ((s & (OcclusionBegun | OcclusionEnded | OcclusionSkipped)) != (OcclusionBegun | OcclusionEnded)) {
+                    results[i] = ResultUnavailable;
+                    continue;
+                }
+                // A chained begin is the previous query's end report (endOcclusionQuery wrote it, no draw since).
+                const uint64_t begin = (s & OcclusionChained) ? reports[(i - 1) * 4 + 2] : reports[i * 4];
+                results[i] = samplesBetween(begin, reports[i * 4 + 2]);
+            }
+            return true;
+        }
         const volatile uint64_t *reports = static_cast<const volatile uint64_t *>(dkMemBlockGetCpuAddr(block));
         for (uint32_t i = 0; i < count; i++)
             results[i] = dkTimestampToNs(reports[i * 2 + 1]);
@@ -964,6 +1007,12 @@ namespace plume {
         capabilities.dynamicDepthBias = true;
         capabilities.uma = true;
         capabilities.queryPools = true;
+        // LostOdysseyRecomp (2026-11-04): occlusion queries from Maxwell's SamplesPassed counter, which deko3d's queue
+        // setup enables for good (SampleCounterEnable). LO_DEKO3D_OCCLUSION=0: none, and the command processor makes up
+        // every count again (nothing is culled).
+        capabilities.occlusionQueries = envFlag("LO_DEKO3D_OCCLUSION");
+        capabilities.occlusionQueryPrecise = true;
+        logf("device: occlusion queries %s (LO_DEKO3D_OCCLUSION)", capabilities.occlusionQueries ? "on" : "off");
         capabilities.resolveRegion = false;
         description.name = "deko3d (Tegra X1, Maxwell GM20B)";
         description.type = RenderDeviceType::INTEGRATED;
@@ -2302,6 +2351,13 @@ namespace plume {
 
     std::unique_ptr<RenderQueryPool> Deko3DDevice::createQueryPool(uint32_t queryCount) {
         return std::make_unique<Deko3DQueryPool>(this, queryCount);
+    }
+
+    std::unique_ptr<RenderQueryPool> Deko3DDevice::createOcclusionQueryPool(uint32_t queryCount) {
+        if (!capabilities.occlusionQueries)
+            return nullptr;
+        auto pool = std::make_unique<Deko3DQueryPool>(this, queryCount, true);
+        return pool->block ? std::move(pool) : nullptr;
     }
 
     void Deko3DDevice::setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &, const RenderBottomLevelASMesh *, uint32_t, bool, bool) {}

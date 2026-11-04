@@ -345,7 +345,15 @@ namespace plume {
         Deko3DDevice *device = nullptr;
         DkMemBlock block = nullptr;
         std::vector<uint64_t> results;
-        Deko3DQueryPool(Deko3DDevice *device, uint32_t count);
+        // LostOdysseyRecomp (2026-11-04): an occlusion pool (createOcclusionQueryPool). Each query has two 16-byte
+        // SamplesPassed reports, begin then end, in CPU-cached memory the CPU never writes. `state` (OcclusionBegun...)
+        // is written where the list is replayed and read after the fence; `used` (queries ended since the last reset)
+        // by the recording thread, which also reads the results.
+        bool occlusion = false;
+        static constexpr uint8_t OcclusionBegun = 1, OcclusionChained = 2, OcclusionEnded = 4, OcclusionSkipped = 8;
+        mutable std::vector<uint8_t> state;
+        mutable uint32_t used = 0;
+        Deko3DQueryPool(Deko3DDevice *device, uint32_t count, bool occlusion = false);
         ~Deko3DQueryPool() override;
         void queryResults() override;
         bool queryResults(uint32_t count);
@@ -473,6 +481,13 @@ namespace plume {
         void discardTexture(const RenderTexture *texture) override;
         void resetQueryPool(const RenderQueryPool *queryPool, uint32_t queryFirstIndex, uint32_t queryCount) override;
         void writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        void beginOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        void endOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        // LostOdysseyRecomp (2026-11-04): the open occlusion query and the draws done when it began, and the last one
+        // ended with its own report (a begin right after it, with no draw in between, reads that report instead).
+        const Deko3DQueryPool *occlusionPool = nullptr, *occlusionLastPool = nullptr;
+        uint32_t occlusionIndex = 0, occlusionLastIndex = 0;
+        uint64_t occlusionDraws = 0, occlusionLastDraws = 0;
 
         // banjo-nx: the blend constant (BLEND_FACTOR), which plume has no call for.
         void setBlendConstant(const float rgba[4]);
@@ -672,6 +687,7 @@ namespace plume {
         std::unique_ptr<RenderCommandSemaphore> createCommandSemaphore() override;
         std::unique_ptr<RenderFramebuffer> createFramebuffer(const RenderFramebufferDesc &desc) override;
         std::unique_ptr<RenderQueryPool> createQueryPool(uint32_t queryCount) override;
+        std::unique_ptr<RenderQueryPool> createOcclusionQueryPool(uint32_t queryCount) override;
         void setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &buildInfo, const RenderBottomLevelASMesh *meshes, uint32_t meshCount, bool preferFastBuild, bool preferFastTrace) override;
         void setTopLevelASBuildInfo(RenderTopLevelASBuildInfo &buildInfo, const RenderTopLevelASInstance *instances, uint32_t instanceCount, bool preferFastBuild, bool preferFastTrace) override;
         void setShaderBindingTableInfo(RenderShaderBindingTableInfo &tableInfo, const RenderShaderBindingGroups &groups, const RenderPipeline *pipeline, RenderDescriptorSet **descriptorSets, uint32_t descriptorSetCount) override;

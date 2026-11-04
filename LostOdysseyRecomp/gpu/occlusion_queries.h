@@ -87,8 +87,10 @@ namespace gpu::occlusion
     enum class Policy { Adaptive, Fast, Strict, History };
 
     // History on Android, where Adaptive's switch to Strict stalls tiled GPUs
-    // for tens of milliseconds per frame; Adaptive elsewhere.
-#ifdef __ANDROID__
+    // for tens of milliseconds per frame, and on Switch, where the command
+    // processor is the limit and the guest must not wait for it mid-frame
+    // (deko3d; LO_DEKO3D_OCCLUSION=0 goes back to fake counts); Adaptive elsewhere.
+#if defined(__ANDROID__) || defined(__SWITCH__)
     inline constexpr Policy kDefaultPolicy = Policy::History;
 #else
     inline constexpr Policy kDefaultPolicy = Policy::Adaptive;
