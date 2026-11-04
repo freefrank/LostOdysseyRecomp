@@ -111,6 +111,15 @@ class Presentation
     bool ProcessSceneColor(plume::RenderCommandList *commands, plume::RenderTexture *source,
                            plume::RenderTexture *target, uint32_t width, uint32_t height,
                            Antialiasing antialiasing, bool hdr = false);
+    // Upscale an opaque, display-encoded SDR scene (source: sampleable, at least sourceWidth x sourceHeight,
+    // top-left crop) to width x height with upscaler: FSR 1 as in Draw, Off a bilinear filter. No output
+    // conversion. Returns this instance's own RGBA8 UNORM image of exactly width x height in SHADER_READ (source
+    // also ends SHADER_READ), valid until the next call, or nullptr when nothing was recorded. The renderer's
+    // LO_SWITCH_UI_NATIVE scene copy samples it. Same contract as ProcessSceneColor: prior commands of this
+    // instance must complete before another call, and the caller restores its own state afterwards.
+    plume::RenderTexture *UpscaleSceneColor(plume::RenderCommandList *commands, plume::RenderTexture *source,
+                                            uint32_t sourceWidth, uint32_t sourceHeight, uint32_t width,
+                                            uint32_t height, SpatialUpscaler upscaler, float rcasStops);
     // Synthesize an extended-gamma FP16 frame from the final SDR frame (any
     // upscaler, UI included) and the pre-upscale FP16 scene: per channel
     // gain = max(hdr, 1) sampled bilinearly, weighted by the pixel's own

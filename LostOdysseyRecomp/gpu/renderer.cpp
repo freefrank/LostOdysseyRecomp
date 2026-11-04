@@ -57,6 +57,7 @@
 #include "fsr_alpha_postprocess_gpu.h"
 #include "fsr_alpha_propagation_gpu.h"
 #include "presentation.h"
+#include "switch_upscaler.h"
 #if defined(LO_GPU_PLUME)
 #include "frame_generation_snapshot.h"
 #include "frame_generation_handoff.h"
@@ -523,6 +524,8 @@ namespace gpu::renderer
             // lookup after the mod list changes in game.
             bool modReplaceable = false;
             uint32_t modsEpoch = 0;
+            // A LO_DRAW_REUSE record holds this texture: erasing it from the cache bumps drawReuseEvictions.
+            bool drawReuseHeld = false;
 
             // The source remains BC3. Only a verified controller atlas owns an
             // optional, single-mip RGBA PlayStation child; retirement of the
@@ -880,7 +883,9 @@ namespace gpu::renderer
             std::unordered_map<uint64_t, Shader> shaders[2];
             // GetShader's last valid hit per stage; ClearShaders() forgets them.
             struct LastShader { uint64_t hash = 0; Shader* entry = nullptr; } lastShader[2];
-            void ClearShaders() { shaders[0].clear(); shaders[1].clear(); lastShader[0] = lastShader[1] = {}; }
+            // Changes with every ClearShaders(): LO_DRAW_REUSE records keep Shader pointers.
+            uint64_t shaderGeneration = 0;
+            void ClearShaders() { shaders[0].clear(); shaders[1].clear(); lastShader[0] = lastShader[1] = {}; ++shaderGeneration; }
             // Keyed by the normalized pipeline key. sceneSerial: the scene in which
             // the pipeline was last drawn was recorded in its recipe.
             // origin/drawn: LO_RECORD_TIMING first-use attribution only.
@@ -1777,6 +1782,14 @@ namespace gpu::renderer
             uint64_t srReconfigureFrame = ~0ull;
             std::unique_ptr<RenderShader> sceneCopyPromotionPs, sceneCopyPromotionRgbPs;
             std::map<uint32_t, std::unique_ptr<RenderPipeline>> sceneCopyPromotionPipelines, sceneCopyPromotionRgbPipelines;
+            // LO_SWITCH_UI_NATIVE=1 (Switch, no SR): the scene copy (VS 8bbd, PS cda5, the finished scene into the
+            // display target before the UI) samples the scene upscaled to the output's scale (LO_SWITCH_UPSCALER's
+            // FSR 1, else bilinear) and draws into a promoted output-size target, so the UI drawn after it is never
+            // scaled (PromoteUiNative). One Presentation per GPU slot: frames in flight never share its images.
+            bool uiNative = false;
+            gpu::switch_upscaler::Choice uiNativeUpscaler{};
+            std::unique_ptr<gpu::Presentation> uiNativeScalers[kGpuSlots];
+            uint64_t uiNativeFrames = 0, uiNativeMisses = 0, uiNativeEarlyRestores = 0, uiNativeScaledFrame = ~0ull;
             std::unique_ptr<RenderTexture> sceneAAOutput;
             // FP16 twin of sceneAAOutput for the HDR scene (see sceneAo.hdrColor):
             // the sidecar copy follows the AA binding when this frame's twin
@@ -2669,6 +2682,262 @@ namespace gpu::renderer
             static_assert(offsetof(SharedConstants,transfer)==240);
             static_assert(offsetof(SharedConstants,vfetchOffset)==256);
 
+            // ---- LO_DRAW_REUSE ------------------------------------------------------
+            // A draw nearly always repeats the draw at its position in the previous frame. Its record keeps three
+            // lookups that draw made, each with everything its result depends on, and the next frame's draw at that
+            // position takes the result instead of looking it up again:
+            // - GetShader's entry for each stage's hash (entries stay until ClearShaders: shaderGeneration);
+            // - GetPipeline's slot for the raw pipeline key (slots are never erased or replaced);
+            // - what bindTextures(ps) and bindTextures(vs) wrote, slot by slot (ReuseDrawTextures says when it holds).
+            // The constants, vertex and index buffers, descriptor sets, targets and state are still made per draw.
+            // LO_DRAW_REUSE=1 takes the results; =2 still looks everything up and logs every result that differs
+            // from its record's (LOG_ERROR); unset or 0: off.
+            const int drawReuseMode = [] {
+                const char* value = getenv("LO_DRAW_REUSE");
+                return value && (value[0] == '1' || value[0] == '2') ? value[0] - '0' : 0;
+            }();
+            static constexpr uint32_t kDrawReusePositions = 4096;
+            // Texture fetches a record keeps, both stages together; a draw with more always binds its own.
+            static constexpr uint32_t kDrawReuseTextures = 8;
+            enum DrawReuseResult : uint8_t {
+                kReuseHit, kReuseRecord, kReuseIneligible, kReuseUnrepeatable, kReuseSlots, kReuseInputs, kReuseFetch,
+                kReuseSamplers, kReuseEvicted, kReuseResolve, kReuseLook, kReusePlan, kReuseResults
+            };
+            struct DrawReuseTexture {
+                HostTexture* tex = nullptr; // null: the bank's dummy, for a fetch constant that is not a texture's
+                uint32_t fetch[6]{};
+                uint32_t samplerIndex = 0, textureInfo = 0;
+                uint8_t bank = 0, slot = 0;
+            };
+            struct DrawReuseRecord {
+                uint64_t shaderGeneration = 0, vsHash = 0, psHash = 0;
+                Shader* vs = nullptr;
+                Shader* ps = nullptr;
+                PipelineKey pipelineRaw{}, pipelineKey{};
+                PipelineSlot* pipelineSlot = nullptr;
+                // bindTextures' inputs besides the fetch constants, and its writes in their order.
+                Shader* textureVs = nullptr;
+                Shader* texturePs = nullptr;
+                uint64_t textureVsHash = 0, texturePsHash = 0, textureEvictions = 0, samplerSerial = 0;
+                DrawReuseResult textureState = kReuseRecord; // kReuseHit: the textures below can be taken
+                bool sceneGeometry = false;
+                uint8_t textureCount = 0;
+                DrawReuseTexture textures[kDrawReuseTextures];
+            };
+            std::vector<DrawReuseRecord> drawReuse;
+            uint64_t drawReuseFrame = ~0ull;
+            uint32_t drawReuseCursor = 0;
+            // Erasures from `textures` of a texture some record holds (HostTexture::drawReuseHeld).
+            uint64_t drawReuseEvictions = 0;
+            // bindTextures' writes while it runs for a record (CaptureDrawTexture).
+            struct DrawReuseCapture {
+                DrawReuseTexture textures[kDrawReuseTextures];
+                uint32_t count = 0;
+                uint64_t evictions = 0;
+                bool active = false;
+                DrawReuseResult state = kReuseHit;
+            } drawReuseCapture;
+            // LO_DRAW_REUSE=2: what the record would have bound, beside what bindTextures binds.
+            struct DrawReuseScratch {
+                TextureSetCache::Key bindings[3];
+                uint32_t active[3];
+                uint32_t swapSlots;
+                SharedConstants shared;
+            };
+            std::unique_ptr<DrawReuseScratch> drawReuseScratch;
+            struct DrawReuseStats {
+                uint64_t shaders = 0, shadersReused = 0, pipelines = 0, pipelinesReused = 0;
+                uint64_t textureDraws = 0, verified = 0, differed = 0;
+                uint64_t textures[kReuseResults]{};
+            } drawReuseStats;
+
+            // The record of the draw at this position (the count of draws that got here this frame), or null.
+            DrawReuseRecord* DrawReuseAt()
+            {
+                if (!drawReuseMode) return nullptr;
+                if (drawReuseFrame != frame) { drawReuseFrame = frame; drawReuseCursor = 0; }
+                const uint32_t position = drawReuseCursor++;
+                if (position >= kDrawReusePositions) return nullptr;
+                if (position >= drawReuse.size()) {
+                    if (drawReuse.empty())
+                        LOG_INFO("renderer: LO_DRAW_REUSE={}: {}", drawReuseMode, drawReuseMode == 1 ?
+                            "draws take the shaders, pipeline and texture bindings of the previous frame's draw at their position when those are provably the same" :
+                            "verify: draws look everything up and check the previous frame's draw at their position against it");
+                    drawReuse.resize(std::min<size_t>(kDrawReusePositions, size_t(position) + 512));
+                    if (drawReuseMode == 2 && !drawReuseScratch) drawReuseScratch = std::make_unique<DrawReuseScratch>();
+                }
+                return &drawReuse[position];
+            }
+
+            void DrawReuseDiffered(const char* what, uint64_t vsHash, uint64_t psHash, uint32_t slot, uint64_t record, uint64_t lookup)
+            {
+                ++drawReuseStats.differed;
+                static uint32_t logged = 0;
+                if (logged < 64) {
+                    ++logged;
+                    LOG_ERROR("renderer: LO_DRAW_REUSE verify frame={} position={} vs={:016x} ps={:016x}: {} differs (slot {}): record {:#x}, lookup {:#x}",
+                        frame, drawReuseCursor - 1, vsHash, psHash, what, slot, record, lookup);
+                }
+            }
+
+            // GetShader, through the draw's record. The record's entry is GetShader's answer for the same hash while
+            // ClearShaders has not run since, unless GetShader would still do something with it: F1 capture logs,
+            // deko3d's one-time discard check of a pixel shader.
+            Shader* LookUpShader(DrawReuseRecord* r, bool pixel, const uint32_t* words, uint32_t count, uint64_t hash)
+            {
+                if (!r) return GetShader(pixel, words, count, hash);
+                Shader* recorded = pixel ? r->ps : r->vs;
+                const bool same = recorded && r->shaderGeneration == shaderGeneration && (pixel ? r->psHash : r->vsHash) == hash &&
+                    recorded->valid && debugCaptureDir.empty() && (!pixel || recorded->discardChecked || !video::IsDeko3d());
+                ++drawReuseStats.shaders;
+                drawReuseStats.shadersReused += same;
+                if (same && drawReuseMode == 1) {
+                    lastShader[pixel ? 1 : 0] = {hash, recorded};
+                    return recorded;
+                }
+                Shader* shader = GetShader(pixel, words, count, hash);
+                if (same) {
+                    ++drawReuseStats.verified;
+                    if (shader != recorded)
+                        DrawReuseDiffered(pixel ? "pixel shader" : "vertex shader", r->vsHash, r->psHash, 0, uintptr_t(recorded), uintptr_t(shader));
+                }
+                if (r->shaderGeneration != shaderGeneration) { r->shaderGeneration = shaderGeneration; r->vs = r->ps = nullptr; }
+                (pixel ? r->ps : r->vs) = shader && shader->valid ? shader : nullptr;
+                (pixel ? r->psHash : r->vsHash) = hash;
+                return shader;
+            }
+
+            // GetPipeline (mayDefer), through the draw's record: the same raw key finds the same slot.
+            RenderPipeline* LookUpPipeline(DrawReuseRecord* r, const PipelineKey& key, Shader* vs, Shader* ps, RenderFormat color, RenderFormat depth)
+            {
+                if (!r) return GetPipeline(key, vs, ps, color, depth, true);
+                const bool same = r->pipelineSlot && r->pipelineRaw == key;
+                ++drawReuseStats.pipelines;
+                drawReuseStats.pipelinesReused += same;
+                if (same && drawReuseMode == 1) return PipelineHit(*r->pipelineSlot, r->pipelineKey);
+                RenderPipeline* pipeline = GetPipeline(key, vs, ps, color, depth, true);
+                if (same) {
+                    ++drawReuseStats.verified;
+                    if (pipeline != r->pipelineSlot->pipeline.get())
+                        DrawReuseDiffered("pipeline", key.vs, key.ps, 0, uintptr_t(r->pipelineSlot->pipeline.get()), uintptr_t(pipeline));
+                }
+                // A hit leaves its slot and normalized key in lastPipelineSlot/lastPipelineKey; a slot owns its
+                // pipeline, so the same pointer proves the slot. Created and prefetched pipelines are kept next time.
+                if (pipeline && lastPipelineSlot && lastPipelineSlot->pipeline.get() == pipeline) {
+                    r->pipelineRaw = key;
+                    r->pipelineKey = lastPipelineKey;
+                    r->pipelineSlot = lastPipelineSlot;
+                } else r->pipelineSlot = nullptr;
+                return pipeline;
+            }
+
+            // bindTextures: one slot's binding, for the draw's record. Only a binding the record can make again
+            // without GetTexture counts: a cached guest texture (no resolve at the address, no controller atlas,
+            // no mod replacement on its way, nothing substituted for it) or the dummy for a fetch constant that is
+            // not a texture's.
+            void CaptureDrawTexture(HostTexture* tex, const uint32_t* fetch, uint32_t bank, uint32_t slot,
+                uint32_t samplerIndex, uint32_t textureInfo, bool repeatable)
+            {
+                auto& capture = drawReuseCapture;
+                if (tex && repeatable)
+                    repeatable = tex->texture && !tex->controllerAtlasRecognized && tex->atlasState == HostTexture::AtlasState::None &&
+                        !tex->replacementPending && !FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F);
+                if (!repeatable || capture.count == kDrawReuseTextures) {
+                    capture.state = repeatable ? kReuseSlots : kReuseUnrepeatable;
+                    capture.active = false;
+                    return;
+                }
+                // From here every erasure of it from `textures` counts (drawReuseEvictions).
+                if (tex) tex->drawReuseHeld = true;
+                auto& entry = capture.textures[capture.count++];
+                entry.tex = tex;
+                std::memcpy(entry.fetch, fetch, sizeof(entry.fetch));
+                entry.samplerIndex = samplerIndex;
+                entry.textureInfo = textureInfo;
+                entry.bank = uint8_t(bank);
+                entry.slot = uint8_t(slot);
+            }
+
+            // After bindTextures(ps) and bindTextures(vs): the record keeps what they bound when all of it can be
+            // made again, and no texture it holds left the cache while they ran.
+            void StoreDrawTextures(DrawReuseRecord& r, DrawReuseResult eligible, Shader* vs, Shader* ps, uint64_t vsHash,
+                uint64_t psHash, bool sceneGeometry)
+            {
+                const auto& capture = drawReuseCapture;
+                r.textureState = eligible != kReuseHit ? eligible : capture.state != kReuseHit ? capture.state :
+                    capture.evictions != drawReuseEvictions ? kReuseEvicted : kReuseHit;
+                if (r.textureState != kReuseHit) return;
+                r.textureVs = vs; r.texturePs = ps;
+                r.textureVsHash = vsHash; r.texturePsHash = psHash;
+                r.sceneGeometry = sceneGeometry;
+                r.textureEvictions = capture.evictions;
+                // Read after the lookups: a Select miss publishes a table that keeps this draw's slots.
+                r.samplerSerial = samplerState.Serial();
+                r.textureCount = uint8_t(capture.count);
+                std::copy_n(capture.textures, capture.count, r.textures);
+            }
+
+            // What bindTextures(ps) then bindTextures(vs) would write for this draw, from its record, when they would
+            // write the same: the same shaders (pointer and hash), fetch constants and draw-side sampler term
+            // (sceneGeometry); the same sampler table (its serial: each recipe keeps its slot); every texture still
+            // in the cache (no record-held texture erased since), with no resolve at its address and nothing for
+            // GetTexture to look at: no mod replacement, no controller atlas, and its once-a-frame check of guest
+            // writes passing as GetTexture would pass it. A dummy needs no plan suppression. Writes nothing unless
+            // the answer is kReuseHit; commit also takes GetTexture's check as GetTexture takes it (verify: not).
+            DrawReuseResult ReuseDrawTextures(const DrawReuseRecord& r, Shader* vs, Shader* ps, uint64_t vsHash, uint64_t psHash,
+                bool sceneGeometry, bool commit, TextureSetCache::Key (&bindings)[3], uint32_t (&active)[3], uint32_t& swapSlots,
+                SharedConstants& shared)
+            {
+                if (r.textureState != kReuseHit) return r.textureState;
+                if (r.textureVs != vs || r.texturePs != ps || r.textureVsHash != vsHash || r.texturePsHash != psHash ||
+                    r.sceneGeometry != sceneGeometry) return kReuseInputs;
+                if (r.samplerSerial != samplerState.Serial()) return kReuseSamplers;
+                if (r.textureEvictions != drawReuseEvictions) return kReuseEvicted;
+                uint32_t written[kDrawReuseTextures]{};
+                bool dummy = false;
+                for (uint32_t i = 0; i < r.textureCount; ++i) {
+                    const auto& entry = r.textures[i];
+                    uint32_t fetch[6];
+                    g_commandProcessor.ReadRegisters(REG_FETCH_CONSTANTS + entry.slot * 6, 6, fetch);
+                    if (std::memcmp(fetch, entry.fetch, sizeof(fetch)) != 0) return kReuseFetch;
+                    if (!entry.tex) { dummy = true; continue; }
+                    if (FindResolved((fetch[1] >> 12) << 12, fetch[1] & 0x3F)) return kReuseResolve;
+                    const HostTexture& tex = *entry.tex;
+                    if (!tex.texture || tex.replacementPending || (tex.modReplaceable && tex.modsEpoch != textureModsEpoch) ||
+                        tex.atlasState != HostTexture::AtlasState::None) return kReuseLook;
+                    // GetTexture's look at the guest bytes, once a frame: untiled, after a frame without the texture,
+                    // or after a guest write into its range.
+                    if (tex.guestBytes != 0 && tex.checkedFrame != frame) {
+                        written[i] = GuestWriteGeneration(tex);
+                        if (!((fetch[0] >> 31) & 1) || tex.checkedFrame + 1 < frame || written[i] != tex.writeGeneration)
+                            return kReuseLook;
+                    }
+                }
+                if (dummy && PlanSuppressed()) return kReusePlan;
+                for (uint32_t i = 0; i < r.textureCount; ++i) {
+                    const auto& entry = r.textures[i];
+                    const uint32_t bit = 1u << entry.slot;
+                    active[entry.bank] |= bit;
+                    swapSlots &= ~bit;
+                    shared.samplerIndex[entry.slot] = entry.samplerIndex;
+                    shared.textureInfo[entry.slot] = entry.textureInfo;
+                    if (!entry.tex) {
+                        const HostTexture& empty = entry.bank == 1 ? dummyTexture3D : entry.bank == 2 ? dummyTextureCube : dummyTexture2D;
+                        bindings[entry.bank][entry.slot] = empty.texture.get();
+                        dummyBindings += commit;
+                        continue;
+                    }
+                    HostTexture& tex = *entry.tex;
+                    if (commit && tex.guestBytes != 0 && tex.checkedFrame != frame) {
+                        tex.checkedFrame = frame;
+                        tex.writeGeneration = written[i];
+                    }
+                    shared.textureSize[entry.slot] = tex.guestWidth | (tex.guestHeight << 16);
+                    bindings[entry.bank][entry.slot] = tex.texture.get();
+                }
+                return kReuseHit;
+            }
+
             void WriteP2ResolveEvent(const char* kind, const HostTexture& source, uint32_t destBase,
                 const ResolvedSurface& destination, const char* operation)
             {
@@ -3024,6 +3293,19 @@ namespace gpu::renderer
                     sceneProcessor=std::make_unique<gpu::Presentation>();
                     if(!sceneProcessor->Init(device)) return InitFailure("scene_presentation.init");
                 }
+#if LO_PLATFORM_SWITCH
+                if (const char* setting = getenv("LO_SWITCH_UI_NATIVE"); setting && std::strcmp(setting, "0") != 0 && !resolveReadback) {
+                    uiNativeUpscaler = gpu::switch_upscaler::FromEnvironment();
+                    uiNative = true;
+                    for (auto& scaler : uiNativeScalers) {
+                        scaler = std::make_unique<gpu::Presentation>();
+                        if (!scaler->Init(device)) { uiNative = false; break; }
+                    }
+                    if (!uiNative) for (auto& scaler : uiNativeScalers) scaler.reset();
+                    LOG_INFO("renderer: LO_SWITCH_UI_NATIVE {} (scene {} to the output's scale at the scene copy; UI at the output's size)",
+                        uiNative ? "on" : "unavailable", gpu::switch_upscaler::Name(uiNativeUpscaler.mode));
+                }
+#endif
                 if(temporalExperiment) {
                     temporalHistory=std::make_unique<temporal::HistoryOwner>();
                     if(!temporalHistory->Init(device)) {temporalHistory.reset();temporalExperiment=false;return InitFailure("temporal_history.init");}
@@ -3843,7 +4125,96 @@ namespace gpu::renderer
                 if (!scene_copy_promotion::MustRestore(key == promotion.key, promotion.frame == frame,
                         promotion.epoch == activePlan.geometryEpoch, needsDepthStencil,
                         height, promotion.active->guestHeight)) return true;
+                // LO_SWITCH_UI_NATIVE: a restore within the promoted frame leaves the UI after it at the scene's size.
+                if (uiNative && promotion.frame == frame && uiNativeEarlyRestores++ < 16)
+                    LOG_INFO("renderer: LO_SWITCH_UI_NATIVE frame={} restores the scene-size target before the frame ends (base={:#x} depth={} other_target={} height={}/{} epoch_changed={})",
+                        frame, key.base, needsDepthStencil, !(key == promotion.key), height, promotion.active->guestHeight,
+                        promotion.epoch != activePlan.geometryEpoch);
                 return RestoreSceneCopyDestination("target_depth_extent_or_epoch");
+            }
+
+            // ---- LO_SWITCH_UI_NATIVE ----------------------------------------------
+            // This scene copy can draw at the output's size: its target is at a scale smaller than the output, and
+            // nothing else (SR, the HDR scene, another promotion) owns it. The copy then replaces every channel under
+            // its quad, as ActivateSceneCopyDestination's replacedQuad expects.
+            bool UiNativeEligible(const HostTexture& color, uint32_t blend)
+            {
+                const uint32_t outputWidth = activePlan.output.width, outputHeight = activePlan.output.height;
+                return uiNative && activePlan.requestedUpscaler == upscaling::Upscaler::Off &&
+                    !hdrSceneEnabled.load(std::memory_order_relaxed) && !sceneCopyPromotion.activeMapping &&
+                    sceneCopyPromotionFrame != frame && !Gpu().srPrefixClosed && sceneCopyPromotionPs &&
+                    outputWidth && outputHeight && outputWidth <= 16384 && outputHeight <= 16384 &&
+                    outputWidth >= color.resolutionSize.width && outputHeight >= color.resolutionSize.height &&
+                    (outputWidth > color.resolutionSize.width || outputHeight > color.resolutionSize.height) &&
+                    BlendFactor((blend >> 16) & 31) == RenderBlend::ONE && BlendFactor((blend >> 24) & 31) == RenderBlend::ZERO &&
+                    BlendOp((blend >> 21) & 7) == RenderBlendOperation::ADD;
+            }
+
+            // The scene copy's source (`input`: `tex` itself, or its same-size AO or AA output) at the size `tex` has
+            // at the output's scale, in this GPU slot's Presentation image: the copy at the output's size then
+            // samples it texel for texel. Null when nothing was recorded.
+            RenderTexture* UiNativeScale(HostTexture& tex, RenderTexture* input)
+            {
+                // Once a frame: a second call would rewrite the image an earlier copy of this frame samples.
+                if (uiNativeScaledFrame == frame) return nullptr;
+                uiNativeScaledFrame = frame;
+                auto* scaler = uiNativeScalers[gpuSlot].get();
+                const uint32_t width = std::max(1u, resolution::ScaleX(tex.guestWidth, activePlan.output.width));
+                const uint32_t height = std::max(1u, resolution::Scale(tex.guestHeight, activePlan.output.height));
+                if (!scaler || !input || tex.format != RenderFormat::R8G8B8A8_UNORM ||
+                    width < tex.width || height < tex.height || (width == tex.width && height == tex.height)) return nullptr;
+                if (input == tex.texture.get()) Transition(tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                return scaler->UpscaleSceneColor(commandList, input, tex.width, tex.height, width, height,
+                    uiNativeUpscaler.mode, uiNativeUpscaler.rcasStops);
+            }
+
+            // SR's promotion without SR (ActivateSceneCopyDestination): the display target under the scene copy is
+            // swapped for an output-size one, whose pixels outside the copy's quad (tile padding) are resampled from
+            // the old one. The copy and the UI after it draw at the output's size, the final resolve takes that
+            // size, and the next access that needs depth, a taller extent, another target or another frame gives
+            // the scene-size target back, owing the promoted pixels (PreparePromotionAccess, RestoreDebt).
+            bool PromoteUiNative(const RenderTargetKey& key, HostTexture*& color, HostTexture*& rasterTarget,
+                RenderViewport& rasterViewport, RenderRect& physicalScissor,
+                const RenderViewport& guestViewport, const RenderRect& guestScissor, const float* replacedQuad)
+            {
+                // This draw's constants, sets and indices already belong to Gpu(): nothing here may Flush.
+                if (!scene_copy_promotion::CanAppendConstants(Gpu().uploadOffset, kUploadRingSize, sizeof(SharedConstants), 1))
+                    return false;
+                auto promoted = CreatePromotedTarget(*color, {activePlan.output.width, activePlan.output.height});
+                if (!promoted) return false;
+                SharedConstants constants{};
+                constants.transfer[0] = std::bit_cast<uint32_t>(float(color->width) / float(promoted->width));
+                constants.transfer[1] = std::bit_cast<uint32_t>(float(color->height) / float(promoted->height));
+                const uint64_t offset = Upload(&constants, sizeof(constants));
+                auto* set = offset == UINT64_MAX ? nullptr : AcquireSet(1);
+                if (!set) {
+                    Gpu().retiredTextures.push_back(std::move(promoted));
+                    return false;
+                }
+                set->setTexture(0, color->texture.get(), RenderTextureLayout::SHADER_READ);
+                set->setTexture(1, dummyTexture2D.texture.get(), RenderTextureLayout::SHADER_READ);
+                for (auto* image : {&sceneCopyPromotion.preparedPromoted, &sceneCopyPromotion.scratch})
+                    if (*image) Gpu().retiredTextures.push_back(std::move(*image));
+                sceneCopyPromotion = {};
+                sceneCopyPromotion.key = key; sceneCopyPromotion.frame = frame; sceneCopyPromotion.epoch = activePlan.geometryEpoch;
+                sceneCopyPromotion.sourceAllocation = color->allocationSerial;
+                sceneCopyPromotion.fallbackSet = set; sceneCopyPromotion.fallbackConstants = offset;
+                sceneCopyPromotion.preparedPromoted = std::move(promoted);
+                sceneCopyPromotion.prepared = true;
+                ++targetEpoch;
+                if (!ActivateSceneCopyDestination(color, rasterTarget, rasterViewport, physicalScissor,
+                        guestViewport, guestScissor, replacedQuad)) return false;
+                ++uiNativeFrames;
+                // Logged when the scene's size changes (dynamic resolution), a bounded number of times.
+                const auto& low = *sceneCopyPromotion.parkedLow;
+                static uint32_t loggedWidth = 0, loggedHeight = 0, logs = 0;
+                if ((low.width != loggedWidth || low.height != loggedHeight) && logs < 32) {
+                    ++logs; loggedWidth = low.width; loggedHeight = low.height;
+                    LOG_INFO("renderer: LO_SWITCH_UI_NATIVE frame={} scene copy {}x{} promoted to {}x{} (base={:#x} guest={}x{}, {} promoted, {} early restores)",
+                        frame, low.width, low.height, color->width, color->height, key.base, color->guestWidth, color->guestHeight,
+                        uiNativeFrames, uiNativeEarlyRestores);
+                }
+                return true;
             }
 
 #if defined(LO_GPU_PLUME)
@@ -9089,6 +9460,7 @@ void main()
                         return SelectControllerAtlas(cached, bindingInfo);
                     }
                     if (!replacementArrived) textureReuploads++;
+                    drawReuseEvictions += cached->drawReuseHeld;
                     Gpu().retiredTextures.push_back(std::move(it->second));
                     textures.erase(it);
                     ++texturesVersion;
@@ -9464,6 +9836,7 @@ void main()
                     {
                         // The command list being recorded may still reference it, so
                         // hand it to the retired list (freed after the next fence wait).
+                        drawReuseEvictions += it->second->drawReuseHeld;
                         Gpu().retiredTextures.push_back(std::move(it->second));
                         textures.erase(it);
                         ++texturesVersion;
@@ -10094,6 +10467,8 @@ void main()
                 }
                 RefreshAnisotropicFiltering();
                 samplerState.BeginDraw();
+                // LO_DRAW_REUSE: what the draw at this position in an earlier frame looked up.
+                DrawReuseRecord* const reuse = DrawReuseAt();
 
                 // Shaders come from the command processor's last IM_LOAD.
                 uint32_t vsCount = 0, psCount = 0;
@@ -10118,11 +10493,11 @@ void main()
                         ? g_commandProcessor.GetActiveShaderByteHash(true) : 0;
                     shaderLookupTimer.AddTo(tShaderLookup);
                 }
-                Shader* vs = GetShader(false, vsWords, vsCount, vsHash);
+                Shader* vs = LookUpShader(reuse, false, vsWords, vsCount, vsHash);
                 // RB_MODECONTROL=5 is depth-only: the last loaded pixel shader
                 // is inactive, including its discard and depth exports. Running
                 // a stale shadow-depth PS here corrupts stencil volume tests.
-                Shader* ps = modeControl == 4 && psWords && psCount ? GetShader(true, psWords, psCount, psHash) : nullptr;
+                Shader* ps = modeControl == 4 && psWords && psCount ? LookUpShader(reuse, true, psWords, psCount, psHash) : nullptr;
                 if (debugShaderSources && !debugCaptureDir.empty() && !(modeControl == 4 && psWords && psCount))
                     debugShaderSources->NotePixelNotBound();
                 if (!vs || (info.primitiveType == 8 && rectListExpansion && !PrepareRectListShader(*vs, vsWords, vsCount, vsHash)))
@@ -10190,8 +10565,15 @@ void main()
                     if (colorWrites && transferDebt.target && transferDebt.base == (colorInfo & 0xFFF) && info.primitiveType == 8 &&
                         !info.indexed && info.indexCount <= 6 && (Reg(REG_PA_CL_VTE_CNTL) & 0x100))
                         SettleTransferDebt();
+                    // An owed restore keeps reuse away from its tiles: there a draw settles it, here nothing would. A
+                    // LO_SWITCH_UI_NATIVE promotion keeps it too, since PromoteUiNative and every restore bump
+                    // targetEpoch (SR's promotion swaps the map inside the scene copy without a bump). Otherwise the
+                    // debt a promotion leaves at the next frame's first draw turned reuse off for most of that frame.
+                    const bool memoPromotionSafe = (!restoreDebt.target ||
+                        (restoreDebt.base != (colorInfo & 0xFFF) && restoreDebt.target != rtMemo.depth)) &&
+                        (!sceneCopyPromotion.activeMapping || uiNative);
                     if (rtReuse && rtMemo.color && rtMemo.epoch == targetEpoch && rtMemo.frame == frame && rtMemo.plan == memoPlan &&
-                        !restoreDebt.target && !sceneCopyPromotion.activeMapping && std::memcmp(rtMemo.inputs, memoInputs, sizeof(memoInputs)) == 0)
+                        memoPromotionSafe && std::memcmp(rtMemo.inputs, memoInputs, sizeof(memoInputs)) == 0)
                     {
                         color = rtMemo.color;
                         depth = rtMemo.depth;
@@ -10350,7 +10732,7 @@ void main()
                         return;
                     }
                 }
-                RenderPipeline* pipeline = GetPipeline(key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN, true);
+                RenderPipeline* pipeline = LookUpPipeline(reuse, key, vs, ps, color->format, depth ? depth->format : RenderFormat::UNKNOWN);
                 if (!pipeline)
                 {
                     if (std::exchange(pipelineDeferred, false)) return; // skipped while it builds
@@ -11097,6 +11479,10 @@ void main()
                 render_batch::CpuTimer<> tBind0(cpuTimingEnabled);
                 const uint32_t sceneCopyBank = ps && ps->info.textureDimension[0] == 2 ? 1 :
                     ps && ps->info.textureDimension[0] == 3 ? 2 : 0;
+                // LO_SWITCH_UI_NATIVE: slot 0 samples the upscaled scene, and the copy draws at the output's size.
+                const bool uiNativeCopy = uiNative && fullSceneCopy && !depth && sceneCopyBank == 0 && color &&
+                    UiNativeEligible(*color, key.blend);
+                RenderTexture* uiNativeSource = nullptr;
                 // F1 records the actual texture0 binding.
                 std::optional<binding::Texture> captureTexture0;
                 bool failedPlan = false;
@@ -11176,6 +11562,8 @@ void main()
                             shared.samplerIndex[slot] = 0;
                             shared.textureInfo[slot] = 0x68800u;
                             textureSwapSlots &= ~(1u << slot);
+                            if (drawReuseCapture.active)
+                                CaptureDrawTexture(nullptr, fetch, bank, slot, 0, 0x68800u, (fetch[0] & 3) != 2 && !unusedPostBlur);
                             if (selectedBinding) {
                                 *selectedBinding = {};
                                 DescribeBindingTexture(&*selectedBinding, *dummy, binding::TextureKind::Dummy);
@@ -11762,15 +12150,19 @@ void main()
                         // reconstruction at the bloom shader's fractional UVs.
                         if (bloomFiltered && !temporalDisplay)
                             samplerKey = (samplerKey & ~uint64_t(0xF)) | 0x5;
+                        // LO_SWITCH_UI_NATIVE: the same picture at the output's scale (same guest extent).
+                        RenderTexture* uiNativeBinding = nullptr;
+                        if (uiNativeCopy && s == ps && slot == 0 && bank == 0 && !uiNativeSource && !bloomFiltered && !hdrBinding)
+                            uiNativeBinding = uiNativeSource = UiNativeScale(*tex, temporalDisplay ? temporalDisplay : aoColor ? aoColor : tex->texture.get());
                         const bool afEligible = sampling::Eligible(samplerKey, tex->guestBytes != 0,
                             dimension, s == ps && depth && (depthControl & 2) && !(shared.vtxFmt & 1) &&
                                 !((vs->info.textureSlotMask >> slot) & 1),
-                            temporalDisplay || aoColor || bloomFiltered || hdrBinding);
+                            temporalDisplay || aoColor || bloomFiltered || hdrBinding || uiNativeBinding);
                         const auto samplerIndex = GetSamplerIndex(samplerKey, afEligible);
                         if (!samplerIndex) { failedPlan = true; return; }
                         shared.samplerIndex[slot] = *samplerIndex;
                         samplerKey = ActualSamplerKey(*samplerIndex);
-                        textureBindings[bank][slot] = temporalDisplay ? temporalDisplay : aoColor ? aoColor :
+                        textureBindings[bank][slot] = uiNativeBinding ? uiNativeBinding : temporalDisplay ? temporalDisplay : aoColor ? aoColor :
                             bloomFiltered ? bloomFiltered->texture.get() : hdrBinding ? hdrBinding : tex->texture.get();
                         // Candidate only: a later VS binding or a failed draw
                         // can still replace/cancel it. Confirm after recording.
@@ -11815,14 +12207,78 @@ void main()
                             }
                             captureTexture0 = *selectedBinding;
                         }
+                        if (drawReuseCapture.active)
+                            CaptureDrawTexture(tex, fetch, bank, slot, shared.samplerIndex[slot], shared.textureInfo[slot],
+                                textureBindings[bank][slot] == tex->texture.get() && !(textureSwapSlots & (1u << slot)));
                     }
                 };
-                bindTextures(ps);
-                if (failedPlan)
-                    return;
-                bindTextures(vs);
-                if (failedPlan)
-                    return;
+                // LO_DRAW_REUSE: the bindings of the draw at this position in an earlier frame, when ReuseDrawTextures
+                // proves them the same. The draws bindTextures treats specially always bind their own: F1 captures,
+                // the controller atlas trace, VS 8bbd's full-screen quads (scene copy: AO, TAA, SR inputs, the UI's
+                // promotion; fades), the tone map (post blur dummies, HDR tone map, FSR alpha depth), the bloom
+                // source, and every fetch the FSR alpha bridge watches.
+                const bool sceneGeometry = depth && (depthControl & 2) && !(shared.vtxFmt & 1);
+                bool reuseTextures = reuse && debugCaptureDir.empty() && !traceControllerAtlas && !fullSceneCopy && !uiNativeCopy &&
+                    key.vs != 0x8bbd4da701845d16ull && key.ps != color_qualification::kTonemapPS &&
+                    !(key.vs == 0x2f6bbed8149a7804ull && key.ps == 0x7c260eacff1d681dull);
+#if defined(LO_GPU_PLUME)
+                reuseTextures = reuseTextures && !(fsrAlphaBridge && activePlan.requestedUpscaler == upscaling::Upscaler::Fsr);
+#endif
+                DrawReuseResult textureReuse = kReuseIneligible;
+                if (reuseTextures && drawReuseMode == 1)
+                    textureReuse = ReuseDrawTextures(*reuse, vs, ps, key.vs, key.ps, sceneGeometry, true,
+                        textureBindings, activeTextureSlots, textureSwapSlots, shared);
+                else if (reuseTextures) {
+                    auto& scratch = *drawReuseScratch;
+                    std::copy_n(textureBindings, 3, scratch.bindings);
+                    std::copy_n(activeTextureSlots, 3, scratch.active);
+                    scratch.swapSlots = textureSwapSlots;
+                    scratch.shared = shared;
+                    textureReuse = ReuseDrawTextures(*reuse, vs, ps, key.vs, key.ps, sceneGeometry, false,
+                        scratch.bindings, scratch.active, scratch.swapSlots, scratch.shared);
+                }
+                if (reuse) {
+                    ++drawReuseStats.textureDraws;
+                    ++drawReuseStats.textures[textureReuse];
+                }
+                if (drawReuseMode != 1 || textureReuse != kReuseHit) {
+                    drawReuseCapture.active = reuseTextures;
+                    drawReuseCapture.count = 0;
+                    drawReuseCapture.evictions = drawReuseEvictions;
+                    drawReuseCapture.state = kReuseHit;
+                    bindTextures(ps);
+                    if (failedPlan)
+                        return;
+                    bindTextures(vs);
+                    if (failedPlan)
+                        return;
+                    drawReuseCapture.active = false;
+                    if (textureReuse == kReuseHit) {
+                        // LO_DRAW_REUSE=2: the record against what bindTextures bound.
+                        const auto& scratch = *drawReuseScratch;
+                        ++drawReuseStats.verified;
+                        for (uint32_t bank = 0; bank < 3; ++bank) {
+                            if (scratch.active[bank] != activeTextureSlots[bank])
+                                DrawReuseDiffered("active slots", key.vs, key.ps, bank, scratch.active[bank], activeTextureSlots[bank]);
+                            for (uint32_t slot = 0; slot < kTextureSlots; ++slot)
+                                if (scratch.bindings[bank][slot] != textureBindings[bank][slot])
+                                    DrawReuseDiffered("texture binding", key.vs, key.ps, bank * 32 + slot,
+                                        uintptr_t(scratch.bindings[bank][slot]), uintptr_t(textureBindings[bank][slot]));
+                        }
+                        if (scratch.swapSlots != textureSwapSlots)
+                            DrawReuseDiffered("R/B swap slots", key.vs, key.ps, 0, scratch.swapSlots, textureSwapSlots);
+                        for (uint32_t slot = 0; slot < kTextureSlots; ++slot) {
+                            if (scratch.shared.samplerIndex[slot] != shared.samplerIndex[slot])
+                                DrawReuseDiffered("sampler index", key.vs, key.ps, slot, scratch.shared.samplerIndex[slot], shared.samplerIndex[slot]);
+                            if (scratch.shared.textureInfo[slot] != shared.textureInfo[slot])
+                                DrawReuseDiffered("texture info", key.vs, key.ps, slot, scratch.shared.textureInfo[slot], shared.textureInfo[slot]);
+                            if (scratch.shared.textureSize[slot] != shared.textureSize[slot])
+                                DrawReuseDiffered("texture size", key.vs, key.ps, slot, scratch.shared.textureSize[slot], shared.textureSize[slot]);
+                        }
+                    }
+                    if (reuse)
+                        StoreDrawTextures(*reuse, reuseTextures ? kReuseHit : kReuseIneligible, vs, ps, key.vs, key.ps, sceneGeometry);
+                }
 #if defined(LO_GPU_PLUME)
                 if (fsrAlphaBridge) for (const auto& request : alphaBridgeFetches) {
                     auto* bound = textureBindings[request.bank][request.slot];
@@ -12135,6 +12591,7 @@ void main()
                 scissor.top = std::clamp(scissor.top, 0, int32_t(rasterTarget->guestHeight)); scissor.bottom = std::clamp(scissor.bottom, 0, int32_t(rasterTarget->guestHeight));
                 const RenderRect guestScissor = scissor;
                 bool scenePromotionActivated = false;
+                bool uiNativePromoted = false; // PromoteUiNative's: no SR pass to record
                 recordProbe.Enter(record_timing::Phase::Promote);
                 if (dlssSrRequested && dlssSceneCopyInputs && fullSceneCopy && !depth
 #if defined(LO_GPU_PLUME)
@@ -12155,6 +12612,16 @@ void main()
                         scenePromotionActivated = ActivateSceneCopyDestination(color, rasterTarget, rasterViewport, scissor,
                             viewport, guestScissor, replacesAlpha ? fullCopyBounds : nullptr);
                     }
+                }
+                if (uiNativeSource && !scenePromotionActivated) {
+                    // UiNativeEligible checked the blend: the copy replaces alpha under its quad.
+                    const RenderTargetKey promotionKey{colorInfo & 0xFFF, ColorClassOf((colorInfo >> 16) & 0xF), pitch, 0, false};
+                    scenePromotionActivated = PromoteUiNative(promotionKey, color, rasterTarget, rasterViewport, scissor,
+                        viewport, guestScissor, fullCopyBounds);
+                    uiNativePromoted = scenePromotionActivated;
+                    if (!scenePromotionActivated && uiNativeMisses++ < 8)
+                        // The copy still runs at the scene's size, sampling the upscaled picture.
+                        LOG_WARNING("renderer: LO_SWITCH_UI_NATIVE frame={} kept the scene-size target (promotion unavailable)", frame);
                 }
                 int32_t scissorLeft, scissorTop, scissorRight, scissorBottom;
                 if (!scenePromotionActivated) {
@@ -13484,7 +13951,7 @@ void main()
                     }
                 }
                 recordProbe.Enter(record_timing::Phase::SceneDlss);
-                if (scenePromotionActivated)
+                if (scenePromotionActivated && !uiNativePromoted)
                     RecordSceneCopyDlss(color, rasterTarget);
                 if (video::GpuWorkStopped()) return;
  #endif
@@ -15935,6 +16402,21 @@ void main()
                 LOG_INFO("renderer: render targets reused for {} of {} draws in the last 300 frames", g_renderer->rtReuseHits,
                     g_renderer->rtReuseHits + g_renderer->rtReuseMisses);
                 g_renderer->rtReuseHits = g_renderer->rtReuseMisses = 0;
+            }
+            if (g_renderer->frame % 300 == 0 && g_renderer->drawReuseStats.textureDraws)
+            {
+                auto& s = g_renderer->drawReuseStats;
+                const auto* t = s.textures;
+                using R = Renderer;
+                LOG_INFO("renderer: LO_DRAW_REUSE={} in the last 300 frames: shaders {} of {} from the record, pipelines {} of {}, "
+                    "texture bindings {} of {} (not taken: not eligible {}, no record {}, unrepeatable {}, too many fetches {}, "
+                    "other shaders or sampler term {}, fetch constants {}, sampler table {}, cache eviction {}, resolve {}, "
+                    "guest bytes to look at {}, plan {}); verify: {} checked, {} differed",
+                    g_renderer->drawReuseMode, s.shadersReused, s.shaders, s.pipelinesReused, s.pipelines, t[R::kReuseHit], s.textureDraws,
+                    t[R::kReuseIneligible], t[R::kReuseRecord], t[R::kReuseUnrepeatable], t[R::kReuseSlots], t[R::kReuseInputs],
+                    t[R::kReuseFetch], t[R::kReuseSamplers], t[R::kReuseEvicted], t[R::kReuseResolve], t[R::kReuseLook], t[R::kReusePlan],
+                    s.verified, s.differed);
+                s = {};
             }
             if (g_renderer->frame % 300 == 0 && (g_renderer->resolveTransfersFolded || g_renderer->transferDebtsSettled ||
                 g_renderer->transferDebtsDropped || g_renderer->resolveShares))

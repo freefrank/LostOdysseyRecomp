@@ -888,6 +888,91 @@ bool Presentation::ProcessSceneColor(RenderCommandList *commands, RenderTexture 
     commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::SHADER_READ));
     return true;
 }
+RenderTexture *Presentation::UpscaleSceneColor(RenderCommandList *commands, RenderTexture *source, uint32_t sw,
+                                               uint32_t sh, uint32_t width, uint32_t height, SpatialUpscaler upscaler,
+                                               float rcasStops)
+{
+    auto &p = *impl;
+    if (!commands || !source || !sw || !sh || !width || !height || sw > 16384 || sh > 16384 ||
+        width > 16384 || height > 16384 || !p.initialized)
+        return nullptr;
+    // Draw's passes for the same upscaler, each into an SDR intermediate. A pipeline that failed to build leaves
+    // the bilinear filter (pixelLinear, or pixel() when that failed too).
+    RenderPipeline *easu = upscaler == SpatialUpscaler::Fsr || upscaler == SpatialUpscaler::Easu ? p.FsrPipeline(0, false) : nullptr;
+    RenderPipeline *rcas = upscaler == SpatialUpscaler::Fsr || upscaler == SpatialUpscaler::Rcas ? p.FsrPipeline(1, false) : nullptr;
+    if (upscaler == SpatialUpscaler::Fsr && (!easu || !rcas)) easu = rcas = nullptr;
+    RenderPipeline *linear = p.finalPipelines[0] && p.swapchainFormat == RenderFormat::R8G8B8A8_UNORM ?
+        p.finalPipelines[0].get() : p.pipeline.get();
+    auto &passes = p.passes[0];
+    size_t passIndex = 0;
+    RenderBuffer *ramp = p.UpdateGammaRamp(nullptr);
+    struct { float x,y,w,h,sw,sh;uint32_t aa,filter,expandRange,outputFlags;float outputScale,peakRatio;float calibrationRect[4]; }
+        constants{};
+    constants.outputScale = 1;
+    constants.peakRatio = 1;
+    // RCAS's sharpness, as in Draw (fsr1_shaders.h)
+    constants.calibrationRect[0] = std::exp2(-std::max(rcasStops, 0.0f));
+    const auto render = [&](RenderTexture *input, uint32_t iw, uint32_t ih, uint32_t tw, uint32_t th,
+                            RenderPipeline *pipe) -> RenderTexture * {
+        if (passIndex == passes.size()) passes.emplace_back();
+        auto &pass = passes[passIndex++];
+        if (!pass.descriptors) {
+            RenderDescriptorSetBuilder set;
+            set.begin(); set.addTexture(0); set.addSampler(p.vulkan ? 1 : 0); set.addTexture(p.vulkan ? 2 : 1);
+            set.addConstantBuffer(p.vulkan ? 3 : 1); set.end();
+            pass.descriptors = set.create(p.device);
+            if (!pass.descriptors) return nullptr;
+            pass.descriptors->setSampler(1, p.sampler.get());
+        }
+        if (pass.width != tw || pass.height != th || pass.format != RenderFormat::R8G8B8A8_UNORM || !pass.texture) {
+            pass.framebuffer.reset();
+            pass.texture = p.device->createTexture(RenderTextureDesc::Texture2D(tw, th, 1, RenderFormat::R8G8B8A8_UNORM,
+                RenderTextureFlag::RENDER_TARGET));
+            pass.width = pass.height = 0;
+            if (!pass.texture) return nullptr;
+            const RenderTexture *attachment[] = {pass.texture.get()};
+            pass.framebuffer = p.device->createFramebuffer(RenderFramebufferDesc(attachment, 1));
+            if (!pass.framebuffer) { pass.texture.reset(); return nullptr; }
+            pass.width = tw; pass.height = th; pass.format = RenderFormat::R8G8B8A8_UNORM;
+        }
+        pass.descriptors->setBuffer(3, ramp, Impl::kRampBytes);
+        pass.descriptors->setTexture(0, input, RenderTextureLayout::SHADER_READ);
+        pass.descriptors->setTexture(2, input, RenderTextureLayout::SHADER_READ);
+        commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(input, RenderTextureLayout::SHADER_READ));
+        commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(pass.texture.get(), RenderTextureLayout::COLOR_WRITE));
+        // The triangle writes every pixel without blending or discard: no clear.
+        commands->setFramebuffer(pass.framebuffer.get());
+        RenderViewport viewport(0, 0, float(tw), float(th));
+        RenderRect scissor(0, 0, tw, th);
+        commands->setViewports(&viewport, 1);
+        commands->setScissors(&scissor, 1);
+        constants.w = float(tw); constants.h = float(th); constants.sw = float(iw); constants.sh = float(ih);
+        commands->setGraphicsPipelineLayout(p.layout.get());
+        commands->setPipeline(pipe);
+        commands->setGraphicsPushConstants(0, &constants);
+        commands->setGraphicsDescriptorSet(pass.descriptors.get(), 0);
+        commands->drawInstanced(3, 1, 0, 0);
+        return pass.texture.get();
+    };
+    RenderTexture *result = nullptr;
+    if (easu && rcas) {
+        // EASU at the output's size, then RCAS 1:1
+        if (auto *upscaled = render(source, sw, sh, width, height, easu))
+            result = render(upscaled, width, height, width, height, rcas);
+    } else if (easu) {
+        result = render(source, sw, sh, width, height, easu);
+    } else if (rcas && linear) {
+        // RCAS at the source's size, then the bilinear upscale
+        if (auto *sharpened = render(source, sw, sh, sw, sh, rcas))
+            result = render(sharpened, sw, sh, width, height, linear);
+    } else if (linear) {
+        result = render(source, sw, sh, width, height, linear);
+    }
+    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(source, RenderTextureLayout::SHADER_READ));
+    if (result)
+        commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(result, RenderTextureLayout::SHADER_READ));
+    return result;
+}
 RenderTexture* Presentation::ComposeHdrGain(RenderCommandList *commands, RenderTexture *sdr, RenderTexture *hdr,
                                             uint32_t width, uint32_t height, uint32_t hdrValidWidth, uint32_t hdrValidHeight,
                                             uint32_t hdrAllocationWidth, uint32_t hdrAllocationHeight)
@@ -1225,6 +1310,11 @@ bool Presentation::ProcessSceneColor(plume::RenderCommandList *, plume::RenderTe
                                      uint32_t, uint32_t, Antialiasing, bool)
 {
     return false;
+}
+plume::RenderTexture *Presentation::UpscaleSceneColor(plume::RenderCommandList *, plume::RenderTexture *, uint32_t,
+                                                      uint32_t, uint32_t, uint32_t, SpatialUpscaler, float)
+{
+    return nullptr;
 }
 std::shared_ptr<Presentation::UiCompositionLease> Presentation::DrawSeparatedUi(
     plume::RenderCommandList *, plume::RenderTexture *, plume::RenderTexture *,
