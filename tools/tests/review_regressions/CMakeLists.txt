@@ -43,6 +43,7 @@ lo_review_test(LoDebugOverlayTest debug_overlay_test.cpp "${LO_RUNTIME}/debug/me
 lo_review_test(LoDebugMenuInteractionTest debug_menu_interaction_test.cpp "${LO_RUNTIME}/debug/menu_overlay.cpp")
 lo_review_test(LoSoftResetTest soft_reset_test.cpp)
 lo_review_test(LoAudioCallbackTest audio_callback_test.cpp)
+lo_review_test(LoAudioQueueRefillTest audio_queue_refill_test.cpp)
 lo_review_test(LoFramePacerTest frame_pacer_test.cpp)
 lo_review_test(LoPresentationProgressTest presentation_progress_test.cpp)
 lo_review_test(LoLoadingStateTest loading_state_test.cpp)
@@ -177,3 +178,5 @@ add_subdirectory("${LO_TESTS}/steam_artwork" "${CMAKE_CURRENT_BINARY_DIR}/steam_
 
 # Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
 add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")
+
+add_subdirectory("${LO_TESTS}/xma_streaming" "${CMAKE_CURRENT_BINARY_DIR}/xma_streaming")
