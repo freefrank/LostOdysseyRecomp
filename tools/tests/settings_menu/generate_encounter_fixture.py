@@ -102,6 +102,16 @@ int main() {
     Check(settings::GetConfig().encounterRate==EncounterRate::Normal &&
         !settings::GetConfig().battleExpDouble,"safe defaults for existing profiles");
     Check(settings::GetConfig().discordStatus,"Discord status defaults On for existing profiles");
+    for (auto text : {"", "sgsr1=2\n", "sgsr1=-1\n", "sgsr1=bad\n"}) {
+        Write(text); Check(!settings::Read().sgsr1,"missing/invalid SGSR1 keeps the standard renderer");
+    }
+    for (bool enabled : {false,true}) {
+        Write(enabled ? "sgsr1=1\n" : "sgsr1=0\n");
+        auto config=settings::Read();
+        Check(config.sgsr1==enabled && settings::SaveConfig(config) &&
+            settings::GetConfig().sgsr1==enabled && settings::Read().sgsr1==enabled,
+            "SGSR1 survives save/reload in both states");
+    }
     for(auto text : {"", "discord_status=2\n", "discord_status=-1\n", "discord_status=bad\n"}) {
         Write(text); Check(settings::Read().discordStatus,"missing/invalid Discord setting keeps On default");
     }

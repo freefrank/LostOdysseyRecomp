@@ -336,6 +336,20 @@ int main(int argc, char** argv) {
               "AO selector translated in all UI languages");
     }
     settings::edit.uiLanguage=0;
+    // The Vulkan SGSR1 row changes only its saved pipeline preference.
+    {
+        const auto priorEdit=settings::edit;
+        const auto priorSaved=settings::GetConfig();
+        settings::edit.graphicsBackend=settings::GraphicsBackend::Vulkan;
+        settings::edit.sgsr1=false;settings::row=int(GraphicsRow::Sgsr1);tick();
+        Check(!settings::snapshot.rows[int(GraphicsRow::Sgsr1)].hidden,"SGSR1 visible for Vulkan");
+        tick(8);Check(settings::edit.sgsr1,"SGSR1 toggles on");
+        Check(settings::GetConfig()==priorSaved,"unsaved SGSR1 does not change active settings");
+        auto before=settings::edit;before.sgsr1=false;
+        Check(settings::restart::Required(before,settings::edit),"SGSR1 pipeline change requests restart");
+        tick(4);Check(!settings::edit.sgsr1,"SGSR1 toggles off");
+        settings::edit=priorEdit;
+    }
     // A VRR-only save must keep a Dynamic MFG preference read from settings.ini.
     settings::savedConfig=settings::edit;
     settings::savedConfig.frameGenerationProvider=framegen::Provider::Dlss;

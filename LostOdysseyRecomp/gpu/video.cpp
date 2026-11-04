@@ -2900,7 +2900,8 @@ namespace gpu::video
             g_uploadBuffer = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(g_uploadCapacity));
             if (!g_uploadBuffer) return "presentation upload allocation failed";
             g_presentation = std::make_unique<Presentation>();
-            if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat(), g_swapChain->hasStorageTextures()))
+            if (!g_presentation->Init(g_device.get(), g_swapChain->getFormat(), g_swapChain->hasStorageTextures(),
+                settings::GetConfig().sgsr1))
                 return "presentation shader/pipeline initialization failed";
             g_presentation->PrewarmOverlay();
             g_presentationFormat = g_swapChain->getFormat();

@@ -72,7 +72,8 @@ class Presentation
     // storageSwapchain: the swap chain images accept storage writes
     // (RenderSwapChain::hasStorageTextures), so the final bicubic upscale can
     // run as a compute pass (PresentationOptions::storageTarget).
-    bool Init(plume::RenderDevice *device, plume::RenderFormat swapchainFormat, bool storageSwapchain = false);
+    bool Init(plume::RenderDevice *device, plume::RenderFormat swapchainFormat, bool storageSwapchain = false,
+              bool enableSgsr1 = false);
     void SetOutputTransform(const hdr::OutputTransform& transform);
     // Draw and ProcessSceneColor keep one framebuffer per caller-owned target,
     // keyed by texture address and size. Call this, with no recorded draw of this

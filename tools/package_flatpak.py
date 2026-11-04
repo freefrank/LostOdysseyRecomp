@@ -27,6 +27,7 @@ REQUIRED = {
     "share/licenses/lost-odyssey-recomp/LICENSE-FidelityFX.txt",
     "share/licenses/lost-odyssey-recomp/zstd-LICENSE.txt",
     "share/licenses/lost-odyssey-recomp/XeGTAO.txt",
+    "share/licenses/lost-odyssey-recomp/SnapdragonGSR.txt",
     "share/licenses/lost-odyssey-recomp/Signalsmith-Stretch.txt",
     "share/licenses/lost-odyssey-recomp/Signalsmith-Linear.txt",
     f"share/applications/{APP_ID}.desktop",
