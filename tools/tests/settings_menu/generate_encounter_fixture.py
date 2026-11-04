@@ -67,6 +67,7 @@ bool Take(uint8_t*,int32_t& formation) {
 }
 void RestoreStage(uint8_t*) {}
 }
+namespace battle_intro_skip { void NoteTourDraw(int32_t) {} }
 '''
 
 test = r'''
@@ -196,6 +197,30 @@ int main() {
     settings::PreviewConfig(graphics);
     Check(settings::GetConfig().encounterRate==EncounterRate::None && settings::GetConfig().battleExpDouble,
         "graphics preview cannot overwrite debug preferences");
+
+    // Debug Menu -> Skip battle animation: battle_intro_skip 0 Off, 1 Press to skip, 2 Always.
+    // The removed skip_battle_intro key is ignored (never released, no migration).
+    using settings::BattleIntroSkip;
+    for(auto text : {"", "battle_intro_skip=0\n", "battle_intro_skip=3\n", "battle_intro_skip=-1\n",
+                    "battle_intro_skip=bad\n", "skip_battle_intro=1\n"}) {
+        Write(text); Check(settings::Read().battleIntroSkip==BattleIntroSkip::Off,"missing/invalid battle intro skip is Off");
+    }
+    Write("width=1600\nbattle_intro_skip=1\n");
+    Check(settings::Read().battleIntroSkip==BattleIntroSkip::Press,"battle intro skip key parsed");
+    Write("width=1600\nbattle_intro_skip=2\n");
+    Check(settings::Read().battleIntroSkip==BattleIntroSkip::Always,"battle intro skip Always parsed");
+    for(auto mode : {BattleIntroSkip::Off,BattleIntroSkip::Press,BattleIntroSkip::Always}) {
+        Check(settings::SaveBattleIntroSkip(mode) && settings::Read().battleIntroSkip==mode &&
+            settings::GetConfig().battleIntroSkip==mode,"battle intro skip roundtrips through disk and runtime");
+        auto other=settings::GetConfig();
+        other.battleIntroSkip=mode==BattleIntroSkip::Off ? BattleIntroSkip::Press : BattleIntroSkip::Off;
+        Check(settings::SaveConfig(other) && settings::Read().battleIntroSkip==mode,
+            "ordinary settings save preserves battle intro skip");
+        settings::PreviewConfig(other);
+        Check(settings::GetConfig().battleIntroSkip==mode,"graphics preview preserves battle intro skip");
+    }
+    Check(settings::SaveBattleIntroSkip(BattleIntroSkip(7)) && settings::Read().battleIntroSkip==BattleIntroSkip::Off,
+        "unknown battle intro skip value saves as Off");
 
     // Execute the real wrapper, including the successful-draw original-body
     // side effects. Interleaved zero draws and other callers cannot consume
