@@ -766,6 +766,30 @@ namespace plume {
         e.size = uint32_t(std::min<uint64_t>(size, 0xFFFFFFFFull));
     }
 
+    // LostOdysseyRecomp (2026-11-04): descriptor writes, as measured on GPU CmdProc in a busy street (cpu-street4).
+    // LO_DEKO3D_DESCRIPTOR_CACHE=0: dkImageDescriptorInitialize for every write (0.7%), not once per texture.
+    // LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH=0: the counters below with release / sequentially consistent increments, as
+    // before. Those made each write wait until its uncached descriptor store had drained (most of setTexture's 2.2%).
+    // Nothing on the CPU reads a descriptor after the epoch (currentEpoch only decides on an invalidate, on the thread
+    // that records, or on the record worker after the ring's own release), and the GPU sees the stores once the
+    // submission's system call has run, as before.
+    static bool envFlag(const char *name) {
+        const char *v = getenv(name);
+        return !v || strcmp(v, "0") != 0;
+    }
+    static const bool g_descriptorCache = envFlag("LO_DEKO3D_DESCRIPTOR_CACHE");
+    static const bool g_relaxedDescriptorEpoch = envFlag("LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH");
+
+    static void noteDescriptorWrite(Deko3DDevice *device) {
+        if (g_relaxedDescriptorEpoch) {
+            g_deko3dStats.descriptorWrites.fetch_add(1, std::memory_order_relaxed);
+            device->descriptorEpoch.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        g_deko3dStats.descriptorWrites++;
+        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+    }
+
     void Deko3DDescriptorSet::setTexture(uint32_t descriptorIndex, const RenderTexture *texture, RenderTextureLayout, const RenderTextureView *textureView) {
         if (imageHeapBase == UINT32_MAX || descriptorIndex < imageFirst || descriptorIndex - imageFirst >= imageCount)
             return;
@@ -782,7 +806,14 @@ namespace plume {
             // Written into a local copy first: the GPU may read the descriptor block (other slots) while the CPU
             // writes it, so a slot is written whole, with one copy.
             DkImageDescriptor local;
-            dkImageDescriptorInitialize(&local, &view, loadStore, false);
+            if (g_descriptorCache && !textureView && !loadStore) {
+                if (!t->sampledDescriptorReady) {
+                    dkImageDescriptorInitialize(&t->sampledDescriptor, &view, false, false);
+                    t->sampledDescriptorReady = true;
+                }
+                local = t->sampledDescriptor;
+            } else
+                dkImageDescriptorInitialize(&local, &view, loadStore, false);
             memcpy(d, &local, sizeof(local));
             // banjo-nx (2026-10-19, GPU, txq): the size a texture query of this view returns at level 0: the image's
             // size at the view's first level; the depth of a 3D image there, else the view's layers (all from its first
@@ -801,8 +832,7 @@ namespace plume {
                                     : (t->desc.arraySize > view.layerOffset ? t->desc.arraySize - view.layerOffset : 1u);
             imageSizes[id] = {w, h, z};
         }
-        g_deko3dStats.descriptorWrites++;
-        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+        noteDescriptorWrite(device);
     }
 
     void Deko3DDescriptorSet::setSampler(uint32_t descriptorIndex, const RenderSampler *sampler) {
@@ -814,8 +844,7 @@ namespace plume {
             memset(d, 0, sizeof(*d));
         else
             memcpy(d, &static_cast<const Deko3DSampler *>(sampler)->descriptor, sizeof(*d));
-        g_deko3dStats.descriptorWrites++;
-        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+        noteDescriptorWrite(device);
     }
 
     void Deko3DDescriptorSet::setAccelerationStructure(uint32_t, const RenderAccelerationStructure *) {}
@@ -2244,6 +2273,8 @@ namespace plume {
 
     std::unique_ptr<RenderFramebuffer> Deko3DDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
         auto fb = std::make_unique<Deko3DFramebuffer>();
+        static std::atomic<uint64_t> serials{0};
+        fb->serial = serials.fetch_add(1, std::memory_order_relaxed) + 1;
         fb->colorCount = std::min<uint32_t>(desc.colorAttachmentsCount, 8);
         for (uint32_t i = 0; i < fb->colorCount; i++) {
             const Deko3DTexture *t = static_cast<const Deko3DTexture *>(desc.colorAttachments[i]);

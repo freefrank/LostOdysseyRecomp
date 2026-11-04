@@ -119,6 +119,10 @@ namespace plume {
         bool ownsMemory = true;
         bool ownsBlock = false;  // LostOdysseyRecomp (2026-10-28): its own memory block (compressed render targets)
         bool valid = false;
+        // LostOdysseyRecomp (2026-11-04): the sampled descriptor of defaultView(), made on first use (the image never
+        // changes once made). Written by the descriptor-writing thread only.
+        mutable DkImageDescriptor sampledDescriptor{};
+        mutable bool sampledDescriptorReady = false;
 
         Deko3DTexture(Deko3DDevice *device, const RenderTextureDesc &desc);
         Deko3DTexture(Deko3DDevice *device) : device(device) {} // swapchain images
@@ -329,6 +333,8 @@ namespace plume {
         bool hasDepth = false;
         uint32_t width = 0, height = 0;
         bool srgb[8] = {};
+        // LostOdysseyRecomp (2026-11-04): unique per framebuffer made, so a new one at a freed one's address differs.
+        uint64_t serial = 0;
         // LostOdysseyRecomp (2026-11-03): a recorded setFramebuffer may still point at it.
         ~Deko3DFramebuffer() override { Deko3DRecordDrain(Deko3DRecordWait::FramebufferDestroyed); }
         uint32_t getWidth() const override { return width; }
@@ -402,6 +408,7 @@ namespace plume {
         bool descriptorsInvalidated = false;
         uint64_t descriptorEpoch = 0;
         const Deko3DFramebuffer *framebuffer = nullptr;
+        uint64_t framebufferSerial = 0;  // LostOdysseyRecomp (2026-11-04): the serial of `framebuffer` when bound
         // Bound textures: the handles last bound per graphics stage, and the buffer the shared constants were last
         // found in (GPU range and CPU address).
         DkResHandle boundTex[3][32]{};

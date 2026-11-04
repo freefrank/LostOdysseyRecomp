@@ -531,6 +531,7 @@ namespace plume {
         memset(uboBoundStages, 0, sizeof(uboBoundStages));
         memset(ssboBoundStages, 0, sizeof(ssboBoundStages));
         framebuffer = nullptr;
+        framebufferSerial = 0;
         viewportCount = scissorCount = 0;
         indexAddress = 0;
         boundIndexFormat = DkIdxFormat_Uint16;
@@ -1420,13 +1421,25 @@ namespace plume {
     }
 
     void Deko3DCommandList::setFramebuffer(const RenderFramebuffer *fb) {
-        // Bound every time: an application can free a framebuffer and make another at the same address.
+        // Recorded every time: an application can free a framebuffer and make another at the same address.
         if (deferred(*this)) {
             put(*this, RecOp::Framebuffer, RecPtr{fb});
             return;
         }
         const Deko3DFramebuffer *f = static_cast<const Deko3DFramebuffer *>(fb);
+        // LostOdysseyRecomp (2026-11-04, LO_DEKO3D_FB_DEDUPE=0 turns it off): the renderer sets the framebuffer for
+        // every draw, and binding it again (dkCmdBufBindRenderTargets, its image views and Zcull sizes, the sRGB word)
+        // was ~2.3% of GPU CmdProc in a busy street (cpu-street4). Only this call binds render targets, and begin()
+        // forgets the binding, so the same framebuffer (same serial: not a new one at a freed one's address) is still
+        // bound on the GPU at this point of the list. deko3d keeps Zcull while the depth target stays the same, so the
+        // repeated bind changed nothing. Pending barriers still go out here, as they did.
+        static const bool skipRepeat = envInt("LO_DEKO3D_FB_DEDUPE", 1) != 0;
+        if (skipRepeat && f && f == framebuffer && f->serial == framebufferSerial) {
+            flushBarriers();
+            return;
+        }
         framebuffer = f;
+        framebufferSerial = f ? f->serial : 0;
         if (!f)
             return;
 #if defined(PLUME_DEKO3D_GUARDS)

@@ -304,13 +304,13 @@ void hid::ClearKeyboardState()
     g_keys.fill(0);
 }
 
-static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
+static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt, bool observe = true)
 {
     uint16_t buttons = 0;
     for (auto* controller : g_controllers)
     {
         if (!SDL_GamepadConnected(controller)) continue;
-        ObserveController(controller);
+        if (observe) ObserveController(controller);
         const auto pad = ApplyController(g_controllerMap, ReadSources(controller));
         buttons |= pad.buttons;
         lt = std::max(lt, pad.leftTrigger);
@@ -371,6 +371,16 @@ static void ProcessHostInput(uint16_t buttons, uint8_t lt, uint8_t rt)
     s_prevGamepadButtons = buttons;
 }
 
+// LO_HOST_INPUT_REUSE=0: a full controller reading on every pump, as before.
+static bool HostInputReuse()
+{
+    static const bool enabled = [] {
+        const char* value = getenv("LO_HOST_INPUT_REUSE");
+        return !value || strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
 void hid::PumpHostInput()
 {
     std::lock_guard stateLock(g_getStateMutex);
@@ -379,7 +389,31 @@ void hid::PumpHostInput()
     {
         std::lock_guard lock(g_hidMutex);
         if (g_externalPump) SDL_UpdateGamepads();
+#if LO_PLATFORM_SWITCH
+        // Input pumping was 6.7% of GPU CmdProc in a busy street (cpu-street4): every pump read
+        // the controller twice (prompt observation and buttons), ~70 SDL calls that each take
+        // locks. A guest reading from the last kPadReuse stands, as it does for GetState: its
+        // buttons and triggers are this reading's (same layout, before keyboard and test input).
+        // Prompts are observed every kControllerObserveEvery, as GetState does.
+        const auto now = std::chrono::steady_clock::now();
+        if (HostInputReuse() && now - g_lastPadRead < kPadReuse)
+        {
+            buttons = g_lastPad.wButtons;
+            lt = g_lastPad.bLeftTrigger;
+            rt = g_lastPad.bRightTrigger;
+            PublishPromptStyle();
+        }
+        else if (HostInputReuse())
+        {
+            const bool observe = now - g_lastControllerObserve >= kControllerObserveEvery;
+            if (observe) g_lastControllerObserve = now;
+            buttons = ReadRawButtonsLocked(lt, rt, observe);
+        }
+        else
+            buttons = ReadRawButtonsLocked(lt, rt);
+#else
         buttons = ReadRawButtonsLocked(lt, rt);
+#endif
     }
 #if LO_PLATFORM_ANDROID
     const auto touch = hid::android_touch::Snapshot();

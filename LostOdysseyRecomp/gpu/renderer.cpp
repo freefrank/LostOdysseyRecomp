@@ -148,6 +148,9 @@ namespace plume {
 #include <algorithm>
 #include <atomic>
 #include <thread>
+#if defined(__aarch64__) && defined(__GNUC__)
+#include <arm_neon.h>
+#endif
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -572,6 +575,29 @@ namespace gpu::renderer
 
         using TextureKey = gpu::texture_cache::Key;
         using TextureKeyHash = gpu::texture_cache::KeyHash;
+
+        // Writes into the upload ring, which plume-deko3d maps CPU-uncached. memcpy stores 16 bytes at a time and
+        // stalled on those stores: the ring copy of Upload was 4.8% of GPU CmdProc in a busy street (cpu-street4).
+        // 64 bytes per store instruction, the same bytes. LO_UPLOAD_VECTOR_COPY=0: memcpy.
+        void CopyToUploadRing(uint8_t* destination, const void* source, size_t size)
+        {
+#if defined(__aarch64__) && defined(__GNUC__)
+            static const bool vectorCopy = [] {
+                const char* value = getenv("LO_UPLOAD_VECTOR_COPY");
+                return !value || strcmp(value, "0") != 0;
+            }();
+            if (vectorCopy)
+            {
+                const auto* from = static_cast<const uint8_t*>(source);
+                size_t done = 0;
+                for (; done + 64 <= size; done += 64)
+                    vst1q_u8_x4(destination + done, vld1q_u8_x4(from + done));
+                if (done < size) std::memcpy(destination + done, from + done, size - done);
+                return;
+            }
+#endif
+            std::memcpy(destination, source, size);
+        }
 
         struct Shader
         {
@@ -5615,7 +5641,7 @@ void main()
                         return UINT64_MAX;
                 }
                 if (data)
-                    memcpy(uploadMapped + offset, data, size);
+                    CopyToUploadRing(uploadMapped + offset, data, size);
                 Gpu().uploadOffset = offset + size;
                 return offset;
             }
