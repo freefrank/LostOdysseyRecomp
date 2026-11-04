@@ -1175,6 +1175,7 @@ bool SystemRowHidden(int r)
 }
 bool GraphicsRowHidden(int r)
 {
+    if (r == int(GraphicsRow::Sgsr1)) return edit.graphicsBackend != GraphicsBackend::Vulkan;
     // A page entry row shows with the setting it belongs to.
     if (r == int(GraphicsRow::NeuralRenderingTuning)) r = int(GraphicsRow::DlssNeuralRendering);
     if (r == int(GraphicsRow::HdrCalibration)) r = int(GraphicsRow::HdrPeak);
@@ -1587,6 +1588,7 @@ void Publish(uint8_t *base, uint32_t config)
 #endif
         placeGraphics(GraphicsRow::RgbRange, makeChoices(L"RGB Range", L"RGB 範圍",
                    {Tr(L"Off", L"關"), Tr(L"Expanded", L"擴展")}, edit.expandRgbRange ? 1 : 0));
+        placeGraphics(GraphicsRow::Sgsr1, makeChoices(L"SGSR1", L"SGSR1", onOff(), edit.sgsr1 ? 0 : 1));
         std::vector<std::wstring> frameRates;
         for (const auto fps : gpu::frame_rate::kNativeRates)
             frameRates.push_back(std::to_wstring(fps) + L" FPS");
@@ -1917,6 +1919,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::RgbRange:
             next.help = Tr(L"Expands only the game image from RGB 16–235 to 0–255. Applies immediately after saving.",
                            L"僅將遊戲畫面從 RGB 16–235 擴展到 0–255。儲存後立即套用。");
+            break;
+        case GraphicsRow::Sgsr1:
+            next.help = Tr(L"Snapdragon spatial upscaling. Use a lower render resolution and High scaling filter. SDR only. Save and restart to apply.",
+                           L"Snapdragon 空間放大。搭配較低渲染解析度與高品質縮放濾鏡。僅限 SDR。儲存並重新啟動後套用。");
             break;
         case GraphicsRow::FrameRate:
             next.help = edit.frameRate > 60
@@ -3813,6 +3819,9 @@ PPC_FUNC(sub_822F19B0)
                 break;
             case GraphicsRow::RgbRange:
                 edit.expandRgbRange = !edit.expandRgbRange;
+                break;
+            case GraphicsRow::Sgsr1:
+                edit.sgsr1 = !edit.sgsr1;
                 break;
             case GraphicsRow::FrameRate:
             {

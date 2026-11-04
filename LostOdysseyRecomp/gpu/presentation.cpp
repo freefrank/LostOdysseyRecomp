@@ -189,7 +189,7 @@ bool Presentation::Init(RenderDevice *device)
 {
     return Init(device, RenderFormat::R8G8B8A8_UNORM);
 }
-bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool storageSwapchain)
+bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool storageSwapchain, bool enableSgsr1)
 {
     auto &p = *impl;
     p.initialized = false;
@@ -197,7 +197,7 @@ bool Presentation::Init(RenderDevice *device, RenderFormat swapchainFormat, bool
     p.vulkan = gpu::shader::UsesSpirv(device);
     const char *sgsr1 = std::getenv("LO_SGSR1");
     p.sgsr1 = device->getCapabilities().shaderFormat == RenderShaderFormat::SPIRV &&
-        sgsr1 && std::string_view(sgsr1) == "1";
+        (enableSgsr1 || (sgsr1 && std::string_view(sgsr1) == "1"));
     p.swapchainFormat = swapchainFormat;
     p.uiPresentPipeline.reset();
     p.uiPipeline.reset();
@@ -540,7 +540,7 @@ float4 gainPixel(float4 position : SV_Position) : SV_Target {
         swapchainFormat == RenderFormat::R8G8B8A8_UNORM)
         p.InitCompute(source.c_str());
     if (p.initialized && p.sgsr1)
-        LOG_INFO("presentation: experimental SGSR1 for SDR high-quality upscaling (LO_SGSR1=1)");
+        LOG_INFO("presentation: SGSR1 enabled for SDR high-quality upscaling");
     return p.initialized;
 }
 // The final pass as a compute pass into a storage swap chain image: each

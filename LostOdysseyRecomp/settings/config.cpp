@@ -220,6 +220,8 @@ Config Read()
             value.ambientOcclusion = number;
         else if (key == "scaling_quality")
             value.scalingQuality = number;
+        else if (key == "sgsr1" && number <= 1)
+            value.sgsr1 = number == 1;
         else if (key == "expand_rgb_range" && number <= 1)
             value.expandRgbRange = number == 1;
         else if (key == "display_gamma")
@@ -471,6 +473,7 @@ static bool WriteConfig(const Config &value)
            << "\nshadow_resolution=" << value.shadowResolution
            << "\nambient_occlusion=" << value.ambientOcclusion
            << "\nscaling_quality=" << value.scalingQuality
+           << "\nsgsr1=" << (value.sgsr1 ? 1 : 0)
            << "\nexpand_rgb_range=" << (value.expandRgbRange ? 1 : 0)
            << "\ndisplay_brightness=" << value.displayBrightness
            << "\ndisplay_gamma=" << value.displayGamma

@@ -1,11 +1,16 @@
-# Optional SGSR1 presentation experiment
+# Optional SGSR1 presentation filter
 
-`LO_SGSR1=1`, with the High-quality scaling filter, selects Qualcomm SGSR1
-for Vulkan SDR upscaling. Unset it or use `LO_SGSR1=0` to restore the existing
-filter. This is an experiment, not a new default or a measured speedup.
+Settings → Graphics → SGSR1 → On, Save, and restart selects Qualcomm SGSR1
+for Vulkan SDR upscaling. Use the High scaling filter and a render resolution
+below the output resolution, for example 720p rendering to a 1080p surface.
+Off, Save, and restart restores the existing filter. The persisted key is
+`sgsr1=0/1`; the legacy `LO_SGSR1=1` developer override remains supported.
+Only requested Vulkan pipelines include the algorithm, retaining ordinary
+shader bytecode and startup work with the option off. It remains opt-in and
+does not establish a measured speedup.
 
 The unchanged Qualcomm algorithm is embedded in `gpu/shader/sgsr1_source.h`,
-from SnapdragonStudios/snapdragon-gsr commit
+from SnapdragonGameStudios/snapdragon-gsr commit
 `d926f074bcb9d714e179f1ce0fcb9ee2eeb5074e`,
 `sgsr/v1/include/hlsl/sgsr1_mobile.h`. The BSD-3-Clause notice is retained and
 the full license is staged in Android and desktop packages.
@@ -31,14 +36,34 @@ the destination size is not sharpened again.
 - `python tools/tests/sgsr1_shader_test.py --dxc <dxc>` compiles all eight
   production SPIR-V variants: vertex, pixel, HDR gain and compute, with the
   option off/on. It needs neither a game nor a Vulkan device.
-- `presentation.cpp` and `presentation_test.cpp` passed GCC 13 C++20 syntax
-  checks with the pinned Plume overlay and SDL/fmt headers. The runtime PCH was
-  replaced by standard includes; this is not a full runtime/NDK build.
-- The AppImage, Flatpak and Windows package fixtures passed (11 + 7 + 1 tests).
-- The existing GPU readback fixture accepts `LoPresentationTest --vulkan
-  --sgsr1`, also with `--hdr-only` or `--hdr-calibration-only`. Native identity,
-  padding, AA order, flat regions and letterboxing still need execution on a
-  real Vulkan implementation. No GPU/Android result is claimed here.
+- On November 4, 2026, the integrated fork's complete Android ARM64 runtime
+  compiled with pinned NDK 28.2.13676358, and its signed APK passed 82 JVM tests
+  and release lint (warnings remain, no errors). This is compilation evidence,
+  not a physical Android or performance result for this PR branch.
+- The integrated fork passes seven production Vulkan readback modes on Mesa lavapipe 25.2.8:
+  native filtering, the explicit setting API, storage/compute output, the
+  legacy environment override, HDR, calibration and HDR transfer. Checks cover
+  native identity, valid-extent padding, AA order, flat regions, reduction and
+  letterboxing. The transfer fixture checks 151 cases / 185,922 RGB values.
+  The SGSR1 review branch passes the first six; its older base predates the
+  extended HDR-transfer CLI mode, which the standalone harness registers only
+  when that mode exists. No failure is silently converted into a passing test.
+- The standalone Linux fixture needs no game input. Install X11 development
+  headers, the Vulkan loader and a software ICD, initialize submodules and
+  apply the tracked Plume base and SDL3 overlays, then run:
+
+```sh
+cmake -S tools/tests/presentation -B out/verify/presentation -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build out/verify/presentation --parallel 3
+ctest --test-dir out/verify/presentation --output-on-failure
+```
+
+`LoPresentationTest --vulkan --sgsr1-setting --storage` exercises the new
+setting and compute output together. `--sgsr1` retains the developer override.
+The fixture replaces only the game-dependent PCH with standard headers and
+uses the production presentation, DXC wrapper, backend and readback bodies.
+`LO_PRESENTATION_DEPENDENCY_ROOT` may point at another checkout containing the
+same prepared pinned dependencies. The dedicated workflow uploads its test log.
 
 Before accepting the filter, compare identical fixed scenes and resolution,
 with warm shader caches, off/on/off/on on Adreno 650/740/750 and at least one

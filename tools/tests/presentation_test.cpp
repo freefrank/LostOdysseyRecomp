@@ -273,16 +273,29 @@ static int TestHdrCalibration(plume::RenderDevice* device)
 int main(int argc, char** argv)
 {
     using namespace plume;
+    bool sgsr1Setting = false;
+    bool storageTarget = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) != "--storage") continue;
+        storageTarget = true;
+        for (int j = i; j + 1 < argc; ++j) argv[j] = argv[j + 1];
+        --argc;
+        break;
+    }
 #if !LO_PLATFORM_MACOS
     // Run the existing native identity, padding, AA-order, bounds and HDR
     // readbacks against the optional Vulkan presentation filter.
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) != "--sgsr1") continue;
+        const std::string option(argv[i]);
+        if (option != "--sgsr1" && option != "--sgsr1-setting") continue;
+        sgsr1Setting = option == "--sgsr1-setting";
+        if (!sgsr1Setting) {
 #ifdef _WIN32
         _putenv_s("LO_SGSR1", "1");
 #else
         setenv("LO_SGSR1", "1", 1);
 #endif
+        }
         for (int j = i; j + 1 < argc; ++j) argv[j] = argv[j + 1];
         --argc;
         break;
@@ -316,7 +329,7 @@ int main(int argc, char** argv)
     auto commands = queue->createCommandList();
     auto fence = device->createCommandFence();
     gpu::Presentation presentation;
-    if (!presentation.Init(device.get()))
+    if (!presentation.Init(device.get(), RenderFormat::R8G8B8A8_UNORM, storageTarget, sgsr1Setting))
         return 1;
     auto source = device->createTexture(RenderTextureDesc::Texture2D(40, 20, 1, RenderFormat::R8G8B8A8_UNORM));
     auto upload = device->createBuffer(RenderBufferDesc::UploadBuffer(256 * 20));
@@ -341,7 +354,8 @@ int main(int argc, char** argv)
     if (!scenePresentation.Init(device.get())) return 1;
     auto render = [&](unsigned w, unsigned h, gpu::Antialiasing aa, unsigned sw = 32, unsigned sh = 16, gpu::ScalingFilter filter = gpu::ScalingFilter::Bilinear, unsigned path = 0) {
         auto target = device->createTexture(
-            RenderTextureDesc::Texture2D(w, h, 1, RenderFormat::R8G8B8A8_UNORM, RenderTextureFlag::RENDER_TARGET));
+            RenderTextureDesc::Texture2D(w, h, 1, RenderFormat::R8G8B8A8_UNORM,
+                RenderTextureFlag::RENDER_TARGET | (storageTarget ? RenderTextureFlag::STORAGE : 0u)));
         auto readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(256 * h));
         commands->begin();
         bool recorded = true;
@@ -349,8 +363,11 @@ int main(int argc, char** argv)
             recorded = w == sw && h == sh && scenePresentation.ProcessSceneColor(commands.get(), source.get(), target.get(), sw, sh, aa);
         else if (path == 2)
             presentation.DrawComposited(commands.get(), source.get(), target.get(), sw, sh, w, h, filter);
-        else
-            presentation.Draw(commands.get(), source.get(), target.get(), sw, sh, w, h, gpu::PresentationOptions{aa, filter});
+        else {
+            gpu::PresentationOptions options{aa, filter};
+            options.storageTarget = storageTarget;
+            presentation.Draw(commands.get(), source.get(), target.get(), sw, sh, w, h, options);
+        }
         commands->barriers(RenderBarrierStage::COPY,
                            RenderTextureBarrier(target.get(), RenderTextureLayout::COPY_SOURCE));
         commands->copyTextureRegion(
