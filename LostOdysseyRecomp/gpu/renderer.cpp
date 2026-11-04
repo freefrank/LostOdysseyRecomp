@@ -8110,11 +8110,11 @@ void main()
             // The frame of the last draw, resolve or clear that applied the plan, and the frame a new scene size was
             // last held back in (ApplyInternalResolution).
             uint64_t planWorkFrame = ~0ull, planDeferredFrame = ~0ull;
-            // LO_RESIZE_FIX=1: the dynamic-resolution flicker fix, until it's been checked on the console. Without it a
-            // scene size change happens as before (at once, dropping every resolve; new targets uncleared).
+            // The dynamic-resolution flicker fix, checked on the console 2026-11-04. LO_RESIZE_FIX=0: a scene size change as
+            // before (at once, dropping every resolve; new targets uncleared).
             const bool resizeFix = [] {
                 const char* value = getenv("LO_RESIZE_FIX");
-                return value && value[0] == '1';
+                return !(value && value[0] == '0');
             }();
 
             bool ApplyInternalResolution()
