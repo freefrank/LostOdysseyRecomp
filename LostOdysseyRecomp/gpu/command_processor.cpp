@@ -157,6 +157,20 @@ namespace gpu
 
     // words point at big-endian microcode: guest memory for IM_LOAD, the
     // packet's inline payload for IM_LOAD_IMMEDIATE (`immediate`).
+    // D3D writes 0xFFFFFEED to two adjacent marker words (one-word MEM_WRITEs), then waits for that value at each
+    // (WAIT_REG_MEM): about 360 such groups a frame in the busy street, each ending four sync periods, so the per-draw
+    // checks keyed on the period (shader microcode, zero-register constants) ran at nearly every draw. The GPU waiting
+    // on its own write orders nothing between the guest and the GPU, so a write whose wait follows it with no other
+    // packet between and matches at once ends none. LO_CP_SELF_WAITS=0: every one ends one.
+    static bool SelfWaitsEnabled()
+    {
+        static const bool enabled = [] {
+            const char* value = getenv("LO_CP_SELF_WAITS");
+            return !value || value[0] != '0';
+        }();
+        return enabled;
+    }
+
     static void CaptureShader(uint32_t type, const uint32_t* words, uint32_t count, bool immediate)
     {
         if (type > 1 || count == 0 || count > 0x10000)
@@ -1074,6 +1088,17 @@ namespace gpu
             r.d2 = reader.PeekAndSwap(2);
         }
 
+        // The pending MEM_WRITEs' sync point, unless this is another of them or a WAIT_REG_MEM that may cancel one.
+        if (m_pendingMemWrites) [[unlikely]]
+        {
+            const uint32_t opcode = (packet >> 8) & 0x7F;
+            if (type != 3 || (opcode != PM4_WAIT_REG_MEM && opcode != PM4_MEM_WRITE))
+            {
+                m_pendingMemWrites = 0;
+                AdvanceSyncEpoch(SyncSource::MemWrite);
+            }
+        }
+
         switch (packet >> 30)
         {
         case 0: return ExecutePacketType0(reader, packet);
@@ -1159,9 +1184,15 @@ namespace gpu
         {
         case PM4_INTERRUPT: AdvanceSyncEpoch(SyncSource::Interrupt); break;
         case PM4_XE_SWAP: AdvanceSyncEpoch(SyncSource::Swap); break;
-        case PM4_WAIT_REG_MEM: AdvanceSyncEpoch(SyncSource::WaitRegMem); break;
+        case PM4_WAIT_REG_MEM: if (!m_pendingMemWrites) AdvanceSyncEpoch(SyncSource::WaitRegMem); break;
         case PM4_REG_TO_MEM: AdvanceSyncEpoch(SyncSource::RegToMem); break;
-        case PM4_MEM_WRITE: AdvanceSyncEpoch(SyncSource::MemWrite); break;
+        case PM4_MEM_WRITE:
+            if (count != 2 || !SelfWaitsEnabled() || m_pendingMemWrites == kPendingMemWrites)
+            {
+                m_pendingMemWrites = 0;
+                AdvanceSyncEpoch(SyncSource::MemWrite);
+            }
+            break;
         case PM4_COND_WRITE: AdvanceSyncEpoch(SyncSource::CondWrite); break;
         case PM4_EVENT_WRITE_SHD: AdvanceSyncEpoch(SyncSource::EventShd); break;
         case PM4_EVENT_WRITE_EXT: AdvanceSyncEpoch(SyncSource::EventExt); break;
@@ -1448,6 +1479,31 @@ namespace gpu
                     isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
             g_workerStage.store("WAIT_REG_MEM", std::memory_order_relaxed);
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            // After one-word MEM_WRITEs: their sync points and this one's were held back, and are taken unless this
+            // waits, at once, for the value one of them left at the same address (which then leaves the list).
+            bool selfWait = false;
+            uint32_t selfValue = 0;
+            if (m_pendingMemWrites)
+            {
+                for (uint32_t i = 0; i < m_pendingMemWrites; ++i)
+                {
+                    if (!isMemory || pollRegAddr != m_pendingMemWriteAddress[i] || (waitInfo & 7) != 3 ||
+                        (m_pendingMemWriteValue[i] & mask) != ref)
+                        continue;
+                    selfWait = true;
+                    selfValue = m_pendingMemWriteValue[i];
+                    --m_pendingMemWrites;
+                    m_pendingMemWriteAddress[i] = m_pendingMemWriteAddress[m_pendingMemWrites];
+                    m_pendingMemWriteValue[i] = m_pendingMemWriteValue[m_pendingMemWrites];
+                    break;
+                }
+                if (!selfWait)
+                {
+                    m_pendingMemWrites = 0;
+                    AdvanceSyncEpoch(SyncSource::MemWrite);
+                    AdvanceSyncEpoch(SyncSource::WaitRegMem);
+                }
+            }
             while (m_running)
             {
                 // Snapshot before reading, so a handler finishing after the read
@@ -1473,6 +1529,13 @@ namespace gpu
                 case 5: matched = (value & mask) >= ref; break;
                 case 6: matched = (value & mask) > ref; break;
                 case 7: matched = true; break;
+                }
+                if (selfWait && (!matched || value != selfValue))
+                {
+                    selfWait = false;
+                    m_pendingMemWrites = 0;
+                    AdvanceSyncEpoch(SyncSource::MemWrite);
+                    AdvanceSyncEpoch(SyncSource::WaitRegMem);
                 }
                 if (matched)
                     break;
@@ -1512,7 +1575,7 @@ namespace gpu
                     std::this_thread::yield();
             }
             // Guest writes made before the waited-for value are visible from here.
-            AdvanceSyncEpoch(SyncSource::WaitRegMem);
+            if (!selfWait) AdvanceSyncEpoch(SyncSource::WaitRegMem);
             return true;
         }
 
@@ -1544,6 +1607,13 @@ namespace gpu
             {
                 LOG_ERROR("MEM_WRITE: invalid physical destination extent");
                 return false;
+            }
+            if (count == 2 && SelfWaitsEnabled())
+            {
+                // Its sync point waits for the packets after it (ExecutePacket, WAIT_REG_MEM).
+                m_pendingMemWriteAddress[m_pendingMemWrites] = writeAddr;
+                m_pendingMemWriteValue[m_pendingMemWrites] = reader.PeekAndSwap(0);
+                ++m_pendingMemWrites;
             }
             for (uint32_t i = 0; i < count - 1; i++)
             {

@@ -89,7 +89,8 @@ namespace gpu
         // interrupts, swaps, memory waits, resolve readback. A guest write to
         // memory the GPU already read is only ordered against later draws across
         // such a point. Occlusion queries are not one: the guest polls their
-        // records but never makes the command stream wait for them.
+        // records but never makes the command stream wait for them. Nor is a
+        // MEM_WRITE the GPU at once waits on itself (SelfWaitsEnabled).
         uint64_t SyncEpoch() const { return m_syncEpoch.load(std::memory_order_relaxed); }
         // What ended each sync period; counted only with LO_RENDER_TIMING.
         enum class SyncSource : uint32_t {
@@ -213,6 +214,11 @@ namespace gpu
         std::atomic<uint64_t> m_syncEpoch{1};
         alignas(64) std::atomic<bool> m_running{ false };
         bool m_countSyncSources = false;
+        // One-word MEM_WRITEs whose sync point waits for the packets after them (SelfWaitsEnabled in
+        // command_processor.cpp): a WAIT_REG_MEM for the value one wrote, matched at once, makes the pair no sync point.
+        static constexpr uint32_t kPendingMemWrites = 4;
+        uint32_t m_pendingMemWrites = 0;
+        uint32_t m_pendingMemWriteAddress[kPendingMemWrites]{}, m_pendingMemWriteValue[kPendingMemWrites]{};
         std::atomic<uint64_t> m_syncSources[uint32_t(SyncSource::Count)]{};
 
         IndirectBufferGuard m_indirectGuard;
