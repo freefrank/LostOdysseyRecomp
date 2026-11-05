@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">Cancel pending change</string>
     <string name="touch_hide_all">Hide all touch controls</string>
     <string name="touch_hide_all_help">Reveal the system bars or use Android Back to show CTRL for 4 seconds.</string>
+    <string name="touch_dual_screen">Second-screen panel (dual-screen devices)</string>
     <string name="touch_settings_title">Controller settings</string>
     <string name="touch_show_controls">Show touch controls</string>
     <string name="touch_controller_hint">Physical controller connected. Touch controls hide automatically; turn them on here to use both together.</string>

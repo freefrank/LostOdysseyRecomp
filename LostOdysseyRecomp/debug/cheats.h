@@ -158,6 +158,7 @@ struct CharacterState {
     uint16_t weapon = 0, ring = 0;
     uint8_t accessoryCount = 0, row = 0;
     std::array<uint16_t,8> accessories{};
+    uint16_t learnedSkills = 0; // read-only, for the dual-screen companion
 };
 enum class Result { Ready, Unavailable, Disabled, Pending, Applied, Cancelled, Invalid };
 struct Snapshot {
@@ -167,6 +168,10 @@ struct Snapshot {
     Result result = Result::Unavailable;
     std::array<CharacterState,9> characters{};
     std::array<uint32_t,5> party{UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};
+    // Read-only inventory counts for the dual-screen companion, same order as
+    // data::Items / data::Materials. Validate() already bounds them to 0..9999.
+    std::array<uint16_t, std::size(data::Items)> items{};
+    std::array<uint16_t, std::size(data::Materials)> materials{};
 };
 // UI owns only requests and by-value snapshots; Tick is the only guest writer.
 class Session {
@@ -221,7 +226,13 @@ public:
             c.weapon=memory.U16(Weapon+b); c.ring=memory.U16(Ring+b);
             c.accessoryCount=memory.U8(AccessoryCount+b); c.row=memory.U8(0x7C+b);
             for (unsigned j=0; j<8; ++j) c.accessories[j]=memory.U16(Accessory+b+j*4);
+            c.learnedSkills = 0;
+            for (const auto& e : data::LearnedSkills) if (memory.U8(b+e.value) & 0x80) ++c.learnedSkills;
         }
+        for (size_t i=0; i<snapshot.items.size(); ++i)
+            snapshot.items[i] = uint16_t(memory.F32(data::Items[i].value));
+        for (size_t i=0; i<snapshot.materials.size(); ++i)
+            snapshot.materials[i] = uint16_t(memory.F32(data::Materials[i].value));
     }
 };
 inline Session session;
