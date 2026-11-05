@@ -11,7 +11,9 @@
 // differences only. In the 256-sample loop, the 145 memory words at fixed addresses (coefficients, delay lengths and
 // line indices of its delay lines) are C++ locals: each is an offset in the reverb, found by evaluating the setup code
 // before the loop (several of the loop's pointers name the same word, so they share one local), read once
-// before the loop; stores still write memory as well. The recompiled loop reloaded all of them every sample. The
+// before the loop. The 20 of them that the loop's indexed loads can reach are still written to memory at every store;
+// the other 46 the loop stores are written back once, after it (the translator bounds every indexed access: a frame
+// buffer, or a delay line's masked index range). The recompiled loop reloaded and stored all of them every sample. The
 // frame's private slots (below r1 + 384, and the caller's r1 + 20) are C++ locals, which the compiler keeps in
 // registers. fadds / fsubs / fmuls run in float: the recompiled code rounds
 // them through double to float, and for +, - and * double rounding through a format of 53 bits is innocuous for
@@ -26,7 +28,6 @@
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <arm_neon.h>
-#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <cmath>
@@ -68,13 +69,6 @@ namespace
         const uint32_t count = 16 - (address & 15);
         std::memcpy(bytes, base + address, count);
         return vreinterpretq_f32_u8(vrev32q_u8(vld1q_u8(bytes)));
-    }
-
-    // Two of the loop's fixed addresses the same (see tools/switch/ppc2native.py): the promotion would be wrong there.
-    void LoopAliased(uint32_t address)
-    {
-        static std::atomic<bool> logged{false};
-        if (!logged.exchange(true)) LOG_ERROR("[reverb] two fixed loop addresses meet at {:#x}", address);
     }
 
     void Native(PPCContext& ctx, uint8_t* base)
@@ -973,11 +967,6 @@ namespace
         m142 = PPC_FAST_LOAD_U32(uint32_t(object + 299296));
         m143 = PPC_FAST_LOAD_U32(uint32_t(object + 299304));
         m144 = PPC_FAST_LOAD_U32(uint32_t(object + 299308));
-        {
-            uint32_t fixed[145] = {uint32_t(object + 171792), uint32_t(object + 299288), uint32_t(object + 192460), uint32_t(object + 254072), uint32_t(object + 167560), uint32_t(object + 237672), uint32_t(object + 282888), uint32_t(object + 167556), uint32_t(object + 169628), uint32_t(object + 171696), uint32_t(object + 171728), uint32_t(object + 171748), uint32_t(object + 171780), uint32_t(object + 188196), uint32_t(object + 188224), uint32_t(object + 190296), uint32_t(object + 192364), uint32_t(object + 192396), uint32_t(object + 192416), uint32_t(object + 192448), uint32_t(object + 208864), uint32_t(object + 208892), uint32_t(object + 217112), uint32_t(object + 225328), uint32_t(object + 233544), uint32_t(object + 237660), uint32_t(object + 254108), uint32_t(object + 262328), uint32_t(object + 270544), uint32_t(object + 278760), uint32_t(object + 282876), uint32_t(object + 169632), uint32_t(object + 169616), uint32_t(object + 169624), uint32_t(object + 169620), uint32_t(object + 171688), uint32_t(object + 171692), uint32_t(object + 171704), uint32_t(object + 171708), uint32_t(object + 171712), uint32_t(object + 171724), uint32_t(object + 171720), uint32_t(object + 171716), uint32_t(object + 171736), uint32_t(object + 171740), uint32_t(object + 171744), uint32_t(object + 171756), uint32_t(object + 171764), uint32_t(object + 171768), uint32_t(object + 171752), uint32_t(object + 171796), uint32_t(object + 171776), uint32_t(object + 171784), uint32_t(object + 171788), uint32_t(object + 171772), uint32_t(object + 188188), uint32_t(object + 188192), uint32_t(object + 188204), uint32_t(object + 188208), uint32_t(object + 188228), uint32_t(object + 188212), uint32_t(object + 188220), uint32_t(object + 188216), uint32_t(object + 190300), uint32_t(object + 190284), uint32_t(object + 190292), uint32_t(object + 190288), uint32_t(object + 192356), uint32_t(object + 192360), uint32_t(object + 192372), uint32_t(object + 192376), uint32_t(object + 192380), uint32_t(object + 192388), uint32_t(object + 192384), uint32_t(object + 192392), uint32_t(object + 192404), uint32_t(object + 192408), uint32_t(object + 192412), uint32_t(object + 192424), uint32_t(object + 192432), uint32_t(object + 192436), uint32_t(object + 192420), uint32_t(object + 192464), uint32_t(object + 192444), uint32_t(object + 192452), uint32_t(object + 192456), uint32_t(object + 192440), uint32_t(object + 208856), uint32_t(object + 208860), uint32_t(object + 208872), uint32_t(object + 208876), uint32_t(object + 208896), uint32_t(object + 208880), uint32_t(object + 208888), uint32_t(object + 208884), uint32_t(object + 217116), uint32_t(object + 217096), uint32_t(object + 217108), uint32_t(object + 217100), uint32_t(object + 217104), uint32_t(object + 225332), uint32_t(object + 225324), uint32_t(object + 225316), uint32_t(object + 225320), uint32_t(object + 233548), uint32_t(object + 233532), uint32_t(object + 233540), uint32_t(object + 233536), uint32_t(object + 237676), uint32_t(object + 237664), uint32_t(object + 237668), uint32_t(object + 237656), uint32_t(object + 237652), uint32_t(object + 254068), uint32_t(object + 254076), uint32_t(object + 254080), uint32_t(object + 254088), uint32_t(object + 254092), uint32_t(object + 254096), uint32_t(object + 254104), uint32_t(object + 254100), uint32_t(object + 254112), uint32_t(object + 262312), uint32_t(object + 262324), uint32_t(object + 262320), uint32_t(object + 262316), uint32_t(object + 262332), uint32_t(object + 270532), uint32_t(object + 270540), uint32_t(object + 270536), uint32_t(object + 270548), uint32_t(object + 278748), uint32_t(object + 278756), uint32_t(object + 278764), uint32_t(object + 278752), uint32_t(object + 282880), uint32_t(object + 282884), uint32_t(object + 282872), uint32_t(object + 282892), uint32_t(object + 282868), uint32_t(object + 299284), uint32_t(object + 299292), uint32_t(object + 299296), uint32_t(object + 299304), uint32_t(object + 299308)};
-            std::sort(fixed, fixed + 145);
-            for (uint32_t i = 1; i < 145; ++i) if (fixed[i] - fixed[i - 1] < 4) { LoopAliased(fixed[i]); break; }
-        }
         goto loc_82CCAB3C; // b 0x82ccab3c
         loc_82CCAB38:;
         r19 = s112; // lwz r19,112(r1)
@@ -1103,10 +1092,10 @@ namespace
         r18 = s144; // lwz r18,144(r1)
         r20 = r20 + uint32_t(1); // addi r20,r20,1
         r20 = r20 & 0x000001ffu; // clrlwi r20,r20,23
-        m4 = r20; PPC_FAST_STORE_U32(r30, m4); // stw r20,0(r30) [fixed]
+        m4 = r20; // stw r20,0(r30) [fixed, written back after the loop]
         f9 = float(std::fma(double(f14), double(f8), double(f9))); // fmadds f9,f14,f8,f9
         r20 = s132; // lwz r20,132(r1)
-        m7 = U(f9); PPC_FAST_STORE_U32(uint32_t(r18 + 12), m7); // stfs f9,12(r18) [fixed]
+        m7 = U(f9); // stfs f9,12(r18) [fixed, written back after the loop]
         r19 = m31; // lwz r19,0(r29) [fixed]
         f9 = f10 + f31; // fadds f9,f10,f31
         r17 = m32; // lwz r17,0(r20) [fixed]
@@ -1125,9 +1114,9 @@ namespace
         r19 = m31; // lwz r19,0(r29) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000001ffu; // clrlwi r19,r19,23
-        m31 = r19; PPC_FAST_STORE_U32(r29, m31); // stw r19,0(r29) [fixed]
+        m31 = r19; // stw r19,0(r29) [fixed, written back after the loop]
         f8 = float(std::fma(double(f7), double(f14), double(f8))); // fmadds f8,f7,f14,f8
-        m8 = U(f8); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m8); // stfs f8,12(r20) [fixed]
+        m8 = U(f8); // stfs f8,12(r20) [fixed, written back after the loop]
         r20 = s356; // lwz r20,356(r1)
         r19 = r20 + uint32_t(12); // addi r19,r20,12
         r17 = m35; // lwz r17,0(r20) [fixed]
@@ -1140,7 +1129,7 @@ namespace
         m38 = U(f7); PPC_FAST_STORE_U32(uint32_t(r19 + 8), m38); // stfs f7,8(r19) [fixed]
         f8 = float(std::fma(double(f31), double(f8), double(f9))); // fmadds f8,f31,f8,f9
         m37 = U(f9); PPC_FAST_STORE_U32(uint32_t(r19 + 4), m37); // stfs f9,4(r19) [fixed]
-        m9 = U(f8); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m9); // stfs f8,8(r20) [fixed]
+        m9 = U(f8); // stfs f8,8(r20) [fixed, written back after the loop]
         r20 = m39; // lwz r20,0(r6) [fixed]
         f7 = F(m40); // lfs f7,12(r6) [fixed]
         r19 = r20 & 0x00000001u; // clrlwi r19,r20,31
@@ -1159,7 +1148,7 @@ namespace
         f12 = f13 - f12; // fsubs f12,f13,f12
         f30 = F(PPC_FAST_LOAD_U32(r8)); // lfs f30,0(r8)
         f9 = float(std::fma(double(f9), double(f31), double(f7))); // fmadds f9,f9,f31,f7
-        m10 = U(f9); PPC_FAST_STORE_U32(uint32_t(r6 + 16), m10); // stfs f9,16(r6) [fixed]
+        m10 = U(f9); // stfs f9,16(r6) [fixed, written back after the loop]
         r19 = m45; // lwz r19,0(r22) [fixed]
         f9 = F(m46); // lfs f9,12(r22) [fixed]
         f8 = F(m47); // lfs f8,4(r20) [fixed]
@@ -1172,7 +1161,7 @@ namespace
         m48 = U(f8); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m48); // stfs f8,8(r20) [fixed]
         f8 = F(m49); // lfs f8,8(r22) [fixed]
         f9 = f8 * f9; // fmuls f9,f8,f9
-        m11 = U(f9); PPC_FAST_STORE_U32(uint32_t(r22 + 4), m11); // stfs f9,4(r22) [fixed]
+        m11 = U(f9); // stfs f9,4(r22) [fixed, written back after the loop]
         r20 = m50; // lwz r20,0(r11) [fixed]
         f8 = F(m51); // lfs f8,4(r7) [fixed]
         r19 = m52; // lwz r19,12(r7) [fixed]
@@ -1193,8 +1182,8 @@ namespace
         f31 = f28 * f9; // fmuls f31,f28,f9
         f13 = F(PPC_FAST_LOAD_U32(uint32_t(r20 + r11))); // lfsx f13,r20,r11
         f13 = f13 * f8; // fmuls f13,f13,f8
-        m12 = U(f13); PPC_FAST_STORE_U32(uint32_t(r7 + 8), m12); // stfs f13,8(r7) [fixed]
-        m0 = U(f7); PPC_FAST_STORE_U32(uint32_t(r7 + 20), m0); // stfs f7,20(r7) [fixed]
+        m12 = U(f13); // stfs f13,8(r7) [fixed, written back after the loop]
+        m0 = U(f7); // stfs f7,20(r7) [fixed, written back after the loop]
         r20 = m50; // lwz r20,0(r11) [fixed]
         r20 = r20 + uint32_t(2); // addi r20,r20,2
         r20 = std::rotl(r20, 2) & 0xfffffffcu; // rlwinm r20,r20,2,0,29
@@ -1202,7 +1191,7 @@ namespace
         r20 = m50; // lwz r20,0(r11) [fixed]
         r20 = r20 + uint32_t(1); // addi r20,r20,1
         r20 = r20 & 0x00000fffu; // clrlwi r20,r20,20
-        m50 = r20; PPC_FAST_STORE_U32(r11, m50); // stw r20,0(r11) [fixed]
+        m50 = r20; // stw r20,0(r11) [fixed, written back after the loop]
         r20 = s288; // lwz r20,288(r1)
         r19 = m55; // lwz r19,0(r20) [fixed]
         f13 = F(m56); // lfs f13,4(r20) [fixed]
@@ -1211,7 +1200,7 @@ namespace
         r19 = std::rotl(r19, 2) & 0xfffffffcu; // rlwinm r19,r19,2,0,29
         f8 = F(PPC_FAST_LOAD_U32(uint32_t(r19 + r20))); // lfsx f8,r19,r20
         f13 = f8 * f13; // fmuls f13,f8,f13
-        m13 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m13); // stfs f13,8(r20) [fixed]
+        m13 = U(f13); // stfs f13,8(r20) [fixed, written back after the loop]
         r20 = r20 + uint32_t(12); // addi r20,r20,12
         f13 = F(m57); // lfs f13,4(r20) [fixed]
         m58 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m58); // stfs f13,8(r20) [fixed]
@@ -1237,8 +1226,8 @@ namespace
         r19 = r19 & 0x000001ffu; // clrlwi r19,r19,23
         f13 = float(std::fma(double(f12), double(f7), double(f13))); // fmadds f13,f12,f7,f13
         f9 = f22 * f9; // fmuls f9,f22,f9
-        m59 = r19; PPC_FAST_STORE_U32(r28, m59); // stw r19,0(r28) [fixed]
-        m14 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m14); // stfs f13,12(r20) [fixed]
+        m59 = r19; // stw r19,0(r28) [fixed, written back after the loop]
+        m14 = U(f13); // stfs f13,12(r20) [fixed, written back after the loop]
         r20 = s296; // lwz r20,296(r1)
         r17 = m63; // lwz r17,0(r27) [fixed]
         r19 = r17; // mr r19,r17
@@ -1257,9 +1246,9 @@ namespace
         r19 = m63; // lwz r19,0(r27) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000001ffu; // clrlwi r19,r19,23
-        m63 = r19; PPC_FAST_STORE_U32(r27, m63); // stw r19,0(r27) [fixed]
+        m63 = r19; // stw r19,0(r27) [fixed, written back after the loop]
         f12 = float(std::fma(double(f12), double(f8), double(f13))); // fmadds f12,f12,f8,f13
-        m15 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m15); // stfs f12,12(r20) [fixed]
+        m15 = U(f12); // stfs f12,12(r20) [fixed, written back after the loop]
         r20 = s328; // lwz r20,328(r1)
         f13 = f1 + f25; // fadds f13,f1,f25
         r19 = r20 + uint32_t(12); // addi r19,r20,12
@@ -1273,7 +1262,7 @@ namespace
         m69 = U(f13); PPC_FAST_STORE_U32(uint32_t(r19 + 4), m69); // stfs f13,4(r19) [fixed]
         f12 = float(std::fma(double(f7), double(f12), double(f13))); // fmadds f12,f7,f12,f13
         m70 = U(f8); PPC_FAST_STORE_U32(uint32_t(r19 + 8), m70); // stfs f8,8(r19) [fixed]
-        m16 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m16); // stfs f12,8(r20) [fixed]
+        m16 = U(f12); // stfs f12,8(r20) [fixed, written back after the loop]
         r20 = m71; // lwz r20,0(r5) [fixed]
         f12 = F(m72); // lfs f12,8(r5) [fixed]
         r19 = r20 & 0x00000001u; // clrlwi r19,r20,31
@@ -1290,7 +1279,7 @@ namespace
         r20 = r21 + uint32_t(16); // addi r20,r21,16
         f8 = f12 * f8; // fmuls f8,f12,f8
         f13 = float(std::fma(double(f13), double(f7), double(f8))); // fmadds f13,f13,f7,f8
-        m17 = U(f13); PPC_FAST_STORE_U32(uint32_t(r5 + 16), m17); // stfs f13,16(r5) [fixed]
+        m17 = U(f13); // stfs f13,16(r5) [fixed, written back after the loop]
         r19 = m77; // lwz r19,0(r21) [fixed]
         f13 = F(m78); // lfs f13,12(r21) [fixed]
         f12 = F(m79); // lfs f12,4(r20) [fixed]
@@ -1303,7 +1292,7 @@ namespace
         m80 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m80); // stfs f12,8(r20) [fixed]
         f12 = F(m81); // lfs f12,8(r21) [fixed]
         f13 = f13 * f12; // fmuls f13,f13,f12
-        m18 = U(f13); PPC_FAST_STORE_U32(uint32_t(r21 + 4), m18); // stfs f13,4(r21) [fixed]
+        m18 = U(f13); // stfs f13,4(r21) [fixed, written back after the loop]
         r20 = m82; // lwz r20,0(r10) [fixed]
         f12 = F(m83); // lfs f12,4(r4) [fixed]
         r19 = m84; // lwz r19,12(r4) [fixed]
@@ -1322,8 +1311,8 @@ namespace
         f7 = F(PPC_FAST_LOAD_U32(uint32_t(r20 + r10))); // lfsx f7,r20,r10
         f13 = f8 * f13; // fmuls f13,f8,f13
         f12 = f7 * f12; // fmuls f12,f7,f12
-        m2 = U(f13); PPC_FAST_STORE_U32(uint32_t(r4 + 20), m2); // stfs f13,20(r4) [fixed]
-        m19 = U(f12); PPC_FAST_STORE_U32(uint32_t(r4 + 8), m19); // stfs f12,8(r4) [fixed]
+        m2 = U(f13); // stfs f13,20(r4) [fixed, written back after the loop]
+        m19 = U(f12); // stfs f12,8(r4) [fixed, written back after the loop]
         r20 = m82; // lwz r20,0(r10) [fixed]
         f13 = f0 + f20; // fadds f13,f0,f20
         r20 = r20 + uint32_t(2); // addi r20,r20,2
@@ -1332,7 +1321,7 @@ namespace
         r20 = m82; // lwz r20,0(r10) [fixed]
         r20 = r20 + uint32_t(1); // addi r20,r20,1
         r20 = r20 & 0x00000fffu; // clrlwi r20,r20,20
-        m82 = r20; PPC_FAST_STORE_U32(r10, m82); // stw r20,0(r10) [fixed]
+        m82 = r20; // stw r20,0(r10) [fixed, written back after the loop]
         r20 = s304; // lwz r20,304(r1)
         r19 = m87; // lwz r19,0(r20) [fixed]
         f12 = F(m88); // lfs f12,4(r20) [fixed]
@@ -1341,7 +1330,7 @@ namespace
         r19 = std::rotl(r19, 2) & 0xfffffffcu; // rlwinm r19,r19,2,0,29
         f9 = F(PPC_FAST_LOAD_U32(uint32_t(r19 + r20))); // lfsx f9,r19,r20
         f12 = f9 * f12; // fmuls f12,f9,f12
-        m20 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m20); // stfs f12,8(r20) [fixed]
+        m20 = U(f12); // stfs f12,8(r20) [fixed, written back after the loop]
         r20 = r20 + uint32_t(12); // addi r20,r20,12
         f12 = F(m89); // lfs f12,4(r20) [fixed]
         m90 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 8), m90); // stfs f12,8(r20) [fixed]
@@ -1366,9 +1355,9 @@ namespace
         r19 = m91; // lwz r19,0(r25) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000007ffu; // clrlwi r19,r19,21
-        m91 = r19; PPC_FAST_STORE_U32(r25, m91); // stw r19,0(r25) [fixed]
+        m91 = r19; // stw r19,0(r25) [fixed, written back after the loop]
         f12 = float(std::fma(double(f9), double(f8), double(f12))); // fmadds f12,f9,f8,f12
-        m21 = U(f12); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m21); // stfs f12,12(r20) [fixed]
+        m21 = U(f12); // stfs f12,12(r20) [fixed, written back after the loop]
         r20 = s312; // lwz r20,312(r1)
         r17 = m95; // lwz r17,0(r26) [fixed]
         r19 = r17; // mr r19,r17
@@ -1390,8 +1379,8 @@ namespace
         r19 = m95; // lwz r19,0(r26) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000007ffu; // clrlwi r19,r19,21
-        m95 = r19; PPC_FAST_STORE_U32(r26, m95); // stw r19,0(r26) [fixed]
-        m22 = U(f9); PPC_FAST_STORE_U32(uint32_t(r20 + 16), m22); // stfs f9,16(r20) [fixed]
+        m95 = r19; // stw r19,0(r26) [fixed, written back after the loop]
+        m22 = U(f9); // stfs f9,16(r20) [fixed, written back after the loop]
         r20 = s344; // lwz r20,344(r1)
         r17 = m100; // lwz r17,0(r24) [fixed]
         f12 = F(m101); // lfs f12,8(r20) [fixed]
@@ -1414,8 +1403,8 @@ namespace
         f13 = float(std::fma(double(f12), double(f9), double(f13))); // fmadds f13,f12,f9,f13
         f9 = F(s80); // lfs f9,80(r1)
         f10 = f10 + f9; // fadds f10,f10,f9
-        m100 = r19; PPC_FAST_STORE_U32(r24, m100); // stw r19,0(r24) [fixed]
-        m23 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m23); // stfs f13,12(r20) [fixed]
+        m100 = r19; // stw r19,0(r24) [fixed, written back after the loop]
+        m23 = U(f13); // stfs f13,12(r20) [fixed, written back after the loop]
         r19 = m104; // lwz r19,0(r23) [fixed]
         r20 = s320; // lwz r20,320(r1)
         r19 = r19 + uint32_t(2); // addi r19,r19,2
@@ -1435,9 +1424,9 @@ namespace
         r19 = m104; // lwz r19,0(r23) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000003ffu; // clrlwi r19,r19,22
-        m104 = r19; PPC_FAST_STORE_U32(r23, m104); // stw r19,0(r23) [fixed]
+        m104 = r19; // stw r19,0(r23) [fixed, written back after the loop]
         f13 = float(std::fma(double(f12), double(f9), double(f13))); // fmadds f13,f12,f9,f13
-        m24 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m24); // stfs f13,12(r20) [fixed]
+        m24 = U(f13); // stfs f13,12(r20) [fixed, written back after the loop]
         r20 = m108; // lwz r20,0(r9) [fixed]
         r19 = m109; // lwz r19,12(r3) [fixed]
         f9 = F(m110); // lfs f9,16(r3) [fixed]
@@ -1456,8 +1445,8 @@ namespace
         f13 = f13 * f9; // fmuls f13,f13,f9
         f8 = F(PPC_FAST_LOAD_U32(uint32_t(r20 + r9))); // lfsx f8,r20,r9
         f12 = f8 * f12; // fmuls f12,f8,f12
-        m5 = U(f13); PPC_FAST_STORE_U32(uint32_t(r3 + 20), m5); // stfs f13,20(r3) [fixed]
-        m25 = U(f12); PPC_FAST_STORE_U32(uint32_t(r3 + 8), m25); // stfs f12,8(r3) [fixed]
+        m5 = U(f13); // stfs f13,20(r3) [fixed, written back after the loop]
+        m25 = U(f12); // stfs f12,8(r3) [fixed, written back after the loop]
         r20 = m108; // lwz r20,0(r9) [fixed]
         r20 = r20 + uint32_t(2); // addi r20,r20,2
         r20 = std::rotl(r20, 2) & 0xfffffffcu; // rlwinm r20,r20,2,0,29
@@ -1465,7 +1454,7 @@ namespace
         r20 = m108; // lwz r20,0(r9) [fixed]
         r20 = r20 + uint32_t(1); // addi r20,r20,1
         r20 = r20 & 0x00000fffu; // clrlwi r20,r20,20
-        m108 = r20; PPC_FAST_STORE_U32(r9, m108); // stw r20,0(r9) [fixed]
+        m108 = r20; // stw r20,0(r9) [fixed, written back after the loop]
         r20 = s360; // lwz r20,360(r1)
         r19 = m113; // lwz r19,0(r20) [fixed]
         f13 = F(m114); // lfs f13,8(r20) [fixed]
@@ -1480,7 +1469,7 @@ namespace
         m117 = U(f10); PPC_FAST_STORE_U32(uint32_t(r19 + 8), m117); // stfs f10,8(r19) [fixed]
         f13 = float(std::fma(double(f9), double(f12), double(f13))); // fmadds f13,f9,f12,f13
         m116 = U(f11); PPC_FAST_STORE_U32(uint32_t(r19 + 4), m116); // stfs f11,4(r19) [fixed]
-        m3 = U(f13); PPC_FAST_STORE_U32(uint32_t(r20 + 4), m3); // stfs f13,4(r20) [fixed]
+        m3 = U(f13); // stfs f13,4(r20) [fixed, written back after the loop]
         r20 = s104; // lwz r20,104(r1)
         r20 = r20 & 0x0000001fu; // clrlwi r20,r20,27
         cmpA = int32_t(r20); cmpB = 0; cmpSigned = true; // cmpwi cr6,r20,0
@@ -1512,11 +1501,11 @@ namespace
         r19 = m121; // lwz r19,0(r20) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000007ffu; // clrlwi r19,r19,21
-        m121 = r19; PPC_FAST_STORE_U32(r20, m121); // stw r19,0(r20) [fixed]
+        m121 = r19; // stw r19,0(r20) [fixed, written back after the loop]
         f0 = float(std::fma(double(f0), double(f9), double(f12))); // fmadds f0,f0,f9,f12
         r20 = s136; // lwz r20,136(r1)
         r19 = s152; // lwz r19,152(r1)
-        m26 = U(f0); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m26); // stfs f0,12(r20) [fixed]
+        m26 = U(f0); // stfs f0,12(r20) [fixed, written back after the loop]
         r20 = r19 + uint32_t(20); // addi r20,r19,20
         r14 = m122; // lwz r14,0(r19) [fixed]
         f12 = F(m123); // lfs f12,12(r19) [fixed]
@@ -1540,8 +1529,8 @@ namespace
         r17 = m126; // lwz r17,0(r20) [fixed]
         r17 = r17 + uint32_t(1); // addi r17,r17,1
         r17 = r17 & 0x000007ffu; // clrlwi r17,r17,21
-        m126 = r17; PPC_FAST_STORE_U32(r20, m126); // stw r17,0(r20) [fixed]
-        m27 = U(f12); PPC_FAST_STORE_U32(uint32_t(r19 + 16), m27); // stfs f12,16(r19) [fixed]
+        m126 = r17; // stw r17,0(r20) [fixed, written back after the loop]
+        m27 = U(f12); // stfs f12,16(r19) [fixed, written back after the loop]
         r19 = s88; // lwz r19,88(r1)
         r20 = r19 + uint32_t(16); // addi r20,r19,16
         r14 = m127; // lwz r14,0(r19) [fixed]
@@ -1561,11 +1550,11 @@ namespace
         r19 = m130; // lwz r19,0(r20) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000007ffu; // clrlwi r19,r19,21
-        m130 = r19; PPC_FAST_STORE_U32(r20, m130); // stw r19,0(r20) [fixed]
+        m130 = r19; // stw r19,0(r20) [fixed, written back after the loop]
         f0 = float(std::fma(double(f13), double(f12), double(f0))); // fmadds f0,f13,f12,f0
         r20 = s88; // lwz r20,88(r1)
         r19 = s84; // lwz r19,84(r1)
-        m28 = U(f0); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m28); // stfs f0,12(r20) [fixed]
+        m28 = U(f0); // stfs f0,12(r20) [fixed, written back after the loop]
         r20 = r19 + uint32_t(16); // addi r20,r19,16
         r14 = m131; // lwz r14,0(r19) [fixed]
         f13 = F(m132); // lfs f13,8(r19) [fixed]
@@ -1600,11 +1589,11 @@ namespace
         r19 = m133; // lwz r19,0(r20) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x000003ffu; // clrlwi r19,r19,22
-        m133 = r19; PPC_FAST_STORE_U32(r20, m133); // stw r19,0(r20) [fixed]
+        m133 = r19; // stw r19,0(r20) [fixed, written back after the loop]
         f0 = float(std::fma(double(f13), double(f12), double(f0))); // fmadds f0,f13,f12,f0
         r20 = s84; // lwz r20,84(r1)
         r19 = s268; // lwz r19,268(r1)
-        m29 = U(f0); PPC_FAST_STORE_U32(uint32_t(r20 + 12), m29); // stfs f0,12(r20) [fixed]
+        m29 = U(f0); // stfs f0,12(r20) [fixed, written back after the loop]
         r20 = r19 + uint32_t(24); // addi r20,r19,24
         r16 = m135; // lwz r16,12(r19) [fixed]
         f12 = F(m136); // lfs f12,16(r19) [fixed]
@@ -1624,8 +1613,8 @@ namespace
         f0 = f0 * f12; // fmuls f0,f0,f12
         f10 = F(PPC_FAST_LOAD_U32(uint32_t(r17 + r20))); // lfsx f10,r17,r20
         f13 = f10 * f13; // fmuls f13,f10,f13
-        m6 = U(f0); PPC_FAST_STORE_U32(uint32_t(r19 + 20), m6); // stfs f0,20(r19) [fixed]
-        m30 = U(f13); PPC_FAST_STORE_U32(uint32_t(r19 + 8), m30); // stfs f13,8(r19) [fixed]
+        m6 = U(f0); // stfs f0,20(r19) [fixed, written back after the loop]
+        m30 = U(f13); // stfs f13,8(r19) [fixed, written back after the loop]
         r19 = m138; // lwz r19,0(r20) [fixed]
         f13 = F(s284); // lfs f13,284(r1)
         r19 = r19 + uint32_t(2); // addi r19,r19,2
@@ -1634,7 +1623,7 @@ namespace
         r19 = m138; // lwz r19,0(r20) [fixed]
         r19 = r19 + uint32_t(1); // addi r19,r19,1
         r19 = r19 & 0x00000fffu; // clrlwi r19,r19,20
-        m138 = r19; PPC_FAST_STORE_U32(r20, m138); // stw r19,0(r20) [fixed]
+        m138 = r19; // stw r19,0(r20) [fixed, written back after the loop]
         r20 = s276; // lwz r20,276(r1)
         r19 = m140; // lwz r19,0(r20) [fixed]
         f0 = F(m141); // lfs f0,8(r20) [fixed]
@@ -1649,11 +1638,57 @@ namespace
         m144 = U(f11); PPC_FAST_STORE_U32(uint32_t(r19 + 8), m144); // stfs f11,8(r19) [fixed]
         f0 = float(std::fma(double(f10), double(f12), double(f0))); // fmadds f0,f10,f12,f0
         m143 = U(f13); PPC_FAST_STORE_U32(uint32_t(r19 + 4), m143); // stfs f13,4(r19) [fixed]
-        m1 = U(f0); PPC_FAST_STORE_U32(uint32_t(r20 + 4), m1); // stfs f0,4(r20) [fixed]
+        m1 = U(f0); // stfs f0,4(r20) [fixed, written back after the loop]
         r20 = r15 + uint32_t(4); // addi r20,r15,4
         s80 = r20; // stw r20,80(r1)
         cmpA = int32_t(r20); cmpB = 1024; cmpSigned = true; // cmpwi cr6,r20,1024
         if (cmpSigned ? (cmpA < cmpB) : (cmpUA < cmpUB)) goto loc_82CCAB38; // blt cr6,0x82ccab38
+        PPC_FAST_STORE_U32(uint32_t(object + 171792), m0); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 299288), m1); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192460), m2); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 254072), m3); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 167560), m4); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 237672), m5); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 282888), m6); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 167556), m7); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 169628), m8); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 171696), m9); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 171728), m10); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 171748), m11); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 171780), m12); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 188196), m13); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 188224), m14); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 190296), m15); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192364), m16); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192396), m17); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192416), m18); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192448), m19); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 208864), m20); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 208892), m21); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 217112), m22); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 225328), m23); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 233544), m24); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 237660), m25); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 254108), m26); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 262328), m27); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 270544), m28); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 278760), m29); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 282876), m30); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 169632), m31); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 171796), m50); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 188228), m59); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 190300), m63); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 192464), m82); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 208896), m91); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 217116), m95); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 225332), m100); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 233548), m104); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 237676), m108); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 254112), m121); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 262332), m126); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 270548), m130); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 278764), m133); // write-back after the loop
+        PPC_FAST_STORE_U32(uint32_t(object + 282892), m138); // write-back after the loop
         r27 = s220; // lwz r27,220(r1)
         r3 = r31 + uint32_t(327680); // addis r3,r31,5
         r4 = r27; // mr r4,r27
