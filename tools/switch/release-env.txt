@@ -13,7 +13,5 @@ LO_SWITCH_RENDER_HEIGHT=540
 LO_NATIVE_MOVIES=1
 # Spread the game's threads across the Switch's three CPU cores
 LO_GUEST_AFFINITY=1
-# Faster handling of the game's visibility tests
-LO_ZPD_MODE=xenia
 # Prepare every known graphics state in the background at start
 LO_PIPELINE_PREBUILD=all

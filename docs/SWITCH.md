@@ -575,8 +575,9 @@ built when devkitPro's deko3d library is installed (`dkp-pacman -S deko3d`; the 
   these lines the values saved on the Debug page (Settings → System → Debug, "Debug page" above) apply. The
   runtime log's `video: deko3d GPU options` line and its `option:` lines show what is on. With `LO_RENDER_TIMING=1`, a `deko3d frame work`
   line every 150 frames gives the draws, binds, barriers and copies per frame.
-- Not on deko3d yet: host occlusion queries (`LO_ZPD_MODE` uses made-up counts), LSFG frame generation, the driver
-  pipeline cache (not needed: no pipeline compiles).
+- Not on deko3d yet: LSFG frame generation, the driver pipeline cache (not needed: no pipeline compiles). Host
+  occlusion queries are on since `91b7b3ba` (`LO_DEKO3D_OCCLUSION=0` or a made-up `LO_ZPD_MODE` such as `xenia` turns
+  them off, which costs about 12% in towns).
 
 ### LostOdysseyRecomp's changes for deko3d
 
