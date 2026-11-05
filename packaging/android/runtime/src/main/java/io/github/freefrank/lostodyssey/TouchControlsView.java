@@ -452,6 +452,13 @@ final class TouchControlsView extends View {
         hideAllHelp.setText(strings.getString(R.string.touch_hide_all_help));
         content.addView(hideAllHelp);
 
+        // Dual-screen handhelds (AYN Thor): the companion panel on the second display.
+        CheckBox dualScreen = new CheckBox(activity);
+        dualScreen.setText(strings.getString(R.string.touch_dual_screen));
+        dualScreen.setChecked(DualScreenCompanion.isEnabled(activity));
+        dualScreen.setOnCheckedChangeListener((button, checked) -> activity.setDualScreenEnabled(checked));
+        content.addView(dualScreen);
+
         // Qualcomm and Mali devices: open the GPU driver page (download / switch Turnip or PanVK).
         Button driverButton = null;
         if (GpuDriverStore.supported()) {

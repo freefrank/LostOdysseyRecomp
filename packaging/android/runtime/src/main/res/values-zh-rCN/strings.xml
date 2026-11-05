@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">取消待应用的切换</string>
     <string name="touch_hide_all">隐藏所有触控控件</string>
     <string name="touch_hide_all_help">呼出系统栏或使用 Android 返回，可显示 CTRL 4 秒。</string>
+    <string name="touch_dual_screen">副屏面板（双屏设备）</string>
     <string name="touch_settings_title">触控设置</string>
     <string name="touch_show_controls">显示触控控件</string>
     <string name="touch_controller_hint">已连接实体手柄。触控控件会自动隐藏；在此开启即可同时使用。</string>

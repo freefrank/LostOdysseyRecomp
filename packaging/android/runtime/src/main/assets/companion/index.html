@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lost Odyssey · Dual Screen</title>
+<link rel="stylesheet" href="companion.css">
+</head>
+<body>
+<div id="app">
+  <header id="top" class="metal">
+    <div class="place">
+      <div id="location" class="location">—</div>
+      <div class="chips">
+        <span id="mode" class="chip mode">—</span>
+        <span id="disc" class="chip">—</span>
+      </div>
+    </div>
+    <div id="goldBox" class="gold-box"><span class="gold-label">G</span><span id="gold" class="num"></span></div>
+    <div class="top-actions">
+      <button id="sleepBtn" class="round" aria-label="sleep">☾</button>
+      <button id="settingsBtn" class="round" aria-label="settings"><i class="sprite" data-sprite="icon_gear"></i><span class="fallback">⚙</span></button>
+    </div>
+  </header>
+
+  <main id="views">
+    <section id="view-waiting" class="view">
+      <div class="splash">
+        <div class="logo">LOST ODYSSEY</div>
+        <div class="rule"></div>
+        <div id="waitingText" class="waiting"></div>
+      </div>
+    </section>
+
+    <section id="view-party" class="view">
+      <div class="party-layout">
+        <div class="party-col">
+          <div id="staleNote" class="note hidden"></div>
+          <div id="partyList" class="party-list"></div>
+        </div>
+        <div class="side-col">
+          <div id="charDetail" class="window detail"></div>
+          <div class="window reserve">
+            <div class="plate-title" data-i18n="reserve"></div>
+            <div id="reserveList" class="reserve-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-map" class="view">
+      <div class="map-wrap">
+        <div class="window radar-panel">
+          <canvas id="radar"></canvas>
+          <div class="radar-tools">
+            <button class="round" id="zoomIn">＋</button>
+            <button class="round" id="zoomOut">－</button>
+            <button class="round" id="zoomFit">⤢</button>
+          </div>
+          <div id="mapNote" class="radar-note"></div>
+        </div>
+        <div class="window poi-panel">
+          <div class="plate-title"><span data-i18n="places"></span><span id="poiCount" class="num"></span></div>
+          <div id="poiList" class="list"></div>
+          <div id="poiDetail" class="poi-detail"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-bag" class="view">
+      <div class="segmented">
+        <button class="seg active" data-bag="items"><i class="sprite" data-sprite="icon_item"></i><span data-i18n="items"></span></button>
+        <button class="seg" data-bag="materials"><i class="sprite" data-sprite="icon_emblem"></i><span data-i18n="materials"></span></button>
+      </div>
+      <div class="window bag-window"><div id="bagGrid" class="bag-grid"></div></div>
+    </section>
+
+    <section id="view-pad" class="view">
+      <div id="battleBanner" class="battle-banner hidden"></div>
+      <div class="pad">
+        <div class="pad-col">
+          <div class="shoulders">
+            <button class="pbtn sh" data-btn="LT"><i class="sprite" data-sprite="btn_lt"></i><span class="fallback">LT</span></button>
+            <button class="pbtn sh" data-btn="LB"><i class="sprite" data-sprite="btn_lb"></i><span class="fallback">LB</span></button>
+          </div>
+          <div class="dpad">
+            <button class="pbtn d up" data-btn="UP">▲</button>
+            <button class="pbtn d left" data-btn="LEFT">◀</button>
+            <button class="pbtn d right" data-btn="RIGHT">▶</button>
+            <button class="pbtn d dn" data-btn="DOWN">▼</button>
+          </div>
+        </div>
+        <div class="pad-mid">
+          <button class="pbtn wide" data-btn="BACK"><i class="sprite" data-sprite="btn_back"></i><span data-i18n="backHelp"></span></button>
+          <button class="pbtn wide" data-btn="START"><i class="sprite" data-sprite="btn_start"></i><span data-i18n="startHelp"></span></button>
+          <button class="pbtn wide ring" data-btn="RT"><i class="sprite" data-sprite="icon_ring"></i><span data-i18n="ring"></span></button>
+          <button class="pbtn wide" data-btn="LB+RB"><span data-i18n="debug"></span><small>LB + RB</small></button>
+        </div>
+        <div class="pad-col">
+          <div class="shoulders">
+            <button class="pbtn sh" data-btn="RB"><i class="sprite" data-sprite="btn_rb"></i><span class="fallback">RB</span></button>
+            <button class="pbtn sh" data-btn="RT"><i class="sprite" data-sprite="btn_rt"></i><span class="fallback">RT</span></button>
+          </div>
+          <div class="face">
+            <button class="pbtn f y" data-btn="Y"><i class="sprite" data-sprite="btn_y"></i><span class="fallback">Y</span></button>
+            <button class="pbtn f x" data-btn="X"><i class="sprite" data-sprite="btn_x"></i><span class="fallback">X</span></button>
+            <button class="pbtn f b" data-btn="B"><i class="sprite" data-sprite="btn_b"></i><span class="fallback">B</span></button>
+            <button class="pbtn f a" data-btn="A"><i class="sprite" data-sprite="btn_a"></i><span class="fallback">A</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav id="tabs">
+    <button class="tab" data-view="party"><i class="sprite" data-sprite="icon_weapon"></i><span data-i18n="party"></span></button>
+    <button class="tab" data-view="map"><i class="sprite" data-sprite="icon_map"></i><span data-i18n="map"></span></button>
+    <button class="tab" data-view="bag"><i class="sprite" data-sprite="icon_item"></i><span data-i18n="bag"></span></button>
+    <button class="tab" data-view="pad"><i class="sprite" data-sprite="btn_a"></i><span data-i18n="pad"></span></button>
+  </nav>
+</div>
+
+<div id="sleep" class="sleep hidden"><div data-i18n="wake"></div></div>
+
+<div id="settings" class="modal hidden">
+  <div class="modal-box window">
+    <div class="plate-title" data-i18n="settings"></div>
+    <label class="row"><span data-i18n="language"></span>
+      <select id="optLang"><option value="auto">Auto</option><option value="es">Español</option><option value="en">English</option></select>
+    </label>
+    <label class="row"><span data-i18n="optHaptics"></span><input type="checkbox" id="optHaptics"></label>
+    <label class="row"><span data-i18n="optBattle"></span><input type="checkbox" id="optBattle"></label>
+    <label class="row"><span data-i18n="optTeleport"></span><input type="checkbox" id="optTeleport"></label>
+    <p class="hint" data-i18n="teleportWarn"></p>
+    <p id="themeStatus" class="hint"></p>
+    <div class="modal-actions">
+      <button id="disableBtn" class="btn danger" data-i18n="disable"></button>
+      <button id="closeSettings" class="btn" data-i18n="close"></button>
+    </div>
+  </div>
+</div>
+
+<script src="companion.js"></script>
+</body>
+</html>
