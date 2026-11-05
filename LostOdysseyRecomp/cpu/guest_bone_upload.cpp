@@ -109,8 +109,19 @@ namespace
             {
                 const uint32_t destination = PPC_LOAD_U32(fill.array);
                 const uint32_t boneMap = PPC_LOAD_U32(fill.chunk + 28);
+                // The matrices are scattered by the bone map: fetching four bones ahead hides most of each miss
+                // (half of this function's time was the first load of a matrix).
+                constexpr int32_t kAhead = 4;
                 for (int32_t i = 0; i < fill.count; ++i)
+                {
+                    if (i + kAhead < fill.count)
+                    {
+                        const uint8_t* next = base + matrices + uint32_t(PPC_LOAD_U16(boneMap + uint32_t(i + kAhead) * 2)) * 64;
+                        __builtin_prefetch(next);
+                        __builtin_prefetch(next + 32);
+                    }
                     BoneWords(base, matrices, boneMap, i, reinterpret_cast<uint32_t*>(base + destination + uint32_t(i) * 48));
+                }
                 PPC_STORE_U32(fill.array + 4, uint32_t(fill.count));
             }
             PPC_STORE_U32(fill.array + 12, InfluenceField(base, fill.chunk));
