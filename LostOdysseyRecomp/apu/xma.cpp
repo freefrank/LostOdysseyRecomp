@@ -638,7 +638,13 @@ namespace apu::xma
                     }
                 // An enabled context counts as work, so on the Switch the short sleep would be a thousand wakeups a
                 // second taken from the busy threads; a decoded frame lasts over 5 ms.
-                std::this_thread::sleep_for(std::chrono::microseconds(LO_PLATFORM_SWITCH ? 2000 : (didWork ? 250 : 1000)));
+                // LO_XMA_PERIOD_US: the Switch's pause between passes (default 2000).
+                static const int switchPeriod = [] {
+                    const char* value = getenv("LO_XMA_PERIOD_US");
+                    const int us = value ? atoi(value) : 0;
+                    return us > 0 ? us : 2000;
+                }();
+                std::this_thread::sleep_for(std::chrono::microseconds(LO_PLATFORM_SWITCH ? switchPeriod : (didWork ? 250 : 1000)));
             }
         }
     }

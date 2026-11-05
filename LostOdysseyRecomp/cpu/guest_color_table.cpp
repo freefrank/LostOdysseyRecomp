@@ -98,7 +98,11 @@ PPC_FUNC(sub_822A42B8)
             __imp__sub_822A42B8(ctx, base);
             return;
         }
-        Build(ctx, base);
+        {
+            Build(ctx, base);
+            // Build ran guest code on a copy of the context: the CPU's flush mode may no longer match ctx's cached one.
+            ctx.fpscr.loadFromHost();
+        }
     }
     if (mode == 2)
     {
