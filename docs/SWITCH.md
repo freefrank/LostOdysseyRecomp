@@ -215,7 +215,9 @@ The files in the app folder are always the last session's.
 
 The PC build reads its `LO_*` diagnostic switches from the environment. On the
 console put them in `sdmc:/switch/LostOdysseyRecomp/env.txt`, one `KEY=VALUE`
-per line (`#` starts a comment); `stderr.log` lists the ones applied. Useful
+per line (`#` starts a comment; keep one above each setting saying what it does:
+`bench.py`, `lo_debug.py env` and `scenario.py` add one from
+`tools/switch/env_comments.py` to every setting they write); `stderr.log` lists the ones applied. Useful
 ones: `LO_CPU_PROFILE=1` (below), `LO_FRAME_TIMING=1` (one line per second:
 command flush, waits, present), `LO_RENDER_TIMING=1` (per-frame timing with GPU
 timestamps), `LO_GPU_DRAW_TIMING_EVERY=300` (GPU time of every group of four
@@ -262,7 +264,7 @@ Switch-specific options and diagnostics:
 | `LO_PERF_HITCHES` | `300` | `hitch:` lines per session |
 | `LO_BENCH` and `LO_BENCH_*` | off | A benchmark run: see [SWITCH-BENCHMARKS.md](SWITCH-BENCHMARKS.md) (`tools/switch/bench.py` writes these) |
 | `LO_AUTO_BUTTONS` | off | Scripted presses: `a@900` at a presented frame, `a@30s` at seconds since launch (letters: `s a b x y`, `u d l r` d-pad, `k` back, `L R` shoulders) |
-| `LO_DEBUG_SERVER` | off | `1` (or a port) starts the debug server (below) at this start; `0` keeps it off whatever the settings say |
+| `LO_DEBUG_SERVER` | settings (off) | `1` (or a port) starts the debug server (below) at this start; `0` keeps it off whatever the settings say |
 | `LO_DEBUG_RESTART` | automatic | `1`: the debug server's `restart` works here (a HOME-menu forwarder whose ID starts with `01`); `0`: never |
 
 The runtime log (`state/logs/runtime-*.log`) is buffered on the console and
@@ -285,8 +287,11 @@ A TCP port (6543) on the console for a PC on the same network: build and frame
 info, the log as it is written, screenshots, controller input, the app
 folder's files, and deploying a new NRO. It is off unless turned on, and never
 on in a fresh install: `LO_DEBUG_SERVER=1` in env.txt, or `debug_server=1` in
-`config/settings.ini` (the settings menu's Debug section), read at the next
-start. There is no password: use it on your own network only. At start
+`config/settings.ini` (Settings → System → Debug → Debug server, or the
+LB+RB debug menu's Debug Server button), read at the next start: the socket
+service's buffers come from the heap guest memory uses, so it is not started
+mid-game. The LB+RB button says whether the server runs now and what the next
+start does. There is no password: use it on your own network only. At start
 `stderr.log` (and the network log) says
 `[debug] server listening on <ip>:6543, turned on by env.txt`.
 
@@ -440,7 +445,7 @@ marks a change that is saved but not running yet.
 | deko3d: depth compression | next start | `deko3d_depth_compression` | `LO_DEKO3D_DEPTH_COMPRESSION` |
 | deko3d: colour compression | next start | `deko3d_color_compression` | `LO_DEKO3D_COLOR_COMPRESSION` |
 | deko3d: vertex output trimming | next start | `deko3d_vs_outputs` | `LO_DEKO3D_VS_OUTPUTS` |
-| Debug server | next start | `debug_server` | |
+| Debug server | next start | `debug_server` | `LO_DEBUG_SERVER` |
 
 The two barrier switches are read for each barrier, so the render thread
 changes them between frames. The other deko3d switches are read when the GPU
@@ -448,8 +453,9 @@ queue (Zcull), a render target (compression) or a pipeline (vertex outputs) is
 made; changing them mid-game would leave old and new targets and pipelines
 mixed, so they wait for the next start. The deko3d rows need the deko3d back
 end (`LO_SWITCH_BACKEND=deko3d`); the help line under each one says what runs
-now and whether env.txt set it. The debug server (issue #10) is not in the
-build yet: its row only saves the choice.
+now and whether env.txt set it. The debug server row (also in the LB+RB debug
+menu) saves the choice for the next start; env.txt's `LO_DEBUG_SERVER` wins
+over it.
 
 env.txt stays the way to script runs: an option set there (`LO_DEKO3D_<NAME>`,
 or `LO_DEKO3D_GPU_FAST` for all but colour compression) wins over the Debug

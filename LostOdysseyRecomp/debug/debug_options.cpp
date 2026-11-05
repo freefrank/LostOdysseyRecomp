@@ -74,12 +74,25 @@ bool Set(Deko3d option, bool on)
     return true;
 }
 
+bool DebugServerFromEnvironment()
+{
+    const char *value = std::getenv("LO_DEBUG_SERVER");
+    return value && *value;
+}
+
+bool DebugServerNextStart()
+{
+    return DebugServerFromEnvironment() ? std::strcmp(std::getenv("LO_DEBUG_SERVER"), "0") != 0
+                                        : settings::GetConfig().debug.debugServer;
+}
+
 bool SetDebugServer(bool on)
 {
     auto options = settings::GetConfig().debug;
     options.debugServer = on;
     if (!settings::SaveDebugOptions(options)) return false;
-    LOG_NOTICE("option: frame={} debug_server={} source=menu applies=next_start built=0", NextFrame(), int(on));
+    LOG_NOTICE("option: frame={} debug_server={} source=menu applies=next_start{}", NextFrame(), int(on),
+               DebugServerFromEnvironment() ? " env_wins=LO_DEBUG_SERVER" : "");
     return true;
 }
 
@@ -131,8 +144,8 @@ void StartDeko3d()
                "lean_barriers={} vs_outputs={}", gpu.colorCompression, gpu.depthCompression, gpu.zcull,
                gpu.mergeBarriers, gpu.leanBarriers, gpu.vsOutputs);
     LOG_NOTICE("option: frame={} performance_overlay={} source=settings", frame, saved.performanceOverlay);
-    if (saved.debug.debugServer)
-        LOG_NOTICE("option: frame={} debug_server=1 source=settings built=0 (no debug server in this build)", frame);
+    LOG_NOTICE("option: frame={} debug_server={} source={}", frame, int(DebugServerNextStart()),
+               DebugServerFromEnvironment() ? "env.txt env=LO_DEBUG_SERVER" : "settings");
 #endif
 }
 

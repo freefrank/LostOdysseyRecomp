@@ -17,6 +17,11 @@
 #include "../settings/config.h"
 #include "cheat_overlay.h"
 #include "controller_hint.h"
+#include <os/platform.h>
+#if LO_PLATFORM_SWITCH
+#include "debug_options.h"
+#include <os/debug_server.h>
+#endif
 
 // hid.h also declares guest XAMINPUT types; the overlay only needs this host state.
 namespace hid { bool UsesPlayStationPrompts(); }
@@ -24,6 +29,8 @@ namespace hid { bool UsesPlayStationPrompts(); }
 namespace debug_menu
 {
     using translations::Pick;
+    // Overview's last row: Cancel Victory Request, then the Switch's Debug server switch.
+    constexpr int kOverviewLastRow = LO_PLATFORM_SWITCH ? 7 : 6;
 
     struct OverlayState
     {
@@ -258,8 +265,8 @@ namespace debug_menu
                 g_overlayState.selectedRow--;
             return;
         case InputAction::Down:
-            // Overview ends at row 6; Teleport ends at row 8 (Debug Event Room).
-            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 : 8))
+            // Overview ends at kOverviewLastRow; Teleport ends at row 8 (Debug Event Room).
+            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? kOverviewLastRow : 8))
                 g_overlayState.selectedRow++;
             return;
         default:
@@ -276,6 +283,7 @@ namespace debug_menu
             // 4: Return to title
             // 5: Win Battle
             // 6: Cancel Battle Request
+            // 7: Debug server on / off at the next start (the Switch)
             if (action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right)
             {
                 switch (g_overlayState.selectedRow)
@@ -333,6 +341,23 @@ namespace debug_menu
                     SetOverlayStatus(Pick(language, L"Victory cancelled", L"已取消判胜请求", L"Victoria cancelada"));
                     return;
                 }
+#if LO_PLATFORM_SWITCH
+                case 7:
+                {
+                    // Saved like System → Debug → Debug server; the socket service is set up at start only.
+                    const uint32_t language = g_overlayState.language;
+                    stateLock.unlock();
+                    if (debug_options::DebugServerFromEnvironment())
+                        SetOverlayStatus(Pick(language, L"Set by env.txt (LO_DEBUG_SERVER)", L"由 env.txt 设置（LO_DEBUG_SERVER）",
+                            L"Fijado en env.txt (LO_DEBUG_SERVER)"));
+                    else if (!debug_options::SetDebugServer(!settings::GetConfig().debug.debugServer))
+                        SetOverlayStatus(Pick(language, L"Failed to save debug server setting", L"保存调试服务器设置失败",
+                            L"No se ha podido guardar el servidor de depuración"));
+                    else
+                        SetOverlayStatus(Pick(language, L"Applies at the next start", L"下次启动时生效", L"Se aplica en el próximo inicio"));
+                    return;
+                }
+#endif
                 }
             }
         }
@@ -609,6 +634,38 @@ namespace debug_menu
                 r.DrawWString(panelX + (panelW - bStatW) / 2, contentY + 6 * rowH + 22, bStat, host_ui::MakeColor(255, 220, 180, 120));
             }
 
+            // The help lines under the buttons; one row lower with the Switch's Debug server row.
+            int helpY = contentY + 7 * rowH + 30;
+#if LO_PLATFORM_SWITCH
+            // 7: Debug server. On or off now, and what the next start does when that differs.
+            {
+                const bool running = os::debug_server::Running(), next = debug_options::DebugServerNextStart();
+                std::wstring serverText = running ? Pick(language, L"Debug Server: ON", L"调试服务器: 开启", L"Servidor de depuración: SÍ")
+                                                  : Pick(language, L"Debug Server: OFF", L"调试服务器: 关闭", L"Servidor de depuración: NO");
+                if (running != next)
+                    serverText += next ? Pick(language, L" (ON at next start)", L"（下次启动开启）", L" (SÍ al reiniciar)")
+                                       : Pick(language, L" (OFF at next start)", L"（下次启动关闭）", L" (NO al reiniciar)");
+                host_ui::DrawButton(r, btnX, contentY + 7 * rowH + 6, btnW, 30, serverText, state.selectedRow == 7);
+                helpY = contentY + 8 * rowH + 22;
+            }
+            if (state.selectedRow == 7)
+            {
+                const wchar_t* help[] = {
+                    Pick(language, L"Log, screenshots and input for tools/switch/lo_debug.py on the local network.",
+                        L"在局域网中为 tools/switch/lo_debug.py 提供日志、截图和输入。",
+                        L"Registro, capturas y entrada para tools/switch/lo_debug.py en la red local."),
+                    debug_options::DebugServerFromEnvironment()
+                        ? Pick(language, L"env.txt's LO_DEBUG_SERVER decides it at start.", L"启动时由 env.txt 的 LO_DEBUG_SERVER 决定。",
+                              L"Al iniciar decide LO_DEBUG_SERVER de env.txt.")
+                        : Pick(language, L"Applies at the next start. No password: local network only.", L"下次启动时生效。无密码：仅限局域网。",
+                              L"Se aplica en el próximo inicio. Sin contraseña: solo red local."),
+                };
+                for (int line = 0; line < 2; ++line)
+                    r.DrawWString(panelX + (panelW - r.MeasureWString(help[line])) / 2, helpY + line * 22, help[line],
+                        host_ui::MakeColor(255, 240, 190, 90));
+            }
+            else
+#endif
             // Issue #74: party-switch permission is runtime-only and is not restored by a load.
             if (state.selectedRow == 4)
             {
@@ -618,7 +675,7 @@ namespace debug_menu
                 };
                 for (int line = 0; line < 2; ++line)
                     r.DrawWString(panelX + (panelW - r.MeasureWString(help[line])) / 2,
-                        contentY + 7 * rowH + 30 + line * 22, help[line], host_ui::MakeColor(255, 240, 190, 90));
+                        helpY + line * 22, help[line], host_ui::MakeColor(255, 240, 190, 90));
             }
             else if (saveOn)
             {
@@ -629,7 +686,7 @@ namespace debug_menu
                 for (int line = 0; line < 2; ++line)
                 {
                     const int warningW = r.MeasureWString(warning[line]);
-                    r.DrawWString(panelX + (panelW - warningW) / 2, contentY + 7 * rowH + 30 + line * 22, warning[line],
+                    r.DrawWString(panelX + (panelW - warningW) / 2, helpY + line * 22, warning[line],
                         host_ui::MakeColor(255, 240, 190, 90));
                 }
             }

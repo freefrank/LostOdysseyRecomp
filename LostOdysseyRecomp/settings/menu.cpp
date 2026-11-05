@@ -612,8 +612,11 @@ std::pair<std::wstring, std::wstring> DebugHelp()
                   L"頂點著色器只輸出像素著色器讀取的值。下次啟動時生效。");
         break;
     case DebugServerRow:
-        help = Tr(L"Not in this build yet: the choice is only saved for the next start.",
-                  L"此版本尚未提供：僅儲存供下次啟動使用。");
+        help = debug_options::DebugServerFromEnvironment()
+            ? Tr(L"env.txt's LO_DEBUG_SERVER decides at start; this choice is saved for when it is gone.",
+                 L"啟動時由 env.txt 的 LO_DEBUG_SERVER 決定；此選項會保存，供移除後使用。")
+            : Tr(L"Log, screenshots and input for tools/switch/lo_debug.py on the local network. Applies at the next start.",
+                 L"在區域網路中提供日誌、截圖與輸入給 tools/switch/lo_debug.py。下次啟動時生效。");
         break;
     }
     const auto option = DebugDeko3d(debugFocus);

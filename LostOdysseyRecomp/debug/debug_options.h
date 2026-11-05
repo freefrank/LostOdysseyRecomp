@@ -32,7 +32,12 @@ bool Saved(Deko3d option);
 // The Debug page. Saves the value and logs it; a live option reaches the GPU before the next frame. False when the
 // settings could not be saved (nothing changes then).
 bool Set(Deko3d option, bool on);
+// The debug server (os/debug_server.h) is read at start: env.txt's LO_DEBUG_SERVER, else the saved value. These say
+// what the next start does and whether env.txt decides it; SetDebugServer saves the value (the Debug page, the LB+RB
+// overlay) and logs it.
 bool SetDebugServer(bool on);
+bool DebugServerNextStart();
+bool DebugServerFromEnvironment();
 // Logs a performance overlay mode the Debug page saved (0 Off, 1 FPS, 2 Detailed).
 void LogPerformanceOverlay(uint32_t mode);
 // gpu/video.cpp, before the deko3d device is made: env.txt over the saved values into plume's options, each logged.
