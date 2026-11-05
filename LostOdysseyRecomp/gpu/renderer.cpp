@@ -650,6 +650,10 @@ namespace gpu::renderer
             // (deko3d only) it counts as yes.
             bool mayDiscard = true;
             bool discardChecked = false;
+            // Shaders from the portable pack or the startup cache come without their constant slot sets (neither
+            // format stores them), which turned sparse constants off for them. Filled from one translation of the
+            // microcode at first use (ResolveConstantSlots; LO_RESOLVE_CONSTANT_SLOTS=0 leaves them unknown).
+            bool slotsResolved = false;
         };
 
         using PipelineKey = gpu::pipeline_cache::Key;
@@ -8247,6 +8251,23 @@ void main()
                         std::chrono::duration_cast<std::chrono::milliseconds>(spent).count());
             }
 
+            // The constant slot sets of a shader loaded without them: the same translation the shader came from (same
+            // microcode, same constant form), only its slot sets kept. A shader with relative addressing has none.
+            void ResolveConstantSlots(Shader& entry, bool pixel, const uint32_t* words, uint32_t count)
+            {
+                entry.slotsResolved = true;
+                static const bool enabled = [] {
+                    const char* value = getenv("LO_RESOLVE_CONSTANT_SLOTS");
+                    return !value || value[0] != '0';
+                }();
+                if (!enabled || entry.info.constantSlotsKnown || entry.info.usesRelativeConstants) return;
+                std::vector<uint32_t> swapped(count);
+                for (uint32_t i = 0; i < count; ++i) swapped[i] = ByteSwap(words[i]);
+                const auto translated = xenos::TranslateShader(swapped.data(), count, pixel, uboConstants);
+                entry.info.constantSlots = translated.constantSlots;
+                entry.info.constantSlotsKnown = translated.constantSlotsKnown;
+            }
+
             Shader* GetShader(bool pixel, const uint32_t* words, uint32_t count, uint64_t hash)
             {
                 if (debugShaderSources && !debugCaptureDir.empty())
@@ -8265,6 +8286,7 @@ void main()
                 if (it != cache.end() && !it->second.valid && !it->second.retry.Ready()) return nullptr;
                 if (it != cache.end() && it->second.valid) {
                     if (pixel && !it->second.discardChecked && video::IsDeko3d()) CheckShaderDiscard(it->second, words, count);
+                    if (!it->second.slotsResolved) ResolveConstantSlots(it->second, pixel, words, count);
                     // LO_SHADER_HLSL_DIR also covers shaders that came from the portable
                     // pack (no HLSL was generated for them): translate once to write it.
                     if (static const char* hlslDir = getenv("LO_SHADER_HLSL_DIR"); hlslDir && it->second.info.hlsl.empty()) {

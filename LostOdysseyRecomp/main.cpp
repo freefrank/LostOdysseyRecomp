@@ -291,8 +291,9 @@ static int RunGuest(uint32_t entry)
                      GuestAddressSpace::CommittedBytes() >> 20, cpu);
             std::string placement;
             os::switch_cpu_profiler::AppendThreadPlacement(placement);
+            // Asked for (LO_THREAD_PLACEMENT=1), so above the log's default level.
             if (!placement.empty())
-                LOG_INFO("switch: placement {}", placement);
+                LOG_NOTICE("switch: placement {}", placement);
         }
     }));
 #endif
