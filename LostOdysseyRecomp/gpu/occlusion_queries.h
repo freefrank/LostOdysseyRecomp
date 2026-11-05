@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <utility>
 #include <vector>
 
@@ -384,8 +385,9 @@ namespace gpu::occlusion
         // the bound allocates again. Never more than the queries once in flight.
         static constexpr size_t kSparePartLists = 8192;
         std::vector<std::vector<Part>> spareParts_; // cleared part lists of finished queries
-        std::unordered_map<uint32_t, uint32_t> generations_;
-        std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner
+        // Flat maps: GPU CmdProc reads both at every query BEGIN and END (about 700 a frame in the busy street).
+        ankerl::unordered_dense::map<uint32_t, uint32_t> generations_;
+        ankerl::unordered_dense::map<uint64_t, uint32_t> last_; // last measured count per owner
         static constexpr size_t kMaxCompleted = size_t(1) << 18; // nobody draining: stop growing
         std::vector<std::pair<uint64_t, uint32_t>> completed_;   // Mode::History counts for TakeCompleted
     };

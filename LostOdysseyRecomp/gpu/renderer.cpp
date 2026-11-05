@@ -311,7 +311,8 @@ namespace gpu::renderer
                 return owner;
             }
         };
-        std::unordered_map<uint32_t, OcclusionOwners> g_occlusionOwners;
+        // Flat: looked up under g_occlusionOwnerMutex at every query BEGIN on GPU CmdProc and allocation on the rendering thread.
+        ankerl::unordered_dense::map<uint32_t, OcclusionOwners> g_occlusionOwners;
         // Policy::History: measured (owner, samples) for the guest hooks.
         std::atomic<bool> g_occlusionHistory{false};
         std::atomic<bool> g_occlusionFake{false};
