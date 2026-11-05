@@ -273,18 +273,21 @@ class Console:
 
 
 def edit_env(lines: list[str], updates: dict[str, str | None]) -> list[str]:
-    """env.txt with KEY=VALUE lines replaced (None: removed); new keys at the end."""
+    """env.txt with KEY=VALUE lines replaced (None: removed, with the comment above it); new keys at the end, each
+    under a comment that says what it does (env_comments.py)."""
+    import env_comments  # next to this file
+    removed = {k for k, v in updates.items() if v is None}
     out, done = [], set()
-    for line in lines:
-        key = line.split("=", 1)[0].strip() if "=" in line and not line.lstrip().startswith("#") else None
+    for line in env_comments.without(lines, removed):
+        key = line.split("=", 1)[0].strip() if env_comments.is_setting(line) else None
         if key in updates:
-            if updates[key] is not None and key not in done:
+            if key not in done:
                 out.append(f"{key}={updates[key]}")
             done.add(key)
             continue
         out.append(line)
-    out += [f"{k}={v}" for k, v in updates.items() if v is not None and k not in done]
-    return out
+    added = [f"{k}={v}" for k, v in updates.items() if v is not None and k not in done and k not in removed]
+    return out + env_comments.commented(added)
 
 
 # ---------------------------------------------------------------- commands

@@ -187,10 +187,12 @@ def cmd_env(args) -> None:
     bench = env_lines(settings, args)
     if con:
         bench += debug_env_lines(original)
-    keys = {line.split("=", 1)[0] for line in bench if "=" in line and not line.startswith("#")}
-    # The bench lines win over the same keys in the base file.
-    kept = [line for line in base if line.split("=", 1)[0].strip() not in keys]
-    text = "\n".join(kept + [""] + bench) + "\n"
+    import env_comments  # next to this file
+    keys = {line.split("=", 1)[0].strip() for line in bench if env_comments.is_setting(line)}
+    # The bench lines win over the same keys in the base file (their comments go with them); every setting
+    # keeps a comment that says what it does.
+    kept = env_comments.without(base, keys)
+    text = "\n".join(env_comments.commented(kept + [""] + bench)) + "\n"
     if args.out == "-":
         sys.stdout.write(text)
     else:
