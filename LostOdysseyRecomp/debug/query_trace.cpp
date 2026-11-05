@@ -4,7 +4,7 @@
 #include <gpu/renderer.h>
 #include <gpu/occlusion_queries.h>
 #include <patches/occlusion_history.h>
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 
 extern "C" PPC_FUNC(__imp__sub_827B7408);
 extern "C" PPC_FUNC(__imp__sub_823CDCA8);
@@ -53,8 +53,8 @@ PPC_FUNC(sub_823CCCE8)
     __imp__sub_823CCCE8(ctx, base);
     const uint32_t query = ctx.r3.u32;
     if (!query) return;
-    // Allocation is single-threaded (the render thread of the game).
-    static std::unordered_map<uint32_t, uint32_t> ordinals;
+    // Allocation is single-threaded (the render thread of the game). Flat, so the clear each frame keeps its storage.
+    static ankerl::unordered_dense::map<uint32_t, uint32_t> ordinals;
     if (index == 0) ordinals.clear();
     const uint32_t ordinal = ordinals[caller]++;
     // query+28: guest address of the query's first record slot (D3D GetData).

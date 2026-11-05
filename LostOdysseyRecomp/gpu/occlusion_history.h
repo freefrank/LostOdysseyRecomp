@@ -3,7 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <utility>
 #include <vector>
 
@@ -190,8 +190,9 @@ namespace gpu::occlusion
         uint32_t frame_ = 0;
         uint32_t cutFrame_ = 0;
         uint32_t serial_ = 1;
-        std::unordered_map<uint64_t, Entry> entries_[2];
-        std::unordered_map<uint32_t, Issued> queries_;
+        // Flat tables: the lookups run for every deferred read and issue on the game's rendering thread.
+        ankerl::unordered_dense::map<uint64_t, Entry> entries_[2];
+        ankerl::unordered_dense::map<uint32_t, Issued> queries_;
         std::vector<Pending> pending_ = std::vector<Pending>(kPendingSlots);
         Stats stats_;
     };
