@@ -409,7 +409,11 @@ static uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitR
     return obj->Wait(timeout);
 }
 
-static uint32_t WaitObjects(const std::vector<std::shared_ptr<KernelObject>>& objects,
+// The objects of one multiple-object wait, on the stack: a vector per call took newlib's malloc lock twice, on the
+// game's worker and audio threads, against every other thread's allocations.
+using WaitObjectList = std::array<std::shared_ptr<KernelObject>, 64>;
+
+static uint32_t WaitObjects(std::span<const std::shared_ptr<KernelObject>> objects,
     uint32_t waitType, uint32_t timeout)
 {
     if (waitType > 1 || objects.empty() || objects.size() > 64) return STATUS_INVALID_PARAMETER;
@@ -425,10 +429,9 @@ static uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HE
     if (!Objects || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
     WaitScope scope("KeWaitForMultipleObjects", uint32_t(Objects[0].ptr));
     if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
-    std::vector<std::shared_ptr<KernelObject>> objects;
-    objects.reserve(Count);
-    for (size_t i = 0; i < Count; ++i) objects.push_back(ResolveWaitObject(Objects[i]));
-    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
+    WaitObjectList objects;
+    for (size_t i = 0; i < Count; ++i) objects[i] = ResolveWaitObject(Objects[i]);
+    return WaitObjects({objects.data(), Count}, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
 static uint32_t NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
@@ -443,10 +446,9 @@ static uint32_t NtWaitForMultipleObjectsEx(uint32_t Count, be<uint32_t>* Handles
     if (!Handles || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
     WaitScope scope("NtWaitForMultipleObjectsEx", uint32_t(Handles[0]));
     if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
-    std::vector<std::shared_ptr<KernelObject>> objects;
-    objects.reserve(Count);
-    for (size_t i = 0; i < Count; ++i) objects.push_back(GetKernelObject(Handles[i]));
-    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
+    WaitObjectList objects;
+    for (size_t i = 0; i < Count; ++i) objects[i] = GetKernelObject(Handles[i]);
+    return WaitObjects({objects.data(), Count}, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
 
 static uint32_t NtCreateSemaphore(be<uint32_t>* Handle, XOBJECT_ATTRIBUTES* ObjectAttributes, uint32_t InitialCount, uint32_t MaximumCount)

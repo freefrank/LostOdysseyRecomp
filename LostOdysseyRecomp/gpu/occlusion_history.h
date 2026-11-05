@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -71,9 +72,6 @@ namespace gpu::occlusion
         void BeginFrame()
         {
             ++frame_;
-            if (frame_ % 64 == 0)
-                for (auto it = pending_.begin(); it != pending_.end();)
-                    it = frame_ - it->second.frame > kPendingFrames ? pending_.erase(it) : std::next(it);
             if (frame_ % 600 == 0)
                 for (auto& map : entries_)
                     for (auto it = map.begin(); it != map.end();)
@@ -114,9 +112,16 @@ namespace gpu::occlusion
                 if (!samples) ++stats_.zero;
                 return samples;
             }
-            auto& pending = pending_[issued->second.owner];
+            Pending& pending = PendingFor(issued->second.owner);
+            if (pending.owner != issued->second.owner) {
+                pending.owner = issued->second.owner;
+                pending.count = 0;
+                pending.more.clear();
+            }
             pending.frame = issue;
-            pending.keys.emplace_back(kind, key);
+            if (pending.count < pending.keys.size()) pending.keys[pending.count] = {kind, key};
+            else pending.more.emplace_back(kind, key);
+            ++pending.count;
             if (entry.issue == kNone) { ++stats_.unknown; return kVisible; }
             if (frame_ - entry.issue > kMaxAge + 1) { ++stats_.stale; return kVisible; }
             if (entry.issue < cutFrame_) { ++stats_.cut; return kVisible; }
@@ -133,11 +138,16 @@ namespace gpu::occlusion
         // The host measured `samples` for the query of `owner`.
         void Completed(uint64_t owner, uint32_t samples)
         {
-            const auto pending = pending_.find(owner);
-            if (pending == pending_.end()) return;
-            for (const auto& [kind, key] : pending->second.keys)
-                Store(entries_[size_t(kind)][key], pending->second.frame, samples);
-            pending_.erase(pending);
+            Pending& pending = PendingFor(owner);
+            if (pending.owner != owner) return;
+            if (frame_ - pending.frame <= kPendingFrames)
+                for (uint32_t i = 0; i < pending.count; ++i) {
+                    const auto& [kind, key] = i < pending.keys.size() ? pending.keys[i] : pending.more[i - pending.keys.size()];
+                    Store(entries_[size_t(kind)][key], pending.frame, samples);
+                }
+            pending.owner = 0;
+            pending.count = 0;
+            pending.more.clear();
         }
 
         const Stats& GetStats() const { return stats_; }
@@ -153,7 +163,19 @@ namespace gpu::occlusion
             uint32_t lastRead = kNone;    // frame of the last read
         };
         struct Issued { uint64_t owner = 0; uint32_t frame = 0; bool main = false; };
-        struct Pending { uint32_t frame = 0; std::vector<std::pair<Kind, uint64_t>> keys; };
+        // Reads waiting for their query's count, in a ring by the issue serial in the owner (Issue): an owner is
+        // never 0, and one kPendingSlots issues later takes the slot over. The map and vector this replaces allocated
+        // and freed for about 700 reads a frame in the busy street, under newlib's malloc lock, on the game's
+        // rendering thread.
+        static constexpr uint32_t kPendingSlots = 1u << 15;
+        struct Pending
+        {
+            uint64_t owner = 0;
+            uint32_t frame = 0, count = 0;
+            std::array<std::pair<Kind, uint64_t>, 2> keys{};
+            std::vector<std::pair<Kind, uint64_t>> more; // the keys after the first two
+        };
+        Pending& PendingFor(uint64_t owner) { return pending_[uint32_t(owner) & (kPendingSlots - 1)]; }
 
         static void Store(Entry& entry, uint32_t issue, uint32_t samples)
         {
@@ -170,7 +192,7 @@ namespace gpu::occlusion
         uint32_t serial_ = 1;
         std::unordered_map<uint64_t, Entry> entries_[2];
         std::unordered_map<uint32_t, Issued> queries_;
-        std::unordered_map<uint64_t, Pending> pending_;
+        std::vector<Pending> pending_ = std::vector<Pending>(kPendingSlots);
         Stats stats_;
     };
 }
