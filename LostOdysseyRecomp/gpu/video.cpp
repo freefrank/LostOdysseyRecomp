@@ -4846,6 +4846,22 @@ namespace gpu::video
                 sources.outputWidth = sourceWidth;
                 sources.outputHeight = sourceHeight;
             }
+#if LO_PLATFORM_SWITCH
+            {
+                // The final pass's FSR 1 (as the frame's Resolve in the present path) and whether dynamic
+                // resolution moves the scene height; the screen's size when the scene is scaled to it.
+                const auto config = settings::GetConfig();
+                const auto fsr = gpu::switch_upscaler::Resolve(config.switchFsr, config.fsrSharpnessPercent).mode;
+                sources.fsr = fsr == SpatialUpscaler::Off ? "OFF" : fsr == SpatialUpscaler::Easu ? "EASU" :
+                    fsr == SpatialUpscaler::Rcas ? "RCAS" : "ON";
+                sources.dynamicResolution = gpu_busy::g_dynamicResolution.load(std::memory_order_relaxed);
+                sources.upscaler = sources.dynamicResolution ? "DYN" : "FIXED";
+                if (sourceWidth != outputWidth || sourceHeight != outputHeight) {
+                    sources.outputWidth = outputWidth;
+                    sources.outputHeight = outputHeight;
+                }
+            }
+#endif
             if (mode == overlay::Detailed) {
                 const auto fg = FrameGenerationPresents();
                 sources.frameGeneration = fg.active;

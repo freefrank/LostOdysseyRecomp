@@ -320,6 +320,11 @@ void Draw(const Values& values, const Sources& sources) {
         image.pixels.assign(size_t(image.width) * image.height, kBackground);
         Canvas canvas(image, s);
         Row row(canvas, int(image.height));
+        if (sources.fsr) {
+            row.Label("FSR", kUpscalerLabel);
+            row.Value(Ascii(sources.fsr), kWhite, true);
+            row.Divider();
+        }
         row.Label(sources.upscaler, kUpscalerLabel);
         row.Value(Size(sources.renderWidth, sources.renderHeight), kWhite, true);
         if (sources.outputWidth) {
@@ -385,6 +390,15 @@ void Draw(const Values& values, const Sources& sources) {
         row.Unit("FPS");
         row.Value(ms);
         row.Unit("ms");
+        if (sources.fsr) {
+            // The Switch: FSR ON 540p FIXED.
+            row.Divider();
+            row.Label("FSR", kUpscalerLabel);
+            row.Value(Ascii(sources.fsr), kWhite, true);
+            row.Divider();
+            row.Value(Ascii(std::to_string(sources.renderHeight)), kWhite, true);
+            row.Unit(sources.dynamicResolution ? "p DYN" : "p FIXED");
+        }
         const uint32_t used = std::min<uint32_t>(image.width, uint32_t(std::lround(row.X() + 4 * s)));
         // Background behind the text only, then crop to it.
         std::vector<uint32_t> block(size_t(used) * image.height, kBackground);

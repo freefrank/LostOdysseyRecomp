@@ -9,7 +9,8 @@
 // resolution, the backend with FPS, frame time and a frame-time graph, frame
 // generation's presented FPS, and the process CPU and GPU load (on the Switch:
 // the game's main thread and the render thread, each as a share of one core,
-// draws per frame and the GPU clock). Values are
+// draws per frame and the GPU clock). On the Switch both modes also say whether
+// FSR 1 is on and the scene height, FIXED or moved by dynamic resolution (DYN). Values are
 // averaged over about half a second and the image is redrawn only then.
 // Presentation thread only.
 namespace ui::performance_overlay {
@@ -31,6 +32,10 @@ struct Sources {
     bool frameGeneration = false;    // a provider generates frames
     uint64_t presentedFrames = 0;    // its cumulative presents, generated frames included
     uint64_t gpuBusy = 0;            // gpu::gpu_busy::Total()
+    // The Switch: FSR 1's state for the final scale ("ON", "OFF", or env.txt's "EASU" / "RCAS"); null elsewhere.
+    // With it, upscaler is "DYN" or "FIXED" and the output size is the screen's when the scene is scaled to it.
+    const char* fsr = nullptr;
+    bool dynamicResolution = false;
 };
 
 // Once per presented game frame while the overlay is on. True when the

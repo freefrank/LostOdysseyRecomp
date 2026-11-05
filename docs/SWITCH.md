@@ -87,6 +87,9 @@ a whole 16:9 width. FSR runs only when the scene is smaller than the 720p
 output; FSR sharpness p% is RCAS at 2 − p/50 stops (FSR 2 and 3's mapping),
 and Off runs EASU alone. The log shows the result: `video: Switch upscaler`,
 `presentation: FSR 1`, and `dynamic resolution: on` / `off`.
+The performance overlay shows the same: FPS mode adds `FSR ON 540p FIXED` (or
+`OFF`, and `DYN` while dynamic resolution moves the height), Detailed starts
+with `FSR ON | FIXED 960x540 → 1280x720`.
 
 Also on the tab: Graphics preset, Dynamic shadows, Depth of field, Bloom,
 Motion blur, Culling, Scaling filter, Frame rate, Loading speed, Performance
