@@ -62,15 +62,30 @@ The [installation guide](docs/INSTALL-SWITCH.md) has every step, the SD card lay
 
 ## Settings
 
-On the title screen, **Y** opens **Settings**. On the Switch, **Graphics** has:
+On the title screen, **Y** opens **Settings**. Settings are saved in `settings.ini`.
+
+### Graphics
 
 | Option | What it does |
 | :--- | :--- |
-| **Graphics preset** | **Original** keeps every effect; **Low-end** turns off dynamic shadows, motion blur, depth of field and bloom for more speed. |
-| **Render resolution** | The 3D scene's height, from 360p to 720p, separately for handheld and docked. Automatic is 540p. |
-| **Dynamic resolution** | Lowers the resolution when a frame takes too long, down to the **Minimum resolution**. Off by default. |
-| **FSR** and **FSR sharpness** | AMD FSR 1 upscaling and sharpening for a scene rendered below the screen's resolution. |
-| **Performance overlay** | The frame rate, or a bar with the render resolution, FSR, and the CPU and GPU load. |
+| **Graphics preset** | Sets the options below in one step. All three presets use FSR and 30 FPS. **Balanced (recommended)** is the default: dynamic resolution 360–540p, depth of field at 50%, no bloom, dynamic shadows and motion blur on. **Quality** renders a fixed 540p with every effect. **Performance** is Balanced without dynamic shadows, motion blur or depth of field. Changing any option below shows **Custom**. |
+| **Render resolution** | The height the 3D scene is rendered at before it's scaled to the screen, from 360p to 720p, set separately for handheld and docked. Automatic is 540p. With dynamic resolution on, this row is called **Maximum resolution**. |
+| **Dynamic resolution** | Lowers the scene's resolution step by step when the GPU can't finish a frame in time, and raises it again when there's room, so the frame rate holds steadier. |
+| **Minimum resolution** | How low dynamic resolution may go. Shown when dynamic resolution is on. |
+| **FSR** | AMD FSR 1: scales the scene to the screen with sharper edges than plain scaling. Costs a little GPU time. |
+| **FSR sharpness** | How strongly FSR sharpens: 0% is no sharpening, 100% the strongest. |
+| **Dynamic shadows** | Character and object shadows. **Low** keeps only the largest ones; **Off** removes them. Both raise the frame rate. |
+| **Depth of field** | Strength of the game's background blur. 100% is the original look; **Off** keeps distant scenery sharp. |
+| **Bloom** | The game's glow around bright areas. Off removes it, and the picture gets slightly darker. |
+| **Motion blur** | The blur during fast camera and character movement. Off keeps moving scenes sharp. |
+| **Culling** | How soon objects at the screen edges stop being drawn. 100% is the original; lower costs frame rate, higher hides them sooner. |
+| **Scaling filter** | The filter used when the scene is scaled without FSR: **Standard** (bilinear) or **High** (bicubic, slower on the Switch). |
+| **Frame rate** | The game's frame rate target. Lost Odyssey runs at 30 FPS, and the presets use that. |
+| **Loading speed** | **Original** keeps the Xbox 360's loading pace; **Fast** loads quicker. Effects play at normal speed either way. |
+| **Performance overlay** | Off by default. **FPS** shows the frame rate; **Detailed** adds a bar with the render resolution, FSR, and the CPU and GPU load. |
+| **Brightness** | Opens a page to adjust brightness and gamma. |
+
+### Other settings
 
 Text, the HUD and the menus follow the console's language, Spanish included.
 
