@@ -11,8 +11,9 @@
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 ![Nintendo Switch](https://img.shields.io/badge/Nintendo%20Switch-homebrew-E60012)
 ![deko3d](https://img.shields.io/badge/graphics-deko3d-5E5E5E)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/z2yPct6z2w)
 
-### [Download](https://github.com/Ad0ky/LostOdysseyRecomp/releases) · [Installation guide](docs/INSTALL-SWITCH.md) · [Report a problem](https://github.com/Ad0ky/LostOdysseyRecomp/issues)
+### [Download](https://github.com/Ad0ky/LostOdysseyRecomp/releases) · [Installation guide](docs/INSTALL-SWITCH.md) · [Report a problem](https://github.com/Ad0ky/LostOdysseyRecomp/issues) · [Discord](https://discord.gg/z2yPct6z2w)
 
 By **Ad0ky** and **depende3000**, based on [freefrank's Lost Odyssey Recomp](https://github.com/freefrank/LostOdysseyRecomp).
 Free and open source: if you paid for this, ask for a refund.
@@ -114,6 +115,8 @@ All screenshots were taken on a Switch in handheld mode at 960×540.
 Also attach the files the game writes in `sdmc:/switch/LostOdysseyRecomp/`: `state/logs/runtime-*.log`, `stderr.log` and, if they exist, `crash.log`, `hang.log` and `exit.log`.
 
 Don't attach game files or saves.
+
+Questions and help: the [Discord](https://discord.gg/z2yPct6z2w).
 
 ## For developers
 
