@@ -47,6 +47,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIOS = REPO_ROOT / "tools/scenarios"
 RELEASE_ENV = REPO_ROOT / "tools/switch/release-env.txt"
+# What a run renders when neither its base env.txt nor --set says (the console's Graphics menu would decide).
+PINNED_RENDERING = (("LO_SWITCH_RENDER_HEIGHT", "540"), ("LO_DYNAMIC_RESOLUTION", "0"))
 DEFAULT_OUT = REPO_ROOT / "out/bench"
 DATA_ROOT = "sdmc:/switch/LostOdysseyRecomp"
 NETLOG_PORT = 28780
@@ -188,6 +190,12 @@ def cmd_env(args) -> None:
     if con:
         bench += debug_env_lines(original)
     import env_comments  # next to this file
+    # The release env.txt leaves the scene height and dynamic resolution to the Graphics menu (settings.ini):
+    # pin them so a run measures the same frames on every console, unless the base file or --set chooses.
+    chosen = {line.split("=", 1)[0].strip() for line in base + bench if env_comments.is_setting(line)}
+    for key, value in PINNED_RENDERING:
+        if key not in chosen:
+            bench.append(f"{key}={value}")
     keys = {line.split("=", 1)[0].strip() for line in bench if env_comments.is_setting(line)}
     # The bench lines win over the same keys in the base file (their comments go with them); every setting
     # keeps a comment that says what it does.

@@ -82,8 +82,9 @@ inline constexpr int InternalResolutionNative = 1;
 // The Switch's Minimum and Maximum resolution rows: scene heights in rows. Each is a multiple of 36, dynamic
 // resolution's step, so every one is a 16:9 width and a rung down from 540 and 720 (no 480: 853.3 columns).
 inline constexpr uint32_t SwitchSceneHeights[] = {360, 432, 504, 540, 576, 648, 720};
-// Automatic maximum: 540 rows in handheld mode, the Xbox 360's 720 docked.
-inline constexpr uint32_t SwitchAutomaticHeight(bool docked) { return docked ? 720 : 540; }
+// Automatic maximum: 540 rows in both modes (720 docked is not yet tested with deko3d; the Maximum resolution
+// row offers it). The release env.txt sets no height, so these rows decide it.
+inline constexpr uint32_t SwitchAutomaticHeight(bool docked) { return docked ? 540 : 540; }
 // Audio output: the stereo downmix, the game's 5.1 channels passed through,
 // or 5.1 matrix-encoded into stereo for a receiver to decode.
 inline constexpr uint32_t AudioOutputStereo = 0;

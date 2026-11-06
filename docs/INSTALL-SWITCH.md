@@ -94,28 +94,24 @@ sdmc:/switch/LostOdysseyRecomp/
 LO_SWITCH_BACKEND=deko3d
 # deko3d's GPU savings: depth compression, depth culling, fewer GPU waits, leaner vertex shaders
 LO_DEKO3D_GPU_FAST=1
-# Dynamic resolution stays off in this release: with deko3d it still shows stripes
-LO_DYNAMIC_RESOLUTION=0
-# Render the 3D scene at 960x540, also when docked (720 is not yet tested with deko3d)
-LO_SWITCH_RENDER_HEIGHT=540
+# Leaner game shaders, about 4 ms less GPU time in battle. Needs shaders/deko3d_shaders_lean3.lodk.
+LO_DEKO3D_LEAN_SHADERS=3
 # Use the native cutscene video decoder (faster, smoother cutscenes)
 LO_NATIVE_MOVIES=1
 # Spread the game's threads across the Switch's three CPU cores
 LO_GUEST_AFFINITY=1
-# Faster handling of the game's visibility tests
-LO_ZPD_MODE=xenia
 # Prepare every known graphics state in the background at start
 LO_PIPELINE_PREBUILD=all
 ```
 
-- **Docked at 720p:** delete the `LO_SWITCH_RENDER_HEIGHT=540` line. The scene then renders at 1280×720 when docked. This hasn't been tested with deko3d yet; if it shows problems, put the line back.
+- **Docked at 720p:** set **Settings → Graphics → Render resolution** to 720p while docked. The scene then renders at 1280×720 when docked. This hasn't been tested with deko3d yet; if it shows problems, set it back to Automatic (540p).
 - **NVK instead of deko3d:** delete the `LO_SWITCH_BACKEND=deko3d` line. NVK is slower, and on its first start it builds a large driver cache.
 
 ### In the game
 
 Open **Settings → Graphics → Graphics preset** and choose **Low-end**. It turns off dynamic shadows, motion blur, depth of field and bloom, which gives about 10–20% more speed. Choose **Original** to get the full effects back.
 
-**Settings → Graphics** also has **Render resolution** (Auto is 540p handheld and 720p docked; each mode keeps its own), **Dynamic resolution** with its **Minimum resolution**, and **FSR** with **FSR sharpness**, which sharpens a scene rendered below 720p. A line in `env.txt` wins over its row, which then shows greyed out: delete `LO_SWITCH_RENDER_HEIGHT=540` or `LO_DYNAMIC_RESOLUTION=0` to choose those in the menu.
+**Settings → Graphics** also has **Render resolution** (called Maximum resolution while dynamic resolution is on; Automatic is 540p, handheld and docked; each mode keeps its own), **Dynamic resolution** (off by default) with its **Minimum resolution**, and **FSR** with **FSR sharpness**, which sharpens a scene rendered below 720p. The release `env.txt` sets none of these. A line you add to `env.txt` (`LO_SWITCH_RENDER_HEIGHT`, `LO_DYNAMIC_RESOLUTION`, `LO_DYNAMIC_RESOLUTION_MIN`, `LO_SWITCH_UPSCALER`, `LO_SWITCH_RCAS_STOPS`) wins over its row, which then shows greyed out; delete the line to choose it in the menu again.
 
 ### Overclocking
 
@@ -135,7 +131,7 @@ The graphics chip is the limit, so a GPU overclock (for example with sys-clk) he
 |---|---|
 | A message about memory, or the game closes right away | Start it through title takeover (hold **R** on a game), not from the Album. |
 | "Game not found" or a crash at start | Check that `sdmc:/switch/LostOdysseyRecomp/game/disc1/default.xex` exists, with that exact folder layout. |
-| Vertical stripes, dark blocks or bands over the picture | Check that `env.txt` has `LO_DYNAMIC_RESOLUTION=0`. |
+| Vertical stripes, dark blocks or bands over the picture | Turn off **Settings → Graphics → Dynamic resolution**, and check that `env.txt` has no `LO_DYNAMIC_RESOLUTION=1` or `LO_RESIZE_FIX=0` line. |
 | Objects or effects missing, invisible characters | Check that `shaders/` has both `portable_vk.lospv` and `deko3d_shaders.lodk` from the same release as the `.nro`. With the USA/Europe edition, report it (see the shaders note above). |
 | A graphics problem that looks like a bug | Try NVK by deleting `LO_SWITCH_BACKEND=deko3d` from `env.txt`. Report whether it happens with both or only with deko3d. |
 | The game asks for another disc | Copy all four disc folders. The game changes discs by itself when they're present. |
