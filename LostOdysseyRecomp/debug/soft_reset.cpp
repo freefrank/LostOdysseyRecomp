@@ -46,7 +46,7 @@ const wchar_t* Message(State value)
     case State::Returning: key = L"Returning to title"; break;
     default: key = L"Return to title unavailable"; break;
     }
-    return translations::Text(key, settings::GetConfig().debugLanguage == 1);
+    return translations::Text(key, settings::GetConfig().debugLanguage);
 }
 
 bool Object(uint32_t address)

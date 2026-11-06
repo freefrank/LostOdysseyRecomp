@@ -40,6 +40,13 @@ namespace
     constexpr uint32_t WAIT_STACK_BYTES = 1024;          // scanned above SP, while the thread is paused
     constexpr uint32_t REPORT_WAIT_LINES_PER_THREAD = 12;
 
+    // LO_CPU_PROFILE_SAMPLES: every sample kept (cpu-samples.bin). A record is 16 bytes plus 4 per guest
+    // return address; the buffer holds a report window of the busy threads (about 10 MiB in a battle).
+    constexpr uint32_t RAW_BUFFER_BYTES = 24u << 20;
+    constexpr uint32_t RAW_GUEST_DEPTH = 32;
+    constexpr uint32_t RAW_MAGIC = 0x53434F4C; // "LOCS"
+    constexpr uint32_t RAW_VERSION = 1;
+
     struct ThreadSlot
     {
         Handle handle = 0;
@@ -50,7 +57,82 @@ namespace
         uint32_t samples = 0;       // samples taken while it had run since the previous one
         uint32_t idleSamples = 0;   // samples taken while it had not run
         uint32_t syscallSamples = 0;
+        bool raw = false;           // its samples go to cpu-samples.bin
+        // Guest threads (SetCurrentThreadGuestStack): where the PPCContext pointer is, and the guest stack.
+        void* const volatile* guestContext = nullptr;
+        uint32_t stackLow = 0;
+        uint32_t stackHigh = 0;
+        // LO_THREAD_PLACEMENT: what the thread saw at NoteCore, and the counts at the previous placement report.
+        uint32_t coreHits[4]{};
+        uint32_t coreMoves = 0;
+        int8_t lastCore = -1;
+        uint32_t reportedHits[4]{};
+        uint32_t reportedMoves = 0;
+        uint64_t placementTicks = 0;
+        bool coreRuleApplied = false;
     };
+
+    // cpu-samples.bin: one chunk per report window, a RawChunk, then RawName per sampled thread, then the
+    // records (RawRecord + depth guest return addresses, innermost first). Little-endian.
+    struct RawChunk
+    {
+        uint32_t magic;
+        uint32_t version;
+        uint64_t moduleBase;
+        uint64_t tickFrequency;
+        uint64_t startTick;         // the sampler's start: record times are relative to it
+        uint64_t endTick;
+        uint32_t nameCount;
+        uint32_t recordBytes;
+        uint32_t dropped;           // records that did not fit
+        uint32_t intervalUs;
+    };
+    struct RawName
+    {
+        uint32_t slot;
+        char name[48];
+    };
+    struct RawRecord
+    {
+        uint32_t timeUs;            // since startTick (wraps after 71 minutes)
+        uint8_t slot;
+        uint8_t depth;
+        uint8_t flags;              // 1: in a system call; 2: guest chain read
+        uint8_t reserved;
+        uint32_t pc;                // offsets into the executable; UINT32_MAX outside it
+        uint32_t lr;
+    };
+    static_assert(sizeof(RawRecord) == 16);
+
+    bool g_rawEnabled = false;
+    char g_rawFilter[256]{};        // empty: every thread
+    uint8_t g_rawBuffer[RAW_BUFFER_BYTES];
+    uint32_t g_rawBytes = 0;
+    uint32_t g_rawDropped = 0;
+    uint64_t g_rawStartTick = 0;
+    const uint8_t* g_guestBase = nullptr;
+    uint32_t g_guestR1Offset = 0;
+    uint32_t g_guestLrOffset = UINT32_MAX;
+
+    bool RawWanted(const char* name)
+    {
+        if (!g_rawEnabled)
+            return false;
+        if (!g_rawFilter[0])
+            return true;
+        const size_t length = strlen(name);
+        for (const char* item = g_rawFilter; *item;)
+        {
+            const char* end = strchr(item, ',');
+            const size_t itemLength = end ? size_t(end - item) : strlen(item);
+            if (itemLength == length && memcmp(item, name, length) == 0)
+                return true;
+            if (!end)
+                break;
+            item = end + 1;
+        }
+        return false;
+    }
 
     struct Bucket
     {
@@ -632,6 +714,62 @@ namespace
                     }
                 }
 
+                // The raw record, still while it is paused: the guest stack must not change under the walk.
+                if (thread.raw && R_SUCCEEDED(result))
+                {
+                    if (g_rawBytes + sizeof(RawRecord) + RAW_GUEST_DEPTH * 4 <= RAW_BUFFER_BYTES)
+                    {
+                        RawRecord* record = reinterpret_cast<RawRecord*>(g_rawBuffer + g_rawBytes);
+                        record->timeUs = uint32_t(armTicksToNs(armGetSystemTick() - g_rawStartTick) / 1000);
+                        record->slot = uint8_t(slot);
+                        record->depth = 0;
+                        record->flags = inSystemCall ? 1 : 0;
+                        record->reserved = 0;
+                        record->pc = InModule(context.pc.x) ? uint32_t(context.pc.x - g_moduleBase) : UINT32_MAX;
+                        record->lr = InModule(context.lr) ? uint32_t(context.lr - g_moduleBase) : UINT32_MAX;
+                        uint32_t* chain = reinterpret_cast<uint32_t*>(record + 1);
+                        const uint8_t* ctx = thread.guestContext ? static_cast<const uint8_t*>(*thread.guestContext) : nullptr;
+                        if (ctx && g_guestBase)
+                        {
+                            // The guest LR first (the caller of a function that has not called anything yet, else a
+                            // return address inside it), then the back chain: each frame's word 0 is the caller's
+                            // r1, and the prologue saved the caller's LR 8 bytes below that.
+                            auto load = [](uint32_t address)
+                            {
+                                uint32_t value;
+                                memcpy(&value, g_guestBase + address, 4);
+                                return __builtin_bswap32(value);
+                            };
+                            uint32_t depth = 0;
+                            if (g_guestLrOffset != UINT32_MAX)
+                            {
+                                uint64_t lr;
+                                memcpy(&lr, ctx + g_guestLrOffset, 8);
+                                chain[depth++] = uint32_t(lr);
+                            }
+                            uint32_t r1;
+                            memcpy(&r1, ctx + g_guestR1Offset, 4);
+                            for (uint32_t sp = r1; depth < RAW_GUEST_DEPTH;)
+                            {
+                                if ((sp & 3) != 0 || sp < thread.stackLow || sp + 4 > thread.stackHigh)
+                                    break;
+                                const uint32_t back = load(sp);
+                                if (back <= sp || (back & 3) != 0 || back + 4 > thread.stackHigh)
+                                    break;
+                                chain[depth++] = load(back - 8);
+                                sp = back;
+                            }
+                            record->depth = uint8_t(depth);
+                            record->flags |= 2;
+                        }
+                        g_rawBytes += sizeof(RawRecord) + record->depth * 4;
+                    }
+                    else
+                    {
+                        g_rawDropped++;
+                    }
+                }
+
                 svcSetThreadActivity(thread.handle, ThreadActivity_Runnable);
 
                 if (R_SUCCEEDED(result))
@@ -686,6 +824,20 @@ namespace
                         reportWaits.push_back(wait);
                 }
 
+                std::vector<RawName> rawNames;
+                if (g_rawEnabled)
+                {
+                    for (uint32_t slot = 0; slot < MAX_THREADS; slot++)
+                    {
+                        if (g_slots[slot].raw)
+                        {
+                            RawName name{};
+                            name.slot = slot;
+                            memcpy(name.name, g_slots[slot].name, sizeof(name.name));
+                            rawNames.push_back(name);
+                        }
+                    }
+                }
                 const uint32_t dropped = g_tableDropped;
                 const uint32_t waitDropped = g_waitDropped;
                 memset(g_table, 0, sizeof(g_table));
@@ -697,6 +849,35 @@ namespace
                 std::string report;
                 FormatReport(report, now - reportStart, reportThreads, reportBuckets, reportWaits, dropped, waitDropped);
                 os::switch_cpu_profiler::WriteLog(report);
+
+                if (g_rawEnabled)
+                {
+                    // Only this thread fills the buffer: nothing is sampled while it is written.
+                    RawChunk chunk{};
+                    chunk.magic = RAW_MAGIC;
+                    chunk.version = RAW_VERSION;
+                    chunk.moduleBase = g_moduleBase;
+                    chunk.tickFrequency = armGetSystemTickFreq();
+                    chunk.startTick = g_rawStartTick;
+                    chunk.endTick = armGetSystemTick();
+                    chunk.nameCount = uint32_t(rawNames.size());
+                    chunk.recordBytes = g_rawBytes;
+                    chunk.dropped = g_rawDropped;
+                    chunk.intervalUs = uint32_t(SAMPLE_INTERVAL_NS / 1000);
+                    std::string head(reinterpret_cast<const char*>(&chunk), sizeof(chunk));
+                    head.append(reinterpret_cast<const char*>(rawNames.data()), rawNames.size() * sizeof(RawName));
+                    const uint64_t writeStart = armGetSystemTick();
+                    const bool written = os::switch_platform::RawAppend("cpu-samples.bin", head.data(), head.size()) &&
+                        (g_rawBytes == 0 ||
+                            os::switch_platform::RawAppend("cpu-samples.bin", reinterpret_cast<const char*>(g_rawBuffer), g_rawBytes));
+                    char line[200];
+                    snprintf(line, sizeof(line), "[cpu samples] %u bytes, %u dropped, %u threads -> cpu-samples.bin%s, %llu ms\n",
+                        g_rawBytes, g_rawDropped, chunk.nameCount, written ? "" : " (write failed)",
+                        (unsigned long long)(armTicksToNs(armGetSystemTick() - writeStart) / 1000000));
+                    os::switch_cpu_profiler::WriteLog(line, strlen(line));
+                    g_rawBytes = 0;
+                    g_rawDropped = 0;
+                }
 
                 reportStart = armGetSystemTick();
             }
@@ -744,6 +925,14 @@ void os::switch_cpu_profiler::RegisterCurrentThread(const char* name)
         snprintf(thread.name, sizeof(thread.name), "%s", name);
         thread.usageTicks = ThreadTicks(handle);
         thread.sampleTicks = thread.usageTicks;
+        thread.raw = RawWanted(thread.name);
+        thread.guestContext = nullptr;
+        memset(thread.coreHits, 0, sizeof(thread.coreHits));
+        memset(thread.reportedHits, 0, sizeof(thread.reportedHits));
+        thread.coreMoves = thread.reportedMoves = 0;
+        thread.lastCore = -1;
+        thread.coreRuleApplied = false;
+        thread.placementTicks = thread.usageTicks;
         thread.active = true;
     }
     mutexUnlock(&g_slotsMutex);
@@ -764,8 +953,115 @@ void os::switch_cpu_profiler::UnregisterCurrentThread()
     mutexLock(&g_slotsMutex);
     const int slot = FindSlot(handle);
     if (slot >= 0)
+    {
         g_slots[slot].active = false; // Its samples, if any, are still reported once.
+        g_slots[slot].guestContext = nullptr;
+    }
     mutexUnlock(&g_slotsMutex);
+}
+
+void os::switch_cpu_profiler::SetCurrentThreadGuestStack(void* const* contextSlot, uint32_t r1Offset, uint32_t lrOffset,
+    const uint8_t* memoryBase, uint32_t stackLow, uint32_t stackHigh)
+{
+    const Handle handle = threadGetCurHandle();
+    mutexLock(&g_slotsMutex);
+    g_guestBase = memoryBase;
+    g_guestR1Offset = r1Offset;
+    g_guestLrOffset = lrOffset;
+    const int slot = FindSlot(handle);
+    if (slot >= 0)
+    {
+        g_slots[slot].stackLow = stackLow;
+        g_slots[slot].stackHigh = stackHigh;
+        g_slots[slot].guestContext = contextSlot;
+    }
+    mutexUnlock(&g_slotsMutex);
+}
+
+void os::switch_cpu_profiler::ClearCurrentThreadGuestStack()
+{
+    const Handle handle = threadGetCurHandle();
+    mutexLock(&g_slotsMutex);
+    const int slot = FindSlot(handle);
+    if (slot >= 0)
+        g_slots[slot].guestContext = nullptr;
+    mutexUnlock(&g_slotsMutex);
+}
+
+namespace
+{
+    // LO_THREAD_PLACEMENT. The kernel gives a core's idle time only to a thread running on that core, so
+    // one small thread is pinned to each.
+    constexpr uint64_t NOTE_CORE_INTERVAL_TICKS = 19'200'000 / 500;   // 2 ms
+
+    bool g_placementEnabled = false;
+    Thread g_coreIdleThreads[4];
+    std::atomic<uint64_t> g_coreIdleTicks[4]{};
+    std::atomic<uint64_t> g_coreIdleReadAt[4]{};
+    uint64_t g_reportedIdleTicks[4]{};
+    uint64_t g_reportedIdleReadAt[4]{};
+    uint64_t g_placementWindowStart = 0;
+
+    // LO_THREAD_CORES=name=core:mask[:percent],...: experiments with thread placement, needing LO_THREAD_PLACEMENT.
+    // Applied at a report to a thread of that name above percent CPU (default 50, which picks the render thread among
+    // its namesakes).
+    constexpr double CORE_RULE_MIN_PERCENT = 50.0;
+
+    void ApplyCoreRule(ThreadSlot& thread, double percent)
+    {
+        const char* rules = getenv("LO_THREAD_CORES");
+        if (!rules || thread.coreRuleApplied)
+            return;
+
+        const size_t length = strlen(thread.name);
+        for (const char* rule = rules; *rule;)
+        {
+            const char* end = strchr(rule, ',');
+            int core = -1;
+            unsigned mask = 0;
+            int minPercent = int(CORE_RULE_MIN_PERCENT);
+            if (strncmp(rule, thread.name, length) == 0 && rule[length] == '=' &&
+                sscanf(rule + length + 1, "%d:%x:%d", &core, &mask, &minPercent) >= 2 && percent >= minPercent)
+            {
+                const Result rc = svcSetThreadCoreMask(thread.handle, core, mask);
+                thread.coreRuleApplied = true;
+                fprintf(stderr, "thread placement: %s -> core %d mask 0x%x (0x%x)\n", thread.name, core, mask, rc);
+                return;
+            }
+            if (!end)
+                break;
+            rule = end + 1;
+        }
+    }
+
+    void CoreIdleThread(void* argument)
+    {
+        const size_t core = reinterpret_cast<size_t>(argument);
+        for (;;)
+        {
+            uint64_t ticks = 0;
+            if (R_SUCCEEDED(svcGetInfo(&ticks, InfoType_IdleTickCount, INVALID_HANDLE, UINT64_MAX)))
+            {
+                g_coreIdleTicks[core].store(ticks, std::memory_order_relaxed);
+                g_coreIdleReadAt[core].store(armGetSystemTick(), std::memory_order_relaxed);
+            }
+            svcSleepThread(1'000'000'000);
+        }
+    }
+
+    void StartPlacementLog()
+    {
+        g_placementEnabled = true;
+        g_placementWindowStart = armGetSystemTick();
+        for (size_t core = 0; core < 4; core++)
+        {
+            // Above the audio pump, like the sampler: a read takes microseconds, once a second.
+            const Result rc = threadCreate(&g_coreIdleThreads[core], CoreIdleThread, reinterpret_cast<void*>(core),
+                nullptr, 0x2000, 0x1D, int(core));
+            if (R_FAILED(rc) || R_FAILED(threadStart(&g_coreIdleThreads[core])))
+                fprintf(stderr, "thread placement: no idle reader on core %zu (0x%x)\n", core, rc);
+        }
+    }
 }
 
 void os::switch_cpu_profiler::Start(bool sampler)
@@ -773,8 +1069,28 @@ void os::switch_cpu_profiler::Start(bool sampler)
     g_usageWindowStart = armGetSystemTick();
     FindModule();
 
+    {
+        u64 coreMask = 0;
+        svcGetInfo(&coreMask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
+        fprintf(stderr, "thread placement: the process may use cores 0x%llx\n", (unsigned long long)coreMask);
+    }
+    if (const char* placement = getenv("LO_THREAD_PLACEMENT"); placement && placement[0] == '1')
+        StartPlacementLog();
+
     if (!sampler || g_samplerStarted)
         return;
+
+    if (const char* samples = getenv("LO_CPU_PROFILE_SAMPLES"); samples && *samples && strcmp(samples, "0") != 0)
+    {
+        mutexLock(&g_slotsMutex);
+        g_rawEnabled = true;
+        snprintf(g_rawFilter, sizeof(g_rawFilter), "%s", strcmp(samples, "1") == 0 ? "" : samples);
+        g_rawStartTick = armGetSystemTick();
+        for (ThreadSlot& thread : g_slots)
+            thread.raw = thread.active && RawWanted(thread.name);
+        mutexUnlock(&g_slotsMutex);
+        fprintf(stderr, "CPU profiler: every sample of %s to cpu-samples.bin\n", g_rawFilter[0] ? g_rawFilter : "every thread");
+    }
 
     // The hang watchdog: above the sampler and every game thread.
     if (R_SUCCEEDED(threadCreate(&g_watchdogThread, WatchdogThread, nullptr, nullptr, 0x10000, 0x1C, -2)))
@@ -843,6 +1159,101 @@ void os::switch_cpu_profiler::AppendThreadCpuUsage(std::string& out)
     mutexUnlock(&g_slotsMutex);
 }
 
+void os::switch_cpu_profiler::NoteCore()
+{
+    if (!g_placementEnabled)
+        return;
+
+    // Per thread: the slot stays this thread's until it exits, so it needs looking up once.
+    static thread_local int slot = -1;
+    static thread_local uint64_t nextTick = 0;
+    const uint64_t now = armGetSystemTick();
+    if (now < nextTick)
+        return;
+    nextTick = now + NOTE_CORE_INTERVAL_TICKS;
+
+    if (slot < 0)
+    {
+        if (!mutexTryLock(&g_slotsMutex))
+            return;
+        slot = FindSlot(threadGetCurHandle());
+        mutexUnlock(&g_slotsMutex);
+        if (slot < 0)
+            return;
+    }
+
+    ThreadSlot& thread = g_slots[slot];
+    const int core = int(svcGetCurrentProcessorNumber()) & 3;
+    thread.coreHits[core]++;
+    if (thread.lastCore >= 0 && thread.lastCore != core)
+        thread.coreMoves++;
+    thread.lastCore = int8_t(core);
+}
+
+void os::switch_cpu_profiler::AppendThreadPlacement(std::string& out)
+{
+    if (!g_placementEnabled || !mutexTryLock(&g_slotsMutex))
+        return;
+
+    const uint64_t now = armGetSystemTick();
+    const uint64_t window = now - g_placementWindowStart;
+    g_placementWindowStart = now;
+
+    char entry[160];
+    out += "idle";
+    for (size_t core = 0; core < 4; core++)
+    {
+        const uint64_t idle = g_coreIdleTicks[core].load(std::memory_order_relaxed);
+        const uint64_t readAt = g_coreIdleReadAt[core].load(std::memory_order_relaxed);
+        if (readAt == 0)
+            snprintf(entry, sizeof(entry), " c%zu n/a", core);
+        else if (g_reportedIdleReadAt[core] == 0 || readAt == g_reportedIdleReadAt[core])
+            snprintf(entry, sizeof(entry), " c%zu ?", core);
+        else
+            snprintf(entry, sizeof(entry), " c%zu %.1f%%", core,
+                100.0 * double(idle - g_reportedIdleTicks[core]) / double(readAt - g_reportedIdleReadAt[core]));
+        out += entry;
+        g_reportedIdleTicks[core] = idle;
+        g_reportedIdleReadAt[core] = readAt;
+    }
+
+    for (size_t i = 0; i < MAX_THREADS; i++)
+    {
+        ThreadSlot& thread = g_slots[i];
+        if (!thread.active)
+            continue;
+
+        const uint64_t ticks = ThreadTicks(thread.handle);
+        const uint64_t used = ticks >= thread.placementTicks ? ticks - thread.placementTicks : 0;
+        thread.placementTicks = ticks;
+        uint32_t hits[4];
+        uint32_t total = 0;
+        for (size_t core = 0; core < 4; core++)
+        {
+            hits[core] = thread.coreHits[core] - thread.reportedHits[core];
+            thread.reportedHits[core] = thread.coreHits[core];
+            total += hits[core];
+        }
+        const uint32_t moves = thread.coreMoves - thread.reportedMoves;
+        thread.reportedMoves = thread.coreMoves;
+
+        const double percent = window ? 100.0 * double(used) / double(window) : 0.0;
+        if (percent < 1.0)
+            continue;
+
+        s32 ideal = -1;
+        u64 mask = 0;
+        s32 priority = -1;
+        svcGetThreadCoreMask(&ideal, &mask, thread.handle);
+        svcGetThreadPriority(&priority, thread.handle);
+        ApplyCoreRule(thread, percent);
+        snprintf(entry, sizeof(entry), " | #%zu %s cpu %.1f%% prio 0x%x ideal %d mask 0x%llx seen c0/1/2/3 %u/%u/%u/%u moves %u",
+            i, thread.name, percent, unsigned(priority), int(ideal), (unsigned long long)mask, hits[0], hits[1], hits[2], hits[3], moves);
+        out += entry;
+    }
+    mutexUnlock(&g_slotsMutex);
+}
+
 size_t os::switch_cpu_profiler::CopyThreads(ThreadInfo* out, size_t capacity)
 {
     size_t count = 0;
@@ -858,6 +1269,32 @@ size_t os::switch_cpu_profiler::CopyThreads(ThreadInfo* out, size_t capacity)
     }
     mutexUnlock(&g_slotsMutex);
     return count;
+}
+
+size_t os::switch_cpu_profiler::SampleThreadTicks(ThreadTime* out, size_t capacity, uint64_t& systemTick, bool wait)
+{
+    if (wait)
+        mutexLock(&g_slotsMutex);
+    else if (!mutexTryLock(&g_slotsMutex))
+        return 0;
+    size_t count = 0;
+    systemTick = armGetSystemTick();
+    for (const ThreadSlot& thread : g_slots)
+    {
+        if (!thread.active || count == capacity)
+            continue;
+        out[count].handle = thread.handle;
+        out[count].ticks = ThreadTicks(thread.handle);
+        memcpy(out[count].name, thread.name, sizeof(out[count].name));
+        count++;
+    }
+    mutexUnlock(&g_slotsMutex);
+    return count;
+}
+
+uint64_t os::switch_cpu_profiler::TickFrequency()
+{
+    return armGetSystemTickFreq();
 }
 
 bool os::switch_cpu_profiler::TryGetCurrentThreadName(char* out, size_t size)

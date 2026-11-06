@@ -2,6 +2,7 @@
 // Parts follow UnleashedRecomp-NX (os/switch/runtime_switch.cpp, crash_switch.cpp).
 #include <os/platform.h>
 #if LO_PLATFORM_SWITCH
+#include <os/debug_server.h>
 #include <os/netlog.h>
 #include <os/switch_platform.h>
 #include <os/switch_cpu_profiler.h>
@@ -321,9 +322,10 @@ void ApmThreadMain(void*)
         std::fprintf(stderr, "[apm] Unable to read clocks through clkrst; clocks unchanged.\n");
         return;
     }
-    if (R_FAILED(apmSetPerformanceConfiguration(mode, kHandheldGpu460Memory1331)))
+    const u32 configuration = kHandheldGpu460Memory1331;
+    if (R_FAILED(apmSetPerformanceConfiguration(mode, configuration)))
     {
-        std::fprintf(stderr, "[apm] Configuration 0x%08X is not available on this firmware.\n", kHandheldGpu460Memory1331);
+        std::fprintf(stderr, "[apm] Configuration 0x%08X is not available on this firmware.\n", configuration);
         return;
     }
     u32 gpuAfter = 0, memoryAfter = 0;
@@ -348,11 +350,11 @@ void ApmThreadMain(void*)
         if (hasOriginal)
             apmSetPerformanceConfiguration(mode, original);
         std::fprintf(stderr, "[apm] 0x%08X changed the memory clock (%.1f -> %.1f MHz); reverted to 0x%08X.\n",
-            kHandheldGpu460Memory1331, memoryBefore / 1e6, memoryAfter / 1e6, original);
+            configuration, memoryBefore / 1e6, memoryAfter / 1e6, original);
         return;
     }
-    std::fprintf(stderr, "[apm] GPU %.1f -> %.1f MHz, memory stays at %.1f MHz (configuration 0x%08X).\n",
-        gpuBefore / 1e6, gpuAfter / 1e6, memoryAfter / 1e6, kHandheldGpu460Memory1331);
+    std::fprintf(stderr, "[apm] GPU %.1f -> %.1f MHz, memory %.1f -> %.1f MHz (configuration 0x%08X).\n",
+        gpuBefore / 1e6, gpuAfter / 1e6, memoryBefore / 1e6, memoryAfter / 1e6, configuration);
 }
 }
 
@@ -452,7 +454,9 @@ void Initialize(const std::filesystem::path& dataRoot)
         }
         std::fclose(env);
     }
-    os::netlog::Start(std::getenv("LO_NETLOG"));
+    // The network log (LO_NETLOG) and the debug server (LO_DEBUG_SERVER, settings.ini debug_server) share one
+    // socket service setup; both stay off, and cost nothing, unless turned on.
+    os::debug_server::StartNetwork(dataRoot.string().c_str());
 
     appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
     appletSetAutoSleepDisabled(true);
@@ -547,6 +551,18 @@ bool IsDocked()
     return appletGetOperationMode() == AppletOperationMode_Console;
 }
 
+bool SystemLanguageIsSpanish()
+{
+    if (R_FAILED(setInitialize()))
+        return false;
+    u64 code = 0;
+    SetLanguage language = SetLanguage_ENUS;
+    const bool spanish = R_SUCCEEDED(setGetSystemLanguage(&code)) && R_SUCCEEDED(setMakeLanguage(code, &language)) &&
+                         (language == SetLanguage_ES || language == SetLanguage_ES419);
+    setExit();
+    return spanish;
+}
+
 bool TakeOperationModeChanged()
 {
     return g_operationModeChanged.exchange(false, std::memory_order_acq_rel);
@@ -581,14 +597,61 @@ std::string MemorySummary()
     return text;
 }
 
+void HeapUsage(uint64_t& used, uint64_t& limit)
+{
+    const struct mallinfo heap = mallinfo();
+    used = uint64_t(heap.uordblks);
+    limit = uint64_t(fake_heap_end - fake_heap_start);
+}
+
+bool ReadClockRates(uint32_t& cpuHz, uint32_t& gpuHz, uint32_t& memoryHz)
+{
+    cpuHz = gpuHz = memoryHz = 0;
+    if (R_FAILED(clkrstInitialize()))
+        return false;
+    bool ok = true;
+    const auto read = [&ok](PcvModuleId module, uint32_t& hz) {
+        ClkrstSession session{};
+        u32 rate = 0;
+        if (R_SUCCEEDED(clkrstOpenSession(&session, module, 3)))
+        {
+            ok &= R_SUCCEEDED(clkrstGetClockRate(&session, &rate));
+            clkrstCloseSession(&session);
+        }
+        else
+            ok = false;
+        hz = rate;
+    };
+    read(PcvModuleId_CpuBus, cpuHz);
+    read(PcvModuleId_GPU, gpuHz);
+    read(PcvModuleId_EMC, memoryHz);
+    clkrstExit();
+    return ok;
+}
+
 uint32_t CurrentThreadHandle()
 {
     return threadGetCurHandle();
 }
 
+static std::atomic<uint32_t> g_pinnedThread{0}; // the game's own affinity calls leave this one alone
+
 uint32_t SetThreadIdealCore(uint32_t handle, int core)
 {
+    if ((handle ? handle : threadGetCurHandle()) == g_pinnedThread.load(std::memory_order_relaxed))
+        return 0;
     return svcSetThreadCoreMask(handle ? Handle(handle) : CUR_THREAD_HANDLE, core, 0x7);
+}
+
+void SleepNanoseconds(int64_t nanoseconds)
+{
+    svcSleepThread(nanoseconds);
+}
+
+void PinCurrentThread(int core)
+{
+    if (R_SUCCEEDED(svcSetThreadCoreMask(CUR_THREAD_HANDLE, core, 1u << core)))
+        g_pinnedThread.store(threadGetCurHandle(), std::memory_order_relaxed);
 }
 
 void SetCurrentThreadPriority(int priority)

@@ -14,10 +14,15 @@
 #include "render_timing.h"
 #include "shader_identity.h"
 #include <debug/frame_timing.h>
+#include <debug/perf_stats.h>
 #include <cpu/guest_thread.h>
 #include <kernel/memory.h>
 #include <kernel/function.h>
+#include <os/debug_server.h>
 #include <os/logger.h>
+#if LO_PLATFORM_SWITCH
+#include <os/switch_cpu_profiler.h>
+#endif
 #include <os/thread_name.h>
 #include <os/host_scheduling.h>
 #include <os/shader_log.h>
@@ -30,6 +35,9 @@
 #include <host_ui/host_ui.h>
 #include <fstream>
 #include <future>
+#if defined(__aarch64__) || defined(_M_ARM64)
+#include <arm_neon.h>
+#endif
 
 void DumpGuestThreadStates();
 
@@ -84,6 +92,18 @@ namespace gpu
 #endif
         return true;
     }
+    // A host overlay's frame while the guest is paused under it, and the debug server's "shot" of it: no guest swap
+    // presents one meanwhile.
+    static void PresentHostOverlayFrame()
+    {
+        video::PresentHostOverlay();
+        if (const char* debugShot = nullptr; os::debug_server::TakeShotRequest(debugShot))
+        {
+            const bool saved = video::SaveScreenshot(debugShot);
+            LOG_INFO("debug server screenshot of the host overlay -> {} ({})", debugShot, saved ? "ok" : "failed");
+            os::debug_server::ShotDone(0, saved);
+        }
+    }
     static const bool g_capturePacketHistory = getenv("LO_GPU_TRACE") != nullptr;
 
     // Opt-in ring of recently executed packets, dumped when the parser derails.
@@ -137,6 +157,20 @@ namespace gpu
 
     // words point at big-endian microcode: guest memory for IM_LOAD, the
     // packet's inline payload for IM_LOAD_IMMEDIATE (`immediate`).
+    // D3D writes 0xFFFFFEED to two adjacent marker words (one-word MEM_WRITEs), then waits for that value at each
+    // (WAIT_REG_MEM): about 360 such groups a frame in the busy street, each ending four sync periods, so the per-draw
+    // checks keyed on the period (shader microcode, zero-register constants) ran at nearly every draw. The GPU waiting
+    // on its own write orders nothing between the guest and the GPU, so a write whose wait follows it with no other
+    // packet between and matches at once ends none. LO_CP_SELF_WAITS=0: every one ends one.
+    static bool SelfWaitsEnabled()
+    {
+        static const bool enabled = [] {
+            const char* value = getenv("LO_CP_SELF_WAITS");
+            return !value || value[0] != '0';
+        }();
+        return enabled;
+    }
+
     static void CaptureShader(uint32_t type, const uint32_t* words, uint32_t count, bool immediate)
     {
         if (type > 1 || count == 0 || count > 0x10000)
@@ -412,11 +446,33 @@ namespace gpu
         static const bool traceIb = getenv("LO_TRACE_IB") != nullptr;
         if (traceIb)
             LOG_INFO("swap#{} WPTR <- {:#x} (rd {:#x})", g_swapCount.load(), dwordIndex, m_readPtrIndex);
+        // LO_CP_WPTR_LOCKFREE=0: store under the mutex, as before. Targets the render thread's
+        // svcArbitrateLock under the D3D kick sub_823CE468 (0.3% of it, street3), taken while
+        // GPU CmdProc holds the mutex in its idle wait. Lock-free, no wake is lost: the store and
+        // the waiter count are sequentially consistent, so either this load sees the worker's
+        // increment, or the worker's predicate (after its increment) sees the store. A seen
+        // waiter is between its increment and its wait (holding the mutex, so taking it here
+        // waits until its predicate has run or it sleeps) or already asleep.
+        static const bool lockFree = [] {
+            const char* value = getenv("LO_CP_WPTR_LOCKFREE");
+            return !value || strcmp(value, "0") != 0;
+        }();
+        if (lockFree)
+        {
+            m_writePtrIndex.store(dwordIndex);
+            if (m_writePtrWaiters.load())
+            {
+                { std::lock_guard lock(m_writePtrMutex); }
+                m_writePtrChanged.notify_one();
+            }
+            return;
+        }
         {
             std::lock_guard lock(m_writePtrMutex);
             m_writePtrIndex = dwordIndex;
         }
-        m_writePtrChanged.notify_one();
+        if (!LO_PLATFORM_SWITCH || m_writePtrWaiters.load())
+            m_writePtrChanged.notify_one();
     }
 
     // Guest MMIO stores reach WriteRegister on other threads.
@@ -594,10 +650,74 @@ namespace gpu
     // words as they are and the register file their byte-swapped values, the
     // same result as WriteRegisterFast on each word. False leaves the caller
     // to write word by word.
+    // LO_CP_FUSED_PLAIN_RUN=0: the MMIO copy and the register pass separately, as before.
+    static const bool g_fusedPlainRun = [] {
+        const char* value = getenv("LO_CP_FUSED_PLAIN_RUN");
+        return !value || strcmp(value, "0") != 0;
+    }();
+
+    // One pass over `count` guest words: the MMIO image takes them as they are, the register
+    // file their byte-swapped values. Returns nonzero when a register changed.
+    static inline uint32_t CopyPlainWords(const uint32_t* guestWords, uint32_t* mmio, uint32_t* registers, uint32_t count)
+    {
+        uint32_t diff = 0, i = 0;
+#if defined(__aarch64__) || defined(_M_ARM64)
+        uint32x4_t changed = vdupq_n_u32(0);
+        for (; i + 4 <= count; i += 4)
+        {
+            const uint8x16_t raw = vld1q_u8(reinterpret_cast<const uint8_t*>(guestWords + i));
+            vst1q_u8(reinterpret_cast<uint8_t*>(mmio + i), raw);
+            const uint32x4_t value = vreinterpretq_u32_u8(vrev32q_u8(raw));
+            changed = vorrq_u32(changed, veorq_u32(vld1q_u32(registers + i), value));
+            vst1q_u32(registers + i, value);
+        }
+        diff = vmaxvq_u32(changed);
+#endif
+        for (; i < count; ++i)
+        {
+            const uint32_t raw = guestWords[i], value = ByteSwap(raw);
+            mmio[i] = raw;
+            diff |= registers[i] ^ value;
+            registers[i] = value;
+        }
+        return diff;
+    }
+
     inline bool CommandProcessor::WritePlainRun(uint32_t first, const uint32_t* guestWords, uint32_t count)
     {
         if (first < kPlainRegisterFirst || uint64_t(first) + count > REGISTER_COUNT)
             return false;
+        // Fused: ExecutePacket's constant runs were ~5% of GPU CmdProc in a busy street
+        // (cpu-street4): a memcpy into the MMIO image (2.4%) and a scalar swap-and-compare
+        // loop over the same words (2.4%). Same stores, same dirty blocks, one read of the words.
+        if (g_fusedPlainRun)
+        {
+            auto* mmio = static_cast<uint32_t*>(g_memory.Translate(MMIO_BASE)) + first;
+            uint32_t* registers = m_registers.data() + first;
+            const uint32_t end = first + count;
+            constexpr uint32_t kConstantEnd = kAluConstantBase + 2 * kAluConstantBankSize;
+            const uint32_t constantFirst = std::max(first, kAluConstantBase), constantEnd = std::min(end, kConstantEnd);
+            if (constantFirst >= constantEnd)
+            {
+                CopyPlainWords(guestWords, mmio, registers, count);
+                return true;
+            }
+            CopyPlainWords(guestWords, mmio, registers, constantFirst - first);
+            uint64_t changed[2]{};
+            for (uint32_t block = constantFirst; block < constantEnd;)
+            {
+                const uint32_t blockEnd = std::min(constantEnd, (block & ~15u) + 16);
+                const uint32_t at = block - first;
+                if (CopyPlainWords(guestWords + at, mmio + at, registers + at, blockEnd - block))
+                    changed[(block - kAluConstantBase) / kAluConstantBankSize] |= ConstantBlockBit(block);
+                block = blockEnd;
+            }
+            CopyPlainWords(guestWords + (constantEnd - first), mmio + (constantEnd - first),
+                registers + (constantEnd - first), end - constantEnd);
+            for (uint32_t bank = 0; bank < 2; ++bank)
+                if (changed[bank]) MarkCommandConstantsChanged(bank, changed[bank]);
+            return true;
+        }
         std::memcpy(static_cast<uint8_t*>(g_memory.Translate(MMIO_BASE)) + size_t(first) * 4, guestWords, size_t(count) * 4);
         uint32_t* registers = m_registers.data();
         const uint32_t end = first + count;
@@ -700,6 +820,9 @@ namespace gpu
         bool timingIdle = false;
         while (m_running)
         {
+#if LO_PLATFORM_SWITCH
+            os::switch_cpu_profiler::NoteCore();
+#endif
             uint32_t writePtr = m_writePtrIndex.load();
 
             // The write pointer is also visible in the MMIO window when the
@@ -720,17 +843,21 @@ namespace gpu
             if (writePtr == 0xBAADF00D || m_readPtrIndex == writePtr || m_primaryBufferSize == 0)
             {
                 g_workerStage.store("idle/event pump", std::memory_order_relaxed);
-                if (timingEnabled && !timingIdle)
+                // Measured always: the perf line's cp_idle (debug/perf_stats.h) is time the game left the GPU
+                // thread without work, which tells a game-thread-bound scene from a render-thread-bound one.
+                if (!timingIdle)
                 {
                     idleStart = std::chrono::steady_clock::now();
                     timingIdle = true;
                 }
                 {
                     std::unique_lock lock(m_writePtrMutex);
+                    m_writePtrWaiters.fetch_add(1);
                     notified_wait::For(m_writePtrChanged, lock, std::chrono::microseconds(500), [&] {
                         return !m_running || m_writePtrIndex.load() != writePtr ||
                             m_wake.exchange(false, std::memory_order_acq_rel);
                     });
+                    m_writePtrWaiters.fetch_sub(1);
                 }
                 if (m_running)
                 {
@@ -745,7 +872,7 @@ namespace gpu
                         if (now - s_lastOverlayPresent >= std::chrono::milliseconds(16))
                         {
                             s_lastOverlayPresent = now;
-                            video::PresentHostOverlay();
+                            PresentHostOverlayFrame();
                         }
                     }
                 }
@@ -753,8 +880,10 @@ namespace gpu
             }
             if (timingIdle)
             {
-                frame_timing::CpIdle(std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - idleStart).count());
+                const auto idle = std::chrono::steady_clock::now() - idleStart;
+                if (timingEnabled)
+                    frame_timing::CpIdle(std::chrono::duration<double, std::milli>(idle).count());
+                perf_stats::CpIdle(uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(idle).count()));
                 timingIdle = false;
             }
 
@@ -859,7 +988,8 @@ namespace gpu
                 std::lock_guard lock(m_waitProgressMutex);
                 m_interruptsCompleted.fetch_add(1, std::memory_order_release);
             }
-            m_waitProgress.notify_all();
+            if (!LO_PLATFORM_SWITCH || m_waitProgressWaiters.load())
+                m_waitProgress.notify_all();
             if (trace)
                 LOG_VERBOSE("isr done block=[{:#x} {:#x} {:#x} {:#x} {:#x} {:#x}]",
                     uint32_t(blk[0]), uint32_t(blk[1]), uint32_t(blk[2]), uint32_t(blk[3]), uint32_t(blk[4]), uint32_t(blk[5]));
@@ -958,6 +1088,17 @@ namespace gpu
             r.d2 = reader.PeekAndSwap(2);
         }
 
+        // The pending MEM_WRITEs' sync point, unless this is another of them or a WAIT_REG_MEM that may cancel one.
+        if (m_pendingMemWrites) [[unlikely]]
+        {
+            const uint32_t opcode = (packet >> 8) & 0x7F;
+            if (type != 3 || (opcode != PM4_WAIT_REG_MEM && opcode != PM4_MEM_WRITE))
+            {
+                m_pendingMemWrites = 0;
+                AdvanceSyncEpoch(SyncSource::MemWrite);
+            }
+        }
+
         switch (packet >> 30)
         {
         case 0: return ExecutePacketType0(reader, packet);
@@ -1043,9 +1184,15 @@ namespace gpu
         {
         case PM4_INTERRUPT: AdvanceSyncEpoch(SyncSource::Interrupt); break;
         case PM4_XE_SWAP: AdvanceSyncEpoch(SyncSource::Swap); break;
-        case PM4_WAIT_REG_MEM: AdvanceSyncEpoch(SyncSource::WaitRegMem); break;
+        case PM4_WAIT_REG_MEM: if (!m_pendingMemWrites) AdvanceSyncEpoch(SyncSource::WaitRegMem); break;
         case PM4_REG_TO_MEM: AdvanceSyncEpoch(SyncSource::RegToMem); break;
-        case PM4_MEM_WRITE: AdvanceSyncEpoch(SyncSource::MemWrite); break;
+        case PM4_MEM_WRITE:
+            if (count != 2 || !SelfWaitsEnabled() || m_pendingMemWrites == kPendingMemWrites)
+            {
+                m_pendingMemWrites = 0;
+                AdvanceSyncEpoch(SyncSource::MemWrite);
+            }
+            break;
         case PM4_COND_WRITE: AdvanceSyncEpoch(SyncSource::CondWrite); break;
         case PM4_EVENT_WRITE_SHD: AdvanceSyncEpoch(SyncSource::EventShd); break;
         case PM4_EVENT_WRITE_EXT: AdvanceSyncEpoch(SyncSource::EventExt); break;
@@ -1119,6 +1266,7 @@ namespace gpu
                 : video::GetFramePacingTarget(GetFrameRateTarget());
             const bool timingEnabled = frame_timing::Enabled();
             frame_timing::PacingSample pacing;
+            uint64_t pacingSleepNs = 0;
             {
                 static FramePacer pacer;
                 static OutputFramePacer outputPacer;
@@ -1129,11 +1277,12 @@ namespace gpu
                     : video::GetDynamicFgOutputPacing(GetFrameRateTarget());
                 const auto outputDeadline = outputPacer.Schedule(timingPace, output.outputFps, output.actualPresents);
                 const auto deadline = std::max(nativeDeadline, outputDeadline);
-                const auto sleepStart = timingEnabled ? std::chrono::steady_clock::now() : timingPace;
+                const auto sleepStart = std::chrono::steady_clock::now();
                 pacingWait.Until(deadline);
+                const auto wake = std::chrono::steady_clock::now();
+                pacingSleepNs = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(wake - sleepStart).count());
                 if (timingEnabled)
                 {
-                    const auto wake = std::chrono::steady_clock::now();
                     pacing.requestedMs = std::max(0.0, std::chrono::duration<double, std::milli>(deadline - sleepStart).count());
                     pacing.actualMs = std::chrono::duration<double, std::milli>(wake - sleepStart).count();
                     // A past deadline requests no sleep; its call overhead must
@@ -1165,6 +1314,9 @@ namespace gpu
             g_workerStage.store("window event pump", std::memory_order_relaxed);
             video::PumpEvents();
             g_completedSwaps = swaps;
+            perf_stats::Present({swaps, fpsCap, pacingSleepNs,
+                uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - timingPresent).count()),
+                loadBoost || loading::Active()});
             static double previousSwapLogMs = 0, previousSwapPostMs = 0;
             if (timingEnabled)
             {
@@ -1210,8 +1362,10 @@ namespace gpu
                         LOG_INFO("screenshot request {}: {} frames starting at swap {}", serial, requestedShots, swaps);
                     }
                 }
-                const bool requestedShot = requestedShots != 0;
-                if (requestedShot) --requestedShots;
+                // A benchmark run's screenshot (LO_BENCH_SHOT), named like a requested one.
+                const bool benchShot = perf_stats::TakeBenchScreenshot();
+                const bool requestedShot = requestedShots != 0 || benchShot;
+                if (requestedShots) --requestedShots;
                 if (requestedShot || (shotSwap && swaps >= shotSwap && swaps < shotSwap + shotCount) || (shotEvery && (swaps % shotEvery) == 0))
                 {
                     std::string path = getenv("LO_SCREENSHOT_PATH") ? getenv("LO_SCREENSHOT_PATH") : "screenshot.ppm";
@@ -1220,7 +1374,19 @@ namespace gpu
                         size_t dot = path.rfind('.');
                         path = path.substr(0, dot) + fmt::format("_{}", swaps) + (dot == std::string::npos ? "" : path.substr(dot));
                     }
-                    LOG_INFO("screenshot at swap {} -> {} ({})", swaps, path, video::SaveScreenshot(path.c_str()) ? "ok" : "failed");
+                    const bool saved = video::SaveScreenshot(path.c_str());
+                    // A benchmark's screenshot is always logged: tools/switch/bench.py waits for it before the next run.
+                    if (benchShot)
+                        LOG_NOTICE("bench screenshot at swap {} -> {} ({})", swaps, path, saved ? "ok" : "failed");
+                    else
+                        LOG_INFO("screenshot at swap {} -> {} ({})", swaps, path, saved ? "ok" : "failed");
+                }
+                // The debug server's "shot": the frame just presented, to the file it names.
+                if (const char* debugShot = nullptr; os::debug_server::TakeShotRequest(debugShot))
+                {
+                    const bool saved = video::SaveScreenshot(debugShot);
+                    LOG_INFO("debug server screenshot at swap {} -> {} ({})", swaps, debugShot, saved ? "ok" : "failed");
+                    os::debug_server::ShotDone(swaps, saved);
                 }
             }
             if (g_gpuStats)
@@ -1313,6 +1479,31 @@ namespace gpu
                     isMemory ? GpuSwap(*reinterpret_cast<uint32_t*>(TranslatePhysical(pollRegAddr & ~3u)), pollRegAddr & 3) : 0, g_swapCount.load());
             g_workerStage.store("WAIT_REG_MEM", std::memory_order_relaxed);
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            // After one-word MEM_WRITEs: their sync points and this one's were held back, and are taken unless this
+            // waits, at once, for the value one of them left at the same address (which then leaves the list).
+            bool selfWait = false;
+            uint32_t selfValue = 0;
+            if (m_pendingMemWrites)
+            {
+                for (uint32_t i = 0; i < m_pendingMemWrites; ++i)
+                {
+                    if (!isMemory || pollRegAddr != m_pendingMemWriteAddress[i] || (waitInfo & 7) != 3 ||
+                        (m_pendingMemWriteValue[i] & mask) != ref)
+                        continue;
+                    selfWait = true;
+                    selfValue = m_pendingMemWriteValue[i];
+                    --m_pendingMemWrites;
+                    m_pendingMemWriteAddress[i] = m_pendingMemWriteAddress[m_pendingMemWrites];
+                    m_pendingMemWriteValue[i] = m_pendingMemWriteValue[m_pendingMemWrites];
+                    break;
+                }
+                if (!selfWait)
+                {
+                    m_pendingMemWrites = 0;
+                    AdvanceSyncEpoch(SyncSource::MemWrite);
+                    AdvanceSyncEpoch(SyncSource::WaitRegMem);
+                }
+            }
             while (m_running)
             {
                 // Snapshot before reading, so a handler finishing after the read
@@ -1339,6 +1530,13 @@ namespace gpu
                 case 6: matched = (value & mask) > ref; break;
                 case 7: matched = true; break;
                 }
+                if (selfWait && (!matched || value != selfValue))
+                {
+                    selfWait = false;
+                    m_pendingMemWrites = 0;
+                    AdvanceSyncEpoch(SyncSource::MemWrite);
+                    AdvanceSyncEpoch(SyncSource::WaitRegMem);
+                }
                 if (matched)
                     break;
                 // The guest thread this wait depends on may itself be polling an
@@ -1352,7 +1550,7 @@ namespace gpu
                     if (now - s_lastWaitOverlayPresent >= std::chrono::milliseconds(16))
                     {
                         s_lastWaitOverlayPresent = now;
-                        video::PresentHostOverlay();
+                        PresentHostOverlayFrame();
                     }
                 }
                 if (std::chrono::steady_clock::now() > deadline)
@@ -1366,16 +1564,18 @@ namespace gpu
                     // the scratch writeback word. Re-check when any handler completes
                     // rather than always sleeping the whole poll interval.
                     std::unique_lock lock(m_waitProgressMutex);
+                    m_waitProgressWaiters.fetch_add(1);
                     m_waitProgress.wait_for(lock, std::chrono::milliseconds(wait / 0x100), [&] {
                         return m_interruptsCompleted.load(std::memory_order_relaxed) != progress || !m_running ||
                             m_wake.exchange(false, std::memory_order_acq_rel);
                     });
+                    m_waitProgressWaiters.fetch_sub(1);
                 }
                 else
                     std::this_thread::yield();
             }
             // Guest writes made before the waited-for value are visible from here.
-            AdvanceSyncEpoch(SyncSource::WaitRegMem);
+            if (!selfWait) AdvanceSyncEpoch(SyncSource::WaitRegMem);
             return true;
         }
 
@@ -1407,6 +1607,13 @@ namespace gpu
             {
                 LOG_ERROR("MEM_WRITE: invalid physical destination extent");
                 return false;
+            }
+            if (count == 2 && SelfWaitsEnabled())
+            {
+                // Its sync point waits for the packets after it (ExecutePacket, WAIT_REG_MEM).
+                m_pendingMemWriteAddress[m_pendingMemWrites] = writeAddr;
+                m_pendingMemWriteValue[m_pendingMemWrites] = reader.PeekAndSwap(0);
+                ++m_pendingMemWrites;
             }
             for (uint32_t i = 0; i < count - 1; i++)
             {

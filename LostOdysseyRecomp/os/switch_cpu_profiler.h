@@ -18,12 +18,25 @@
 // registered thread every 2 ms, reads where it is (program counter) and resumes it; every 30 seconds
 // it writes the hottest code addresses of each thread to stderr.log, as offsets into the executable
 // that tools/switch-cpu-profile.py turns into function names (recompiled game functions included).
+//
+// Lost Odyssey: LO_CPU_PROFILE_SAMPLES=1 (or a comma-separated list of thread names, e.g.
+// "Guest Main,GPU CmdProc") also keeps every sample of those threads, with the host LR and, for guest
+// threads, the guest call chain (return addresses from the PowerPC back chain), and appends them to
+// cpu-samples.bin in the app folder at each report. tools/switch/switch-cpu-profile.py --samples reads it.
 namespace os::switch_cpu_profiler
 {
     // The name is copied (up to 47 characters).
     void RegisterCurrentThread(const char* name);
     void RegisterCurrentThreadWithAddress(const char* prefix, uint32_t guestAddress);
     void UnregisterCurrentThread();
+
+    // The calling (registered) thread runs guest code: where its PPCContext pointer lives (the thread_local
+    // g_ppcContext, which GuestToHostFunction swaps), the offsets of r1 and lr in a PPCContext (lrOffset
+    // UINT32_MAX: no lr), guest memory's base and the guest stack's [low, high) guest addresses. With
+    // LO_CPU_PROFILE_SAMPLES the sampler then walks the guest stack's back chain at each sample (below).
+    void SetCurrentThreadGuestStack(void* const* contextSlot, uint32_t r1Offset, uint32_t lrOffset,
+        const uint8_t* memoryBase, uint32_t stackLow, uint32_t stackHigh);
+    void ClearCurrentThreadGuestStack();
 
     // Starts the per-thread accounting, and the sampler when asked ([Switch] SwitchCpuProfiler).
     void Start(bool sampler);
@@ -32,6 +45,13 @@ namespace os::switch_cpu_profiler
     // for the sampler: while it holds the thread list, the entries are left out of this report.
     void AppendThreadCpuUsage(std::string& out);
 
+    // LO_THREAD_PLACEMENT=1: where threads run. NoteCore (called from each thread's wait paths, at most every 2 ms, one
+    // relaxed test when off) counts the core it finds the thread on; AppendThreadPlacement gives, since the previous
+    // call, each core's idle share and, for threads above 1% CPU, priority, ideal core, allowed mask, those counts
+    // and how often the core changed between two of them. Leaves AppendThreadCpuUsage's window alone.
+    void NoteCore();
+    void AppendThreadPlacement(std::string& out);
+
     // The registered threads (kernel handle and name), for the stall watchdog. Returns how many were copied.
     struct ThreadInfo
     {
@@ -39,6 +59,19 @@ namespace os::switch_cpu_profiler
         char name[48];
     };
     size_t CopyThreads(ThreadInfo* out, size_t capacity);
+
+    // Every registered thread's CPU time so far (kernel ticks) and the system tick it was read at, for callers that
+    // keep their own windows (debug/perf_stats.cpp). Leaves AppendThreadCpuUsage's window alone. wait=false gives up
+    // (returns 0) while the sampler holds the thread list.
+    struct ThreadTime
+    {
+        uint32_t handle;
+        uint64_t ticks;
+        char name[48];
+    };
+    size_t SampleThreadTicks(ThreadTime* out, size_t capacity, uint64_t& systemTick, bool wait);
+    // System ticks per second (the kernel's thread tick counts use the same clock).
+    uint64_t TickFrequency();
 
     // The calling thread's registered name, for a crash report: false (and `out` untouched) when it has none or the
     // thread list is locked at the moment (the crash handler cannot wait for it).

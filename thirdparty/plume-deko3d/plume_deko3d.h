@@ -63,6 +63,21 @@ namespace plume {
     struct Deko3DDevice;
     struct Deko3DCommandQueue;
 
+    // LostOdysseyRecomp (2026-11-03, LO_DEKO3D_RECORD_THREAD=1): command lists append their calls to a ring that one
+    // worker thread replays into deko3d (plume_deko3d_commands.cpp: the note at its top lists the drain points). What a
+    // caller waits for the worker for:
+    enum class Deko3DRecordWait : uint8_t {
+        Submit, ListDestroyed, SwapchainDestroyed, TextureDestroyed, BufferDestroyed, SetDestroyed, SetWritten,
+        FramebufferDestroyed, PipelineDestroyed, LayoutDestroyed, QueryPoolDestroyed, SharedWords, RingFull, Shutdown, Count
+    };
+    struct Deko3DRecordRing;
+    // Waits until the worker has replayed every call recorded so far on every list; returns at once when the thread is
+    // off or has caught up. Any thread but the worker.
+    void Deko3DRecordDrain(Deko3DRecordWait why);
+    // The worker, started by the device when LO_DEKO3D_RECORD_THREAD=1 (read once), and stopped (drained) with it.
+    void Deko3DRecordStart();
+    void Deko3DRecordStop();
+
     struct Deko3DBuffer : RenderBuffer {
         Deko3DDevice *device = nullptr;
         RenderBufferDesc desc;
@@ -104,6 +119,10 @@ namespace plume {
         bool ownsMemory = true;
         bool ownsBlock = false;  // LostOdysseyRecomp (2026-10-28): its own memory block (compressed render targets)
         bool valid = false;
+        // LostOdysseyRecomp (2026-11-04): the sampled descriptor of defaultView(), made on first use (the image never
+        // changes once made). Written by the descriptor-writing thread only.
+        mutable DkImageDescriptor sampledDescriptor{};
+        mutable bool sampledDescriptorReady = false;
 
         Deko3DTexture(Deko3DDevice *device, const RenderTextureDesc &desc);
         Deko3DTexture(Deko3DDevice *device) : device(device) {} // swapchain images
@@ -195,6 +214,8 @@ namespace plume {
         std::vector<Set> sets;
         std::vector<RenderPushConstantRange> pushRanges;
         uint32_t pushSize = 0;
+        // LostOdysseyRecomp (2026-11-03): a recorded call may still point at it.
+        ~Deko3DPipelineLayout() override { Deko3DRecordDrain(Deko3DRecordWait::LayoutDestroyed); }
     };
 
     struct Deko3DDescriptorSet : RenderDescriptorSet {
@@ -219,6 +240,10 @@ namespace plume {
         // banjo-nx (2026-10-19, GPU): per image id, the level-0 size of the view written there as a texture query
         // reads it (width, height, depth or layers), for the texture size buffer (txq).
         std::vector<std::array<uint32_t, 3>> imageSizes;
+        // LostOdysseyRecomp (2026-11-03, record thread): the ring (index + 1, top 8 bits) and list generation (low 32)
+        // of its last recorded bind: the worker reads the set at that list's draws until it has replayed its end(), so
+        // a write or destruction before then waits for it (Deko3DRecordWaitSet). 0: never bound by a recorded list.
+        mutable std::atomic<uint64_t> recordTicket{0};
 
         Deko3DDescriptorSet(Deko3DDevice *device, const RenderDescriptorSetDesc &desc);
         ~Deko3DDescriptorSet() override;
@@ -228,6 +253,8 @@ namespace plume {
         void setAccelerationStructure(uint32_t descriptorIndex, const RenderAccelerationStructure *accelerationStructure) override;
         const Range *rangeOf(uint32_t descriptorIndex) const;
     };
+    // Before the set changes or goes: the worker done with the recorded list that bound it, if that list is still open.
+    void Deko3DRecordWaitSet(const Deko3DDescriptorSet &set, Deko3DRecordWait why);
 
     struct Deko3DPipeline : RenderPipeline {
         enum class Type { Graphics, Compute };
@@ -277,13 +304,18 @@ namespace plume {
         // absent), so a bind does not ask deko3d, and a hash of each group of the fixed-function state, so a bind
         // after a pipeline of other state sends only the groups that differ (kStateGroups, Deko3DCommandList).
         const DkShader *stageShaders[3] = {};
+        const DkShader *earlyFragment = nullptr;  // stageShaders[2] with early fragment tests (LostOdysseyRecomp)
         uint64_t groupHash[9] = {};
+        // LostOdysseyRecomp (2026-11-03): a recorded setPipeline may still point at it (here, not in the base: its
+        // members are gone by the base's destructor).
+        ~Deko3DGraphicsPipeline() override { Deko3DRecordDrain(Deko3DRecordWait::PipelineDestroyed); }
     };
 
     struct Deko3DComputePipeline : Deko3DPipeline {
         const DkShader *shader = nullptr;
         bool valid = false;
         uint32_t uboMask = 0, ssboMask = 0;
+        ~Deko3DComputePipeline() override { Deko3DRecordDrain(Deko3DRecordWait::PipelineDestroyed); }
     };
 
     struct Deko3DCommandFence : RenderCommandFence {
@@ -301,6 +333,10 @@ namespace plume {
         bool hasDepth = false;
         uint32_t width = 0, height = 0;
         bool srgb[8] = {};
+        // LostOdysseyRecomp (2026-11-04): unique per framebuffer made, so a new one at a freed one's address differs.
+        uint64_t serial = 0;
+        // LostOdysseyRecomp (2026-11-03): a recorded setFramebuffer may still point at it.
+        ~Deko3DFramebuffer() override { Deko3DRecordDrain(Deko3DRecordWait::FramebufferDestroyed); }
         uint32_t getWidth() const override { return width; }
         uint32_t getHeight() const override { return height; }
     };
@@ -309,7 +345,15 @@ namespace plume {
         Deko3DDevice *device = nullptr;
         DkMemBlock block = nullptr;
         std::vector<uint64_t> results;
-        Deko3DQueryPool(Deko3DDevice *device, uint32_t count);
+        // LostOdysseyRecomp (2026-11-04): an occlusion pool (createOcclusionQueryPool). Each query has two 16-byte
+        // SamplesPassed reports, begin then end, in CPU-cached memory the CPU never writes. `state` (OcclusionBegun...)
+        // is written where the list is replayed and read after the fence; `used` (queries ended since the last reset)
+        // by the recording thread, which also reads the results.
+        bool occlusion = false;
+        static constexpr uint8_t OcclusionBegun = 1, OcclusionChained = 2, OcclusionEnded = 4, OcclusionSkipped = 8;
+        mutable std::vector<uint8_t> state;
+        mutable uint32_t used = 0;
+        Deko3DQueryPool(Deko3DDevice *device, uint32_t count, bool occlusion = false);
         ~Deko3DQueryPool() override;
         void queryResults() override;
         bool queryResults(uint32_t count);
@@ -340,6 +384,8 @@ namespace plume {
         const Deko3DComputePipeline *computePipeline = nullptr;
         uint64_t boundStateHash = 0;
         const DkShader *boundShaders[3] = {};
+        bool earlyFragmentTests = false;  // Deko3DSetEarlyFragmentTests
+        void bindFragmentVariant();
         // banjo-nx (2026-10-19): the groups of fixed-function state as last bound (Deko3DGraphicsPipeline::groupHash;
         // 0: unknown). The dynamic depth bias and stencil reference make theirs unknown.
         uint64_t boundGroups[9] = {};
@@ -370,6 +416,7 @@ namespace plume {
         bool descriptorsInvalidated = false;
         uint64_t descriptorEpoch = 0;
         const Deko3DFramebuffer *framebuffer = nullptr;
+        uint64_t framebufferSerial = 0;  // LostOdysseyRecomp (2026-11-04): the serial of `framebuffer` when bound
         // Bound textures: the handles last bound per graphics stage, and the buffer the shared constants were last
         // found in (GPU range and CPU address).
         DkResHandle boundTex[3][32]{};
@@ -377,10 +424,17 @@ namespace plume {
         DkGpuAddr sharedBase = 0;
         uint32_t sharedSize = 0;
         const uint8_t *sharedCpu = nullptr;
+        // The buffer the last findBufferCached found, valid while the device's bufferGeneration is the one it saw.
+        DkGpuAddr cachedBase = 0;
+        uint32_t cachedSize = 0;
+        const uint8_t *cachedCpu = nullptr;
+        uint32_t cachedGeneration = 0;
+        bool findBufferCached(DkGpuAddr address, DkGpuAddr &base, uint32_t &size, const uint8_t *&cpu);
         // banjo-nx (2026-10-19, render-thread proposal 5, Deko3DSetSharedWords): the CPU's copy of the shared constants
         // the next draws read, when the renderer pushes them (its uniform buffer holds them only on the GPU's side).
         const uint8_t *sharedWords = nullptr;
         uint32_t sharedWordsSize = 0;
+        DkGpuAddr sharedWordsAddr = 0;  // LostOdysseyRecomp (2026-11-04): the buffer they copy; 0: the bound one
         DkViewport viewports[16]{};
         uint32_t viewportCount = 0;
         DkScissor scissors[16]{};
@@ -428,6 +482,13 @@ namespace plume {
         void discardTexture(const RenderTexture *texture) override;
         void resetQueryPool(const RenderQueryPool *queryPool, uint32_t queryFirstIndex, uint32_t queryCount) override;
         void writeTimestamp(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        void beginOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        void endOcclusionQuery(const RenderQueryPool *queryPool, uint32_t queryIndex) override;
+        // LostOdysseyRecomp (2026-11-04): the open occlusion query and the draws done when it began, and the last one
+        // ended with its own report (a begin right after it, with no draw in between, reads that report instead).
+        const Deko3DQueryPool *occlusionPool = nullptr, *occlusionLastPool = nullptr;
+        uint32_t occlusionIndex = 0, occlusionLastIndex = 0;
+        uint64_t occlusionDraws = 0, occlusionLastDraws = 0;
 
         // banjo-nx: the blend constant (BLEND_FACTOR), which plume has no call for.
         void setBlendConstant(const float rgba[4]);
@@ -440,6 +501,7 @@ namespace plume {
         DkBarrier pendingBarrierMode = DkBarrier_None;
         uint32_t pendingBarrierInvalidate = 0;
         bool pendingBarrier = false;
+        char barrierTrace[192] = {};  // LostOdysseyRecomp: what the barrier about to be emitted came from
         // banjo-nx (2026-10-19, render-thread proposal 13): per-draw counters of this list, added to the totals at end()
         // (no atomic read-modify-write per draw: the A57 has no LSE).
         uint64_t statDraws = 0, statWindowDraws = 0;
@@ -448,8 +510,18 @@ namespace plume {
             if (pendingBarrier)
                 emitBarrier(pendingBarrierMode, pendingBarrierInvalidate);
         }
+        void applyBarrier(DkBarrier mode, uint32_t invalidate, bool merge, const char *trace);
         void invalidateZcullAfterCopy(const Deko3DTexture *dst);
         uint64_t currentEpoch() const;
+
+        // LostOdysseyRecomp (2026-11-03, LO_DEKO3D_RECORD_THREAD): the ring this list's calls go to while the record
+        // thread is on (null: deko3d is written on the calling thread, as before). Every field above belongs to the
+        // worker then; these are the recording thread's own: the layouts as set (a push constant's size when the call
+        // gives none: graphics, compute), and whether the renderer's own copy of the shared words is bound
+        // (Deko3DSetSharedWords: the worker would read it later than the draw, so each draw waits for it).
+        Deko3DRecordRing *ring = nullptr;
+        const Deko3DPipelineLayout *recordLayouts[2] = {};
+        bool recordSharedWords = false;
         void bindGraphicsBuffers();
         void bindTextures();
         void restoreScissors();
@@ -512,6 +584,8 @@ namespace plume {
 
         // Shader code: blocks, bump allocated.
         std::mutex codeMutex;
+        // A fragment shader to the same code with early fragment tests (guarded by codeMutex).
+        std::unordered_map<const DkShader *, std::unique_ptr<DkShader>> earlyFragmentShaders;
         std::vector<std::pair<DkMemBlock, uint32_t>> codeBlocks; // block, used
         std::atomic<uint64_t> codeEpoch{1}; // advances with each code load (command lists invalidate the shader cache)
         std::unordered_map<uint64_t, std::unique_ptr<Deko3DShaderVariant>> variants; // by variant source hash
@@ -590,6 +664,8 @@ namespace plume {
         // Every buffer by its GPU address (bound textures read the shared constants' words through it).
         std::mutex bufferMutex;
         std::map<DkGpuAddr, std::pair<uint32_t, const uint8_t *>> bufferRanges; // GPU address -> size, CPU address
+        // Counts the destroyed buffers (under bufferMutex): a list's cached range is stale once it changes.
+        std::atomic<uint32_t> bufferGeneration{0};
         bool findBuffer(DkGpuAddr address, DkGpuAddr &base, uint32_t &size, const uint8_t *&cpu);
 
         Deko3DDevice();
@@ -612,6 +688,7 @@ namespace plume {
         std::unique_ptr<RenderCommandSemaphore> createCommandSemaphore() override;
         std::unique_ptr<RenderFramebuffer> createFramebuffer(const RenderFramebufferDesc &desc) override;
         std::unique_ptr<RenderQueryPool> createQueryPool(uint32_t queryCount) override;
+        std::unique_ptr<RenderQueryPool> createOcclusionQueryPool(uint32_t queryCount) override;
         void setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &buildInfo, const RenderBottomLevelASMesh *meshes, uint32_t meshCount, bool preferFastBuild, bool preferFastTrace) override;
         void setTopLevelASBuildInfo(RenderTopLevelASBuildInfo &buildInfo, const RenderTopLevelASInstance *instances, uint32_t instanceCount, bool preferFastBuild, bool preferFastTrace) override;
         void setShaderBindingTableInfo(RenderShaderBindingTableInfo &tableInfo, const RenderShaderBindingGroups &groups, const RenderPipeline *pipeline, RenderDescriptorSet **descriptorSets, uint32_t descriptorSetCount) override;
@@ -674,10 +751,12 @@ namespace plume {
     // at 'slot' for the graphics stages that read it; the update of 'size' bytes at 'offset' of the 'uboSize'-byte
     // buffer at 'address'; and the CPU's copy of the shared constants bound textures are read from (bindTextures), for
     // a shared uniform buffer the renderer pushes (nullptr: read where the bound buffer's memory is, as before).
+    // LostOdysseyRecomp (2026-11-04): with 'address', the copy of the uniform buffer at that GPU address only: bound
+    // textures read their sampler words there instead of in the CPU-uncached memory behind it.
     bool Deko3DBindUniform(RenderCommandList *commandList, uint32_t slot, uint64_t address, uint32_t size);
     bool Deko3DPushUniform(RenderCommandList *commandList, uint64_t address, uint32_t uboSize, uint32_t offset,
                            const void *data, uint32_t size);
-    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size);
+    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size, uint64_t address = 0);
     // banjo-nx: the queue lost (dkQueueIsInErrorState).
     bool Deko3DDeviceLost(RenderDevice *device);
     // sa2-nx (2026-10-20, 1.0.3.1): the size the swapchain should have, the console display's (1920x1080 docked,

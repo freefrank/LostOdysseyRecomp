@@ -169,6 +169,9 @@ struct WaitScope
     std::chrono::steady_clock::time_point start_;
     WaitScope(const char* what, uint32_t object) : st(CurrentWaitState()), what_(what), object_(object)
     {
+#if LO_PLATFORM_SWITCH
+        os::switch_cpu_profiler::NoteCore();
+#endif
         if (WaitProfileOn())
             start_ = std::chrono::steady_clock::now();
         st.what = what;
@@ -406,7 +409,11 @@ static uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitR
     return obj->Wait(timeout);
 }
 
-static uint32_t WaitObjects(const std::vector<std::shared_ptr<KernelObject>>& objects,
+// The objects of one multiple-object wait, on the stack: a vector per call took newlib's malloc lock twice, on the
+// game's worker and audio threads, against every other thread's allocations.
+using WaitObjectList = std::array<std::shared_ptr<KernelObject>, 64>;
+
+static uint32_t WaitObjects(std::span<const std::shared_ptr<KernelObject>> objects,
     uint32_t waitType, uint32_t timeout)
 {
     if (waitType > 1 || objects.empty() || objects.size() > 64) return STATUS_INVALID_PARAMETER;
@@ -422,10 +429,9 @@ static uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HE
     if (!Objects || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
     WaitScope scope("KeWaitForMultipleObjects", uint32_t(Objects[0].ptr));
     if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
-    std::vector<std::shared_ptr<KernelObject>> objects;
-    objects.reserve(Count);
-    for (size_t i = 0; i < Count; ++i) objects.push_back(ResolveWaitObject(Objects[i]));
-    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
+    WaitObjectList objects;
+    for (size_t i = 0; i < Count; ++i) objects[i] = ResolveWaitObject(Objects[i]);
+    return WaitObjects({objects.data(), Count}, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
 static uint32_t NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t>* Timeout)
 {
@@ -440,10 +446,9 @@ static uint32_t NtWaitForMultipleObjectsEx(uint32_t Count, be<uint32_t>* Handles
     if (!Handles || !Count || Count > 64 || WaitType > 1) return STATUS_INVALID_PARAMETER;
     WaitScope scope("NtWaitForMultipleObjectsEx", uint32_t(Handles[0]));
     if (Alertable && DeliverUserApcs()) return STATUS_USER_APC;
-    std::vector<std::shared_ptr<KernelObject>> objects;
-    objects.reserve(Count);
-    for (size_t i = 0; i < Count; ++i) objects.push_back(GetKernelObject(Handles[i]));
-    return WaitObjects(objects, WaitType, GuestTimeoutToMilliseconds(Timeout));
+    WaitObjectList objects;
+    for (size_t i = 0; i < Count; ++i) objects[i] = GetKernelObject(Handles[i]);
+    return WaitObjects({objects.data(), Count}, WaitType, GuestTimeoutToMilliseconds(Timeout));
 }
 
 static uint32_t NtCreateSemaphore(be<uint32_t>* Handle, XOBJECT_ATTRIBUTES* ObjectAttributes, uint32_t InitialCount, uint32_t MaximumCount)
@@ -522,8 +527,13 @@ static void RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION* cs, 
 
 static void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
+    const uint32_t thread = g_ppcContext->r13.u32;
+    // Switch: most entries are uncontended, so record the wait (watchdog, wait profile) only when
+    // it can wait (#15).
+    if (LO_PLATFORM_SWITCH && GuestCriticalSection::TryEnter(cs->RecursionCount, cs->OwningThread, thread))
+        return;
     WaitScope scope("RtlEnterCriticalSection", g_memory.MapVirtual(cs));
-    GuestCriticalSection::Enter(cs->RecursionCount, cs->OwningThread, g_ppcContext->r13.u32);
+    GuestCriticalSection::Enter(cs->RecursionCount, cs->OwningThread, thread);
 }
 
 static bool RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
@@ -540,11 +550,20 @@ static void KfAcquireSpinLock(uint32_t* spinLock)
 {
     WaitScope scope("KfAcquireSpinLock", g_memory.MapVirtual(spinLock));
     os::AtomicRef<uint32_t> ref(*spinLock);
-    while (true)
+    for (uint32_t spins = 0;; ++spins)
     {
         uint32_t expected = 0;
         if (ref.compare_exchange_weak(expected, g_ppcContext->r13.u32))
             break;
+#if LO_PLATFORM_SWITCH
+        // The 360 can't preempt a spinlock's holder. Here it can, and a yield only lets threads of this priority or
+        // higher run: the XAudio workers spun over a lower-priority holder for 114 s. A real sleep lets it finish.
+        if (spins >= 32)
+        {
+            os::switch_platform::SleepNanoseconds(spins >= 128 ? 1000000 : 20000);
+            continue;
+        }
+#endif
         std::this_thread::yield();
     }
 }

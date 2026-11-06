@@ -2,6 +2,8 @@
 #include "config.h"
 #include "menu.h"
 #include <os/platform.h>
+#include <gpu/dynamic_resolution.h>
+#include <gpu/switch_upscaler.h>
 #include <algorithm>
 #include <iterator>
 
@@ -82,6 +84,51 @@ inline uint32_t RenderResolutionChoice(const Config& config)
         if (RenderResolutions[i] == config.internalResolution) return i;
     return 0;
 }
+// The Switch's rendering rows. Maximum resolution (RenderResolution) and Minimum resolution: Automatic, then
+// SwitchSceneHeights; each operation mode keeps its own pair and the rows show and change the current mode's.
+// Lowering the maximum below the minimum takes the minimum down with it; the minimum offers heights up to the maximum.
+inline constexpr uint32_t SwitchHeightChoiceCount = 1 + uint32_t(std::size(SwitchSceneHeights));
+inline uint32_t SwitchHeightChoice(uint32_t height)
+{
+    for (uint32_t i = 0; i < std::size(SwitchSceneHeights); ++i)
+        if (SwitchSceneHeights[i] == height) return i + 1;
+    return 0;
+}
+inline uint32_t SwitchHeightAt(uint32_t choice)
+{
+    return choice && choice <= std::size(SwitchSceneHeights) ? SwitchSceneHeights[choice - 1] : 0;
+}
+inline void SelectMaximumHeight(Config& config, bool docked, uint32_t choice)
+{
+    const uint32_t mode = docked ? 1 : 0;
+    config.maximumHeight[mode] = SwitchHeightAt(choice);
+    config.minimumHeight[mode] = std::min(config.minimumHeight[mode], SwitchMaximumHeight(config, docked));
+}
+inline uint32_t MinimumHeightChoiceCount(const Config& config, bool docked)
+{
+    const uint32_t maximum = SwitchMaximumHeight(config, docked);
+    return 1 + uint32_t(std::count_if(std::begin(SwitchSceneHeights), std::end(SwitchSceneHeights),
+                                      [&](uint32_t height) { return height <= maximum; }));
+}
+// What env.txt sets for a scripted run wins over these rows (settings::Validate, gpu/frame_plan.cpp, gpu/video.cpp):
+// the menu shows such a row's value from env.txt, greyed out.
+inline bool MaximumHeightFromEnvironment() { return RenderHeightOverride() != 0; }
+inline bool DynamicResolutionFromEnvironment() { return gpu::dynamic_resolution::EnvironmentEnabled() >= 0; }
+inline bool MinimumHeightFromEnvironment() { return gpu::dynamic_resolution::EnvironmentMinimum() != 0; }
+inline bool FsrFromEnvironment() { return gpu::switch_upscaler::UpscalerFromEnvironment(); }
+inline bool FsrSharpnessFromEnvironment()
+{
+    return gpu::switch_upscaler::UpscalerFromEnvironment() || gpu::switch_upscaler::StopsFromEnvironment();
+}
+// Whether dynamic resolution and FSR run with these settings and env.txt.
+inline bool DynamicResolutionOn(const Config& config)
+{
+    return DynamicResolutionFromEnvironment() ? gpu::dynamic_resolution::EnvironmentEnabled() == 1 : config.dynamicResolution;
+}
+inline bool FsrOn(const Config& config)
+{
+    return gpu::switch_upscaler::Resolve(config.switchFsr, config.fsrSharpnessPercent).mode != gpu::SpatialUpscaler::Off;
+}
 // Graphics preset: a shortcut for the rows it sets, shown as the preset those
 // rows match (Custom otherwise). Nothing of its own is saved. Both render the
 // original 720p at 30 FPS; Low-end also turns off the game's costliest effects
@@ -99,7 +146,9 @@ inline void ApplyPreset(Config& config, Preset preset)
     config.motionBlur = !low;
     config.depthOfFieldPercent = low ? 0 : 100;
     config.bloom = !low;
+#if !LO_PLATFORM_SWITCH // bicubic's final pass costs the console about 7 ms (Config::scalingQuality)
     config.scalingQuality = low ? 0 : 1; // Standard (bilinear) or High (bicubic)
+#endif
 }
 inline Preset PresetOf(const Config& config)
 {
@@ -131,7 +180,7 @@ inline bool IsAction(int tab, int row)
     return (tab == 0 && (row == GameControlsRow || row == GameRestoreRow || row == GameMainMenuRow)) ||
            (tab == 2 && (row == int(GraphicsRow::NeuralRenderingTuning) || row == int(GraphicsRow::HdrCalibration) ||
                          row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
-           (tab == 3 && (row == SystemAchievementsRow || row == SystemModsRow || row == SystemImportRow || row == SystemAddToSteamRow || row == SystemShaderBundleRow ||
+           (tab == 3 && (row == SystemDebugRow || row == SystemAchievementsRow || row == SystemModsRow || row == SystemImportRow || row == SystemAddToSteamRow || row == SystemShaderBundleRow ||
                          row == SystemShaderPreparationRow ||
                          row == SystemSaveRow));
 }
@@ -140,7 +189,9 @@ static_assert(int(GraphicsRow::DlssModel) + 1 == int(GraphicsRow::FsrSharpness))
 // The preset opens the rendering group, after the display rows.
 static_assert(int(GraphicsRow::OutputResolution) + 1 == int(GraphicsRow::Preset));
 static_assert(int(GraphicsRow::Preset) + 1 == int(GraphicsRow::RenderResolution));
-static_assert(int(GraphicsRow::RenderResolution) + 1 == int(GraphicsRow::ShadowResolution));
+static_assert(int(GraphicsRow::RenderResolution) + 1 == int(GraphicsRow::DynamicResolution));
+static_assert(int(GraphicsRow::DynamicResolution) + 1 == int(GraphicsRow::MinimumResolution));
+static_assert(int(GraphicsRow::MinimumResolution) + 1 == int(GraphicsRow::ShadowResolution));
 static_assert(int(GraphicsRow::ShadowResolution) + 1 == int(GraphicsRow::DynamicShadows));
 // Upscaling, neural rendering and frame generation stay one group.
 static_assert(int(GraphicsRow::AntiAliasing) + 1 == int(GraphicsRow::DlssQuality));

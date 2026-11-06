@@ -38,12 +38,33 @@ namespace plume {
         bool colorCompression = true;
     };
     void Deko3DSetGpuOptions(const Deko3DGpuOptions &options);
+    // LostOdysseyRecomp (2026-10-29): the two switches read per barrier, changed while the game runs (the Debug page).
+    // Call it on the thread that records the command lists, between them.
+    void Deko3DSetBarrierOptions(bool mergeBarriers, bool leanBarriers);
+
+    // LostOdysseyRecomp (2026-10-31): whether the list's next draws may test depth before their fragment shader. Only
+    // for a shader that will not discard or write depth on those draws: the image is then the same, and hidden pixels
+    // aren't shaded. Stays until changed.
+    void Deko3DSetEarlyFragmentTests(RenderCommandList *list, bool allowed);
+
+    // LostOdysseyRecomp (2026-11-04): the CPU's copy of the uniform buffer at GPU 'address' (the draw's shared
+    // constants), where bound textures read their sampler words; nullptr when the draw is done (plume_deko3d.h).
+    bool Deko3DSetSharedWords(RenderCommandList *commandList, const void *cpu, uint32_t size, uint64_t address);
+
+    // sa2-nx (2026-10-20): the swap chain's size, instead of the window's; 0, 0 goes back to the window's.
+    void Deko3DSetSwapChainSize(uint32_t width, uint32_t height);
 
     // The back end's running totals (Deko3DStats), for the renderer's per-frame report.
     struct Deko3DCounters {
         uint64_t draws = 0, pipelineBinds = 0, stateBinds = 0, descriptorWrites = 0;
         uint64_t barriersPrimitives = 0, barriersFragments = 0, barriersFull = 0, barriersImageInvalidate = 0;
         uint64_t copyBuffer = 0, copyUpload = 0, copyReadback = 0, copyImage = 0, copyResolve = 0, copyBlit = 0;
+        // Shader work on the console, on any thread: uam compiles and SPIR-V translations, and their time.
+        uint64_t shaderCompiles = 0, shaderCompileNs = 0, translations = 0, translateNs = 0;
     };
     Deko3DCounters Deko3DReadCounters();
+
+    // LO_DEKO3D_BARRIER_TRACE: while on, every barrier that reaches the GPU is logged with what it waits for, its
+    // textures, the draws recorded so far in the list and the caller (LostOdysseyRecomp, 2026-10-30).
+    void Deko3DBarrierTrace(bool on);
 }

@@ -92,6 +92,10 @@ namespace plume {
         g_deko3dOptions.vsOutputs = options.vsOutputs;
         g_deko3dOptions.colorCompression = options.colorCompression;
     }
+    void Deko3DSetBarrierOptions(bool mergeBarriers, bool leanBarriers) {
+        g_deko3dOptions.mergeBarriers = mergeBarriers;
+        g_deko3dOptions.leanBarriers = leanBarriers;
+    }
     Deko3DCounters Deko3DReadCounters() {
         const Deko3DStats &s = g_deko3dStats;
         const auto r = [](const std::atomic<uint64_t> &v) { return v.load(std::memory_order_relaxed); };
@@ -102,6 +106,8 @@ namespace plume {
         c.barriersFull = r(s.barriersFull); c.barriersImageInvalidate = r(s.barriersImageInvalidate);
         c.copyBuffer = r(s.copyBuffer); c.copyUpload = r(s.copyUpload); c.copyReadback = r(s.copyReadback);
         c.copyImage = r(s.copyImage); c.copyResolve = r(s.copyResolve); c.copyBlit = r(s.copyBlit);
+        c.shaderCompiles = r(s.shaderCompiles); c.shaderCompileNs = r(s.shaderCompileNs);
+        c.translations = r(s.translations); c.translateNs = r(s.shaderTranslateNs);
         return c;
     }
 
@@ -458,10 +464,13 @@ namespace plume {
     }
 
     Deko3DBuffer::~Deko3DBuffer() {
+        // LostOdysseyRecomp (2026-11-03): recorded calls not yet replayed may point at it (record thread).
+        Deko3DRecordDrain(Deko3DRecordWait::BufferDestroyed);
         if (block) {
             {
                 std::lock_guard<std::mutex> lock(device->bufferMutex);
                 device->bufferRanges.erase(gpu);
+                device->bufferGeneration.fetch_add(1, std::memory_order_release);
             }
             g_deko3dStats.bufferBytes -= dkMemBlockGetSize(block);
             device->retire({}, block);
@@ -593,6 +602,8 @@ namespace plume {
     }
 
     Deko3DTexture::~Deko3DTexture() {
+        // LostOdysseyRecomp (2026-11-03): recorded calls (copies, a framebuffer's views of it) may point at it.
+        Deko3DRecordDrain(Deko3DRecordWait::TextureDestroyed);
         if (valid && ownsMemory) {
             g_deko3dStats.imageBytes -= alloc.size;
             if (ownsBlock)
@@ -718,6 +729,7 @@ namespace plume {
     }
 
     Deko3DDescriptorSet::~Deko3DDescriptorSet() {
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetDestroyed);  // LostOdysseyRecomp (2026-11-03)
         if (imageHeapBase != UINT32_MAX)
             device->heapRetire(false, imageHeapBase, imageCount);
         if (samplerHeapBase != UINT32_MAX)
@@ -735,6 +747,8 @@ namespace plume {
     void Deko3DDescriptorSet::setBuffer(uint32_t descriptorIndex, const RenderBuffer *buffer, uint64_t bufferSize, const RenderBufferStructuredView *structuredView, const RenderBufferFormattedView *) {
         if (descriptorIndex >= buffers.size())
             return;
+        // LostOdysseyRecomp (2026-11-03): the worker may still read the set at an open recorded list's draws.
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);
         const Deko3DBuffer *b = static_cast<const Deko3DBuffer *>(buffer);
         DkBufExtents &e = buffers[descriptorIndex];
         if (b == nullptr || b->block == nullptr) {
@@ -752,9 +766,34 @@ namespace plume {
         e.size = uint32_t(std::min<uint64_t>(size, 0xFFFFFFFFull));
     }
 
+    // LostOdysseyRecomp (2026-11-04): descriptor writes, as measured on GPU CmdProc in a busy street (cpu-street4).
+    // LO_DEKO3D_DESCRIPTOR_CACHE=0: dkImageDescriptorInitialize for every write (0.7%), not once per texture.
+    // LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH=0: the counters below with release / sequentially consistent increments, as
+    // before. Those made each write wait until its uncached descriptor store had drained (most of setTexture's 2.2%).
+    // Nothing on the CPU reads a descriptor after the epoch (currentEpoch only decides on an invalidate, on the thread
+    // that records, or on the record worker after the ring's own release), and the GPU sees the stores once the
+    // submission's system call has run, as before.
+    static bool envFlag(const char *name) {
+        const char *v = getenv(name);
+        return !v || strcmp(v, "0") != 0;
+    }
+    static const bool g_descriptorCache = envFlag("LO_DEKO3D_DESCRIPTOR_CACHE");
+    static const bool g_relaxedDescriptorEpoch = envFlag("LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH");
+
+    static void noteDescriptorWrite(Deko3DDevice *device) {
+        if (g_relaxedDescriptorEpoch) {
+            g_deko3dStats.descriptorWrites.fetch_add(1, std::memory_order_relaxed);
+            device->descriptorEpoch.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        g_deko3dStats.descriptorWrites++;
+        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+    }
+
     void Deko3DDescriptorSet::setTexture(uint32_t descriptorIndex, const RenderTexture *texture, RenderTextureLayout, const RenderTextureView *textureView) {
         if (imageHeapBase == UINT32_MAX || descriptorIndex < imageFirst || descriptorIndex - imageFirst >= imageCount)
             return;
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);  // LostOdysseyRecomp (2026-11-03): imageSizes
         DkImageDescriptor *d = static_cast<DkImageDescriptor *>(dkMemBlockGetCpuAddr(device->imageHeap)) + imageHeapBase + (descriptorIndex - imageFirst);
         const Deko3DTexture *t = static_cast<const Deko3DTexture *>(texture);
         if (t == nullptr || !t->valid) {
@@ -767,7 +806,14 @@ namespace plume {
             // Written into a local copy first: the GPU may read the descriptor block (other slots) while the CPU
             // writes it, so a slot is written whole, with one copy.
             DkImageDescriptor local;
-            dkImageDescriptorInitialize(&local, &view, loadStore, false);
+            if (g_descriptorCache && !textureView && !loadStore) {
+                if (!t->sampledDescriptorReady) {
+                    dkImageDescriptorInitialize(&t->sampledDescriptor, &view, false, false);
+                    t->sampledDescriptorReady = true;
+                }
+                local = t->sampledDescriptor;
+            } else
+                dkImageDescriptorInitialize(&local, &view, loadStore, false);
             memcpy(d, &local, sizeof(local));
             // banjo-nx (2026-10-19, GPU, txq): the size a texture query of this view returns at level 0: the image's
             // size at the view's first level; the depth of a 3D image there, else the view's layers (all from its first
@@ -786,27 +832,38 @@ namespace plume {
                                     : (t->desc.arraySize > view.layerOffset ? t->desc.arraySize - view.layerOffset : 1u);
             imageSizes[id] = {w, h, z};
         }
-        g_deko3dStats.descriptorWrites++;
-        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+        noteDescriptorWrite(device);
     }
 
     void Deko3DDescriptorSet::setSampler(uint32_t descriptorIndex, const RenderSampler *sampler) {
         if (samplerHeapBase == UINT32_MAX || descriptorIndex < samplerFirst || descriptorIndex - samplerFirst >= samplerCount)
             return;
+        Deko3DRecordWaitSet(*this, Deko3DRecordWait::SetWritten);  // LostOdysseyRecomp (2026-11-03)
         DkSamplerDescriptor *d = static_cast<DkSamplerDescriptor *>(dkMemBlockGetCpuAddr(device->samplerHeap)) + samplerHeapBase + (descriptorIndex - samplerFirst);
         if (sampler == nullptr)
             memset(d, 0, sizeof(*d));
         else
             memcpy(d, &static_cast<const Deko3DSampler *>(sampler)->descriptor, sizeof(*d));
-        g_deko3dStats.descriptorWrites++;
-        device->descriptorEpoch.fetch_add(1, std::memory_order_release);
+        noteDescriptorWrite(device);
     }
 
     void Deko3DDescriptorSet::setAccelerationStructure(uint32_t, const RenderAccelerationStructure *) {}
 
     // ---- Deko3DQueryPool
 
-    Deko3DQueryPool::Deko3DQueryPool(Deko3DDevice *device, uint32_t count) : device(device) {
+    Deko3DQueryPool::Deko3DQueryPool(Deko3DDevice *device, uint32_t count, bool occlusion) : device(device), occlusion(occlusion) {
+        if (occlusion) {
+            // LostOdysseyRecomp (2026-11-04): CPU-cached, so reading a batch's results takes cache-line fills instead
+            // of one uncached load per word. The CPU never writes it: cleaned and invalidated once here, and
+            // invalidated again before each read (queryResults), it holds no line the GPU's reports could be lost to.
+            results.assign(count, ResultUnavailable);
+            state.assign(count, 0);
+            const uint32_t size = alignUp(std::max<uint32_t>(count, 1) * 32, DK_MEMBLOCK_ALIGNMENT);
+            block = device->makeBlock(size, DkMemBlockFlags_CpuCached | DkMemBlockFlags_GpuCached, "occlusion queries");
+            if (block)
+                dkMemBlockFlushCpuCache(block, 0, size);
+            return;
+        }
         results.resize(count);
         // A counter report is 16 bytes: the counter, then the GPU timestamp.
         block = device->makeBlock(alignUp(std::max<uint32_t>(count, 1) * 16, DK_MEMBLOCK_ALIGNMENT), DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, "query pool");
@@ -815,16 +872,48 @@ namespace plume {
     }
 
     Deko3DQueryPool::~Deko3DQueryPool() {
+        Deko3DRecordDrain(Deko3DRecordWait::QueryPoolDestroyed);  // LostOdysseyRecomp (2026-11-03): writeTimestamp
         if (block)
             device->retire({}, block);
     }
 
     void Deko3DQueryPool::queryResults() { queryResults(uint32_t(results.size())); }
 
+    // LostOdysseyRecomp (2026-11-04): samples passed between two SamplesPassed reports. A four-word counter report is
+    // the 64-bit count, then the timestamp (NVN's NVNcounterData, which deko3d mirrors). Mesa's nvc0 reads its
+    // occlusion reports as a 32-bit count in word 1 behind a payload word instead: there the low words (the payload,
+    // 0 from dkCmdBufReportCounter) match and the high words hold the count. Either way this is the count.
+    static uint64_t samplesBetween(uint64_t begin, uint64_t end) {
+        if (uint32_t(begin) != uint32_t(end))
+            return end - begin;
+        return uint32_t(uint32_t(end >> 32) - uint32_t(begin >> 32));
+    }
+
     bool Deko3DQueryPool::queryResults(uint32_t count) {
         count = std::min<uint32_t>(count, uint32_t(results.size()));
         if (!block)
             return true;
+        if (occlusion) {
+            // Called after the fence of the batch that used the pool. A query reads as unavailable (the renderer
+            // answers visible) unless it began and ended with a draw in between.
+            const uint32_t n = std::min(count, used);
+            std::fill(results.begin() + n, results.begin() + count, ResultUnavailable);
+            if (!n)
+                return true;
+            dkMemBlockFlushCpuCache(block, 0, alignUp(n * 32, 64));
+            const uint64_t *reports = static_cast<const uint64_t *>(dkMemBlockGetCpuAddr(block));
+            for (uint32_t i = 0; i < n; i++) {
+                const uint8_t s = state[i];
+                if ((s & (OcclusionBegun | OcclusionEnded | OcclusionSkipped)) != (OcclusionBegun | OcclusionEnded)) {
+                    results[i] = ResultUnavailable;
+                    continue;
+                }
+                // A chained begin is the previous query's end report (endOcclusionQuery wrote it, no draw since).
+                const uint64_t begin = (s & OcclusionChained) ? reports[(i - 1) * 4 + 2] : reports[i * 4];
+                results[i] = samplesBetween(begin, reports[i * 4 + 2]);
+            }
+            return true;
+        }
         const volatile uint64_t *reports = static_cast<const volatile uint64_t *>(dkMemBlockGetCpuAddr(block));
         for (uint32_t i = 0; i < count; i++)
             results[i] = dkTimestampToNs(reports[i * 2 + 1]);
@@ -918,6 +1007,12 @@ namespace plume {
         capabilities.dynamicDepthBias = true;
         capabilities.uma = true;
         capabilities.queryPools = true;
+        // LostOdysseyRecomp (2026-11-04): occlusion queries from Maxwell's SamplesPassed counter, which deko3d's queue
+        // setup enables for good (SampleCounterEnable). LO_DEKO3D_OCCLUSION=0: none, and the command processor makes up
+        // every count again (nothing is culled).
+        capabilities.occlusionQueries = envFlag("LO_DEKO3D_OCCLUSION");
+        capabilities.occlusionQueryPrecise = true;
+        logf("device: occlusion queries %s (LO_DEKO3D_OCCLUSION)", capabilities.occlusionQueries ? "on" : "off");
         capabilities.resolveRegion = false;
         description.name = "deko3d (Tegra X1, Maxwell GM20B)";
         description.type = RenderDeviceType::INTEGRATED;
@@ -936,6 +1031,7 @@ namespace plume {
         }
         pthread_attr_destroy(&attr);
         pthread_detach(thread);
+        Deko3DRecordStart();  // LostOdysseyRecomp (2026-11-03): LO_DEKO3D_RECORD_THREAD=1
         logf("device ready: queue with zcull %s, depth targets %scompressed, vertex shader outputs %s, 1 MB of queue "
              "command memory; uam compile thread started", g_deko3dOptions.zcull ? "on" : "off",
              g_deko3dOptions.depthCompression ? "" : "not ", g_deko3dOptions.vsOutputs ? "pruned per pipeline" : "all written");
@@ -943,6 +1039,7 @@ namespace plume {
     }
 
     Deko3DDevice::~Deko3DDevice() {
+        Deko3DRecordStop();  // LostOdysseyRecomp (2026-11-03): replays what is left, then ends the worker
         if (queue)
             dkQueueWaitIdle(queue);
         {
@@ -1659,6 +1756,29 @@ namespace plume {
             logf("shader %s: %u bytes of DKSH are not valid", what, size);
             return false;
         }
+        // LostOdysseyRecomp (2026-10-31): deko3d copies the program header into the DkShader at initialization, and
+        // the header's early_fragment_tests goes to the GPU at each bind. A patched copy of the control section gives
+        // a second DkShader on the same code. DKSH: control_sz at byte 8, programs_off at 16; a program's type at 0,
+        // its early_fragment_tests at 25. Fragment programs have type 1.
+        {
+            uint32_t controlSize = 0, programsOff = 0, type = 0;
+            memcpy(&controlSize, dksh.data() + 8, 4);
+            memcpy(&programsOff, dksh.data() + 16, 4);
+            if (controlSize <= size && uint64_t(programsOff) + 64 <= controlSize) {
+                memcpy(&type, dksh.data() + programsOff, 4);
+                if (type == 1 && !dksh[programsOff + 25]) {
+                    std::vector<uint8_t> control(dksh.begin(), dksh.begin() + controlSize);
+                    control[programsOff + 25] = 1;
+                    DkShaderMaker early;
+                    dkShaderMakerDefaults(&early, cb.first, at + controlSize);
+                    early.control = control.data();
+                    auto twin = std::make_unique<DkShader>();
+                    dkShaderInitialize(twin.get(), &early);
+                    if (dkShaderIsValid(twin.get()))
+                        earlyFragmentShaders[&shader] = std::move(twin);
+                }
+            }
+        }
         cb.second = at + size;
         g_deko3dStats.codeBytes += size;
         // Command lists invalidate the GPU's shader cache before their next draw (deko3d does it only at a queue
@@ -1992,6 +2112,11 @@ namespace plume {
             }
             p->shaders[p->shaderCount++] = s;
             p->stageShaders[i] = s;  // banjo-nx (2026-10-19)
+            if (i == 2) {
+                std::lock_guard<std::mutex> lock(codeMutex);
+                auto twin = earlyFragmentShaders.find(s);
+                p->earlyFragment = twin != earlyFragmentShaders.end() ? twin->second.get() : nullptr;
+            }
             p->stageMask |= 1u << dkStages[i];
             p->uboMask[i] = stages[i]->usage.uboMask;
             p->ssboMask[i] = stages[i]->usage.ssboMask;
@@ -2197,6 +2322,8 @@ namespace plume {
 
     std::unique_ptr<RenderFramebuffer> Deko3DDevice::createFramebuffer(const RenderFramebufferDesc &desc) {
         auto fb = std::make_unique<Deko3DFramebuffer>();
+        static std::atomic<uint64_t> serials{0};
+        fb->serial = serials.fetch_add(1, std::memory_order_relaxed) + 1;
         fb->colorCount = std::min<uint32_t>(desc.colorAttachmentsCount, 8);
         for (uint32_t i = 0; i < fb->colorCount; i++) {
             const Deko3DTexture *t = static_cast<const Deko3DTexture *>(desc.colorAttachments[i]);
@@ -2224,6 +2351,13 @@ namespace plume {
 
     std::unique_ptr<RenderQueryPool> Deko3DDevice::createQueryPool(uint32_t queryCount) {
         return std::make_unique<Deko3DQueryPool>(this, queryCount);
+    }
+
+    std::unique_ptr<RenderQueryPool> Deko3DDevice::createOcclusionQueryPool(uint32_t queryCount) {
+        if (!capabilities.occlusionQueries)
+            return nullptr;
+        auto pool = std::make_unique<Deko3DQueryPool>(this, queryCount, true);
+        return pool->block ? std::move(pool) : nullptr;
     }
 
     void Deko3DDevice::setBottomLevelASBuildInfo(RenderBottomLevelASBuildInfo &, const RenderBottomLevelASMesh *, uint32_t, bool, bool) {}

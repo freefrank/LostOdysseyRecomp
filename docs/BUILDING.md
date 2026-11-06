@@ -263,6 +263,7 @@ Experimental, Apple Silicon only (arm64). The runtime renders through plume's Me
 ```bash
 git submodule update --init --recursive
 git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+git -C tools/XenonRecomp apply ../patches/XenonRecomp-nonargument-locals.patch
 git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
 git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
 git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch

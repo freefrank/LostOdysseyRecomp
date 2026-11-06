@@ -17,18 +17,27 @@
 #include "../settings/config.h"
 #include "cheat_overlay.h"
 #include "controller_hint.h"
+#include <os/platform.h>
+#if LO_PLATFORM_SWITCH
+#include "debug_options.h"
+#include <os/debug_server.h>
+#endif
 
 // hid.h also declares guest XAMINPUT types; the overlay only needs this host state.
 namespace hid { bool UsesPlayStationPrompts(); }
 
 namespace debug_menu
 {
+    using translations::Pick;
+    // Overview's last row: Cancel Victory Request, then the Switch's Debug server switch.
+    constexpr int kOverviewLastRow = LO_PLATFORM_SWITCH ? 7 : 6;
+
     struct OverlayState
     {
         bool visible = false;
         int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats
         int selectedRow = 0;
-        bool chinese = false;
+        uint32_t language = translations::English;
         bool resetConfirmation = false;
         bool resetYes = false;
         cheat_overlay::Model cheatsPage;
@@ -73,12 +82,12 @@ namespace debug_menu
         }
 
         const auto config = settings::GetConfig();
-        const bool chinese = config.debugLanguage == 1;
+        const uint32_t language = config.debugLanguage;
         const auto snapshot = opening ? debug_menu::GetTeleportSnapshot() : TeleportSnapshot{};
         {
             std::lock_guard lock(g_overlayStateMutex);
             g_overlayState.visible = opening;
-            g_overlayState.chinese = chinese;
+            g_overlayState.language = language;
             g_overlayState.cheatsPage.menuAnimationRate = config.menuAnimationRate;
             g_overlayState.cheatsPage.Dismiss();
             g_overlayState.resetConfirmation = false;
@@ -197,7 +206,7 @@ namespace debug_menu
             {
                 const auto before = fast_forward::GetStatus();
                 const unsigned beforeMenuRate = g_overlayState.cheatsPage.menuAnimationRate;
-                if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.chinese))
+                if (!g_overlayState.cheatsPage.Input(*nav, g_overlayState.language))
                 {
                     stateLock.unlock();
                     ToggleOverlayLocked();
@@ -209,7 +218,7 @@ namespace debug_menu
                 if (after.enabled != before.enabled || after.mode != before.mode || after.button != before.button || after.multiplier != before.multiplier ||
                     after.keepAudioPitch != before.keepAudioPitch)
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     if (!settings::SaveFastForward(after.enabled, after.mode == fast_forward::Mode::Toggle ? 1 : 0,
                                                    after.multiplier, after.keepAudioPitch, uint32_t(after.button)))
@@ -217,18 +226,18 @@ namespace debug_menu
                         fast_forward::SetKeepAudioPitch(before.keepAudioPitch);
                         fast_forward::SetButton(before.button);
                         std::lock_guard lock(g_overlayStateMutex);
-                        g_overlayState.cheatsPage.notice = zh ? L"保存变速设置失败" : L"Failed to save fast-forward setting";
+                        g_overlayState.cheatsPage.notice = Pick(language, L"Failed to save fast-forward setting", L"保存变速设置失败", L"No se ha podido guardar el avance rápido");
                     }
                 }
                 else if (afterMenuRate != beforeMenuRate)
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     if (!settings::SaveMenuAnimationRate(afterMenuRate))
                     {
                         std::lock_guard lock(g_overlayStateMutex);
                         g_overlayState.cheatsPage.menuAnimationRate = beforeMenuRate;
-                        g_overlayState.cheatsPage.notice = zh ? L"保存菜单动画设置失败" : L"Failed to save menu animation setting";
+                        g_overlayState.cheatsPage.notice = Pick(language, L"Failed to save menu animation setting", L"保存菜单动画设置失败", L"No se ha podido guardar la animación de menús");
                     }
                 }
                 return;
@@ -256,8 +265,8 @@ namespace debug_menu
                 g_overlayState.selectedRow--;
             return;
         case InputAction::Down:
-            // Overview ends at row 6; Teleport ends at row 8 (Debug Event Room).
-            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 : 8))
+            // Overview ends at kOverviewLastRow; Teleport ends at row 8 (Debug Event Room).
+            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? kOverviewLastRow : 8))
                 g_overlayState.selectedRow++;
             return;
         default:
@@ -267,31 +276,33 @@ namespace debug_menu
         if (g_overlayState.activeTab == 0)
         {
             // Overview:
-            // 0: Language (Toggle En / Zh)
+            // 0: Language (English / Chinese / Spanish)
             // 1: Render Capture
             // 2: Save Anywhere
             // 3: Force RB party switch
             // 4: Return to title
             // 5: Win Battle
             // 6: Cancel Battle Request
+            // 7: Debug server on / off at the next start (the Switch)
             if (action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right)
             {
                 switch (g_overlayState.selectedRow)
                 {
                 case 0:
-                    g_overlayState.chinese = !g_overlayState.chinese;
+                    // English, Simplified Chinese, Spanish; Left goes back.
+                    g_overlayState.language = (g_overlayState.language +
+                        (action == InputAction::Left ? translations::LanguageCount - 1 : 1)) % translations::LanguageCount;
                     {
-                        const int language = g_overlayState.chinese ? 1 : 0;
-                        const bool zh = g_overlayState.chinese;
+                        const uint32_t language = g_overlayState.language;
                         stateLock.unlock();
                         if (!settings::SaveDebugLanguage(language))
-                            SetOverlayStatus(zh ? L"保存语言配置失败" : L"Failed to save language setting");
+                            SetOverlayStatus(Pick(language, L"Failed to save language setting", L"保存语言配置失败", L"No se ha podido guardar el idioma"));
                     }
                     return;
                 case 1:
                     stateLock.unlock();
                     gpu::renderer::RequestDebugCapture();
-                    SetOverlayStatus(g_overlayState.chinese ? L"已请求截取渲染状态" : L"Capture requested");
+                    SetOverlayStatus(Pick(g_overlayState.language, L"Capture requested", L"已请求截取渲染状态", L"Captura pedida"));
                     return;
                 case 2:
                     stateLock.unlock();
@@ -299,10 +310,10 @@ namespace debug_menu
                     return;
                 case 3:
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     debug_menu::RequestPartySwitch();
-                    SetOverlayStatus(zh ? L"已开启 RB 换人（仅分队区域有效）" : L"RB party switch enabled (split-party areas only)");
+                    SetOverlayStatus(Pick(language, L"RB party switch enabled (split-party areas only)", L"已开启 RB 换人（仅分队区域有效）", L"Cambio de grupo con RB activado (solo en zonas con el grupo dividido)"));
                     return;
                 }
                 case 4:
@@ -314,22 +325,39 @@ namespace debug_menu
                     return;
                 case 5:
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     const bool accepted = debug_menu::RequestVictory();
                     SetOverlayStatus(accepted
-                        ? (zh ? L"已提交判胜请求（等待安全阶段生效）" : L"Victory requested (pending)")
-                        : (zh ? L"无法请求判胜（当前无活跃战斗）" : L"Cannot request victory (no active battle)"));
+                        ? Pick(language, L"Victory requested (pending)", L"已提交判胜请求（等待安全阶段生效）", L"Victoria pedida (pendiente)")
+                        : Pick(language, L"Cannot request victory (no active battle)", L"无法请求判胜（当前无活跃战斗）", L"No se puede pedir la victoria (no hay combate activo)"));
                     return;
                 }
                 case 6:
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     debug_menu::CancelVictory();
-                    SetOverlayStatus(zh ? L"已取消判胜请求" : L"Victory cancelled");
+                    SetOverlayStatus(Pick(language, L"Victory cancelled", L"已取消判胜请求", L"Victoria cancelada"));
                     return;
                 }
+#if LO_PLATFORM_SWITCH
+                case 7:
+                {
+                    // Saved like System → Debug → Debug server; the socket service is set up at start only.
+                    const uint32_t language = g_overlayState.language;
+                    stateLock.unlock();
+                    if (debug_options::DebugServerFromEnvironment())
+                        SetOverlayStatus(Pick(language, L"Set by env.txt (LO_DEBUG_SERVER)", L"由 env.txt 设置（LO_DEBUG_SERVER）",
+                            L"Fijado en env.txt (LO_DEBUG_SERVER)"));
+                    else if (!debug_options::SetDebugServer(!settings::GetConfig().debug.debugServer))
+                        SetOverlayStatus(Pick(language, L"Failed to save debug server setting", L"保存调试服务器设置失败",
+                            L"No se ha podido guardar el servidor de depuración"));
+                    else
+                        SetOverlayStatus(Pick(language, L"Applies at the next start", L"下次启动时生效", L"Se aplica en el próximo inicio"));
+                    return;
+                }
+#endif
                 }
             }
         }
@@ -350,24 +378,24 @@ namespace debug_menu
             case 0:
                 if (action == InputAction::Confirm)
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     const bool accepted = debug_menu::RequestSavePosition();
                     SetOverlayStatus(accepted
-                        ? (zh ? L"已提交记录坐标请求（等待生效）" : L"Save position requested (pending)")
-                        : (zh ? L"无法记录坐标（当前不可用）" : L"Cannot save position (unavailable)"));
+                        ? Pick(language, L"Save position requested (pending)", L"已提交记录坐标请求（等待生效）", L"Guardar la posición pedido (pendiente)")
+                        : Pick(language, L"Cannot save position (unavailable)", L"无法记录坐标（当前不可用）", L"No se puede guardar la posición (no disponible)"));
                     return;
                 }
                 break;
             case 1:
                 if (action == InputAction::Confirm)
                 {
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     const bool accepted = debug_menu::RequestRestorePosition();
                     SetOverlayStatus(accepted
-                        ? (zh ? L"已提交恢复坐标请求（等待生效）" : L"Restore position requested (pending)")
-                        : (zh ? L"无法恢复坐标（未记录或不可用）" : L"Cannot restore position (no bookmark or unavailable)"));
+                        ? Pick(language, L"Restore position requested (pending)", L"已提交恢复坐标请求（等待生效）", L"Volver a la posición pedido (pendiente)")
+                        : Pick(language, L"Cannot restore position (no bookmark or unavailable)", L"无法恢复坐标（未记录或不可用）", L"No se puede volver a la posición (no hay posición recordada o no disponible)"));
                     return;
                 }
                 break;
@@ -382,12 +410,12 @@ namespace debug_menu
                         g_overlayState.editCoordinates[0] = s.current.x;
                         g_overlayState.editCoordinates[1] = s.current.y;
                         g_overlayState.editCoordinates[2] = s.current.z;
-                        g_overlayState.statusMessage = g_overlayState.chinese ? L"已填入当前角色坐标" : L"Position filled";
+                        g_overlayState.statusMessage = Pick(g_overlayState.language, L"Position filled", L"已填入当前角色坐标", L"Posición rellenada");
                         g_overlayState.statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(2);
                     }
                     else
                     {
-                        SetOverlayStatus(g_overlayState.chinese ? L"无法获取当前角色坐标" : L"Cannot fill position (unavailable)");
+                        SetOverlayStatus(Pick(g_overlayState.language, L"Cannot fill position (unavailable)", L"无法获取当前角色坐标", L"No se puede rellenar la posición (no disponible)"));
                     }
                     return;
                 }
@@ -414,12 +442,12 @@ namespace debug_menu
                         g_overlayState.editCoordinates[1],
                         g_overlayState.editCoordinates[2]
                     };
-                    const bool zh = g_overlayState.chinese;
+                    const uint32_t language = g_overlayState.language;
                     stateLock.unlock();
                     const bool accepted = debug_menu::RequestTeleport(p);
                     SetOverlayStatus(accepted
-                        ? (zh ? L"已提交传送请求（等待生效）" : L"Teleport requested (pending)")
-                        : (zh ? L"传送请求被拒绝（坐标无效或不可用）" : L"Teleport request rejected (invalid or unavailable)"));
+                        ? Pick(language, L"Teleport requested (pending)", L"已提交传送请求（等待生效）", L"Teletransporte pedido (pendiente)")
+                        : Pick(language, L"Teleport request rejected (invalid or unavailable)", L"传送请求被拒绝（坐标无效或不可用）", L"Teletransporte rechazado (no válido o no disponible)"));
                     return;
                 }
                 break;
@@ -452,12 +480,12 @@ namespace debug_menu
                     if (size_t(g_overlayState.selectedPoi) < g_overlayState.pois.size())
                     {
                         const auto id = g_overlayState.pois[g_overlayState.selectedPoi].id;
-                        const bool zh = g_overlayState.chinese;
+                        const uint32_t language = g_overlayState.language;
                         stateLock.unlock();
                         const bool accepted = debug_menu::RequestPoiTeleport(id);
                         SetOverlayStatus(accepted
-                            ? (zh ? L"已提交 POI 传送请求（等待生效）" : L"POI teleport requested (pending)")
-                            : (zh ? L"POI 传送请求被拒绝（不可用）" : L"POI teleport request rejected (unavailable)"));
+                            ? Pick(language, L"POI teleport requested (pending)", L"已提交 POI 传送请求（等待生效）", L"Teletransporte al PDI pedido (pendiente)")
+                            : Pick(language, L"POI teleport request rejected (unavailable)", L"POI 传送请求被拒绝（不可用）", L"Teletransporte al PDI rechazado (no disponible)"));
                         return;
                     }
                 }
@@ -482,7 +510,7 @@ namespace debug_menu
         const OverlayState state = GetOverlayStateSnapshot();
         if (!state.visible) return;
 
-        bool zh = state.chinese;
+        const uint32_t language = state.language;
         const bool playStation = hid::UsesPlayStationPrompts();
 
         // Dim background slightly to focus attention on debug overlay
@@ -498,7 +526,7 @@ namespace debug_menu
 
         // Header Title (Centered in header bar by DrawHeader)
         std::wstring headerTitle = controller_hint::ShoulderLabels(
-            zh ? L"Lost Odyssey — 调试菜单 (F1 / LB+RB)" : L"Lost Odyssey — Debug Menu (F1 / LB+RB)", playStation);
+            Pick(language, L"Lost Odyssey — Debug Menu (F1 / LB+RB)", L"Lost Odyssey — 调试菜单 (F1 / LB+RB)", L"Lost Odyssey — Menú de depuración (F1 / LB+RB)"), playStation);
         host_ui::DrawHeader(r, panelX, panelY, panelW, 36, headerTitle);
 
         // Centered Tab buttons
@@ -507,21 +535,23 @@ namespace debug_menu
         int totalTabsW = tabW * 3 + tabGap * 2;
         int tabStartX = panelX + (panelW - totalTabsW) / 2;
         int tabY = panelY + 44;
-        host_ui::DrawButton(r, tabStartX, tabY, tabW, 30, zh ? L"常规" : L"Overview", state.activeTab == 0, state.activeTab == 0);
-        host_ui::DrawButton(r, tabStartX + tabW + tabGap, tabY, tabW, 30, zh ? L"传送" : L"Teleport", state.activeTab == 1, state.activeTab == 1);
-        host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 2, tabY, tabW, 30, zh ? L"辅助 / 修改" : L"Cheats", state.activeTab == 2, state.activeTab == 2);
+        host_ui::DrawButton(r, tabStartX, tabY, tabW, 30, Pick(language, L"Overview", L"常规", L"General"), state.activeTab == 0, state.activeTab == 0);
+        host_ui::DrawButton(r, tabStartX + tabW + tabGap, tabY, tabW, 30, Pick(language, L"Teleport", L"传送", L"Teletransporte"), state.activeTab == 1, state.activeTab == 1);
+        host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 2, tabY, tabW, 30, Pick(language, L"Cheats", L"辅助 / 修改", L"Trucos"), state.activeTab == 2, state.activeTab == 2);
 
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
         r.DrawHLine(panelX, footerY - 6, panelW, host_ui::MakeColor(255, 60, 65, 75));
         const wchar_t* nav = state.resetConfirmation
-            ? (zh ? L"左/右: 选择" : L"Left/Right: Choose")
-            : (zh ? L"方向键/摇杆: 导航" : L"D-Pad/Stick: Nav");
-        const wchar_t* accept = zh ? L"/Enter: 确定" : (state.activeTab == 2 ? L"/Enter: OK" : L"/Enter: Confirm");
-        const wchar_t* back = zh ? L"/Esc: 返回" : L"/Esc: Back";
+            ? Pick(language, L"Left/Right: Choose", L"左/右: 选择", L"Izquierda/Derecha: elegir")
+            : Pick(language, L"D-Pad/Stick: Nav", L"方向键/摇杆: 导航", L"Cruceta: mover");
+        const wchar_t* accept = Pick(language, state.activeTab == 2 ? L"/Enter: OK" : L"/Enter: Confirm", L"/Enter: 确定",
+            L"/Enter: confirmar");
+        const wchar_t* back = Pick(language, L"/Esc: Back", L"/Esc: 返回", L"/Esc: atrás");
         const std::wstring tabs = state.resetConfirmation ? L"" : controller_hint::ShoulderLabels(
-            zh ? (state.activeTab == 2 ? L"LB/RB: 切页  LT/RT: 类别" : L"LB/RB: 切页")
-               : (state.activeTab == 2 ? L"LB/RB: Tab  LT/RT: Category" : L"LB/RB: Tab"), playStation);
+            state.activeTab == 2 ? Pick(language, L"LB/RB: Tab  LT/RT: Category", L"LB/RB: 切页  LT/RT: 类别",
+                                        L"LB/RB: pestaña  LT/RT: categoría")
+                                 : Pick(language, L"LB/RB: Tab", L"LB/RB: 切页", L"LB/RB: pestaña"), playStation);
         constexpr int gap = 13;
         const int helpW = r.MeasureWString(nav) + controller_hint::Width(r, playStation, accept)
             + controller_hint::Width(r, playStation, back) + r.MeasureWString(tabs) + 3 * gap;
@@ -542,47 +572,47 @@ namespace debug_menu
             int rowH = 38;
 
             // 0: Language
-            std::wstring langText = zh ? L"界面语言: 简体中文" : L"Language: English";
+            std::wstring langText = Pick(language, L"Language: English", L"界面语言: 简体中文", L"Idioma: Español");
             host_ui::DrawButton(r, btnX, contentY + 0 * rowH, btnW, 30, langText, state.selectedRow == 0);
 
             // 1: Render Capture
-            std::wstring capText = zh ? L"截取渲染状态" : L"Capture Render State";
+            std::wstring capText = Pick(language, L"Capture Render State", L"截取渲染状态", L"Capturar el estado de renderizado");
             host_ui::DrawButton(r, btnX, contentY + 1 * rowH, btnW, 30, capText, state.selectedRow == 1);
 
             // Status of capture (Centered under capture button if active)
             std::wstring rawCapStat = gpu::renderer::DebugCaptureStatus();
             if (!rawCapStat.empty())
             {
-                std::wstring capStat = debug_menu::translations::Capture(rawCapStat, zh);
+                std::wstring capStat = debug_menu::translations::Capture(rawCapStat, language);
                 int capStatW = r.MeasureWString(capStat);
                 r.DrawWString(panelX + (panelW - capStatW) / 2, contentY + 1 * rowH + 34, capStat, host_ui::MakeColor(255, 200, 200, 100));
             }
 
             // 2: Save Anywhere
             bool saveOn = debug_menu::SaveAnywhereEnabled();
-            std::wstring saveText = zh ? (saveOn ? L"随时存档: 开启" : L"随时存档: 关闭")
-                                       : (saveOn ? L"Save Anywhere: ON" : L"Save Anywhere: OFF");
+            std::wstring saveText = saveOn ? Pick(language, L"Save Anywhere: ON", L"随时存档: 开启", L"Guardado libre: SÍ")
+                                           : Pick(language, L"Save Anywhere: OFF", L"随时存档: 关闭", L"Guardado libre: NO");
             // 3: Force RB party switch (beside Save Anywhere, same 520px row)
             const int saveGap = 16;
             const int saveBtnW = (btnW - saveGap) / 2;
             host_ui::DrawButton(r, btnX, contentY + 2 * rowH + 8, saveBtnW, 30, saveText, state.selectedRow == 2);
             host_ui::DrawButton(r, btnX + saveBtnW + saveGap, contentY + 2 * rowH + 8, saveBtnW, 30,
-                zh ? L"强制开启 RB 换人" : L"Force RB Party Switch", state.selectedRow == 3);
+                Pick(language, L"Force RB Party Switch", L"强制开启 RB 换人", L"Forzar cambio con RB"), state.selectedRow == 3);
 
             // 4: Return to title
             host_ui::DrawButton(r, btnX, contentY + 3 * rowH + 12, btnW, 30,
-                translations::Text(L"Return to title", zh), state.selectedRow == 4);
+                translations::Text(L"Return to title", language), state.selectedRow == 4);
 
             // Map info display (Centered)
             auto mapInfo = debug_menu::GetMapInfo();
-            std::wstring mapText = zh ? L"当前地图: " : L"Current Map: ";
+            std::wstring mapText = Pick(language, L"Current Map: ", L"当前地图: ", L"Mapa actual: ");
             if (mapInfo.available)
             {
                 mapText += mapInfo.name + L" (" + std::to_wstring(mapInfo.id) + L")";
             }
             else
             {
-                mapText += zh ? L"未知" : L"Unknown";
+                mapText += Pick(language, L"Unknown", L"未知", L"Desconocido");
             }
             int mapTextW = r.MeasureWString(mapText);
             r.DrawWString(panelX + (panelW - mapTextW) / 2, contentY + 4 * rowH + 16, mapText, host_ui::MakeColor(255, 180, 210, 240));
@@ -590,41 +620,73 @@ namespace debug_menu
             // 5: Win Battle & 6: Cancel Victory (Side by side, centered total 520px)
             int battleGap = 16;
             int battleBtnW = (btnW - battleGap) / 2; // 252
-            std::wstring winText = zh ? L"当前战斗判胜" : L"Win Current Battle";
+            std::wstring winText = Pick(language, L"Win Current Battle", L"当前战斗判胜", L"Ganar el combate actual");
             host_ui::DrawButton(r, btnX, contentY + 5 * rowH + 16, battleBtnW, 30, winText, state.selectedRow == 5);
 
-            std::wstring cancelWinText = zh ? L"取消判胜请求" : L"Cancel Victory Request";
+            std::wstring cancelWinText = Pick(language, L"Cancel Victory Request", L"取消判胜请求", L"Cancelar la victoria");
             host_ui::DrawButton(r, btnX + battleBtnW + battleGap, contentY + 5 * rowH + 16, battleBtnW, 30, cancelWinText, state.selectedRow == 6);
 
             const wchar_t* rawBStat = debug_menu::Status();
             if (rawBStat && *rawBStat)
             {
-                std::wstring bStat = debug_menu::translations::Text(rawBStat, zh);
+                std::wstring bStat = debug_menu::translations::Text(rawBStat, language);
                 int bStatW = r.MeasureWString(bStat);
                 r.DrawWString(panelX + (panelW - bStatW) / 2, contentY + 6 * rowH + 22, bStat, host_ui::MakeColor(255, 220, 180, 120));
             }
 
+            // The help lines under the buttons; one row lower with the Switch's Debug server row.
+            int helpY = contentY + 7 * rowH + 30;
+#if LO_PLATFORM_SWITCH
+            // 7: Debug server. On or off now, and what the next start does when that differs.
+            {
+                const bool running = os::debug_server::Running(), next = debug_options::DebugServerNextStart();
+                std::wstring serverText = running ? Pick(language, L"Debug Server: ON", L"调试服务器: 开启", L"Servidor de depuración: SÍ")
+                                                  : Pick(language, L"Debug Server: OFF", L"调试服务器: 关闭", L"Servidor de depuración: NO");
+                if (running != next)
+                    serverText += next ? Pick(language, L" (ON at next start)", L"（下次启动开启）", L" (SÍ al reiniciar)")
+                                       : Pick(language, L" (OFF at next start)", L"（下次启动关闭）", L" (NO al reiniciar)");
+                host_ui::DrawButton(r, btnX, contentY + 7 * rowH + 6, btnW, 30, serverText, state.selectedRow == 7);
+                helpY = contentY + 8 * rowH + 22;
+            }
+            if (state.selectedRow == 7)
+            {
+                const wchar_t* help[] = {
+                    Pick(language, L"Log, screenshots and input for tools/switch/lo_debug.py on the local network.",
+                        L"在局域网中为 tools/switch/lo_debug.py 提供日志、截图和输入。",
+                        L"Registro, capturas y entrada para tools/switch/lo_debug.py en la red local."),
+                    debug_options::DebugServerFromEnvironment()
+                        ? Pick(language, L"env.txt's LO_DEBUG_SERVER decides it at start.", L"启动时由 env.txt 的 LO_DEBUG_SERVER 决定。",
+                              L"Al iniciar decide LO_DEBUG_SERVER de env.txt.")
+                        : Pick(language, L"Applies at the next start. No password: local network only.", L"下次启动时生效。无密码：仅限局域网。",
+                              L"Se aplica en el próximo inicio. Sin contraseña: solo red local."),
+                };
+                for (int line = 0; line < 2; ++line)
+                    r.DrawWString(panelX + (panelW - r.MeasureWString(help[line])) / 2, helpY + line * 22, help[line],
+                        host_ui::MakeColor(255, 240, 190, 90));
+            }
+            else
+#endif
             // Issue #74: party-switch permission is runtime-only and is not restored by a load.
             if (state.selectedRow == 4)
             {
                 const wchar_t* help[] = {
-                    translations::Text(L"Return to title after confirmation; unavailable in battle.", zh),
-                    translations::Text(L"Unsaved progress will be lost", zh),
+                    translations::Text(L"Return to title after confirmation; unavailable in battle.", language),
+                    translations::Text(L"Unsaved progress will be lost", language),
                 };
                 for (int line = 0; line < 2; ++line)
                     r.DrawWString(panelX + (panelW - r.MeasureWString(help[line])) / 2,
-                        contentY + 7 * rowH + 30 + line * 22, help[line], host_ui::MakeColor(255, 240, 190, 90));
+                        helpY + line * 22, help[line], host_ui::MakeColor(255, 240, 190, 90));
             }
             else if (saveOn)
             {
                 const wchar_t* warning[] = {
-                    zh ? L"随时存档可在原作不允许存档的时刻保存。" : L"Save Anywhere also saves where the game normally forbids it.",
-                    zh ? L"分队探索期间不提供随时存档；旧存档丢失换人时用上方按钮恢复。" : L"Not offered while the party is split; the button above restores RB on older saves.",
+                    Pick(language, L"Save Anywhere also saves where the game normally forbids it.", L"随时存档可在原作不允许存档的时刻保存。", L"El guardado libre también guarda donde el juego no suele permitirlo."),
+                    Pick(language, L"Not offered while the party is split; the button above restores RB on older saves.", L"分队探索期间不提供随时存档；旧存档丢失换人时用上方按钮恢复。", L"No con el grupo dividido; el botón de arriba devuelve RB a partidas antiguas."),
                 };
                 for (int line = 0; line < 2; ++line)
                 {
                     const int warningW = r.MeasureWString(warning[line]);
-                    r.DrawWString(panelX + (panelW - warningW) / 2, contentY + 7 * rowH + 30 + line * 22, warning[line],
+                    r.DrawWString(panelX + (panelW - warningW) / 2, helpY + line * 22, warning[line],
                         host_ui::MakeColor(255, 240, 190, 90));
                 }
             }
@@ -638,13 +700,13 @@ namespace debug_menu
 
             // Line 0 (Rows 0, 1, 2: Save, Restore, Fill)
             int colW = (gridW - colGap * 2) / 3; // 224
-            host_ui::DrawButton(r, gridX, contentY + 0, colW, 30, zh ? L"记住当前位置" : L"Remember Position", state.selectedRow == 0);
-            host_ui::DrawButton(r, gridX + colW + colGap, contentY + 0, colW, 30, zh ? L"返回记录位置" : L"Restore Position", state.selectedRow == 1);
-            host_ui::DrawButton(r, gridX + (colW + colGap) * 2, contentY + 0, colW, 30, zh ? L"填入当前坐标" : L"Fill Coordinates", state.selectedRow == 2);
+            host_ui::DrawButton(r, gridX, contentY + 0, colW, 30, Pick(language, L"Remember Position", L"记住当前位置", L"Recordar la posición"), state.selectedRow == 0);
+            host_ui::DrawButton(r, gridX + colW + colGap, contentY + 0, colW, 30, Pick(language, L"Restore Position", L"返回记录位置", L"Volver a la posición"), state.selectedRow == 1);
+            host_ui::DrawButton(r, gridX + (colW + colGap) * 2, contentY + 0, colW, 30, Pick(language, L"Fill Coordinates", L"填入当前坐标", L"Rellenar coordenadas"), state.selectedRow == 2);
 
             // Line 1: Current coordinates display (Centered)
             auto posSnap = debug_menu::GetTeleportSnapshot();
-            std::wstring curPosStr = zh ? L"角色实时坐标: " : L"Player Position: ";
+            std::wstring curPosStr = Pick(language, L"Player Position: ", L"角色实时坐标: ", L"Posición del jugador: ");
             if (posSnap.available)
             {
                 wchar_t buf[128];
@@ -653,7 +715,7 @@ namespace debug_menu
             }
             else
             {
-                curPosStr += zh ? L"不可用" : L"Unavailable";
+                curPosStr += Pick(language, L"Unavailable", L"不可用", L"No disponible");
             }
             int curPosW = r.MeasureWString(curPosStr);
             r.DrawWString(panelX + (panelW - curPosW) / 2, contentY + 42, curPosStr, host_ui::MakeColor(255, 180, 220, 180));
@@ -661,46 +723,35 @@ namespace debug_menu
             // Line 2 (Row 3: Editable XYZ, Row 4: Teleport to Target)
             wchar_t coordBuf[128];
             const wchar_t* axisNames[] = {L"X", L"Y", L"Z"};
-            if (zh)
-            {
-                swprintf(coordBuf, 128, L"目标坐标 [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► 微调)",
-                         axisNames[state.selectedAxis],
-                         state.editCoordinates[0],
-                         state.editCoordinates[1],
-                         state.editCoordinates[2]);
-            }
-            else
-            {
-                swprintf(coordBuf, 128, L"Target [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► Adjust)",
-                         axisNames[state.selectedAxis],
-                         state.editCoordinates[0],
-                         state.editCoordinates[1],
-                         state.editCoordinates[2]);
-            }
+            swprintf(coordBuf, 128, Pick(language, L"Target [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► Adjust)",
+                                         L"目标坐标 [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► 微调)",
+                                         L"Destino [%ls]: X: %.1f  Y: %.1f  Z: %.1f  (◄/► ajustar)"),
+                     axisNames[state.selectedAxis],
+                     state.editCoordinates[0],
+                     state.editCoordinates[1],
+                     state.editCoordinates[2]);
             int editW = 510;
             int actionW = gridW - editW - colGap; // 176
             host_ui::DrawButton(r, gridX, contentY + 70, editW, 30, coordBuf, state.selectedRow == 3);
-            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 70, actionW, 30, zh ? L"传送到目标坐标" : L"Teleport to Target", state.selectedRow == 4);
+            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 70, actionW, 30, Pick(language, L"Teleport to Target", L"传送到目标坐标", L"Ir al destino"), state.selectedRow == 4);
 
             // Line 3 (Row 5: Step Size, spanning grid width centered)
             wchar_t stepBuf[64];
-            if (zh)
-                swprintf(stepBuf, 64, L"微调步长: ±%.0f (◄/► 切换)", state.stepSize);
-            else
-                swprintf(stepBuf, 64, L"Step Size: ±%.0f (◄/► Switch)", state.stepSize);
+            swprintf(stepBuf, 64, Pick(language, L"Step Size: ±%.0f (◄/► Switch)", L"微调步长: ±%.0f (◄/► 切换)",
+                                       L"Tamaño del paso: ±%.0f (◄/► cambiar)"), state.stepSize);
             host_ui::DrawButton(r, gridX, contentY + 112, gridW, 30, stepBuf, state.selectedRow == 5);
 
             // Line 4: POI Header (Centered)
-            std::wstring poiHdr = zh ? L"地图兴趣点:" : L"Points of Interest (POI):";
+            std::wstring poiHdr = Pick(language, L"Points of Interest (POI):", L"地图兴趣点:", L"Puntos de interés (PDI):");
             int poiHdrW = r.MeasureWString(poiHdr);
             r.DrawWString(panelX + (panelW - poiHdrW) / 2, contentY + 154, poiHdr, host_ui::MakeColor(255, 230, 230, 230));
 
             // Line 5 (Row 6: POI Selection, Row 7: Teleport to POI)
-            std::wstring poiName = zh ? L"无可用兴趣点" : L"No POIs available";
+            std::wstring poiName = Pick(language, L"No POIs available", L"无可用兴趣点", L"No hay PDI disponibles");
             if (!state.pois.empty() && size_t(state.selectedPoi) < state.pois.size())
             {
                 const auto& p = state.pois[state.selectedPoi];
-                std::wstring pLabel = debug_menu::translations::Poi(p.label, zh);
+                std::wstring pLabel = debug_menu::translations::Poi(p.label, language);
                 wchar_t pBuf[128];
                 swprintf(pBuf, 128, L"[%d/%d] %ls (%.0f, %.0f, %.0f)",
                          state.selectedPoi + 1, int(state.pois.size()),
@@ -708,24 +759,23 @@ namespace debug_menu
                 poiName = pBuf;
             }
             host_ui::DrawButton(r, gridX, contentY + 182, editW, 30, poiName, state.selectedRow == 6);
-            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 182, actionW, 30, zh ? L"传送到此兴趣点" : L"Teleport to POI", state.selectedRow == 7);
+            host_ui::DrawButton(r, gridX + editW + colGap, contentY + 182, actionW, 30, Pick(language, L"Teleport to POI", L"传送到此兴趣点", L"Ir al PDI"), state.selectedRow == 7);
 
             // Line 6 (Row 8: map jump to the game's event-debug room)
-            host_ui::DrawButton(r, gridX, contentY + 224, gridW, 30, zh ? L"调试事件房" : L"Debug Event Room", state.selectedRow == 8);
-            const std::wstring roomHint = zh ? L"跳到 z0g_9；在那里按住 LB 再按上打开 Scenario Jump"
-                                             : L"Jumps to z0g_9; hold LB and press Up there for Scenario Jump";
+            host_ui::DrawButton(r, gridX, contentY + 224, gridW, 30, Pick(language, L"Debug Event Room", L"调试事件房", L"Sala de eventos de depuración"), state.selectedRow == 8);
+            const std::wstring roomHint = Pick(language, L"Jumps to z0g_9; hold LB and press Up there for Scenario Jump", L"跳到 z0g_9；在那里按住 LB 再按上打开 Scenario Jump", L"Va a z0g_9; allí mantén LB y pulsa arriba para Scenario Jump");
             const std::wstring hint = controller_hint::ShoulderLabels(roomHint, playStation);
             r.DrawWString(panelX + (panelW - r.MeasureWString(hint)) / 2, contentY + 260, hint, host_ui::MakeColor(255, 170, 175, 185));
         }
         else if (state.activeTab == 2)
         {
-            cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60, playStation);
+            cheat_overlay::Render(r, state.cheatsPage, language, panelX + 30, contentY, panelW - 60, playStation);
         }
 
         // Status message at bottom of panel (Centered)
         if (state.activeTab != 2 && !state.statusMessage.empty())
         {
-            std::wstring dispMsg = debug_menu::translations::Text(state.statusMessage.c_str(), zh);
+            std::wstring dispMsg = debug_menu::translations::Text(state.statusMessage.c_str(), language);
             int msgW = r.MeasureWString(dispMsg);
             r.DrawWString(panelX + (panelW - msgW) / 2, footerY - 26, dispMsg, host_ui::MakeColor(255, 120, 220, 150));
         }
@@ -737,16 +787,16 @@ namespace debug_menu
             constexpr int width = 560, height = 200;
             const int x = panelX + (panelW - width) / 2, y = contentY + 65;
             host_ui::DrawPanel(r, x, y, width, height, host_ui::MakeColor(255, 24, 31, 42));
-            host_ui::DrawHeader(r, x, y, width, 36, translations::Text(L"Return to title", zh));
-            const wchar_t* warning = translations::Text(L"Unsaved progress will be lost", zh);
+            host_ui::DrawHeader(r, x, y, width, 36, translations::Text(L"Return to title", language));
+            const wchar_t* warning = translations::Text(L"Unsaved progress will be lost", language);
             r.DrawWString(x + (width - r.MeasureWString(warning)) / 2, y + 66,
                 warning, host_ui::MakeColor(255, 240, 190, 90));
             constexpr int buttonWidth = 220, gap = 24;
             const int buttonX = x + (width - 2 * buttonWidth - gap) / 2;
             host_ui::DrawButton(r, buttonX, y + 122, buttonWidth, 38,
-                zh ? L"否" : L"No", !state.resetYes);
+                Pick(language, L"No", L"否", L"No"), !state.resetYes);
             host_ui::DrawButton(r, buttonX + buttonWidth + gap, y + 122, buttonWidth, 38,
-                zh ? L"是" : L"Yes", state.resetYes);
+                Pick(language, L"Yes", L"是", L"Sí"), state.resetYes);
         }
     }
 }

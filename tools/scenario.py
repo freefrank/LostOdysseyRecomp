@@ -9,7 +9,13 @@ settings and logs are never touched.
 
 Usage:
   python3 tools/scenario.py run tools/scenarios/*.toml [--saves DIR] [--bin PATH]
+  python3 tools/scenario.py run tools/scenarios/disc1-ship.toml --switch 192.168.1.87
   python3 tools/scenario.py list tools/scenarios/*.toml
+
+--switch <ip[:port]> runs the scenarios on a console through its debug server
+(tools/switch/lo_debug.py, docs/SWITCH.md "Debug server"): each run writes the
+console's env.txt, restarts the game, streams its log here and sends the same
+input and screenshot requests over the network; env.txt is put back afterwards.
 """
 
 from __future__ import annotations
@@ -29,6 +35,8 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "tools/switch"))
+import lo_debug  # noqa: E402
 DEFAULT_BIN = REPO_ROOT / "out/build/macos-gpu/LostOdysseyRecomp/LostOdysseyRecomp"
 DEFAULT_GAME = REPO_ROOT / "LostOdysseyRecompLib/private/disc1"
 DEFAULT_SAVES = REPO_ROOT / "out/drive-city/save"
@@ -262,6 +270,190 @@ class Run:
         return result
 
 
+class SwitchRun(Run):
+    """The same scenario on a console, through its debug server: env.txt instead of the environment, the debug
+    server's input and shot instead of input.txt and shot-request.txt, the streamed log instead of the log file."""
+
+    APP = "sdmc:/switch/LostOdysseyRecomp"
+    # The PC run's variables that name files on this computer, or that this run sets itself.
+    PC_ONLY = {"LO_BACKGROUND", "LO_NO_UPDATE", "LO_LOG_FILE", "LO_TEST_INPUT_FILE", "LO_SCREENSHOT_REQUEST",
+               "LO_SCREENSHOT_PATH", "LO_SHADER_CACHE_DIR", "LO_DEBUG_SERVER", "LO_SAVE_DIR"}
+    # [settings] keys the console takes from env.txt instead (its settings.ini is the player's).
+    SETTINGS_ENV = {"frame_rate": "LO_FPS"}
+
+    def __init__(self, scenario: dict, args: argparse.Namespace, root: Path):
+        super().__init__(scenario, args, root)
+        host, _, port = args.switch.partition(":")
+        self.con = lo_debug.Console(host, int(port or lo_debug.DEFAULT_PORT))
+        self.stream: lo_debug.LogStream | None = None
+
+    def prepare(self) -> None:
+        if self.dir.exists():
+            shutil.rmtree(self.dir)
+        self.shots.mkdir(parents=True)
+
+    def console_env(self) -> dict[str, str | None]:
+        console = self.s.get("switch", {})
+        env: dict[str, str | None] = {
+            # The server must come back with the game, on the port this run talks to.
+            "LO_DEBUG_SERVER": str(self.con.port) if self.con.port != lo_debug.DEFAULT_PORT else "1",
+            "LO_FRAME_TIMING": "1", "LO_RENDER_TIMING": "1", "LO_DEBUG_LOG": "1",
+            "LO_AUTO_PULSE": str(self.s.get("pulse", 6)),
+            # Swap-stamped presses ([switch] buttons retunes them for the console); none must not fall back to "s".
+            "LO_AUTO_BUTTONS": console.get("buttons", self.s["buttons"]) or "s@999999999",
+            "LO_SCREENSHOT_EVERY": None, "LO_SCREENSHOT_SWAP": None, "LO_AUTO_START": None, "LO_AUTO_STICK": None,
+        }
+        for key, name in self.SETTINGS_ENV.items():
+            if key in self.s["settings"]:
+                env[name] = str(int(self.s["settings"][key]))
+        for key, value in self.s["env"].items():
+            if key not in self.PC_ONLY:
+                env[key] = str(value) if str(value) != "" else None
+        env["LO_SAVE_DIR"] = f"{self.APP}/scenario/save" if self.s["save"] else None
+        return env
+
+    def upload_save(self) -> None:
+        slot = self.s["save"]
+        source = Path(self.args.saves) / slot
+        if not (source / "save.bin").is_file():
+            raise FileNotFoundError(f"save '{slot}' not found in {self.args.saves}")
+        for folder in ("scenario", "scenario/save", f"scenario/save/{slot}"):
+            self.con.text("mkdir", folder)
+        # The run's own save folder (LO_SAVE_DIR): the player's slots are never read or written.
+        for kind, _, name in self.con.ls(f"scenario/save/{slot}"):
+            if kind == "f":
+                self.con.text("rm", f"scenario/save/{slot}/{name}")
+        for file in sorted(source.iterdir()):
+            if file.is_file():
+                self.con.put_bytes(file.read_bytes(), f"scenario/save/{slot}/{file.name}", quiet=True)
+
+    def crash_files(self) -> set[str]:
+        names = set()
+        for folder, pattern in (("/atmosphere/crash_reports", r".+"), (lo_debug.REMOTE_LOGS, r"crash-\d+\.log")):
+            try:
+                names |= {f"{folder}/{n}" for kind, _, n in self.con.ls(folder) if kind == "f" and re.fullmatch(pattern, n)}
+            except (lo_debug.ServerError, OSError):
+                pass
+        return names
+
+    def start_game(self, before: str | None) -> str:
+        try:
+            print(f"   {self.con.text('restart', *(['force'] if self.args.switch_force else []), timeout=10.0)}", flush=True)
+        except lo_debug.ServerError as e:
+            print(f"   {e}\n   Start the game on the console now; waiting up to 5 minutes.", flush=True)
+        session = self.con.wait(300, other_than=before)
+        if not session:
+            raise RuntimeError("the game did not start again with its debug server within 5 minutes")
+        return session
+
+    def send(self, mask: int = 0, x: int = 0, y: int = 0, polls: int = 20) -> None:
+        self.serial += 1
+        self.con.text("input", self.serial, f"{mask:x}", x, y, polls)
+
+    def screenshot(self) -> None:
+        self.shot_serial += 1
+        try:
+            (self.shots / f"shot_{self.shot_serial}.ppm").write_bytes(self.con.shot(ppm=True))
+        except (lo_debug.ServerError, OSError) as e:
+            print(f"   screenshot {self.shot_serial} failed: {e}", flush=True)
+
+    def execute(self) -> dict:
+        self.prepare()
+        self.con.check_game()
+        old_env = self.con.read_env()
+        had_env = bool(old_env) or any(n == "env.txt" for _, _, n in self.con.ls(""))
+        (self.dir / "env.before.txt").write_text("\n".join(old_env) + "\n", encoding="utf-8")
+        crashes_before = self.crash_files()
+        if self.s["save"]:
+            self.upload_save()
+        env = lo_debug.edit_env(old_env, self.console_env())
+        self.con.put_bytes(("\n".join(env) + "\n").encode(), "env.txt", quiet=True)
+        (self.dir / "env.txt").write_text("\n".join(env) + "\n", encoding="utf-8")
+        steps = list(self.s["step"])
+        timed_out, crashed = False, False
+        restored = False
+        try:
+            self.start_game(self.con.session())
+            info = self.con.info()
+            (self.dir / "info.txt").write_text("\n".join(f"{k} {v}" for k, v in info.items()) + "\n", encoding="utf-8")
+            # Times count from the game's start, as on PC (the process start).
+            up = float(re.search(r"up ([0-9.]+) s", info.get("session", "")).group(1))
+            started = time.time() - up
+            self.stream = lo_debug.LogStream(self.con.host, self.con.port, self.log)
+            self.stream.start()
+            timeline = list(self.s["timeline"])
+            step_started = None
+            max_draws = 0
+            while not self.stream.closed.is_set():
+                elapsed = time.time() - started
+                if elapsed >= self.s["timeout"]:
+                    timed_out = True
+                    break
+                if timeline and elapsed >= timeline[0][0]:
+                    self.send(timeline.pop(0)[1], polls=self.s.get("pulse", 6))
+                for match in DRAWS_RE.finditer(self.tail()):
+                    max_draws = max(max_draws, int(match.group(2)))
+                if steps:
+                    step = steps[0]
+                    ready = max_draws >= step.get("wait_draws", 0) and elapsed >= step.get("wait_seconds", 0)
+                    if step_started is None and ready:
+                        step_started = time.time()
+                        mask = 0
+                        for button in filter(None, step.get("press", "").split("+")):
+                            mask |= BUTTONS[button]
+                        stick = step.get("stick", [0, 0])
+                        if mask or stick != [0, 0]:
+                            self.send(mask, stick[0], stick[1], step.get("polls", 20))
+                        if step.get("screenshot"):
+                            self.screenshot()
+                    if step_started is not None and time.time() - step_started >= step.get("hold_seconds", 1):
+                        steps.pop(0)
+                        step_started = None
+                time.sleep(0.1 if timeline else 0.5)
+            crashed = not timed_out
+            if not crashed:
+                self.screenshot()
+            elapsed = time.time() - started
+        finally:
+            if self.stream:
+                self.stream.stop()
+            session = self.con.session()
+            if session:
+                # Back to the console's own env.txt, and the game started with it again.
+                if had_env:
+                    self.con.put_bytes(("\n".join(old_env) + "\n").encode(), "env.txt", quiet=True)
+                else:
+                    self.con.text("rm", "env.txt")
+                restored = True
+                if not self.args.switch_keep:
+                    try:
+                        self.con.text("restart", *(["force"] if self.args.switch_force else []), timeout=10.0)
+                        # The next scenario starts from the game this restart brings back.
+                        if not self.con.wait(180, other_than=session):
+                            print("   the game did not come back after the restart", flush=True)
+                    except lo_debug.ServerError:
+                        print("   env.txt restored; start the game again by hand to leave the scenario's settings",
+                              flush=True)
+            if not restored:
+                print("   the console did not answer, so its env.txt is still this run's. Once the game runs again:\n"
+                      f"   python3 tools/switch/lo_debug.py --host {self.con.host} put {self.dir / 'env.before.txt'} env.txt",
+                      flush=True)
+        crashes = {Path(name) for name in self.crash_files() - crashes_before} if crashed else set()
+        return self.check(None if crashed else 0, timed_out, elapsed, crashes, steps)
+
+
+def make_run(scenario: dict, args: argparse.Namespace, root: Path) -> Run:
+    return SwitchRun(scenario, args, root) if getattr(args, "switch", None) else Run(scenario, args, root)
+
+
+def add_switch_arguments(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--switch", metavar="IP[:PORT]", help="run on a console through its debug server")
+    ap.add_argument("--switch-keep", action="store_true",
+                    help="leave the last scenario's env.txt restored but the game running (no restart at the end)")
+    ap.add_argument("--switch-force", action="store_true",
+                    help="restart also when the console looks like title takeover (a forwarder with a 01... ID)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["run", "list"])
@@ -270,6 +462,7 @@ def main() -> int:
     ap.add_argument("--game", default=str(DEFAULT_GAME))
     ap.add_argument("--saves", default=str(DEFAULT_SAVES), help="folder with converted save slots (userNN)")
     ap.add_argument("--out", default=str(DEFAULT_OUT))
+    add_switch_arguments(ap)
     args = ap.parse_args()
     args.bin, args.game, args.saves = (str(Path(p).resolve()) for p in (args.bin, args.game, args.saves))
     scenarios = [load_scenario(p) for p in args.scenarios]
@@ -277,11 +470,11 @@ def main() -> int:
         for s in scenarios:
             print(f"{s['name']:24} save={s['save'] or '-':8} timeout={s['timeout']:>4}s  {s['description']}")
         return 0
-    root = Path(args.out).resolve() / datetime.now().strftime("%Y%m%d-%H%M%S")
+    root = Path(args.out).resolve() / (("switch-" if args.switch else "") + datetime.now().strftime("%Y%m%d-%H%M%S"))
     results = []
     for s in scenarios:
         print(f"== {s['name']}: {s['description']}", flush=True)
-        result = Run(s, args, root).execute()
+        result = make_run(s, args, root).execute()
         results.append(result)
         status = "PASS" if result["passed"] else "FAIL"
         print(f"   {status}  draws={result['max_draws']} fps={result['median_fps']} "

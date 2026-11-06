@@ -53,6 +53,7 @@ lo_review_test(LoUserPathsTest user_paths_test.cpp)
 lo_review_test(LoRuntimeLibrariesTest runtime_libraries_test.cpp)
 lo_review_test(LoExternalUpdateNoticeTest external_update_notice_test.cpp)
 lo_review_test(LoOcclusionQueriesTest occlusion_queries_test.cpp)
+target_include_directories(LoOcclusionQueriesTest PRIVATE "${LO_ROOT}/thirdparty/unordered_dense/include")
 # TAA/FSR/DLSS jitter map: every reviewed flicker fix has a case here.
 lo_review_test(LoTemporalJitterTest temporal_jitter_test.cpp)
 # One-file local shader store: keys, recovery, integrity, locking, compaction.

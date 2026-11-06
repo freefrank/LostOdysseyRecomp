@@ -1537,7 +1537,25 @@ namespace xenos
         t.dwordCount = dwordCount;
         t.isPixelShader = isPixelShader;
         t.uboConstants = uboConstants;
-        return t.Run();
+        TranslatedShader result = t.Run();
+        // The constant slots, from the finished source: XeConst(N) is a read of slot N, any other argument
+        // (c[N + a0], c[N + aL]) leaves the set unknown. The prelude's definition is XeConst(int index).
+        result.constantSlotsKnown = !result.usesRelativeConstants;
+        constexpr std::string_view call = "XeConst(";
+        for (size_t at = result.hlsl.find(call); at != std::string::npos && result.constantSlotsKnown;
+             at = result.hlsl.find(call, at + call.size()))
+        {
+            size_t end = at + call.size();
+            uint32_t slot = 0;
+            while (end < result.hlsl.size() && result.hlsl[end] >= '0' && result.hlsl[end] <= '9')
+                slot = slot * 10 + uint32_t(result.hlsl[end++] - '0');
+            if (end > at + call.size() && end < result.hlsl.size() && result.hlsl[end] == ')' && slot < 256)
+                result.constantSlots[slot >> 6] |= 1ull << (slot & 63);
+            else if (result.hlsl.compare(at + call.size(), 4, "int ") != 0)
+                result.constantSlotsKnown = false;
+        }
+        if (!result.constantSlotsKnown) result.constantSlots = {};
+        return result;
     }
 
     const char* GetShaderCommonHlsl()

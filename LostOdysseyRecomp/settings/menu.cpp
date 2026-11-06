@@ -27,6 +27,9 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if LO_PLATFORM_SWITCH
+#include <debug/debug_options.h>
+#endif
 #if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
 #include <discord/presence.h>
 #endif
@@ -153,6 +156,10 @@ std::vector<achievements_page::Item> achievementItems;
 std::vector<std::shared_ptr<const menu_assets::Image>> achievementIcons;
 int achievementsFocus = 0;
 std::wstring achievementSummary;
+// Debug page (System → Debug, the Switch only). Every row applies and saves at
+// once and is logged with its frame (debug/debug_options.h).
+std::atomic<bool> debugOpen{false};
+int debugFocus = DebugOverlayRow;
 // Controls page (Gameplay → Controls). The layouts stay unsaved until Save;
 // Button prompts and Vibration save at once, as they did on the tab. The page
 // navigates with the default layouts (FilterInput), so a layout that leaves a
@@ -516,6 +523,114 @@ void CycleAchievementNotifications(int delta)
     saved.achievementSound = edit.achievementSound;
     if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
 }
+#if LO_PLATFORM_SWITCH
+bool DebugTitle(int r) { return r == DebugLiveTitle || r == DebugNextStartTitle; }
+// The deko3d option a Debug page row switches, or Count.
+debug_options::Deko3d DebugDeko3d(int r)
+{
+    using Deko3d = debug_options::Deko3d;
+    switch (r)
+    {
+    case DebugMergeBarriersRow: return Deko3d::MergeBarriers;
+    case DebugLeanBarriersRow: return Deko3d::LeanBarriers;
+    case DebugZcullRow: return Deko3d::Zcull;
+    case DebugDepthCompressionRow: return Deko3d::DepthCompression;
+    case DebugColorCompressionRow: return Deko3d::ColorCompression;
+    case DebugVsOutputsRow: return Deko3d::VsOutputs;
+    default: return Deko3d::Count;
+    }
+}
+void OpenDebugPage()
+{
+    debugFocus = DebugOverlayRow;
+    status.clear();
+    debugOpen = true;
+    LOG_INFO("settings: debug page opened");
+}
+void CloseDebugPage()
+{
+    debugOpen = false;
+    status.clear();
+}
+// A, Left or Right on a Debug page row: applied, saved and logged at once,
+// without unsaved edits from the tabs.
+void ChangeDebugOption(int delta)
+{
+    bool saved = true;
+    if (debugFocus == DebugOverlayRow)
+    {
+        const uint32_t mode = uint32_t((int(std::min(edit.performanceOverlay, 2u)) + 3 + delta) % 3);
+        Config config = GetConfig();
+        config.performanceOverlay = mode;
+        saved = SaveConfig(config);
+        if (saved)
+        {
+            edit.performanceOverlay = mode;
+            debug_options::LogPerformanceOverlay(mode);
+        }
+    }
+    else if (debugFocus == DebugServerRow)
+        saved = debug_options::SetDebugServer(!GetConfig().debug.debugServer);
+    else if (const auto option = DebugDeko3d(debugFocus);
+             option != debug_options::Deko3d::Count && debug_options::Deko3dActive())
+        saved = debug_options::Set(option, !debug_options::Saved(option));
+    if (!saved) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+}
+// Help for the focused Debug page row (line 1); line 2 says what the GPU runs
+// with now, and whether env.txt set it.
+std::pair<std::wstring, std::wstring> DebugHelp()
+{
+    std::wstring help;
+    switch (debugFocus)
+    {
+    case DebugOverlayRow:
+        help = Tr(L"Shows FPS, or detailed load, over the game. Applies and saves at once.",
+                  L"在遊戲畫面上顯示 FPS 或詳細負載。立即套用並儲存。");
+        break;
+    case DebugMergeBarriersRow:
+        help = Tr(L"Back-to-back GPU barriers become one. Applies from the next frame.",
+                  L"連續的 GPU 屏障合併為一個。從下一個影格起生效。");
+        break;
+    case DebugLeanBarriersRow:
+        help = Tr(L"Barriers before a write keep the texture cache. Applies from the next frame.",
+                  L"寫入前的屏障保留紋理快取。從下一個影格起生效。");
+        break;
+    case DebugZcullRow:
+        help = Tr(L"Hierarchical depth culling. It can drop decals. Applies at the next start.",
+                  L"階層式深度剔除，可能遺漏貼花。下次啟動時生效。");
+        break;
+    case DebugDepthCompressionRow:
+        help = Tr(L"Hardware compression for depth buffers. Applies at the next start.",
+                  L"深度緩衝區使用硬體壓縮。下次啟動時生效。");
+        break;
+    case DebugColorCompressionRow:
+        help = Tr(L"Hardware compression for colour render targets, on by default. Applies at the next start.",
+                  L"色彩渲染目標使用硬體壓縮，預設開啟。下次啟動時生效。");
+        break;
+    case DebugVsOutputsRow:
+        help = Tr(L"Vertex shaders write only what the pixel shader reads. Applies at the next start.",
+                  L"頂點著色器只輸出像素著色器讀取的值。下次啟動時生效。");
+        break;
+    case DebugServerRow:
+        help = debug_options::DebugServerFromEnvironment()
+            ? Tr(L"env.txt's LO_DEBUG_SERVER decides at start; this choice is saved for when it is gone.",
+                 L"啟動時由 env.txt 的 LO_DEBUG_SERVER 決定；此選項會保存，供移除後使用。")
+            : Tr(L"Log, screenshots and input for tools/switch/lo_debug.py on the local network. Applies at the next start.",
+                 L"在區域網路中提供日誌、截圖與輸入給 tools/switch/lo_debug.py。下次啟動時生效。");
+        break;
+    }
+    const auto option = DebugDeko3d(debugFocus);
+    if (option == debug_options::Deko3d::Count)
+        return {help, Tr(L"Each change is logged with the frame it took effect at.", L"每次變更都會連同生效的影格編號寫入日誌。")};
+    if (!debug_options::Deko3dActive())
+        return {help, Tr(L"Only with the deko3d back end (LO_SWITCH_BACKEND=deko3d in env.txt).",
+                         L"僅適用於 deko3d 後端（env.txt 中的 LO_SWITCH_BACKEND=deko3d）。")};
+    std::wstring running = std::wstring(Tr(L"Running now:", L"目前執行：")) + L" " +
+                           (debug_options::Running(option) ? Tr(L"On", L"開") : Tr(L"Off", L"關"));
+    if (const char *env = debug_options::ForcedBy(option)) running += L"   (env.txt: " + Widen(env) + L")";
+    return {help, running};
+}
+#endif
 // An achievement entry: icon, name, one line of text, then gamerscore and, once
 // earned, the date. A locked secret shows neither its name, text nor icon.
 Row AchievementRow(const achievements_page::Item &item, std::shared_ptr<const menu_assets::Image> icon)
@@ -1149,35 +1264,67 @@ std::wstring DlssNotice()
 }
 bool SystemRowHidden(int r)
 {
+#if LO_PLATFORM_SWITCH
+    // No updater, network download, log upload or disc importer on the console (docs/SWITCH.md): the discs and
+    // the shader pack are copied to the SD card.
+    if (r == SystemUpdatesRow || r == SystemCollectionRow || r == SystemImportRow || r == SystemShaderBundleRow)
+        return true;
+#else
+    if (r == SystemDebugRow) return true;
+#endif
 #if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
     return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
 #else
     return false;
 #endif
 }
+#if LO_PLATFORM_SWITCH
+// A Graphics row env.txt sets (graphics_menu.h): its help names the variable.
+void SwitchEnvironmentHelp(std::wstring &help, bool fromEnvironment, const wchar_t *variable)
+{
+    if (!fromEnvironment) return;
+    AppendSentence(help, std::wstring(Tr(L"Set by env.txt:", L"由 env.txt 設定：")) + L" " + variable);
+}
+// The Graphics tab's status line: which operation mode's heights the resolution rows show, and whether env.txt
+// holds some rows. The PC's upscaler status does not apply.
+std::wstring SwitchNotice()
+{
+    std::wstring text = Docked() ? Tr(L"Docked: the resolution rows set the docked heights.", L"TV 模式：解析度選項設定 TV 模式的高度。")
+                                 : Tr(L"Handheld: the resolution rows set the handheld heights.", L"手提模式：解析度選項設定手提模式的高度。");
+    if (graphics_menu::MaximumHeightFromEnvironment() || graphics_menu::DynamicResolutionFromEnvironment() ||
+        graphics_menu::MinimumHeightFromEnvironment() || graphics_menu::FsrSharpnessFromEnvironment())
+        AppendSentence(text, Tr(L"Greyed-out rows are set by env.txt.", L"灰色選項由 env.txt 設定。"));
+    return text;
+}
+#endif
 bool GraphicsRowHidden(int r)
 {
     // A page entry row shows with the setting it belongs to.
     if (r == int(GraphicsRow::NeuralRenderingTuning)) r = int(GraphicsRow::DlssNeuralRendering);
     if (r == int(GraphicsRow::HdrCalibration)) r = int(GraphicsRow::HdrPeak);
 #if LO_PLATFORM_SWITCH
-    // The console owns the display and output size, and settings::Validate pins
-    // the Xbox 360 image (720p scene, no host AA, AO, filtering, upscaling, HDR).
+    // The console owns the display and output size, and settings::Validate pins the Xbox 360 image (retail shadow
+    // maps, no host AA, AO, filtering, HDR or PC upscalers). The rows that do something here, and the Switch's own:
+    // the scene height (Render / Maximum, Dynamic and Minimum resolution) and FSR 1 with its sharpness.
     switch (GraphicsRow(r))
     {
-    case GraphicsRow::Backend: case GraphicsRow::Gpu: case GraphicsRow::DisplayMode:
-    case GraphicsRow::Display: case GraphicsRow::AspectRatio: case GraphicsRow::OutputResolution:
-    case GraphicsRow::RenderResolution: case GraphicsRow::ShadowResolution: case GraphicsRow::AntiAliasing:
-    case GraphicsRow::DlssQuality: case GraphicsRow::FsrSharpness: case GraphicsRow::DlssNeuralRendering:
-    case GraphicsRow::FrameGeneration: case GraphicsRow::FrameGenerationMultiplier:
-    case GraphicsRow::AmbientOcclusion: case GraphicsRow::AnisotropicFiltering:
-    case GraphicsRow::VariableRefreshRate: case GraphicsRow::Hdr: case GraphicsRow::HdrPaperWhite:
-    case GraphicsRow::HdrPeak:
-        return true;
-    default:
+    case GraphicsRow::Preset: case GraphicsRow::RenderResolution: case GraphicsRow::DynamicResolution:
+    case GraphicsRow::DynamicShadows: case GraphicsRow::AntiAliasing: case GraphicsRow::DepthOfField:
+    case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::Culling: case GraphicsRow::ScalingQuality:
+    case GraphicsRow::FrameRate: case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
+    case GraphicsRow::Brightness: case GraphicsRow::Save:
         return false;
+    case GraphicsRow::MinimumResolution:
+        return !graphics_menu::DynamicResolutionOn(edit);
+    case GraphicsRow::FsrSharpness:
+        return !graphics_menu::FsrOn(edit);
+    default:
+        return true;
     }
 #endif
+    // The Switch's own rows.
+    if (r == int(GraphicsRow::DynamicResolution) || r == int(GraphicsRow::MinimumResolution))
+        return true;
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
@@ -1264,7 +1411,7 @@ void SkipHiddenGraphicsRow()
 }
 void Publish(uint8_t *base, uint32_t config)
 {
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
@@ -1282,7 +1429,8 @@ void Publish(uint8_t *base, uint32_t config)
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
-    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus : row;
+    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus
+             : debugOpen ? debugFocus : row;
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -1359,6 +1507,37 @@ void Publish(uint8_t *base, uint32_t config)
         for (size_t i = 0; i < achievementItems.size(); ++i)
             next.rows[size_t(AchievementsFirstRow) + i] = AchievementRow(achievementItems[i], achievementIcons[i]);
     }
+#if LO_PLATFORM_SWITCH
+    else if (debugOpen)
+    {
+        next.pageTitle = Tr(L"Debug", L"除錯");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"B / Left / Right: change     A: back", L"B / 左 / 右：變更     A：返回")
+            : Tr(L"A / Left / Right: change     B: back", L"A / 左 / 右：變更     B：返回");
+        next.rows.resize(size_t(DebugRowCount));
+        auto title = [&](const wchar_t *en, const wchar_t *zh) {
+            Row header{Tr(en, zh), {}, false, {}, 0};
+            header.header = true;
+            return header;
+        };
+        next.rows[DebugLiveTitle] = title(L"Applies at once", L"立即生效");
+        next.rows[DebugOverlayRow] = makeChoices(L"Performance overlay", L"效能資訊",
+            {Tr(L"Off", L"關"), L"FPS", Tr(L"Detailed", L"詳細")}, std::min(edit.performanceOverlay, 2u));
+        // The saved values; the help line says what runs now. Off the deko3d back end they do nothing.
+        const bool deko3d = debug_options::Deko3dActive();
+        auto deko3dRow = [&](int r, const wchar_t *en, const wchar_t *zh) {
+            next.rows[size_t(r)] = makeChoices(en, zh, onOff(), debug_options::Saved(DebugDeko3d(r)) ? 0 : 1, deko3d);
+        };
+        deko3dRow(DebugMergeBarriersRow, L"deko3d: merge barriers", L"deko3d：合併屏障");
+        deko3dRow(DebugLeanBarriersRow, L"deko3d: lean barriers", L"deko3d：精簡屏障");
+        next.rows[DebugNextStartTitle] = title(L"Applies at the next start", L"下次啟動時生效");
+        deko3dRow(DebugZcullRow, L"deko3d: Zcull", L"deko3d：Zcull");
+        deko3dRow(DebugDepthCompressionRow, L"deko3d: depth compression", L"deko3d：深度壓縮");
+        deko3dRow(DebugColorCompressionRow, L"deko3d: colour compression", L"deko3d：色彩壓縮");
+        deko3dRow(DebugVsOutputsRow, L"deko3d: vertex output trimming", L"deko3d：頂點輸出精簡");
+        next.rows[DebugServerRow] = makeChoices(L"Debug server", L"除錯伺服器", onOff(), GetConfig().debug.debugServer ? 0 : 1);
+    }
+#endif
     else if (controlsOpen)
     {
         next.pageTitle = Tr(L"Controls", L"按鍵設定");
@@ -1506,6 +1685,10 @@ void Publish(uint8_t *base, uint32_t config)
                 std::to_wstring(height) + L"p");
         placeGraphics(GraphicsRow::RenderResolution, makeChoices(L"Render resolution", L"渲染解析度",
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
+        // The Switch's rows (filled in below there); hidden elsewhere.
+        placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                   edit.dynamicResolution ? 0 : 1));
+        placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度", {}, 0));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
         placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
@@ -1547,6 +1730,62 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
+#if LO_PLATFORM_SWITCH
+        {
+            // The scene height rows for the current operation mode, and FSR 1 in the Anti-aliasing row's place
+            // (graphics_menu.h). A row env.txt sets shows that value, greyed out, and does not change.
+            const bool docked = Docked();
+            const bool dynamic = graphics_menu::DynamicResolutionOn(edit);
+            const auto rows = [](uint32_t height) { return std::to_wstring(height) + L"p"; };
+            const auto automatic = [&](uint32_t height) { return std::wstring(Tr(L"Auto", L"自動")) + L" (" + rows(height) + L")"; };
+            const auto fixed = [&](const wchar_t *en, const wchar_t *zh, std::wstring value) {
+                return makeChoices(en, zh, {std::move(value)}, 0, false);
+            };
+            const wchar_t *maximumEn = dynamic ? L"Maximum resolution" : L"Render resolution";
+            const wchar_t *maximumZh = dynamic ? L"最高解析度" : L"渲染解析度";
+            if (graphics_menu::MaximumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::RenderResolution, fixed(maximumEn, maximumZh, rows(RenderHeightOverride())));
+            else
+            {
+                std::vector<std::wstring> choices{automatic(SwitchAutomaticHeight(docked))};
+                for (const uint32_t height : SwitchSceneHeights) choices.push_back(rows(height));
+                placeGraphics(GraphicsRow::RenderResolution, makeChoices(maximumEn, maximumZh, std::move(choices),
+                    graphics_menu::SwitchHeightChoice(edit.maximumHeight[docked ? 1 : 0])));
+            }
+            placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                dynamic ? 0 : 1, !graphics_menu::DynamicResolutionFromEnvironment()));
+            if (graphics_menu::MinimumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::MinimumResolution, fixed(L"Minimum resolution", L"最低解析度",
+                    rows(gpu::dynamic_resolution::EnvironmentMinimum())));
+            else
+            {
+                Config automaticMinimum = edit;
+                automaticMinimum.minimumHeight[docked ? 1 : 0] = 0;
+                std::vector<std::wstring> choices{automatic(SwitchMinimumHeight(automaticMinimum, docked))};
+                for (uint32_t i = 1; i < graphics_menu::MinimumHeightChoiceCount(edit, docked); ++i)
+                    choices.push_back(rows(graphics_menu::SwitchHeightAt(i)));
+                placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度",
+                    std::move(choices), graphics_menu::SwitchHeightChoice(edit.minimumHeight[docked ? 1 : 0])));
+            }
+            if (graphics_menu::FsrFromEnvironment())
+            {
+                using gpu::SpatialUpscaler;
+                const auto mode = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).mode;
+                placeGraphics(GraphicsRow::AntiAliasing, fixed(L"FSR", L"FSR", mode == SpatialUpscaler::Off ? Tr(L"Off", L"關") :
+                    mode == SpatialUpscaler::Easu ? L"EASU" : mode == SpatialUpscaler::Rcas ? L"RCAS" : Tr(L"On", L"開")));
+            }
+            else
+                placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"FSR", L"FSR", onOff(), edit.switchFsr ? 0 : 1));
+            if (graphics_menu::FsrSharpnessFromEnvironment())
+            {
+                // RCAS's stops as the row's percent (gpu/switch_upscaler.h FromSettings).
+                const float stops = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).rcasStops;
+                const int percent = std::clamp(int(std::lround((2.0f - stops) * 50.0f)), 0, 100);
+                placeGraphics(GraphicsRow::FsrSharpness, fixed(L"FSR sharpness", L"FSR 銳化",
+                    percent ? std::to_wstring(percent) + L"%" : std::wstring(Tr(L"Off", L"關"))));
+            }
+        }
+#endif
         auto neuralRendering = makeChoices(L"DLSS 5 neural rendering", L"DLSS 5 神經渲染",
                    {Tr(L"Off", L"關"), L"1×", L"2×", L"3×", L"4×"},
                    std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses));
@@ -1657,6 +1896,9 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Discord status", L"Discord 狀態", onOff(), edit.discordStatus ? 0 : 1);
         next.rows.back().hidden = SystemRowHidden(SystemDiscordStatusRow);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
+        addAction(L"Debug", L"除錯", Tr(L"Open", L"開啟"));
+        next.rows.back().pageEntry = true;
+        next.rows.back().hidden = SystemRowHidden(SystemDebugRow);
         if (achievementSummary.empty()) RefreshAchievementSummary();
         addAction(L"Achievements", L"成就", achievementSummary.c_str());
         next.rows.back().pageEntry = true;
@@ -1672,12 +1914,14 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
+        for (int i = 0; i < SystemRowCount && i < int(next.rows.size()); ++i)
+            if (SystemRowHidden(i)) next.rows[i].hidden = true;
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
     // so returning to a long list restores its position.
     if (tab >= 0 && tab < MenuTabCount)
     {
-        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0;
+        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0, debugScroll = 0;
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
@@ -1685,7 +1929,8 @@ void Publish(uint8_t *base, uint32_t config)
             if (int(i) <= next.row) visibleFocus = visibleCount;
             ++visibleCount;
         }
-        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
+        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll
+                    : debugOpen ? debugScroll : scrollByTab[tab];
         const int visibleRows = VisibleRowCount(tab, !next.pageTitle.empty());
         scroll = std::clamp(scroll, 0, std::max(0, visibleCount - visibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
@@ -1713,6 +1958,11 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemDebugLogRow)
         next.help = Tr(L"Writes detailed logs in logs/ to help diagnose problems. On by default. Applies when saved.",
                        L"在 logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
+#if LO_PLATFORM_SWITCH
+    if (tab == 3 && row == SystemDebugRow)
+        next.help = Tr(L"A/B switches for benchmark runs. Each change is logged with its frame number.",
+                       L"效能測試用的 A/B 開關。每次變更都會連同影格編號寫入日誌。");
+#endif
     if (tab == 3 && row == SystemAchievementsRow)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");
@@ -1790,10 +2040,24 @@ void Publish(uint8_t *base, uint32_t config)
                            L"設定輸出尺寸；全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::Preset:
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"Both run at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom.",
+                           L"兩者皆為 30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈。");
+#else
             next.help = Tr(L"Both use 720p at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
                            L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
+#endif
             break;
         case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+            next.help = graphics_menu::DynamicResolutionOn(edit)
+                ? Tr(L"The highest scene height dynamic resolution uses. Auto: 540p handheld, 720p docked.",
+                     L"動態解析度使用的最高場景高度。自動：手提模式 540p，TV 模式 720p。")
+                : Tr(L"Scene height, scaled to the 720p screen. Auto: 540p handheld, 720p docked.",
+                     L"場景高度，縮放至 720p 畫面。自動：手提模式 540p，TV 模式 720p。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::MaximumHeightFromEnvironment(), L"LO_SWITCH_RENDER_HEIGHT");
+            break;
+#endif
 #if LO_PLATFORM_MACOS
             next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
                            L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
@@ -1804,6 +2068,20 @@ void Publish(uint8_t *base, uint32_t config)
             next.help += Tr(L" An upscaler supersamples above it.",
                             L"開啟縮放器時，高於輸出即為超取樣。");
             break;
+        case GraphicsRow::DynamicResolution:
+            next.help = Tr(L"Lowers the scene height in steps while the GPU runs over the frame time, and raises it again with room to spare.",
+                           L"GPU 超出影格時間時逐步降低場景高度，有餘裕時再提高。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::DynamicResolutionFromEnvironment(), L"LO_DYNAMIC_RESOLUTION");
+#endif
+            break;
+        case GraphicsRow::MinimumResolution:
+            next.help = Tr(L"The lowest scene height dynamic resolution steps down to. Auto: 80% of the maximum.",
+                           L"動態解析度降低時的最低場景高度。自動：最高解析度的 80%。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::MinimumHeightFromEnvironment(), L"LO_DYNAMIC_RESOLUTION_MIN");
+#endif
+            break;
         case GraphicsRow::ShadowResolution:
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
@@ -1813,7 +2091,11 @@ void Publish(uint8_t *base, uint32_t config)
                            L"角色與物件的陰影。「低」只保留畫面上最大的幾個，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"AMD FSR 1 scales a scene below 720p to the screen with sharper edges. Costs some GPU time.",
+                           L"AMD FSR 1 將低於 720p 的場景放大至畫面，邊緣更銳利。會使用少許 GPU 時間。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrFromEnvironment(), L"LO_SWITCH_UPSCALER");
+#elif LO_PLATFORM_ANDROID
             if (graphics_menu::AndroidFsrAvailable && edit.upscaler == gpu::upscaling::Upscaler::Fsr)
                 next.help = Tr(L"FSR 3.1 needs D3D12 or Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
                               L"FSR 3.1 需要 D3D12 或 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。");
@@ -1854,6 +2136,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
                            L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrSharpnessFromEnvironment(),
+                graphics_menu::FsrFromEnvironment() ? L"LO_SWITCH_UPSCALER" : L"LO_SWITCH_RCAS_STOPS");
+#endif
             break;
         case GraphicsRow::DlssNeuralRendering:
         {
@@ -2019,6 +2305,13 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (achievementsOpen)
         next.help = AchievementsHelp();
+#if LO_PLATFORM_SWITCH
+    else if (debugOpen)
+    {
+        pageHelp = DebugHelp();
+        next.help = pageHelp.first;
+    }
+#endif
     if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
@@ -2114,7 +2407,9 @@ void Publish(uint8_t *base, uint32_t config)
                               std::wstring(Tr(L"Revert", L"還原")) + L" (" + std::to_wstring(seconds) + L")"};
         next.dialogSelection = displayConfirmChoice;
     }
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+    next.notice = tab == 2 ? SwitchNotice() : std::wstring{};
+#elif LO_PLATFORM_ANDROID
     next.notice = tab == 2 && graphics_menu::AndroidFsrAvailable &&
         edit.upscaler == gpu::upscaling::Upscaler::Fsr ? DlssNotice() : std::wstring{};
 #else
@@ -2132,7 +2427,7 @@ void Publish(uint8_t *base, uint32_t config)
         : tab == 2 ? (row == int(GraphicsRow::FrameGeneration) ||
         row == int(GraphicsRow::FrameGenerationMultiplier) ? FgNotice() : DlssNotice()) : std::wstring{};
 #endif
-    if (modsOpen || controlsOpen) next.notice = std::move(pageHelp.second);
+    if (modsOpen || controlsOpen || debugOpen) next.notice = std::move(pageHelp.second);
     std::lock_guard lock(snapshotMutex);
     // Presentation may have published availability while this snapshot was built.
     next.calibration.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
@@ -2240,7 +2535,7 @@ bool CalibrationKey(uint32_t key)
     // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
     // On the Controls page Enter confirms like A, so it starts a capture.
     const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load() || controlsOpen.load()) && (key == 13 || key == 27)) ||
-                               ((modsOpen.load() || achievementsOpen.load()) && key == 27);
+                               ((modsOpen.load() || achievementsOpen.load() || debugOpen.load()) && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -2637,6 +2932,7 @@ PPC_FUNC(sub_822F19B0)
         achievementItems.clear();
         achievementIcons.clear();
         RefreshAchievementSummary();
+        debugOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -2682,6 +2978,7 @@ PPC_FUNC(sub_822F19B0)
     {
         if (modsOpen) modsFocus = selected;
         else if (achievementsOpen) achievementsFocus = selected;
+        else if (debugOpen) debugFocus = selected;
         else if (controlsOpen)
         {
             // A capture keeps its row; a section title is never focused.
@@ -2707,6 +3004,7 @@ PPC_FUNC(sub_822F19B0)
         nrOpen = false;
         modsOpen = false;
         achievementsOpen = false;
+        debugOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -3388,6 +3686,29 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_SWITCH
+    if (debugOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        // B, Back (keyboard Backspace) and Escape leave the page.
+        const bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        if (input & 0x331f) status.clear();
+        // The titles are never focused.
+        if (input & 1)
+            do { debugFocus = (debugFocus + DebugRowCount - 1) % DebugRowCount; } while (DebugTitle(debugFocus));
+        if (input & 2)
+            do { debugFocus = (debugFocus + 1) % DebugRowCount; } while (DebugTitle(debugFocus));
+        if (back) CloseDebugPage();
+        else if (!DebugTitle(debugFocus) && (input & 0x100c))
+            ChangeDebugOption((input & 4) ? -1 : 1);
+        Publish(base, config);
+        return;
+    }
+#endif
     if (controlsOpen.load())
     {
         std::vector<uint32_t> keys;
@@ -3738,8 +4059,32 @@ PPC_FUNC(sub_822F19B0)
                 break;
             }
             case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+                // The current operation mode's maximum; a lower one takes the minimum down with it.
+                if (!graphics_menu::MaximumHeightFromEnvironment())
+                    graphics_menu::SelectMaximumHeight(edit, Docked(), cycle(
+                        graphics_menu::SwitchHeightChoice(edit.maximumHeight[Docked() ? 1 : 0]), graphics_menu::SwitchHeightChoiceCount));
+#else
                 edit.internalResolution = graphics_menu::RenderResolutions[
                     cycle(graphics_menu::RenderResolutionChoice(edit), uint32_t(std::size(graphics_menu::RenderResolutions)))];
+#endif
+                break;
+            case GraphicsRow::DynamicResolution:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::DynamicResolutionFromEnvironment())
+                    edit.dynamicResolution = !edit.dynamicResolution;
+#endif
+                break;
+            case GraphicsRow::MinimumResolution:
+#if LO_PLATFORM_SWITCH
+                // Automatic, then the heights up to the maximum.
+                if (!graphics_menu::MinimumHeightFromEnvironment())
+                {
+                    const uint32_t mode = Docked() ? 1 : 0;
+                    edit.minimumHeight[mode] = graphics_menu::SwitchHeightAt(cycle(
+                        graphics_menu::SwitchHeightChoice(edit.minimumHeight[mode]), graphics_menu::MinimumHeightChoiceCount(edit, mode == 1)));
+                }
+#endif
                 break;
             case GraphicsRow::ShadowResolution:
                 edit.shadowResolution = graphics_menu::ShadowResolutions[
@@ -3750,7 +4095,12 @@ PPC_FUNC(sub_822F19B0)
                     cycle(graphics_menu::DynamicShadowsChoice(edit), uint32_t(std::size(graphics_menu::DynamicShadowsValues)))];
                 break;
             case GraphicsRow::AntiAliasing:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::FsrFromEnvironment())
+                    edit.switchFsr = !edit.switchFsr;
+#else
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
+#endif
                 break;
             case GraphicsRow::AmbientOcclusion:
                 edit.ambientOcclusion = cycle(std::min(edit.ambientOcclusion, 2u), 3);
@@ -3766,6 +4116,10 @@ PPC_FUNC(sub_822F19B0)
                 edit.dlssModel = cycle(std::min(edit.dlssModel, 1u), 2);
                 break;
             case GraphicsRow::FsrSharpness:
+#if LO_PLATFORM_SWITCH
+                if (graphics_menu::FsrSharpnessFromEnvironment())
+                    break;
+#endif
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
                 break;
             case GraphicsRow::DlssNeuralRendering:
@@ -3872,7 +4226,7 @@ PPC_FUNC(sub_822F19B0)
         else
         {
             if (row == SystemUiLanguageRow)
-                edit.uiLanguage = cycle(edit.uiLanguage, 5);
+                edit.uiLanguage = cycle(edit.uiLanguage, uint32_t(std::size(UiLanguageNames)));
             if (row == SystemGameLanguageRow)
             {
                 const auto choices = GameLanguageChoices();
@@ -3998,6 +4352,11 @@ PPC_FUNC(sub_822F19B0)
         else
         {
             graphics = GetConfig();
+#if LO_PLATFORM_SWITCH
+            // The Debug page's overlay row, saved from here: logged the same way.
+            if (graphics.performanceOverlay != previousDisplay.performanceOverlay)
+                debug_options::LogPerformanceOverlay(graphics.performanceOverlay);
+#endif
             graphics.uiLanguage = edit.uiLanguage;
             graphics.gameLanguage = edit.gameLanguage;
             graphics.gameLanguagePack = edit.gameLanguagePack;
@@ -4052,6 +4411,14 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_SWITCH
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemDebugRow)
+    {
+        OpenDebugPage();
+        Publish(base, config);
+        return;
+    }
+#endif
     if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemAchievementsRow)
     {
         OpenAchievementsPage();

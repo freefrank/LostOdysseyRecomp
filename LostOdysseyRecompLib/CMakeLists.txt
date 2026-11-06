@@ -26,6 +26,12 @@ if(LO_TARGET_PLATFORM STREQUAL "switch" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     if(LO_SWITCH_RECOMP_O2)
         target_compile_options(LostOdysseyRecompLib PRIVATE -O2)
     endif()
+    # Profile-guided build: only the files that hold the hot code. Instrumenting all 96 MB would make training unusable.
+    if(NOT LO_SWITCH_PGO STREQUAL "OFF")
+        file(STRINGS "${CMAKE_SOURCE_DIR}/tools/switch/pgo_hot_files.txt" _lo_pgo_names)
+        list(TRANSFORM _lo_pgo_names PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/ppc/")
+        lo_switch_pgo_sources(${_lo_pgo_names})
+    endif()
 elseif(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(FATAL_ERROR "The recompiled code requires clang-cl (uses __int128, weak aliases, builtins)")
 endif()

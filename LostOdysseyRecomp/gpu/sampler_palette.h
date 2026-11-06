@@ -67,6 +67,8 @@ public:
     // past the next Select/Reconfigure must copy it (Retain does).
     const Lease& Current() const { return current_; }
     uint32_t Level() const { return current_ ? current_->level : 0; }
+    // Changes with every published version: an unchanged serial means the same table, so a recipe keeps its slot.
+    uint64_t Serial() const { return serial_; }
     void EnableDiagnostics(bool enabled) { diagnosticsEnabled_ = enabled; }
     Diagnostics TakeDiagnostics() { auto result = diagnostics_; diagnostics_ = {}; return result; }
     void BeginDraw() { used_ = 1; } // slot zero is an immutable dummy fallback
@@ -146,6 +148,7 @@ private:
         if (!descriptors) return false;
         next->descriptors = std::move(descriptors);
         current_ = std::move(next);
+        ++serial_;
         recent_ = {};
         if (diagnosticsEnabled_) ++diagnostics_.published;
         return true;
@@ -156,6 +159,7 @@ private:
     std::array<RecentHit, 4> recent_{};
     uint32_t recentNext_ = 0;
     uint64_t used_ = 1;
+    uint64_t serial_ = 0;
     bool diagnosticsEnabled_ = false;
     Diagnostics diagnostics_{};
 };

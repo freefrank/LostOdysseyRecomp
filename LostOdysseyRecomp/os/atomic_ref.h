@@ -4,14 +4,24 @@
 #include <cstdint>
 #include <type_traits>
 
-#if !defined(__cpp_lib_atomic_ref)
+// The Switch has std::atomic_ref, but devkitA64's libstdc++ has no futex: its
+// wait/notify go through a pool of 16 entries, and every notify locks one of
+// those global mutexes, wakes every waiter in the entry, and each wake is a
+// kernel call. The class below, with Horizon's address arbiter in place of
+// futex, keeps an uncontended leave to a store and a load (#15).
+#if defined(__SWITCH__)
+#define LO_ATOMIC_REF_OWN 1
+extern "C" uint32_t svcWaitForAddress(void* address, uint32_t arbType, int64_t value, int64_t timeout);
+extern "C" uint32_t svcSignalToAddress(void* address, uint32_t signalType, int32_t value, int32_t count);
+#elif !defined(__cpp_lib_atomic_ref)
+#define LO_ATOMIC_REF_OWN 1
 #include <linux/futex.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
 namespace os {
-#if defined(__cpp_lib_atomic_ref)
+#if !defined(LO_ATOMIC_REF_OWN)
 template<class T> using AtomicRef = std::atomic_ref<T>;
 #else
 namespace detail {
@@ -31,8 +41,9 @@ inline void SpinPause() {
 #endif
 }
 }
-// The NDK's libc++ lacks atomic_ref. Guest locks occupy existing 32/64-bit
-// words, so they cannot be replaced by separately constructed std::atomics.
+// The NDK's libc++ lacks atomic_ref (the Switch: see above). Guest locks occupy
+// existing 32/64-bit words, so they cannot be replaced by separately
+// constructed std::atomics.
 template<class T> class AtomicRef {
     static_assert(std::is_integral_v<T> && (sizeof(T) == 4 || sizeof(T) == 8));
     static_assert(__atomic_always_lock_free(sizeof(T), nullptr));
@@ -75,14 +86,27 @@ public:
         auto& waiters = detail::FutexWaiters(value_);
         waiters.fetch_add(1);
         while (load() == old)
+        {
+#if defined(__SWITCH__)
+            // ArbitrationType_WaitIfEqual: sleeps only while the word still holds old.
+            svcWaitForAddress(value_, 2, int32_t(old), -1);
+#else
             syscall(SYS_futex, value_, FUTEX_WAIT_PRIVATE, old, nullptr, nullptr, 0);
+#endif
+        }
         waiters.fetch_sub(1);
     }
     // The caller's preceding store must be seq_cst (see detail::futexWaiters).
     void notify_one() const {
         static_assert(sizeof(T) == 4);
         if (detail::FutexWaiters(value_).load())
+        {
+#if defined(__SWITCH__)
+            svcSignalToAddress(value_, 0 /* SignalType_Signal */, 0, 1);
+#else
             syscall(SYS_futex, value_, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
+#endif
+        }
     }
 };
 #endif

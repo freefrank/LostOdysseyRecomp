@@ -366,6 +366,7 @@ jobs:
       - name: Apply dependency patches
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-nonargument-locals.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-nonargument-locals.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
       - name: Build recompiler tools
@@ -583,6 +584,7 @@ jobs:
       - name: Apply dependency patches
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-nonargument-locals.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-nonargument-locals.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch
           git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-macos.patch >/dev/null 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-macos.patch
@@ -727,6 +729,7 @@ jobs:
       - name: Apply dependency patches
         run: |
           git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch
+          git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-nonargument-locals.patch >/dev/null 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-nonargument-locals.patch
       - name: Build recompiler tools
         run: |
           cmake -S tools/xexdump -B out/build/tools -G Ninja \

@@ -176,8 +176,27 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     # (Horizon's file system does not), wired in with --wrap=rename.
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
         ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c
-        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c)
+        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
+        ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # thirdparty/plume-deko3d: LO_DEKO3D_PRESENT_THREAD hands deko3d's buffer-queue calls to a worker.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=nwindowQueueBuffer,--wrap=nwindowDequeueBuffer")
+    # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.
+    lo_switch_pgo_target(LostOdysseyRecomp)
+    lo_switch_pgo_target(lo_plume_deko3d)
+    # LO_SWITCH_LTO_GPU (cmake/LoSwitch.cmake). Fat objects: the plume archive keeps a symbol index made by plain ar.
+    if(LO_SWITCH_LTO_GPU AND NOT LO_SWITCH_LTO)
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/gpu/renderer.cpp ${LO_RUNTIME_ROOT}/gpu/command_processor.cpp
+            APPEND PROPERTY COMPILE_OPTIONS -flto -ffat-lto-objects)
+        target_compile_options(lo_plume_deko3d PRIVATE -flto -ffat-lto-objects)
+        target_link_options(LostOdysseyRecomp PRIVATE -flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
+    endif()
+    if(LO_SWITCH_PGO STREQUAL "GEN")
+        target_compile_definitions(LostOdysseyRecomp PRIVATE LO_SWITCH_PGO_GEN=1)
+        target_link_options(LostOdysseyRecomp PRIVATE -fprofile-generate)
+    endif()
+    # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS

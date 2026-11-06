@@ -20,6 +20,9 @@
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
 #include "renderer.h"
 #include "presentation.h"
+#if LO_PLATFORM_SWITCH
+#include "switch_upscaler.h"
+#endif
 #include "aspect_layout.h"
 #include "device_loss_hint.h"
 #if defined(LO_GPU_PLUME)
@@ -95,6 +98,7 @@
 #if defined(LO_SWITCH_DEKO3D)
 #include <plume_deko3d_api.h>
 #include "deko3d_shader_cache.h"
+#include <debug/debug_options.h>
 #endif
 #ifdef _WIN32
 #include <plume_d3d12.h>
@@ -453,29 +457,14 @@ namespace gpu::video
         std::unique_ptr<plume::RenderInterface> CreateDeko3dInterface()
         {
             plume::SetDeko3DLogCallback([](const char* message) { LOG_INFO("deko3d: {}", message); });
-            plume::Deko3DSetSpirvOptions(plume::Deko3DSpirvOptions{});
-            // GPU switches (env.txt), all off by default: LO_DEKO3D_GPU_FAST=1 turns them all on, and each
-            // LO_DEKO3D_<NAME>=0/1 overrides it.
-            {
-                const auto flag = [](const char* name, bool fallback) {
-                    const char* value = std::getenv(name);
-                    return value && *value ? std::strcmp(value, "0") != 0 : fallback;
-                };
-                const bool fast = flag("LO_DEKO3D_GPU_FAST", false);
-                plume::Deko3DGpuOptions gpu;
-                gpu.depthCompression = flag("LO_DEKO3D_DEPTH_COMPRESSION", fast);
-                gpu.zcull = flag("LO_DEKO3D_ZCULL", fast);
-                gpu.mergeBarriers = flag("LO_DEKO3D_MERGE_BARRIERS", fast);
-                gpu.leanBarriers = flag("LO_DEKO3D_LEAN_BARRIERS", fast);
-                gpu.vsOutputs = flag("LO_DEKO3D_VS_OUTPUTS", fast);
-                gpu.colorCompression = flag("LO_DEKO3D_COLOR_COMPRESSION", true); // on unless =0
-                plume::Deko3DSetGpuOptions(gpu);
-                LOG_NOTICE("video: deko3d GPU options: color_compression={} depth_compression={} zcull={} merge_barriers={} "
-                    "lean_barriers={} vs_outputs={}", gpu.colorCompression, gpu.depthCompression, gpu.zcull,
-                    gpu.mergeBarriers, gpu.leanBarriers, gpu.vsOutputs);
-            }
+            plume::Deko3DSpirvOptions spirvOptions;
+            if (const char* lean = getenv("LO_DEKO3D_LEAN_SHADERS")) spirvOptions.leanShaders = uint32_t(atoi(lean));
+            plume::Deko3DSetSpirvOptions(spirvOptions);
+            // GPU switches, all off by default but colour compression: env.txt (LO_DEKO3D_GPU_FAST=1 turns them all on,
+            // each LO_DEKO3D_<NAME>=0/1 overrides it), else what the Debug page saved (debug/debug_options.h).
+            debug_options::StartDeko3d();
             const std::filesystem::path root = LO_SWITCH_DATA_ROOT;
-            lo::deko3d::InstallShaderCache(root / "shaders" / "deko3d_shaders.lodk", root / "cache" / "deko3d_runtime.dkcache");
+            lo::deko3d::InstallShaderCache(root / "shaders" / (spirvOptions.leanShaders ? "deko3d_shaders_lean" + std::to_string(spirvOptions.leanShaders) + ".lodk" : std::string("deko3d_shaders.lodk")), root / "cache" / "deko3d_runtime.dkcache");
             LOG_NOTICE("video: deko3d back end (LO_SWITCH_BACKEND=deko3d)");
             return plume::CreateDeko3DInterface();
         }
@@ -588,6 +577,9 @@ namespace gpu::video
         std::atomic<int> g_displayMode{-1};
         std::atomic<bool> g_displayFailed{false},g_reapplyWindow{false};
         std::atomic<bool> g_windowResizeRequested{false};
+#if LO_PLATFORM_SWITCH
+        uint32_t g_switchOutputHeight = 0; // LO_SWITCH_OUTPUT_HEIGHT on deko3d, 0 when off
+#endif
         std::atomic<uint64_t> g_settingsDisplayEpoch{0};
         std::atomic<bool> g_windowModeOverridden{false};
         uint64_t g_completedPresentCount = 0;
@@ -2940,6 +2932,15 @@ namespace gpu::video
             // events still request one, and needsResize() still compares the sizes.
             g_windowResizeRequested = false;
 #endif
+#if LO_PLATFORM_SWITCH
+            // LO_SWITCH_OUTPUT_HEIGHT=540: present the size the scene is rendered at and let the display scale it, as Switch
+            // games do, instead of a full-screen GPU pass into 1280x720.
+            if (const char* output = getenv("LO_SWITCH_OUTPUT_HEIGHT"); output && IsDeko3d())
+            {
+                g_switchOutputHeight = uint32_t(atoi(output));
+                if (g_switchOutputHeight) plume::Deko3DSetSwapChainSize(g_switchOutputHeight * 16 / 9, g_switchOutputHeight);
+            }
+#endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
 #ifdef _WIN32
             if (os::hang_watch::StartupTrace())
@@ -4275,6 +4276,15 @@ namespace gpu::video
     // or rasterizing UI. The returned ticket belongs to these prepared operations.
     static bool PreparePresentation(uint64_t& displayTicket, uint32_t& width, uint32_t& height)
     {
+#if LO_PLATFORM_SWITCH
+        // LO_SWITCH_OUTPUT_HEIGHT's display scaling is for game frames. A host menu (settings, the debug menu) is drawn
+        // at 1280x720 and would be shrunk to the smaller size, then scaled back up by the display: while one is open the
+        // swapchain is 1280x720, and it returns to the smaller size with the first game frame (one resize each way).
+        if (g_switchOutputHeight) {
+            const uint32_t outputHeight = debug_menu::IsOverlayVisible() || settings::IsOpen() ? 720 : g_switchOutputHeight;
+            plume::Deko3DSetSwapChainSize(outputHeight * 16 / 9, outputHeight);
+        }
+#endif
 #if (defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_D3D12_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))) || (defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG))
         if (g_fgWindowChange.load() == 1) {
 #if defined(LO_ENABLE_STREAMLINE_FG)
@@ -4528,6 +4538,13 @@ namespace gpu::video
         }
         g_androidPlannedWidth = width;
         g_androidPlannedHeight = height;
+#endif
+#if LO_PLATFORM_SWITCH
+        // A host menu's 1280x720 swapchain (PreparePresentation) isn't the game's output: its targets keep their size.
+        if (g_switchOutputHeight) {
+            width = g_switchOutputHeight * 16 / 9;
+            height = g_switchOutputHeight;
+        }
 #endif
         renderer::SetOutputSize(width, height);
     }
@@ -4829,6 +4846,22 @@ namespace gpu::video
                 sources.outputWidth = sourceWidth;
                 sources.outputHeight = sourceHeight;
             }
+#if LO_PLATFORM_SWITCH
+            {
+                // The final pass's FSR 1 (as the frame's Resolve in the present path) and whether dynamic
+                // resolution moves the scene height; the screen's size when the scene is scaled to it.
+                const auto config = settings::GetConfig();
+                const auto fsr = gpu::switch_upscaler::Resolve(config.switchFsr, config.fsrSharpnessPercent).mode;
+                sources.fsr = fsr == SpatialUpscaler::Off ? "OFF" : fsr == SpatialUpscaler::Easu ? "EASU" :
+                    fsr == SpatialUpscaler::Rcas ? "RCAS" : "ON";
+                sources.dynamicResolution = gpu_busy::g_dynamicResolution.load(std::memory_order_relaxed);
+                sources.upscaler = sources.dynamicResolution ? "DYN" : "FIXED";
+                if (sourceWidth != outputWidth || sourceHeight != outputHeight) {
+                    sources.outputWidth = outputWidth;
+                    sources.outputHeight = outputHeight;
+                }
+            }
+#endif
             if (mode == overlay::Detailed) {
                 const auto fg = FrameGenerationPresents();
                 sources.frameGeneration = fg.active;
@@ -5522,6 +5555,22 @@ namespace gpu::video
                     sourceOptions.displayBrightness = presentationOptions.displayBrightness;
                     sourceOptions.displayGamma = presentationOptions.displayGamma;
                     sourceOptions.storageTarget = g_swapChain->hasStorageTextures();
+#if LO_PLATFORM_SWITCH
+                    // FSR 1 when the scene is smaller than the output (gpu/switch_upscaler.h): Graphics → FSR and
+                    // FSR sharpness, or env.txt's LO_SWITCH_UPSCALER=fsr|easu|rcas, which wins; bilinear, the
+                    // default, keeps the filter above.
+                    const auto switchUpscaler = gpu::switch_upscaler::Resolve(presentationConfig.switchFsr,
+                        presentationConfig.fsrSharpnessPercent);
+                    static gpu::switch_upscaler::Choice loggedUpscaler{SpatialUpscaler(~0u), -1.0f};
+                    if (switchUpscaler.mode != loggedUpscaler.mode || switchUpscaler.rcasStops != loggedUpscaler.rcasStops) {
+                        loggedUpscaler = switchUpscaler;
+                        LOG_INFO("video: Switch upscaler {} (RCAS {} stops, from {})",
+                            gpu::switch_upscaler::Name(switchUpscaler.mode), switchUpscaler.rcasStops,
+                            gpu::switch_upscaler::UpscalerFromEnvironment() ? "LO_SWITCH_UPSCALER" : "settings");
+                    }
+                    sourceOptions.spatialUpscaler = switchUpscaler.mode;
+                    sourceOptions.rcasStops = switchUpscaler.rcasStops;
+#endif
                     // With scene AA already applied this is DrawComposited's pass.
                     g_presentation->Draw(g_commandList.get(),source,backBuffer,sourceWidth,sourceHeight,
                         g_swapChain->getWidth(),g_swapChain->getHeight(),sourceOptions);

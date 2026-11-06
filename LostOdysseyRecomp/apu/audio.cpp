@@ -302,7 +302,12 @@ namespace apu
                         break;
                     }
 #endif
+#if LO_PLATFORM_SWITCH
+                    // The queue holds about 21 ms: half a frame is fine, and fewer wakeups for the busy threads.
+                    os::scheduling::PreciseSleepFor(std::chrono::microseconds(2500));
+#else
                     os::scheduling::PreciseSleepFor(std::chrono::milliseconds(1));
+#endif
 #if LO_PLATFORM_ANDROID
                     waited = true;
                     ReopenIfStalledAfterResume();
@@ -316,8 +321,16 @@ namespace apu
                 waitedMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - waitStart).count();
 #endif
 
+                // LO_AUDIO_SKIP_GUEST=1 (diagnostic only: silence, and the game may wait on its voices): the guest
+                // callback is not called, so neither the XAudio workers' mixing nor the XMA decoding it asks for run.
+                // Measures what the game's audio costs the other threads.
+                static const bool skipGuest = [] {
+                    const char* value = getenv("LO_AUDIO_SKIP_GUEST");
+                    return value && value[0] == '1';
+                }();
                 const auto dispatch = [&](uint32_t frames)
                 {
+                    if (skipGuest) return;
                     g_guestFramesPerOutput.store(frames, std::memory_order_relaxed);
                     for (uint32_t i = 0; i < frames; ++i)
                     {

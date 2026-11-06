@@ -7,6 +7,7 @@
 #endif
 #include <debug/fast_forward.h>
 #include <atomic>
+#include <gpu/dynamic_resolution.h>
 #include <gpu/frame_rate.h>
 #include <gpu/loading_pacing.h>
 #include <filesystem>
@@ -37,6 +38,52 @@ std::string PackId(std::string text)
         });
     return valid ? text : std::string{};
 }
+} // namespace
+bool Docked()
+{
+#if LO_PLATFORM_SWITCH
+    return os::switch_platform::IsDocked();
+#else
+    return false;
+#endif
+}
+uint32_t RenderHeightOverride()
+{
+#if LO_PLATFORM_SWITCH
+    // LO_SWITCH_RENDER_HEIGHT=540 or 720, or any height dynamic resolution renders at (360 to 1071 rows, a multiple
+    // of 9: 360, 450, 504, ...), for measuring how a scene's cost follows its pixels.
+    static const uint32_t height = [] {
+        const char *text = std::getenv("LO_SWITCH_RENDER_HEIGHT");
+        const uint32_t rows = text && *text ? uint32_t(std::strtoul(text, nullptr, 10)) : 0;
+        return rows == 540 || rows == 720 || gpu::dynamic_resolution::IsDynamicHeight(rows) ? rows : 0u;
+    }();
+    return height;
+#else
+    return 0;
+#endif
+}
+uint32_t SwitchMaximumHeight(const Config &config, bool docked)
+{
+    const uint32_t height = config.maximumHeight[docked ? 1 : 0];
+    return height ? height : SwitchAutomaticHeight(docked);
+}
+uint32_t SwitchMinimumHeight(const Config &config, bool docked)
+{
+    const uint32_t base = SwitchMaximumHeight(config, docked);
+    const uint32_t minimum = config.minimumHeight[docked ? 1 : 0];
+    return gpu::dynamic_resolution::Floor(base, minimum ? minimum : gpu::dynamic_resolution::DefaultMinimum(base));
+}
+uint32_t DynamicResolutionMinimum(const Config &config)
+{
+#if LO_PLATFORM_SWITCH
+    return config.minimumHeight[Docked() ? 1 : 0];
+#else
+    (void)config;
+    return 0;
+#endif
+}
+namespace
+{
 Config Validate(Config value)
 {
     value.encounterRate = ValidEncounterRate(value.encounterRate);
@@ -109,7 +156,7 @@ Config Validate(Config value)
     value.fxaa = value.antialiasing == 1;
     value.frameRate = gpu::frame_rate::Normalize(value.frameRate);
     if (value.loadingTransitions != 0) value.loadingTransitions = 2;
-    if (value.debugLanguage > 1) value.debugLanguage = 0;
+    if (value.debugLanguage >= DebugLanguageCount) value.debugLanguage = 0;
     if (value.fastForwardMode > 1) value.fastForwardMode = 0;
     namespace ff = debug_menu::fast_forward;
     if (value.fastForwardButton > uint32_t(ff::Button::LB)) value.fastForwardButton = 0;
@@ -117,7 +164,7 @@ Config Validate(Config value)
         value.fastForwardRate = 2;
     if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
         value.menuAnimationRate = 1;
-    if (value.uiLanguage > 4)
+    if (value.uiLanguage >= std::size(UiLanguageNames))
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
         value.gameLanguage = 1;
@@ -146,19 +193,23 @@ Config Validate(Config value)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
 #if LO_PLATFORM_SWITCH
-    // The Xbox 360 image: the game's own 720p scene, retail shadow maps and none
+    // The Xbox 360 image: the game's own scene, retail shadow maps and none
     // of the host AA, AO, filtering, upscaling or HDR passes. The menu hides them.
-    // The scene renders at 960x540 in handheld mode (the GPU-bound console
-    // gains about a third in battle) and at the Xbox 360's 720p when docked,
-    // where the GPU clocks higher; the final pass scales to the 720p output.
-    // main.cpp re-applies this when the console is docked or undocked.
-    // LO_SWITCH_RENDER_HEIGHT=540 or 720 (env.txt) forces one of them.
-    {
-        const char* height = std::getenv("LO_SWITCH_RENDER_HEIGHT");
-        if (height && std::strcmp(height, "540") == 0) value.internalResolution = 540;
-        else if (height && std::strcmp(height, "720") == 0) value.internalResolution = 720;
-        else value.internalResolution = os::switch_platform::IsDocked() ? 720 : 540;
-    }
+    // The scene renders at Graphics → Maximum resolution for the current mode:
+    // automatically 960x540 in handheld mode (the GPU-bound console gains about a
+    // third in battle) and the Xbox 360's 720p when docked, where the GPU clocks
+    // higher; the final pass scales to the 720p output (bilinear, or FSR 1).
+    // gpu/video.cpp re-applies this when the console is docked or undocked.
+    // LO_SWITCH_RENDER_HEIGHT (env.txt, RenderHeightOverride) wins over the menu.
+    for (uint32_t *heights : {value.maximumHeight, value.minimumHeight})
+        for (uint32_t mode = 0; mode < 2; ++mode)
+            if (std::find(std::begin(SwitchSceneHeights), std::end(SwitchSceneHeights), heights[mode]) == std::end(SwitchSceneHeights))
+                heights[mode] = 0;
+    // A minimum above its maximum is the maximum: no dynamic range.
+    for (uint32_t mode = 0; mode < 2; ++mode)
+        value.minimumHeight[mode] = std::min(value.minimumHeight[mode], SwitchMaximumHeight(value, mode == 1));
+    if (const uint32_t rows = RenderHeightOverride()) value.internalResolution = int(rows);
+    else value.internalResolution = int(SwitchMaximumHeight(value, Docked()));
     value.shadowResolution = 1;
     value.antialiasing = 0;
     value.fxaa = false;
@@ -168,6 +219,9 @@ Config Validate(Config value)
     value.dlssNeuralRendering = 0;
     value.frameGenerationProvider = framegen::Provider::Off;
     value.hdr = false;
+    // The guest's display gamma ramp already darkens the blacks like the Xbox 360;
+    // expanding 16-235 on top of it crushes everything below 32/255 to black.
+    value.expandRgbRange = false;
 #endif
 #if LO_PLATFORM_MACOS
     // Metal always keeps display sync; the menu offers only ProMotion there.
@@ -175,12 +229,33 @@ Config Validate(Config value)
 #endif
     return value;
 }
+#if LO_PLATFORM_SWITCH
+// A Spanish console (Spain or Latin America) starts the game, the settings and the debug menu in
+// Spanish; each one picked in a menu stays as picked. The USA/Europe edition alone has Spanish game
+// text (ConfigureGameLanguages runs before the settings are first read), and a language pack is a pick.
+void FollowSystemLanguage(Config &value)
+{
+    static const bool spanish = [] {
+        const bool result = os::switch_platform::SystemLanguageIsSpanish();
+        LOG_NOTICE("settings: console language is {}Spanish", result ? "" : "not ");
+        return result;
+    }();
+    if (!spanish) return;
+    if (!value.uiLanguageChosen) value.uiLanguage = UiLanguageSpanish;
+    if (!value.debugLanguageChosen) value.debugLanguage = DebugLanguageSpanish;
+    if (!value.gameLanguageChosen && value.gameLanguagePack.empty() &&
+        GameLanguageIds[GameLanguageIndex(GameLanguageSpanish)] == GameLanguageSpanish)
+        value.gameLanguage = GameLanguageSpanish;
+}
+#endif
 Config Read()
 {
     Config value;
     bool hasAntialiasing = false;
     bool hasEncounterRate = false, legacyNoEncounters = false;
     bool hasHdrPeakAuto = false, hasHdrPeakNits = false, hasAspectRatio = false, hasVsync = false;
+    bool hasLanguageChosen = false;
+    bool hasSwitchFsr = false;
     const auto path = os::user_paths::SettingsPath();
     std::ifstream input(path);
     std::string key;
@@ -231,6 +306,12 @@ Config Read()
             value.uiLanguage = number;
         else if (key == "debug_language")
             value.debugLanguage = number;
+        else if ((key == "ui_language_chosen" || key == "game_language_chosen" || key == "debug_language_chosen") && number <= 1)
+        {
+            hasLanguageChosen = true;
+            (key == "ui_language_chosen" ? value.uiLanguageChosen : key == "game_language_chosen" ? value.gameLanguageChosen
+                                                                                                : value.debugLanguageChosen) = number == 1;
+        }
         else if (key == "game_language")
             value.gameLanguage = number;
         else if (key == "width")
@@ -366,6 +447,33 @@ Config Read()
             value.fastForwardKeepAudioPitch = number == 1;
         else if (key == "menu_animation_rate")
             value.menuAnimationRate = number;
+#if LO_PLATFORM_SWITCH
+        else if (key == "switch_fsr" && number <= 1)
+        {
+            hasSwitchFsr = true;
+            value.switchFsr = number == 1;
+        }
+        else if (key == "dynamic_resolution" && number <= 1)
+            value.dynamicResolution = number == 1;
+        else if (key == "maximum_height_handheld" || key == "maximum_height_docked")
+            value.maximumHeight[key == "maximum_height_docked" ? 1 : 0] = number;
+        else if (key == "minimum_height_handheld" || key == "minimum_height_docked")
+            value.minimumHeight[key == "minimum_height_docked" ? 1 : 0] = number;
+        else if (key == "debug_deko3d_merge_barriers" && number <= 1)
+            value.debug.deko3dMergeBarriers = number == 1;
+        else if (key == "debug_deko3d_lean_barriers" && number <= 1)
+            value.debug.deko3dLeanBarriers = number == 1;
+        else if (key == "debug_deko3d_zcull" && number <= 1)
+            value.debug.deko3dZcull = number == 1;
+        else if (key == "debug_deko3d_depth_compression" && number <= 1)
+            value.debug.deko3dDepthCompression = number == 1;
+        else if (key == "debug_deko3d_color_compression" && number <= 1)
+            value.debug.deko3dColorCompression = number == 1;
+        else if (key == "debug_deko3d_vs_outputs" && number <= 1)
+            value.debug.deko3dVsOutputs = number == 1;
+        else if (key == "debug_server" && number <= 1)
+            value.debug.debugServer = number == 1;
+#endif
         else if (key == "audio_output")
             value.audioOutput = number;
         else if (key == "audio_matrix_rear")
@@ -395,6 +503,19 @@ Config Read()
     if (!hasAspectRatio) value.aspectRatio = gpu::aspect_ratio::Migrated(value.width, value.height);
     // Before the VSync setting, 90/120 FPS presented without display sync.
     if (!hasVsync) value.vsync = value.frameRate <= 60;
+    // Files from before the console's language was followed: a language other than the default was picked.
+    if (!hasLanguageChosen)
+    {
+        value.uiLanguageChosen = value.uiLanguage != Config{}.uiLanguage;
+        value.gameLanguageChosen = value.gameLanguage != Config{}.gameLanguage;
+        value.debugLanguageChosen = value.debugLanguage != Config{}.debugLanguage;
+    }
+#if LO_PLATFORM_SWITCH
+    // Files from before the FSR row saved fsr_sharpness=0 while the row was hidden: take the Switch's default.
+    if (!hasSwitchFsr) value.fsrSharpnessPercent = Config{}.fsrSharpnessPercent;
+    FollowSystemLanguage(value);
+#endif
+    (void)hasSwitchFsr;
     return Validate(value);
 }
 Config &Current()
@@ -460,11 +581,13 @@ void PreviewConfig(const Config &value)
     std::lock_guard lock(mutex);
     auto merged = Validate(value);
     merged.debugLanguage = Current().debugLanguage;
+    merged.debugLanguageChosen = Current().debugLanguageChosen;
     merged.saveAnywhere = Current().saveAnywhere;
     merged.encounterRate = Current().encounterRate;
     merged.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(merged, Current());
     merged.menuAnimationRate = Current().menuAnimationRate;
+    merged.debug = Current().debug;
     merged.audioOutput = Current().audioOutput;
     Current() = merged;
     gpu::loading::SetMode(merged.loadingTransitions);
@@ -557,6 +680,25 @@ static bool WriteConfig(const Config &value)
            << "\nfast_forward_rate=" << value.fastForwardRate
            << "\nfast_forward_keep_pitch=" << (value.fastForwardKeepAudioPitch ? 1 : 0)
            << "\nmenu_animation_rate=" << value.menuAnimationRate << '\n';
+#if LO_PLATFORM_SWITCH
+    const auto &debug = value.debug;
+    output << "debug_deko3d_merge_barriers=" << (debug.deko3dMergeBarriers ? 1 : 0)
+           << "\ndebug_deko3d_lean_barriers=" << (debug.deko3dLeanBarriers ? 1 : 0)
+           << "\ndebug_deko3d_zcull=" << (debug.deko3dZcull ? 1 : 0)
+           << "\ndebug_deko3d_depth_compression=" << (debug.deko3dDepthCompression ? 1 : 0)
+           << "\ndebug_deko3d_color_compression=" << (debug.deko3dColorCompression ? 1 : 0)
+           << "\ndebug_deko3d_vs_outputs=" << (debug.deko3dVsOutputs ? 1 : 0)
+           << "\ndebug_server=" << (debug.debugServer ? 1 : 0)
+           << "\nswitch_fsr=" << (value.switchFsr ? 1 : 0)
+           << "\ndynamic_resolution=" << (value.dynamicResolution ? 1 : 0)
+           << "\nmaximum_height_handheld=" << value.maximumHeight[0]
+           << "\nmaximum_height_docked=" << value.maximumHeight[1]
+           << "\nminimum_height_handheld=" << value.minimumHeight[0]
+           << "\nminimum_height_docked=" << value.minimumHeight[1]
+           << "\nui_language_chosen=" << (value.uiLanguageChosen ? 1 : 0)
+           << "\ngame_language_chosen=" << (value.gameLanguageChosen ? 1 : 0)
+           << "\ndebug_language_chosen=" << (value.debugLanguageChosen ? 1 : 0) << '\n';
+#endif
     output.flush();
     if (!output)
         return false;
@@ -580,11 +722,17 @@ bool SaveConfig(const Config &requested)
     std::lock_guard lock(mutex);
     auto value = Validate(requested);
     value.debugLanguage = Current().debugLanguage;
+    value.debugLanguageChosen = Current().debugLanguageChosen;
+    // A language other than the one in use was picked: it no longer follows the console.
+    value.uiLanguageChosen = Current().uiLanguageChosen || value.uiLanguage != Current().uiLanguage;
+    value.gameLanguageChosen = Current().gameLanguageChosen || value.gameLanguage != Current().gameLanguage ||
+                               value.gameLanguagePack != Current().gameLanguagePack;
     value.saveAnywhere = Current().saveAnywhere;
     value.encounterRate = Current().encounterRate;
     value.battleExpDouble = Current().battleExpDouble;
     CopyFastForward(value, Current());
     value.menuAnimationRate = Current().menuAnimationRate;
+    value.debug = Current().debug;
     value.audioOutput = Current().audioOutput;
     if (!WriteConfig(value)) return false;
     Current() = value;
@@ -631,9 +779,12 @@ bool SaveDebugLanguage(uint32_t language)
     std::lock_guard lock(mutex);
     // Merge with disk, not an unrelated unconfirmed graphics preview.
     auto persisted = Read();
-    persisted.debugLanguage = language <= 1 ? language : 0;
+    const uint32_t chosen = language < DebugLanguageCount ? language : 0;
+    persisted.debugLanguageChosen = persisted.debugLanguageChosen || chosen != persisted.debugLanguage;
+    persisted.debugLanguage = chosen;
     if (!WriteConfig(persisted)) return false;
     Current().debugLanguage = persisted.debugLanguage;
+    Current().debugLanguageChosen = persisted.debugLanguageChosen;
     return true;
 }
 bool SaveSaveAnywhere(bool enabled)
@@ -688,6 +839,16 @@ bool SaveMenuAnimationRate(uint32_t rate)
     if (!WriteConfig(persisted)) return false;
     Current().menuAnimationRate = persisted.menuAnimationRate;
     menuAnimationRate.store(persisted.menuAnimationRate, std::memory_order_relaxed);
+    return true;
+}
+bool SaveDebugOptions(const DebugOptions &options)
+{
+    std::lock_guard lock(mutex);
+    // Merge with the persisted settings, not a pending graphics preview.
+    auto persisted = Read();
+    persisted.debug = options;
+    if (!WriteConfig(persisted)) return false;
+    Current().debug = options;
     return true;
 }
 uint32_t MenuAnimationRate()

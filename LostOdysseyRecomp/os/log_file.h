@@ -2,7 +2,10 @@
 
 #include <filesystem>
 #include <cstddef>
+#include <string>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 namespace os::logger
 {
@@ -17,7 +20,14 @@ namespace os::logger
     // Never recurse or remove non-regular files. Busy/inaccessible old logs are
     // left for a later launch, so the directory may temporarily contain more.
     // Custom LO_LOG_FILE sinks must not opt in to this best-effort cleanup.
+    // The Switch keeps nine other sessions instead of two.
     void PruneDefaultLogs(const std::filesystem::path& currentLog) noexcept;
+
+    // Before PruneDefaultLogs: moves files the previous session left elsewhere (source, name prefix) into the logs
+    // folder as <prefix>-<timestamp>.log, named after the previous runtime log, so they are kept and removed with
+    // it. Missing files are skipped; a name already taken gets the file appended to it.
+    void ArchiveSessionFiles(const std::filesystem::path& currentLog,
+        const std::vector<std::pair<std::filesystem::path, std::string>>& files) noexcept;
 
     // Last-resort crash output. Uses a separately opened OS append handle,
     // never the logger mutex, a FILE* lock, formatting, or allocation. The

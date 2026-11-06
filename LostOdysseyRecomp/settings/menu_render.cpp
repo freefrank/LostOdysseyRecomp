@@ -86,8 +86,10 @@ namespace
     std::wstring PromptText(std::wstring value, bool playStation)
     {
         if (!playStation) return value;
+        // Accented Latin letters are part of a word too: the A of Spanish "Añadir" is no button.
         const auto word = [](wchar_t c) {
-            return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9');
+            return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9') ||
+                   (c >= 0xC0 && c <= 0x24F && c != 0xD7 && c != 0xF7);
         };
         for (size_t i = 0; i + 1 < value.size(); ++i)
         {

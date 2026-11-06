@@ -91,8 +91,11 @@ void PointerDrag(float x, float y, bool held);
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
 //   frame rate, HDR), 3 System (interface and game language, updates, Discord status, debug log,
-//   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
+//   Debug (the Switch), Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
 //   Prepare shaders again, Save).
+// - Test options and A/B switches go on the Debug page (System → Debug, the Switch
+//   only), not on the tabs: applied and saved at once, logged with the frame they
+//   took effect at (debug/debug_options.h). env.txt stays the way to script runs.
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -145,15 +148,16 @@ inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
 inline constexpr int SystemDiscordStatusRow = 3; // hidden on platforms without Discord IPC
 inline constexpr int SystemDebugLogRow = 4;
-inline constexpr int SystemAchievementsRow = 5; // opens the Achievements page
-inline constexpr int SystemCollectionRow = 6;
-inline constexpr int SystemModsRow = 7; // opens the Mods page
-inline constexpr int SystemImportRow = 8;
-inline constexpr int SystemAddToSteamRow = 9; // desktop shortcut with library artwork
-inline constexpr int SystemShaderBundleRow = 10; // downloads the shader bundle again on the next start
-inline constexpr int SystemShaderPreparationRow = 11; // requests startup pipeline preparation
-inline constexpr int SystemSaveRow = 12;
-inline constexpr int SystemRowCount = 13;
+inline constexpr int SystemDebugRow = 5; // opens the Debug page; the Switch only
+inline constexpr int SystemAchievementsRow = 6; // opens the Achievements page
+inline constexpr int SystemCollectionRow = 7;
+inline constexpr int SystemModsRow = 8; // opens the Mods page
+inline constexpr int SystemImportRow = 9;
+inline constexpr int SystemAddToSteamRow = 10; // desktop shortcut with library artwork
+inline constexpr int SystemShaderBundleRow = 11; // downloads the shader bundle again on the next start
+inline constexpr int SystemShaderPreparationRow = 12; // requests startup pipeline preparation
+inline constexpr int SystemSaveRow = 13;
+inline constexpr int SystemRowCount = 14;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
@@ -167,36 +171,38 @@ enum class GraphicsRow : int
     AspectRatio = 4,
     OutputResolution = 5,
     Preset = 6, // derived from the rows below; not saved
-    RenderResolution = 7,
-    ShadowResolution = 8,
-    DynamicShadows = 9,
-    AntiAliasing = 10,
-    DlssQuality = 11,
-    DlssModel = 12, // shown with DLSS
-    FsrSharpness = 13,
-    DlssNeuralRendering = 14,
-    NeuralRenderingTuning = 15, // opens the NR page; shown with the NR row
-    FrameGeneration = 16,
-    FrameGenerationMultiplier = 17,
-    AmbientOcclusion = 18,
-    AnisotropicFiltering = 19,
-    DepthOfField = 20,
-    Bloom = 21,
-    MotionBlur = 22,
-    Culling = 23,
-    ScalingQuality = 24,
-    RgbRange = 25,
-    FrameRate = 26,
-    LoadingTransitions = 27,
-    VariableRefreshRate = 28,
-    PerformanceOverlay = 29,
-    Hdr = 30,
-    HdrPaperWhite = 31, // shown with HDR on
-    HdrPeak = 32, // shown with HDR on
-    HdrCalibration = 33, // opens the HDR peak page; shown with HDR on
-    Brightness = 34, // opens the brightness page
-    Save = 35,
-    Count = 36,
+    RenderResolution = 7, // the Switch: Maximum resolution (the scene height with dynamic resolution off)
+    DynamicResolution = 8, // the Switch only
+    MinimumResolution = 9, // the Switch only; shown with dynamic resolution
+    ShadowResolution = 10,
+    DynamicShadows = 11,
+    AntiAliasing = 12, // the Switch: FSR On / Off
+    DlssQuality = 13,
+    DlssModel = 14, // shown with DLSS
+    FsrSharpness = 15, // shown with FSR (the Switch: with its FSR row on)
+    DlssNeuralRendering = 16,
+    NeuralRenderingTuning = 17, // opens the NR page; shown with the NR row
+    FrameGeneration = 18,
+    FrameGenerationMultiplier = 19,
+    AmbientOcclusion = 20,
+    AnisotropicFiltering = 21,
+    DepthOfField = 22,
+    Bloom = 23,
+    MotionBlur = 24,
+    Culling = 25,
+    ScalingQuality = 26,
+    RgbRange = 27,
+    FrameRate = 28,
+    LoadingTransitions = 29,
+    VariableRefreshRate = 30,
+    PerformanceOverlay = 31,
+    Hdr = 32,
+    HdrPaperWhite = 33, // shown with HDR on
+    HdrPeak = 34, // shown with HDR on
+    HdrCalibration = 35, // opens the HDR peak page; shown with HDR on
+    Brightness = 36, // opens the brightness page
+    Save = 37,
+    Count = 38,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail
@@ -210,6 +216,21 @@ inline constexpr int ModsMoveLeft = 1112, ModsMoveWidth = 64, ModsMoveGap = 8;
 inline constexpr int AchievementsNotificationsRow = 0;
 inline constexpr int AchievementsSummaryRow = 1;
 inline constexpr int AchievementsFirstRow = 2;
+// Debug page (System → Debug, the Switch only): a list page of switches, each
+// applied and saved at once and logged as "option: frame=N key=value"
+// (debug/debug_options.h). A title over the ones that apply while the game runs,
+// one over the ones that apply at the next start; titles are never focused.
+inline constexpr int DebugLiveTitle = 0;
+inline constexpr int DebugOverlayRow = 1;
+inline constexpr int DebugMergeBarriersRow = 2;
+inline constexpr int DebugLeanBarriersRow = 3;
+inline constexpr int DebugNextStartTitle = 4;
+inline constexpr int DebugZcullRow = 5;
+inline constexpr int DebugDepthCompressionRow = 6;
+inline constexpr int DebugColorCompressionRow = 7;
+inline constexpr int DebugVsOutputsRow = 8;
+inline constexpr int DebugServerRow = 9;
+inline constexpr int DebugRowCount = 10;
 // Controls page (Gameplay → Controls): a list page. Button prompts and
 // Vibration, then a titled section per device with a row for each Xbox 360
 // input in hid/input_map.h order (the keyboard adds the left stick), then

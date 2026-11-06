@@ -25,6 +25,7 @@ std::u32string Codepoints(const std::string& text) {
 uint32_t UiLanguageFor(uint32_t game) {
     switch (game) {
     case 2: return 2; // Japanese
+    case 5: return 5; // Spanish: the disc's accented menu fonts
     case 7: return 3; // Korean
     case 8: return 1; // Traditional Chinese
     case 9: return 4; // Simplified Chinese

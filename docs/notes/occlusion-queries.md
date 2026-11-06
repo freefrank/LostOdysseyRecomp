@@ -114,7 +114,7 @@ never culls. A record without a reported owner keys on its slot as before.
 
 | Value | END record | Culling | Uhra cost (D3D12, 2560x1440, uncapped, ABBA) |
 |---|---|---|---|
-| unset / `host` (default) | `history` on Android, `adaptive` elsewhere | | |
+| unset / `host` (default) | `history` on Android and Switch, `adaptive` elsewhere | | |
 | `adaptive` | Fast, Strict while most queried objects read zero (below) | Only in Strict stretches | as `fast` in Uhra (it stays Fast) |
 | `fast` (the default before adaptive) | Written at the event with the last measured count of the same record; 1 when that was zero or unknown | Never: no query reads zero | 128.8 FPS vs 130.3 fake (about 1%) |
 | `strict` | Written once the host GPU has counted it; the guest waits | With exact counts | 111.2 FPS vs 131.7 fake (about 15%) |
@@ -259,6 +259,39 @@ switched Fast/Strict the same way, and the per-slot owner queue never handed out
 a different owner than the old map would have (0 of 1.75 million BEGIN events).
 In history mode the queue matters: the guest has usually allocated a slot again
 before the command processor reaches its BEGIN (1.5 of 2.15 million events).
+
+## Switch (deko3d, 2026-11-04, not yet run on the console)
+
+Before this, plume-deko3d had no occlusion pools, so the command processor made
+up every count and UE3 culled nothing: in a busy street looking through an arch
+into a plaza, 3,220 draws a frame, `GPU CmdProc` 89% busy at about 62 ms a
+frame, the GPU at 26 ms.
+
+- Maxwell counts the samples that pass the depth and stencil tests in one
+  counter, which deko3d's queue setup enables for good (`SampleCounterEnable`).
+  A query is the difference between two `dkCmdBufReportCounter(DkCounter_SamplesPassed)`
+  reports, at its begin and end (each report also flushes the tiled cache, so
+  binned draws are counted). Each query has 32 bytes in a CPU-cached block that
+  the CPU never writes; the CPU invalidates the used range after the fence and
+  reads it.
+- The renderer wraps each measured draw in its own query and measures runs of
+  them back to back, so a begin with no draw since the previous query's end
+  reuses that end report: one report per measured draw instead of two.
+- A query whose draw plume dropped (pipeline not valid yet) reads as unavailable,
+  which the renderer answers as visible, so a compiling query-box pipeline cannot
+  hide objects.
+- The counter report is read as NVN's `{u64 count, u64 timestamp}`; if the count
+  instead sits in word 1 behind a payload word (how Mesa's nvc0 reads it), the
+  low words match and the high words are used.
+- History is the default, as on Android: the guest never waits mid-frame for the
+  command processor or the GPU. `LO_DEKO3D_OCCLUSION=0` (or any fake
+  `LO_ZPD_MODE`) gives the old fake counts, with `cpu/poll_wait.cpp`'s early
+  answer for the same-frame reads. Those four reads in `sub_823CE960`
+  (`0x823CEEE8`, `0x823CEF70`, `0x823CF000`, `0x823CF134`) sit on the
+  `0x833180B4 == 0` branch (`823CE9B8` -> `823CEEAC`), so History never reaches
+  them; it reads only at `823CEACC` and `823CEC44`, which the hooks answer.
+- Risk, as on Android: an object coming out from behind an occluder can be drawn
+  a few frames late (the counts History uses are about three frames old).
 
 ## Validation so far
 

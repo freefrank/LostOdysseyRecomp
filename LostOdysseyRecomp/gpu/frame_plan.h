@@ -3,6 +3,8 @@
 #include "gpu/render_resolution.h"
 #include "gpu/upscaling_plan.h"
 #include <array>
+#include <atomic>
+#include <type_traits>
 #include <algorithm>
 #include <cstdint>
 #include <mutex>
@@ -616,22 +618,86 @@ namespace gpu::frame_plan
         return state.plan;
     }
 
+    // Every render command the game reserves gets the plan it was made under (Store on the game's threads, Take on
+    // its render thread). The plan changes about once a frame, so plans are kept once in a small ring and each tag is
+    // one atomic word in a table indexed by command address: no lock and no allocation per command (2026-11-03: the
+    // mutex and map node were 4.5% of Guest Main in a busy street). A tag whose table slot holds another live command
+    // goes to the old locked map.
     class CommandTags
     {
     public:
-        void Store(uint32_t address, FramePlan plan) { std::lock_guard lock(m_mutex); m_tags[address] = plan; }
+        void Store(uint32_t address, const FramePlan& plan)
+        {
+            const uint64_t entry = uint64_t(address) << 32 | Intern(plan);
+            auto& slot = m_slots[SlotOf(address)];
+            uint64_t current = slot.load(std::memory_order_relaxed);
+            for (;;) {
+                if (current != 0 && uint32_t(current >> 32) != address) break;
+                if (slot.compare_exchange_weak(current, entry, std::memory_order_release, std::memory_order_relaxed)) return;
+            }
+            std::lock_guard lock(m_mutex);
+            m_tags[address] = plan;
+            m_fallback.store(m_tags.size(), std::memory_order_release);
+        }
         std::optional<FramePlan> Take(uint32_t address)
         {
+            auto& slot = m_slots[SlotOf(address)];
+            uint64_t current = slot.load(std::memory_order_acquire);
+            while (current != 0 && uint32_t(current >> 32) == address) {
+                if (slot.compare_exchange_weak(current, 0, std::memory_order_acquire, std::memory_order_acquire))
+                    return Lookup(uint32_t(current));
+            }
+            if (m_fallback.load(std::memory_order_acquire) == 0) return std::nullopt;
             std::lock_guard lock(m_mutex);
             const auto found = m_tags.find(address);
             if (found == m_tags.end()) return std::nullopt;
             const auto plan = found->second;
             m_tags.erase(found);
+            m_fallback.store(m_tags.size(), std::memory_order_release);
             return plan;
         }
     private:
+        static constexpr uint32_t kSlots = 8192, kPlans = 64;
+        static_assert(std::is_trivially_copyable_v<FramePlan>);
+        static uint32_t SlotOf(uint32_t address) { return (address >> 4) & (kSlots - 1); }
+        // A token is generation << 6 | ring index; generation 0 is never used, so a token is never 0.
+        uint32_t Intern(const FramePlan& plan)
+        {
+            thread_local FramePlan lastPlan{};
+            thread_local uint32_t lastToken = 0;
+            if (lastToken && plan == lastPlan && m_plans[lastToken & (kPlans - 1)].generation.load(std::memory_order_acquire) == (lastToken >> 6))
+                return lastToken;
+            std::lock_guard lock(m_internMutex);
+            const uint32_t index = m_nextPlan++ & (kPlans - 1);
+            uint32_t generation = (m_nextGeneration++ & 0x3FFFFFF);
+            if (generation == 0) generation = m_nextGeneration++ & 0x3FFFFFF;
+            auto& stored = m_plans[index];
+            stored.generation.store(0, std::memory_order_relaxed);
+            std::atomic_thread_fence(std::memory_order_release);
+            stored.plan = plan;
+            stored.generation.store(generation, std::memory_order_release);
+            lastPlan = plan;
+            lastToken = generation << 6 | index;
+            return lastToken;
+        }
+        std::optional<FramePlan> Lookup(uint32_t token) const
+        {
+            const auto& stored = m_plans[token & (kPlans - 1)];
+            const uint32_t generation = stored.generation.load(std::memory_order_acquire);
+            if (generation != (token >> 6)) return std::nullopt;
+            const FramePlan plan = stored.plan;
+            std::atomic_thread_fence(std::memory_order_acquire);
+            if (stored.generation.load(std::memory_order_relaxed) != generation) return std::nullopt;
+            return plan;
+        }
+        struct StoredPlan { std::atomic<uint32_t> generation{0}; FramePlan plan{}; };
+        std::array<std::atomic<uint64_t>, kSlots> m_slots{};
+        std::array<StoredPlan, kPlans> m_plans{};
+        std::mutex m_internMutex;
+        uint32_t m_nextPlan = 0, m_nextGeneration = 1;
         std::mutex m_mutex;
         std::unordered_map<uint32_t, FramePlan> m_tags;
+        std::atomic<size_t> m_fallback{0};
     };
 
     namespace wire

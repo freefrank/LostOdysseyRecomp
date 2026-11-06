@@ -289,6 +289,11 @@ static int RunGuest(uint32_t entry)
             os::switch_cpu_profiler::AppendThreadCpuUsage(cpu);
             LOG_INFO("switch: {}, guest committed {} MiB; CPU {}", os::switch_platform::MemorySummary(),
                      GuestAddressSpace::CommittedBytes() >> 20, cpu);
+            std::string placement;
+            os::switch_cpu_profiler::AppendThreadPlacement(placement);
+            // Asked for (LO_THREAD_PLACEMENT=1), so above the log's default level.
+            if (!placement.empty())
+                LOG_NOTICE("switch: placement {}", placement);
         }
     }));
 #endif
@@ -298,6 +303,15 @@ static int RunGuest(uint32_t entry)
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
     os::scheduling::PreferPerformanceCores(true);
+#if LO_PLATFORM_SWITCH
+    // LO_MAIN_CORE=<core> keeps the busiest thread on one core: 2% more frames in the first battle, but it can't leave
+    // a core where a higher-priority thread spins, and the XAudio workers stalled the game 114 s that way. Off by default.
+    {
+        const char* mainCore = getenv("LO_MAIN_CORE");
+        const int core = mainCore ? atoi(mainCore) : -1;
+        if (core >= 0) os::switch_platform::PinCurrentThread(core);
+    }
+#endif
     GuestThread::Start({ entry, 0, 0 });
 
     LOG_INFO("guest main thread returned");
@@ -492,6 +506,13 @@ int main(int argc, char* argv[])
         {
             if (!logOverride)
             {
+#if LO_PLATFORM_SWITCH
+                // The previous session's stderr, crash, hang and exit reports go next to its runtime log, so the
+                // app folder holds this session's and logs/ keeps them paired with the session they belong to.
+                const std::filesystem::path dataRoot(LO_SWITCH_DATA_ROOT);
+                os::logger::ArchiveSessionFiles(logPath, {{dataRoot / "stderr.previous.log", "stderr"},
+                    {dataRoot / "crash.log", "crash"}, {dataRoot / "hang.log", "hang"}, {dataRoot / "exit.log", "exit"}});
+#endif
                 os::logger::PruneDefaultLogs(logPath);
                 sessionLog = logPath;
             }

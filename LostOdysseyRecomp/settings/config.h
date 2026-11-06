@@ -21,7 +21,13 @@ enum class WindowMode : uint32_t
 };
 using GraphicsBackend = gpu::backend::Backend;
 // Stable persisted IDs: retain the original EN/TW UI values.
-inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"};
+inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文", L"Español"};
+inline constexpr uint32_t UiLanguageSpanish = 5;
+// The debug menu's own languages (debug/translations.h): 0 English, 1 Simplified Chinese, 2 Spanish.
+inline constexpr uint32_t DebugLanguageCount = 3;
+inline constexpr uint32_t DebugLanguageSpanish = 2;
+// The game's Spanish (loc/spa/, XC_LANGUAGE_SPANISH); only the USA/Europe edition has it.
+inline constexpr uint32_t GameLanguageSpanish = 5;
 // Guest table at 832455F0 maps IDs 1-9 to INT/JPN/DEU/FRA/SPA/ITA/KOR/CHI/SCH.
 inline constexpr uint32_t AsiaLanguageIds[] = {1, 2, 7, 8, 9};
 inline constexpr const wchar_t *AsiaLanguageNames[] = {L"English", L"日本語", L"한국어", L"繁體中文", L"简体中文"};
@@ -73,6 +79,11 @@ inline uint32_t GameLanguageChoiceIndex(const std::vector<GameLanguageChoice> &c
 // Scaling filter: MetalFX spatial upscaling before presentation (macOS only).
 inline constexpr uint32_t ScalingMetalFx = 2;
 inline constexpr int InternalResolutionNative = 1;
+// The Switch's Minimum and Maximum resolution rows: scene heights in rows. Each is a multiple of 36, dynamic
+// resolution's step, so every one is a 16:9 width and a rung down from 540 and 720 (no 480: 853.3 columns).
+inline constexpr uint32_t SwitchSceneHeights[] = {360, 432, 504, 540, 576, 648, 720};
+// Automatic maximum: 540 rows in handheld mode, the Xbox 360's 720 docked.
+inline constexpr uint32_t SwitchAutomaticHeight(bool docked) { return docked ? 720 : 540; }
 // Audio output: the stereo downmix, the game's 5.1 channels passed through,
 // or 5.1 matrix-encoded into stereo for a receiver to decode.
 inline constexpr uint32_t AudioOutputStereo = 0;
@@ -80,12 +91,32 @@ inline constexpr uint32_t AudioOutputSurround = 1;
 inline constexpr uint32_t AudioOutputMatrix = 2;
 // DLSS 5 Neural Rendering runs at most this many passes after DLSS.
 inline constexpr uint32_t DlssNeuralRenderingMaxPasses = 4;
+// System → Debug on the Switch (debug/debug_options.h): A/B switches for benchmark runs, saved on their own
+// (SaveDebugOptions), never through another save. Read and written on the Switch only. The deko3d fields are
+// plume's Deko3DGpuOptions (plume_deko3d_api.h); env.txt's LO_DEKO3D_* win over them at start.
+struct DebugOptions
+{
+    // Applied between frames on the render thread.
+    bool deko3dMergeBarriers = false;
+    bool deko3dLeanBarriers = false;
+    // Read when the device and its render targets and pipelines are made: applied at the next start.
+    bool deko3dZcull = false;
+    bool deko3dDepthCompression = false;
+    bool deko3dColorCompression = true;
+    bool deko3dVsOutputs = false;
+    // The debug server of issue #10, at the next start (not in the build yet).
+    bool debugServer = false;
+    bool operator==(const DebugOptions &) const = default;
+};
 
 struct Config
 {
     uint32_t uiLanguage = 0;
-    uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese.
+    uint32_t debugLanguage = 0; // Independent tool UI: 0 English, 1 Simplified Chinese, 2 Spanish.
     uint32_t gameLanguage = 1;
+    // The Switch follows the console's system language (Spanish) for each of the three until it is
+    // picked in a menu; settings.ini then keeps the pick (*_language_chosen=1). Unused elsewhere.
+    bool uiLanguageChosen = false, gameLanguageChosen = false, debugLanguageChosen = false;
     // Language pack id shown in place of gameLanguage's text (the game still
     // runs as gameLanguage, the pack's base); empty for none. Applied on the next start.
     std::string gameLanguagePack;
@@ -122,7 +153,12 @@ struct Config
     uint32_t hdrPaperWhiteNits = 203; // Content reference white; Metal maps this to the system SDR white.
     bool hdrPeakAutomatic = true; // Follow the active display's reported peak when available.
     uint32_t hdrPeakNits = 1000; // Manual peak retained independently of automatic mode.
+#if defined(__SWITCH__)
+    // Bilinear on the console: bicubic's final pass took about 7 ms per frame in the first battle (Switch OLED, handheld).
+    uint32_t scalingQuality = 0;
+#else
     uint32_t scalingQuality = 1; // 0 bilinear, 1 bicubic spatial resampling, ScalingMetalFx (macOS).
+#endif
     bool expandRgbRange = false; // Expand game image RGB 16-235 to 0-255 at presentation.
     // Player picture adjustment, applied to the game image after Expanded RGB
     // range: black level (-20..20, 0 = unchanged) and gamma in hundredths
@@ -143,7 +179,23 @@ struct Config
     gpu::upscaling::DlssQuality dlssQuality = gpu::upscaling::DlssQuality::Quality;
     uint32_t dlssModel = 0; // DLSS SR model (render preset): 0 M, 1 L. Applied after saving.
     gpu::upscaling::FsrQuality fsrQuality = gpu::upscaling::FsrQuality::Quality;
+#if defined(__SWITCH__)
+    // The Switch's FSR row: 88% is RCAS at 0.24 stops, about LO_SWITCH_RCAS_STOPS's tested 0.25.
+    uint32_t fsrSharpnessPercent = 88;
+#else
     uint32_t fsrSharpnessPercent = 0; // 0 disables FSR RCAS; 1-100 sets its strength.
+#endif
+    // The Switch's Graphics rows, saved on the Switch only. switchFsr: FSR 1 (EASU, then RCAS at fsrSharpnessPercent,
+    // gpu/switch_upscaler.h) scales a scene smaller than the output, in place of the bilinear scale.
+    // dynamicResolution: the scene height follows the GPU's time per frame (gpu/dynamic_resolution.h) from the
+    // maximum height down to the minimum. Heights are SwitchSceneHeights rows per operation mode ([0] handheld,
+    // [1] docked), 0 automatic: maximum SwitchAutomaticHeight, minimum 80% of the maximum. With dynamic resolution
+    // off the maximum is the scene height. env.txt's LO_SWITCH_UPSCALER, LO_SWITCH_RCAS_STOPS,
+    // LO_SWITCH_RENDER_HEIGHT and LO_DYNAMIC_RESOLUTION(_MIN) win over them. Applied when saved.
+    bool switchFsr = false;
+    bool dynamicResolution = false;
+    uint32_t maximumHeight[2] = {0, 0};
+    uint32_t minimumHeight[2] = {0, 0};
     // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the
     // player's nvngx_dlssnr.dll; Windows only. Applied after saving.
     uint32_t dlssNeuralRendering = 0;
@@ -193,6 +245,7 @@ struct Config
     uint32_t fastForwardRate = 2;
     bool fastForwardKeepAudioPitch = true;
     uint32_t menuAnimationRate = 1; // Debug-only camp-menu transitions: 1 Normal, 2 Fast, 4 Faster.
+    DebugOptions debug;
     bool operator==(const Config &) const = default;
 };
 Config GetConfig();
@@ -205,6 +258,7 @@ bool SaveEncounterRate(EncounterRate rate);
 bool SaveBattleExpDouble(bool enabled);
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button);
 bool SaveMenuAnimationRate(uint32_t rate);
+bool SaveDebugOptions(const DebugOptions &options);
 // Cheap, thread-safe read for the camp-menu tween hook.
 uint32_t MenuAnimationRate();
 bool SaveAudioOutput(uint32_t output);
@@ -215,6 +269,17 @@ bool SaveDisplayChoice(const std::string &name, uint32_t index);
 // saves only graphics_backend, merged with the persisted settings.
 bool SaveGraphicsBackend(GraphicsBackend backend);
 uint32_t GameLanguage();
+// The Switch's operation mode: docked (Config's height index 1) or handheld. False off the Switch.
+bool Docked();
+// LO_SWITCH_RENDER_HEIGHT (env.txt): the scene height it forces over the Maximum resolution row, 0 when unset or
+// not a height the renderer takes. Always 0 off the Switch.
+uint32_t RenderHeightOverride();
+// The Maximum and Minimum resolution rows for one operation mode with automatic resolved: the maximum, and the
+// lowest height dynamic resolution steps down to from it (gpu::dynamic_resolution::Floor).
+uint32_t SwitchMaximumHeight(const Config &config, bool docked);
+uint32_t SwitchMinimumHeight(const Config &config, bool docked);
+// The Minimum resolution row in the current mode, 0 when automatic; dynamic resolution then takes 80%. 0 off the Switch.
+uint32_t DynamicResolutionMinimum(const Config &config);
 // The selected language pack's id, if it is installed and its base is
 // GameLanguage(); empty otherwise. Fixed at the first call, after LanguagePacks.
 std::string GameLanguagePack();
