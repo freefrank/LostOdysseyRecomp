@@ -1,4 +1,5 @@
 #include "achievements.h"
+#include <modding/mod_api.h>
 #include <os/logger.h>
 #include <os/user_paths.h>
 #include <settings/config.h>
@@ -125,6 +126,24 @@ EXDBFLanguage SpaLanguage(uint32_t game) {
     return XDBF_LANGUAGE_ENGLISH;
 }
 
+// The selected language pack's achievements.ini (modding::AchievementTexts), read once: a language
+// the game's title data does not have names its achievements and the "unlocked" heading there.
+const std::map<std::string, std::string>& PackTexts() {
+    static const auto texts = [] {
+        std::map<std::string, std::string> found;
+        const auto id = settings::GameLanguagePack();
+        if (!id.empty())
+            for (const auto& pack : modding::LanguagePacks())
+                if (pack.id == id) {
+                    found = modding::AchievementTexts(pack);
+                    break;
+                }
+        if (!found.empty()) LOG_INFO("achievements: {} texts from language pack {}", found.size(), id);
+        return found;
+    }();
+    return texts;
+}
+
 void BuildListLocked() {
     if (gListBuilt || gSpa.empty()) return;
     gListBuilt = true;
@@ -153,6 +172,10 @@ void BuildListLocked() {
         info.name = pick(lo ? lo->Name : std::string{}, en.Name);
         info.unlockedText = pick(lo ? lo->UnlockedDesc : std::string{}, en.UnlockedDesc);
         info.lockedText = pick(lo ? lo->LockedDesc : std::string{}, en.LockedDesc);
+        for (const auto& [field, text] : {std::pair{".name", &info.name}, std::pair{".unlocked", &info.unlockedText},
+                                          std::pair{".locked", &info.lockedText}})
+            if (const auto found = PackTexts().find(std::to_string(info.id) + field); found != PackTexts().end())
+                *text = found->second;
         if (en.pImageBuffer && en.ImageBufferSize) info.iconPng.assign(en.pImageBuffer, en.pImageBuffer + en.ImageBufferSize);
         info.secret = flags.contains(en.ID) && !(flags[en.ID] & 8);
         gList.push_back(std::move(info));
@@ -265,6 +288,7 @@ std::optional<uint16_t> NextAnnouncement() {
 }
 
 std::string UnlockedHeading() {
+    if (const auto heading = PackTexts().find("heading"); heading != PackTexts().end()) return heading->second;
     switch (settings::GameLanguage()) {
     case 2: return "実績のロックを解除しました";
     case 3: return "Erfolg freigeschaltet";

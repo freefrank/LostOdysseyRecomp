@@ -23,6 +23,7 @@ namespace debug_menu
     };
 
     void ToggleOverlay();
+    void PollResetNotice();
     bool IsOverlayVisible();
     void UpdateOverlaySnapshot();
     void HandleInput(InputAction action);

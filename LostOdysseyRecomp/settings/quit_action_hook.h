@@ -11,6 +11,10 @@ inline constexpr uint32_t SystemMenu = 0x8326DAA8;
 inline constexpr uint32_t SystemTaskYesCaller = 0x822E256C;
 inline constexpr uint32_t ModalYesCaller = 0x822E26B8;
 
+// Shared by the native System Quit and the title confirmation. Queue the
+// normal SDL quit event; failure leaves the caller running for another try.
+bool PushQuit();
+
 inline constexpr bool IsSystemYesCaller(uint32_t lr)
 {
     return lr == SystemTaskYesCaller || lr == ModalYesCaller;

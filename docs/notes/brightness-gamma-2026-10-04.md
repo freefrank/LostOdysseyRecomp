@@ -26,3 +26,11 @@ The retail "Brightness calibration" screen is only a reference pattern for adjus
 - Windows RTX 5080, Uhra save, 1600x900, 120 FPS, opened from Y > System > Settings: the page shows the last field frame on D3D12 in SDR and HDR and on Vulkan in HDR (`extended=true`); the HDR peak page shows it too, and LB / RB switch scene and pattern on both pages. With Expanded RGB range on and gamma 1.30 saved, D3D12 SDR gameplay luminance quantiles moved 1 % 0→0, median 92→116 (predicted 116.4), 99.9 % 251→252.
 - LoMenuFlowTest (page open, edit, retail hand-off and return, Back over A), LoMenuRenderTest and LoPresentationTest (14/14 on D3D12 and Vulkan) pass.
 - Not checked: Metal, Android.
+
+## Current clarification — 2026-10-15
+
+The calibration scene is now captured once when the game's native menu opens, before its transition and blur draw, then published after the GPU fence completes. That single scene remains available through the host Settings and calibration pages and is released after the native menu closes. Normal gameplay no longer allocates or refreshes periodic scene copies; opening the native game menu still incurs one capture and synchronization even when Settings is not opened.
+
+The earlier validation above is preserved as historical evidence for the original implementation.
+
+The final synthetic lifecycle run also verified HDR FP16 gain greater than 1, including high-depth blur and low-depth menu frames, both calibration pages, Settings reopen, and release after menu close. The `/Zs` video and renderer checks and `LoMenuFlowTest` passed; `LoBackendLifecycleTest` passed with the warm cache on D3D12 and Vulkan. The real game path in camp `u52_0` with HDR display output remains unverified.

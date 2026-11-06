@@ -10,6 +10,8 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include <settings/menu.h>
 #include <debug/menu_overlay.h>
 #include <debug/frame_timing.h>
+#include <debug/perf_stats.h>
+#include <os/debug_server.h>
 #include "test_input_pulse.h"
 #include "controller_prompts.h"
 #include "face_buttons.h"
@@ -104,6 +106,12 @@ namespace
     // Lock order: logical input -> HID devices; never call menu code under g_hidMutex.
     Mutex g_getStateMutex;
     uint32_t g_packet = 0;
+    // The last controller reading. Guarded by g_getStateMutex.
+    constexpr auto kPadReuse = std::chrono::milliseconds(8);
+    constexpr auto kControllerObserveEvery = std::chrono::milliseconds(100);
+    std::chrono::steady_clock::time_point g_lastPadRead{}, g_lastControllerObserve{};
+    XAMINPUT_GAMEPAD g_lastPad{};
+    uint16_t g_lastDefaultButtons = 0;
 
     // Match XInput/Xam semantics: rumble is enabled by default and remains at
     // the requested motor speeds until the guest changes or clears the state.
@@ -296,13 +304,13 @@ void hid::ClearKeyboardState()
     g_keys.fill(0);
 }
 
-static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
+static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt, bool observe = true)
 {
     uint16_t buttons = 0;
     for (auto* controller : g_controllers)
     {
         if (!SDL_GamepadConnected(controller)) continue;
-        ObserveController(controller);
+        if (observe) ObserveController(controller);
         const auto pad = ApplyController(g_controllerMap, ReadSources(controller));
         buttons |= pad.buttons;
         lt = std::max(lt, pad.leftTrigger);
@@ -363,6 +371,16 @@ static void ProcessHostInput(uint16_t buttons, uint8_t lt, uint8_t rt)
     s_prevGamepadButtons = buttons;
 }
 
+// LO_HOST_INPUT_REUSE=0: a full controller reading on every pump, as before.
+static bool HostInputReuse()
+{
+    static const bool enabled = [] {
+        const char* value = getenv("LO_HOST_INPUT_REUSE");
+        return !value || strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
 void hid::PumpHostInput()
 {
     std::lock_guard stateLock(g_getStateMutex);
@@ -371,7 +389,31 @@ void hid::PumpHostInput()
     {
         std::lock_guard lock(g_hidMutex);
         if (g_externalPump) SDL_UpdateGamepads();
+#if LO_PLATFORM_SWITCH
+        // Input pumping was 6.7% of GPU CmdProc in a busy street (cpu-street4): every pump read
+        // the controller twice (prompt observation and buttons), ~70 SDL calls that each take
+        // locks. A guest reading from the last kPadReuse stands, as it does for GetState: its
+        // buttons and triggers are this reading's (same layout, before keyboard and test input).
+        // Prompts are observed every kControllerObserveEvery, as GetState does.
+        const auto now = std::chrono::steady_clock::now();
+        if (HostInputReuse() && now - g_lastPadRead < kPadReuse)
+        {
+            buttons = g_lastPad.wButtons;
+            lt = g_lastPad.bLeftTrigger;
+            rt = g_lastPad.bRightTrigger;
+            PublishPromptStyle();
+        }
+        else if (HostInputReuse())
+        {
+            const bool observe = now - g_lastControllerObserve >= kControllerObserveEvery;
+            if (observe) g_lastControllerObserve = now;
+            buttons = ReadRawButtonsLocked(lt, rt, observe);
+        }
+        else
+            buttons = ReadRawButtonsLocked(lt, rt);
+#else
         buttons = ReadRawButtonsLocked(lt, rt);
+#endif
     }
 #if LO_PLATFORM_ANDROID
     const auto touch = hid::android_touch::Snapshot();
@@ -379,6 +421,14 @@ void hid::PumpHostInput()
     lt = std::max(lt, touch.leftTrigger);
     rt = std::max(rt, touch.rightTrigger);
 #endif
+    // The debug server's "press" and "hold" reach the host overlay too (LB+RB, its navigation), also while it has
+    // paused the guest.
+    if (os::debug_server::Held held; os::debug_server::HeldInput(held))
+    {
+        buttons |= held.buttons;
+        lt = std::max(lt, held.leftTrigger);
+        rt = std::max(rt, held.rightTrigger);
+    }
     ProcessHostInput(buttons, lt, rt);
 }
 
@@ -408,7 +458,11 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         return ERROR_DEVICE_NOT_CONNECTED;
 
     std::lock_guard stateLock(g_getStateMutex);
-    Poll();
+    // The game polls twice a frame, and a reading is dozens of SDL calls that
+    // each take locks. Within kPadReuse the last reading stands.
+    const auto pollTime = std::chrono::steady_clock::now();
+    const bool freshPad = !LO_PLATFORM_SWITCH || pollTime - g_lastPadRead >= kPadReuse;
+    if (freshPad) Poll();
 
     *pState = {};
     pState->dwPacketNumber = ++g_packet;
@@ -422,11 +476,14 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
 
     {
         std::lock_guard lock(g_hidMutex);
-        if (!g_externalPump) SDL_UpdateGamepads();
-        for (auto* controller : g_controllers)
+        if (freshPad && !g_externalPump) SDL_UpdateGamepads();
+        // Only prompts use this, so it needn't run on every reading.
+        const bool observe = freshPad && (!LO_PLATFORM_SWITCH || pollTime - g_lastControllerObserve >= kControllerObserveEvery);
+        if (observe) g_lastControllerObserve = pollTime;
+        if (freshPad) for (auto* controller : g_controllers)
         {
             if (!SDL_GamepadConnected(controller)) continue;
-            ObserveController(controller);
+            if (observe) ObserveController(controller);
             auto axis = [&](SDL_GamepadAxis a) { return SDL_GetGamepadAxis(controller, a); };
             const auto sources = ReadSources(controller);
             const auto pad = ApplyController(g_controllerMap, sources);
@@ -437,6 +494,17 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             auto flip = [](int16_t value) { return int16_t(std::min(32767, -int(value))); };
             MergeStick(gp.sThumbLX, gp.sThumbLY, axis(SDL_GAMEPAD_AXIS_LEFTX), flip(axis(SDL_GAMEPAD_AXIS_LEFTY)), 7849);
             MergeStick(gp.sThumbRX, gp.sThumbRY, axis(SDL_GAMEPAD_AXIS_RIGHTX), flip(axis(SDL_GAMEPAD_AXIS_RIGHTY)), 8689);
+        }
+        if (freshPad)
+        {
+            g_lastPadRead = pollTime;
+            g_lastPad = gp;
+            g_lastDefaultButtons = defaultButtons;
+        }
+        else
+        {
+            gp = g_lastPad;
+            defaultButtons = g_lastDefaultButtons;
         }
         controllerConnected = !g_controllers.empty();
         PublishPromptStyle();
@@ -473,6 +541,8 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     //   LO_AUTO_BUTTONS=a@1250,s@1500   swap-stamped form: each entry pulses its
     //                                   button for 20 polls starting at that swap
     //                                   (LO_AUTO_START not needed).
+    //   LO_AUTO_BUTTONS=s@10s,a@30.5s   the same at seconds since launch (a
+    //                                   scenario's timeline); both forms mix.
     {
         static const uint32_t autoStartSwap = getenv("LO_AUTO_START") ? strtoul(getenv("LO_AUTO_START"), nullptr, 10) : 0;
         static const char* seq = getenv("LO_AUTO_BUTTONS") ? getenv("LO_AUTO_BUTTONS") : "s";
@@ -487,7 +557,7 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         if (stamped)
         {
             // Parse once: "<letter>@<swap>" entries separated by commas.
-            struct Entry { char button; uint32_t swap; };
+            struct Entry { char button; double at; bool seconds; };
             static std::vector<Entry> entries = [] {
                 std::vector<Entry> v;
                 for (const char* p = seq; *p;)
@@ -495,20 +565,30 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
                     while (*p == ',' || *p == ' ') p++;
                     if (!*p) break;
                     char b = *p++;
-                    uint32_t at = 0;
-                    if (*p == '@') at = strtoul(p + 1, const_cast<char**>(&p), 10);
-                    v.push_back({ b, at });
+                    double at = 0;
+                    bool seconds = false;
+                    if (*p == '@')
+                    {
+                        at = strtod(p + 1, const_cast<char**>(&p));
+                        seconds = *p == 's';
+                    }
+                    v.push_back({ b, at, seconds });
                     while (*p && *p != ',') p++;
                 }
                 return v;
             }();
             static size_t index = 0;
             static uint32_t polls = 0;
-            if (index < entries.size() && swaps >= entries[index].swap)
+            const auto due = [&](const Entry& entry) {
+                return entry.seconds ? os::logger::ElapsedSeconds() >= entry.at : double(swaps) >= entry.at;
+            };
+            if (index < entries.size() && due(entries[index]))
             {
                 if (polls == 0)
                 {
-                    LOG_INFO("auto input: '{}' at swap {} ({} polls since the previous press)", entries[index].button, swaps, totalPolls - pollsAtLastPress);
+                    // Notice: a console run reads these to retune its stamps (tools/switch/bench.py).
+                    LOG_NOTICE("auto input: '{}' at swap {}, {:.1f} s ({} polls since the previous press)", entries[index].button, swaps,
+                        os::logger::ElapsedSeconds(), totalPolls - pollsAtLastPress);
                     pollsAtLastPress = totalPolls;
                 }
                 pressed = entries[index].button;
@@ -567,6 +647,13 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
             gp.sThumbLX = int16_t(std::clamp(replay.x, -32768, 32767));
             gp.sThumbLY = int16_t(std::clamp(replay.y, -32768, 32767));
         }
+        // A benchmark run's stick (LO_BENCH_STICK), from its scene until its measurement ends.
+        int16_t benchX = 0, benchY = 0;
+        if (perf_stats::BenchStick(benchX, benchY))
+        {
+            gp.sThumbLX = benchX;
+            gp.sThumbLY = benchY;
+        }
     }
 
     // Event-thread snapshot: keyboard remains available with any number of pads.
@@ -586,50 +673,66 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     uint64_t traceInputTick = 0;
     bool traceInputPending = false, traceInputActive = false;
     static const char* const testInputFile = getenv("LO_TEST_INPUT_FILE");
-    if (const char* path = testInputFile)
+    // The debug server's "input" sends the same lines over the network (tools/scenario.py --switch).
+    const bool remoteInput = os::debug_server::Running();
+    if (testInputFile || remoteInput)
     {
         static unsigned lastSerial = 0, pollsLeft = 0, buttons = 0, pollCount = 0;
         static TestInputPulse tickPulse;
         const uint64_t tick = inputTicks ? frame_timing::InputTick() : 0;
         static int leftX = 0, leftY = 0, leftTrigger = 0, rightTrigger = 0;
         static int rightX = 0, rightY = 0;
-        if (++pollCount % 12 == 0)
+        char line[160];
+        // A line from the server is new each time; the file's, once its serial changes.
+        bool fromServer = remoteInput && os::debug_server::TakeTestInput(line, sizeof(line));
+        bool haveLine = fromServer;
+        if (!haveLine && testInputFile && ++pollCount % 12 == 0)
         {
-            if (FILE* file = fopen(path, "r"))
+            if (FILE* file = fopen(testInputFile, "r"))
             {
-                unsigned serial = 0, mask = 0, duration = 0;
-                int x = 0, y = 0, lt = 0, rt = 0, rx = 0, ry = 0;
-                const int fields = fscanf(file, "%u %x %d %d %u %d %d %d %d",
-                    &serial, &mask, &x, &y, &duration, &lt, &rt, &rx, &ry);
-                const bool valid = fields == 5 || fields == 7 || fields == 9;
+                haveLine = fgets(line, sizeof(line), file) != nullptr;
                 fclose(file);
-                if (valid && serial != lastSerial)
-                {
-                    lastSerial = serial;
-                    buttons = mask & 0xffff;
-                    leftX = std::clamp(x, -32768, 32767);
-                    leftY = std::clamp(y, -32768, 32767);
-                    leftTrigger = std::clamp(lt, 0, 255);
-                    rightTrigger = std::clamp(rt, 0, 255);
-                    rightX = std::clamp(rx, -32768, 32767);
-                    rightY = std::clamp(ry, -32768, 32767);
-                    pollsLeft = std::min(duration, 6000u);
-                    if (inputTicks) tickPulse.Set(tick, pollsLeft);
-                    LOG_INFO("background test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{} right_stick={},{}",
-                        serial, buttons, leftX, leftY, pollsLeft, leftTrigger, rightTrigger, rightX, rightY);
-                    if (inputTicks)
-                        LOG_INFO("test input accepted: serial={} controller=0 tick={} start={} ticks={} mode=engine_tick",
-                            serial, tick, tickPulse.start, tickPulse.duration);
-                }
             }
         }
-        // Test trigger state releases at the pulse boundary, including a
-        // zero-duration command; never leave the prior RT value latched.
-        gp.bLeftTrigger = 0;
-        gp.bRightTrigger = 0;
-        gp.sThumbRX = 0;
-        gp.sThumbRY = 0;
+        if (haveLine)
+        {
+            unsigned serial = 0, mask = 0, duration = 0;
+            int x = 0, y = 0, lt = 0, rt = 0, rx = 0, ry = 0;
+            const int fields = sscanf(line, "%u %x %d %d %u %d %d %d %d",
+                &serial, &mask, &x, &y, &duration, &lt, &rt, &rx, &ry);
+            const bool valid = fields == 5 || fields == 7 || fields == 9;
+            if (valid && (fromServer || serial != lastSerial))
+            {
+                lastSerial = serial;
+                buttons = mask & 0xffff;
+                leftX = std::clamp(x, -32768, 32767);
+                leftY = std::clamp(y, -32768, 32767);
+                leftTrigger = std::clamp(lt, 0, 255);
+                rightTrigger = std::clamp(rt, 0, 255);
+                rightX = std::clamp(rx, -32768, 32767);
+                rightY = std::clamp(ry, -32768, 32767);
+                pollsLeft = std::min(duration, 6000u);
+                if (inputTicks) tickPulse.Set(tick, pollsLeft);
+                LOG_INFO("{} test input: serial={} buttons={:#x} stick={},{} polls={} triggers={},{} right_stick={},{}",
+                    fromServer ? "debug server" : "background", serial, buttons, leftX, leftY, pollsLeft, leftTrigger,
+                    rightTrigger, rightX, rightY);
+                if (inputTicks)
+                    LOG_INFO("test input accepted: serial={} controller=0 tick={} start={} ticks={} mode=engine_tick",
+                        serial, tick, tickPulse.start, tickPulse.duration);
+            }
+        }
         const bool active = inputTicks ? tickPulse.Active(tick) : pollsLeft != 0;
+        // Test trigger state releases at the pulse boundary, including a
+        // zero-duration command; never leave the prior RT value latched. With
+        // the file the test owns the triggers and right stick; with the server
+        // alone only while a pulse runs (the controller stays usable).
+        if (testInputFile || active)
+        {
+            gp.bLeftTrigger = 0;
+            gp.bRightTrigger = 0;
+            gp.sThumbRX = 0;
+            gp.sThumbRY = 0;
+        }
         if (active)
         {
             if (!inputTicks) --pollsLeft;
@@ -646,6 +749,17 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
         traceInputTick = tick;
         traceInputPending = inputTicks && tickPulse.Pending(tick);
         traceInputActive = active;
+    }
+
+    // The debug server's "press", "hold" and "stick", as from the controller.
+    if (os::debug_server::Held held; os::debug_server::HeldInput(held))
+    {
+        gp.wButtons |= held.buttons;
+        defaultButtons |= held.buttons;
+        gp.bLeftTrigger = std::max(gp.bLeftTrigger, held.leftTrigger);
+        gp.bRightTrigger = std::max(gp.bRightTrigger, held.rightTrigger);
+        if (held.stick[0]) { gp.sThumbLX = held.x[0]; gp.sThumbLY = held.y[0]; }
+        if (held.stick[1]) { gp.sThumbRX = held.x[1]; gp.sThumbRY = held.y[1]; }
     }
 
     // Chord detection & host overlay input:

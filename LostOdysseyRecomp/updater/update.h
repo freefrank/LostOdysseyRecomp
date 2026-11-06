@@ -140,7 +140,7 @@ struct StartupOptions
 struct StartupPreferences
 {
     bool automaticUpdates = true;
-    bool debugLog = false;
+    bool debugLog = true;
     uint32_t uiLanguage = 0;
 };
 

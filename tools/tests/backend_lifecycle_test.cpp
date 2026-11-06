@@ -14,6 +14,7 @@
 #include <gpu/xess_upscaler.h>
 #include <settings/config.h>
 #include <settings/restart.h>
+#include <plume_render_interface.h>
 #include <SDL3/SDL.h>
 #undef main
 
@@ -25,6 +26,12 @@ std::atomic<bool> externalPump{false};
 std::atomic<unsigned> archiveWaits{0}, rendererShutdowns{0};
 bool failWindow=false;
 bool extraVideoReference=false, extraReferencePreserved=false;
+std::unique_ptr<plume::RenderTexture> resolvedOwner;
+plume::RenderTexture* resolved=nullptr;
+std::unique_ptr<plume::RenderTexture> gainOwner;
+plume::RenderTexture* gain=nullptr;
+uint32_t resolvedWidth=0, resolvedHeight=0;
+bool gameplayResolve=false, gainEnabled=false, settingsOpen=false, brightnessOpen=false, hdrOpen=false, calibrationSceneAvailable=false;
 void Check(bool good, const char* message) {
     if (!good) throw std::runtime_error(message);
 }
@@ -60,16 +67,32 @@ void TestQuitSubSystem(Uint32 flags) {
 #undef SDL_CreateWindowWithProperties
 #undef SDL_QuitSubSystem
 
+namespace discord_rpc { void Shutdown() {} }
 namespace settings {
 Config GetConfig() { std::lock_guard lock(fixture::mutex); return fixture::config; }
-bool DrawMenu(std::vector<uint32_t>&,uint64_t&,uint32_t,uint32_t) { return false; }
+bool DrawMenu(std::vector<uint32_t>& pixels,uint64_t&,uint32_t width,uint32_t height) {
+    if (!fixture::settingsOpen) return false;
+    pixels.assign(size_t(width)*height,0xFF202020u);
+    return true;
+}
 void PointerClick(float,float,bool) { throw std::runtime_error("unexpected pointer input"); }
 void PointerDrag(float,float,bool) { throw std::runtime_error("unexpected pointer input"); }
-bool IsOpen() { return false; }
+bool IsOpen() { return fixture::settingsOpen; }
+bool IsTitleQuitOpen() { return false; }
 bool CalibrationKey(uint32_t) { return false; }
 bool CaptureKey(uint32_t,bool) { return false; }
-HdrCalibration GetHdrCalibration() { return {}; }
-BrightnessCalibration GetBrightnessCalibration() { return {}; }
+HdrCalibration GetHdrCalibration() {
+    HdrCalibration result;
+    result.open=fixture::hdrOpen;
+    result.sceneAvailable=fixture::calibrationSceneAvailable;
+    return result;
+}
+BrightnessCalibration GetBrightnessCalibration() {
+    BrightnessCalibration result;
+    result.open=fixture::brightnessOpen;
+    result.sceneAvailable=fixture::calibrationSceneAvailable;
+    return result;
+}
 bool SaveDisplayChoice(const std::string&,uint32_t) { return false; }
 bool SaveGraphicsBackend(GraphicsBackend) { return false; }
 namespace title_entry {
@@ -119,25 +142,63 @@ void WaitDebugCaptureArchive() {
     std::ofstream("archive-wait-"+std::to_string(GetCurrentProcessId())+".txt") << "production video close/restart reached archive wait stub\n";
 }
 void SetOutputSize(uint32_t,uint32_t) {}
-void ScaleResolvedSize(uint32_t,uint32_t&,uint32_t&) {}
-plume::RenderTexture* AcquireResolvedSurface(uint32_t,uint32_t&,uint32_t&,uint32_t&, frame_plan::FramePlan*, frame_generation::ResolvedHandoff*) { return nullptr; }
+void ScaleResolvedSize(uint32_t,uint32_t& width,uint32_t& height) { width=fixture::resolvedWidth; height=fixture::resolvedHeight; }
+plume::RenderTexture* AcquireResolvedSurface(uint32_t,uint32_t& width,uint32_t& height,uint32_t& format,
+    frame_plan::FramePlan* plan, frame_generation::ResolvedHandoff* handoff) {
+    if (handoff) *handoff={};
+    if (plan) { plan->cpuSerial=1; plan->effectiveAA=1; plan->scalingQuality=0; }
+    width=fixture::resolvedWidth; height=fixture::resolvedHeight;
+    format=uint32_t(plume::RenderFormat::R8G8B8A8_UNORM);
+    return fixture::resolved;
+}
 void CancelFgHandoffs() {}
 bool SuppressPresent() { return false; }
 bool DrainForFrameGenerationReconfigure() { return true; }
 void SetHdrSceneEnabled(bool) {}
 plume::RenderTexture* AcquireHdrResolvedSurface(uint32_t,uint32_t&,uint32_t&) { return nullptr; }
-bool ResolvedScene(uint32_t,uint64_t&) { return false; }
-plume::RenderTexture* AcquireResolvedWrite(uint32_t,uint64_t,bool,uint32_t&,uint32_t&,uint32_t&) { return nullptr; }
+plume::RenderTexture* AcquireHdrGainSurface(uint32_t,uint32_t& width,uint32_t& height) {
+    if (!fixture::gainEnabled || !fixture::gameplayResolve) return nullptr;
+    width=fixture::resolvedWidth; height=fixture::resolvedHeight;
+    return fixture::gain;
+}
+bool ResolvedScene(uint32_t,uint64_t& ordinal) {
+    ordinal=fixture::gameplayResolve ? 1 : 2;
+    return fixture::gameplayResolve;
+}
+plume::RenderTexture* AcquireResolvedWrite(uint32_t,uint64_t ordinal,bool hdr,
+    uint32_t& width,uint32_t& height,uint32_t& format) {
+    if (hdr || !fixture::gameplayResolve || ordinal!=1) return nullptr;
+    width=fixture::resolvedWidth; height=fixture::resolvedHeight;
+    format=uint32_t(plume::RenderFormat::R8G8B8A8_UNORM);
+    return fixture::resolved;
+}
 bool SceneAAApplied(uint32_t) { return false; }
 bool ReadbackResolvedSurface(uint32_t,std::vector<uint32_t>&,uint32_t&,uint32_t&) { return false; }
 std::vector<uint32_t> GetResolvedAddresses() { return {}; }
 void DumpRenderTargets(const char*) {}
 }
+namespace gpu::dred {
+void ConfigureBeforeDeviceCreation(bool) {}
+bool Enabled() { return false; }
+void LogRemovedDevice(ID3D12Device*) {}
+}
+namespace modding::text_overlay {
+void StopPrebuild() {}
+}
+namespace ui::achievement_overlay {
+const Image* Update(uint32_t,uint32_t) { return nullptr; }
+}
+namespace ui::performance_overlay {
+bool Frame(uint32_t,std::chrono::steady_clock::time_point,uint32_t,uint32_t) { return false; }
+void Refresh(const Sources&) {}
+const Image& Current() { static const Image empty; return empty; }
+void Stop() {}
+}
 // Upscaler, DLSS probe, and sizing paths are reached through video init/reset
 // but never configured here; the stubs mirror present_capture_test.cpp.
 namespace settings {
 void SetHdrDisplayInfo(HdrDisplayInfo) {}
-void SetHdrCalibrationSceneAvailable(bool) {}
+void SetHdrCalibrationSceneAvailable(bool available) { fixture::calibrationSceneAvailable=available; }
 void SetNeuralRenderingPreviewAvailable(bool) {}
 NeuralRenderingTuning GetNeuralRenderingTuning() { return {}; }
 }
@@ -175,6 +236,8 @@ void Controller::AbandonUsesAfterDeviceLoss() {}
 void Controller::ShutdownAfterGpuDrain() {}
 const char* ProbeStateName(ProbeState) { return "stub"; }
 void Controller::ReleaseNeuralRenderingPreview() {}
+plume::RenderTexture* Controller::RecordNeuralRenderingPreview(plume::RenderCommandList&,
+    uint32_t,uint32_t,const NeuralRenderingTuning&) { return nullptr; }
 void SetLogSink(LogSink) {}
 void SetComputeShaderCompiler(ComputeShaderCompiler) {}
 }
@@ -213,6 +276,207 @@ void Start(backend::Backend b) {
     Check(video::SelectedBackend()==b,"unexpected fallback");
     Check(externalPump,"HID external pump wasn't enabled");
     Inspect("init"); Record("init");
+}
+void CheckCalibrationCopyRelease() {
+    // A failed first menu submit can leave an allocated copy without an
+    // accepted snapshot. The next prepared frame must release it after close.
+    auto& cache=video::g_hdrCalibrationCache;
+    cache.copy=video::GetDevice()->createTexture(plume::RenderTextureDesc::Texture2D(8,8,1,
+        plume::RenderFormat::R16G16B16A16_FLOAT));
+    Check(bool(cache.copy),"calibration test texture allocation failed");
+    cache.attempted=false;
+    uint64_t ticket=0; uint32_t width=0,height=0;
+    Check(video::PreparePresentation(ticket,width,height),"calibration cleanup preparation failed");
+    Check(!cache.copy&&!cache.scene&&!cache.ready&&!cache.attempted,
+        "unsubmitted calibration copy survived menu close");
+}
+void FillResolved(uint32_t color) {
+    const uint32_t width=resolvedWidth,height=resolvedHeight;
+    const uint32_t pitch=(width+63u)&~63u;
+    auto upload=video::GetDevice()->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(pitch)*height*4));
+    Check(bool(upload),"resolved frame upload allocation failed");
+    auto* pixels=static_cast<uint32_t*>(upload->map());
+    Check(pixels!=nullptr,"resolved frame upload map failed");
+    for(uint32_t y=0;y<height;++y)
+        for(uint32_t x=0;x<width;++x) pixels[size_t(y)*pitch+x]=color;
+    upload->unmap();
+    auto commands=video::GetQueue()->createCommandList();
+    auto fence=video::GetDevice()->createCommandFence();
+    Check(bool(commands)&&bool(fence),"resolved frame command allocation failed");
+    commands->begin();
+    commands->barriers(plume::RenderBarrierStage::COPY,
+        plume::RenderTextureBarrier(resolved,plume::RenderTextureLayout::COPY_DEST));
+    commands->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(resolved),
+        plume::RenderTextureCopyLocation::PlacedFootprint(upload.get(),plume::RenderFormat::R8G8B8A8_UNORM,
+            width,height,1,pitch));
+    commands->end();
+    const plume::RenderCommandList* lists[]{commands.get()};
+    video::GetQueue()->executeCommandLists(lists,1,nullptr,0,nullptr,0,fence.get());
+    video::GetQueue()->waitForCommandFence(fence.get());
+}
+void FillGain() {
+    const uint32_t width=resolvedWidth,height=resolvedHeight;
+    const uint32_t pitch=(width+31u)&~31u;
+    auto upload=video::GetDevice()->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(pitch)*height*8));
+    Check(bool(upload),"HDR gain upload allocation failed");
+    auto* halves=static_cast<uint16_t*>(upload->map());
+    Check(halves!=nullptr,"HDR gain upload map failed");
+    for(uint32_t y=0;y<height;++y)
+        for(uint32_t x=0;x<width;++x) {
+            auto* pixel=halves+(size_t(y)*pitch+x)*4;
+            pixel[0]=pixel[1]=pixel[2]=0x4000; // binary16 2.0
+            pixel[3]=0x3C00;
+        }
+    upload->unmap();
+    auto commands=video::GetQueue()->createCommandList();
+    auto fence=video::GetDevice()->createCommandFence();
+    Check(bool(commands)&&bool(fence),"HDR gain command allocation failed");
+    commands->begin();
+    commands->barriers(plume::RenderBarrierStage::COPY,
+        plume::RenderTextureBarrier(gain,plume::RenderTextureLayout::COPY_DEST));
+    commands->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(gain),
+        plume::RenderTextureCopyLocation::PlacedFootprint(upload.get(),plume::RenderFormat::R16G16B16A16_FLOAT,
+            width,height,1,pitch));
+    commands->end();
+    const plume::RenderCommandList* lists[]{commands.get()};
+    video::GetQueue()->executeCommandLists(lists,1,nullptr,0,nullptr,0,fence.get());
+    video::GetQueue()->waitForCommandFence(fence.get());
+}
+uint32_t ReadCalibrationPixel() {
+    const auto& cache=video::g_hdrCalibrationCache;
+    Check(cache.scene&&cache.width&&cache.height,"calibration scene is empty");
+    const uint32_t pitch=(cache.width+63u)&~63u;
+    auto readback=video::GetDevice()->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(
+        uint64_t(pitch)*cache.height*4));
+    auto commands=video::GetQueue()->createCommandList();
+    auto fence=video::GetDevice()->createCommandFence();
+    Check(bool(readback)&&bool(commands)&&bool(fence),"calibration readback allocation failed");
+    commands->begin();
+    commands->barriers(plume::RenderBarrierStage::COPY,
+        plume::RenderTextureBarrier(cache.scene,plume::RenderTextureLayout::COPY_SOURCE));
+    commands->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),
+        plume::RenderFormat::R8G8B8A8_UNORM,cache.width,cache.height,1,pitch),
+        plume::RenderTextureCopyLocation::Subresource(cache.scene));
+    commands->end();
+    const plume::RenderCommandList* lists[]{commands.get()};
+    video::GetQueue()->executeCommandLists(lists,1,nullptr,0,nullptr,0,fence.get());
+    video::GetQueue()->waitForCommandFence(fence.get());
+    const auto* pixels=static_cast<const uint32_t*>(readback->map());
+    Check(pixels!=nullptr,"calibration readback map failed");
+    const uint32_t center=pixels[size_t(cache.height/2)*pitch+cache.width/2];
+    readback->unmap();
+    return center;
+}
+uint16_t ReadCalibrationRedHalf() {
+    const auto& cache=video::g_hdrCalibrationCache;
+    Check(cache.scene&&cache.width&&cache.height&&cache.extended,"HDR calibration scene is empty");
+    const uint32_t pitch=(cache.width+31u)&~31u;
+    auto readback=video::GetDevice()->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(
+        uint64_t(pitch)*cache.height*8));
+    auto commands=video::GetQueue()->createCommandList();
+    auto fence=video::GetDevice()->createCommandFence();
+    Check(bool(readback)&&bool(commands)&&bool(fence),"HDR calibration readback allocation failed");
+    commands->begin();
+    commands->barriers(plume::RenderBarrierStage::COPY,
+        plume::RenderTextureBarrier(cache.scene,plume::RenderTextureLayout::COPY_SOURCE));
+    commands->copyTextureRegion(plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(),
+        plume::RenderFormat::R16G16B16A16_FLOAT,cache.width,cache.height,1,pitch),
+        plume::RenderTextureCopyLocation::Subresource(cache.scene));
+    commands->end();
+    const plume::RenderCommandList* lists[]{commands.get()};
+    video::GetQueue()->executeCommandLists(lists,1,nullptr,0,nullptr,0,fence.get());
+    video::GetQueue()->waitForCommandFence(fence.get());
+    const auto* halves=static_cast<const uint16_t*>(readback->map());
+    Check(halves!=nullptr,"HDR calibration readback map failed");
+    const uint16_t red=halves[(size_t(cache.height/2)*pitch+cache.width/2)*4];
+    readback->unmap();
+    return red;
+}
+void CheckCalibrationSceneOnSettingsOpen(bool hdrGain) {
+    // Native menu activation arrives before its blur draw. The next blurred
+    // resolve may still report gameplay depth draws, and subsequent menu
+    // resolves replace the clean write before host Settings opens.
+    resolvedWidth=64; resolvedHeight=64;
+    resolvedOwner=video::GetDevice()->createTexture(plume::RenderTextureDesc::Texture2D(
+        resolvedWidth,resolvedHeight,1,plume::RenderFormat::R8G8B8A8_UNORM));
+    resolved=resolvedOwner.get();
+    Check(resolved!=nullptr,"resolved frame allocation failed");
+    gainEnabled=hdrGain;
+    if(hdrGain) {
+        gainOwner=video::GetDevice()->createTexture(plume::RenderTextureDesc::Texture2D(
+            resolvedWidth,resolvedHeight,1,plume::RenderFormat::R16G16B16A16_FLOAT));
+        gain=gainOwner.get();
+        Check(gain!=nullptr,"HDR gain surface allocation failed");
+        FillGain();
+    }
+    gameplayResolve=true;
+    FillResolved(hdrGain?0xFFFFFFFFu:0xFF204080u);
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    Check(!video::g_hdrCalibrationCache.copy&&!calibrationSceneAvailable,
+        "ordinary gameplay allocated a calibration scene");
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    Check(!video::g_hdrCalibrationCache.copy&&!calibrationSceneAvailable,
+        "repeated ordinary gameplay allocated a calibration scene");
+
+    Check(video::WaitForPresentGpu(),"gameplay present did not complete");
+    video::SetCalibrationGameMenuOpen(true);
+    video::CaptureCalibrationSceneBeforeDraw();
+    // This frame still meets the renderer's scene-draw threshold, but has
+    // already received the game's own blur. It must not replace the preview.
+    FillResolved(0xFF202020u);
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    Check(video::WaitForPresentGpu(),"blurred menu present did not complete");
+    gameplayResolve=false;
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    settingsOpen=true;
+    brightnessOpen=true;
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    const bool brightnessAvailable=calibrationSceneAvailable&&video::g_hdrCalibrationCache.ready&&
+        video::g_hdrCalibrationCache.scene!=nullptr;
+    uint32_t brightnessPixel=0,hdrPixel=0,reopenedPixel=0;
+    const auto readFrozen=[&]{ return hdrGain?uint32_t(ReadCalibrationRedHalf()):ReadCalibrationPixel(); };
+    if(brightnessAvailable) {
+        Check(video::WaitForPresentGpu(),"calibration present did not complete");
+        brightnessPixel=readFrozen();
+    }
+    brightnessOpen=false;
+    hdrOpen=true;
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    const bool hdrAvailable=calibrationSceneAvailable&&video::g_hdrCalibrationCache.ready;
+    if(hdrAvailable) {
+        Check(video::WaitForPresentGpu(),"HDR calibration present did not complete");
+        hdrPixel=readFrozen();
+    }
+    settingsOpen=false;
+    hdrOpen=false;
+    uint64_t ticket=0; uint32_t width=0,height=0;
+    Check(video::PreparePresentation(ticket,width,height),"settings close preparation failed");
+    const bool retainedAcrossSettings=calibrationSceneAvailable&&video::g_hdrCalibrationCache.ready;
+    settingsOpen=true;
+    brightnessOpen=true;
+    video::PresentFrontbuffer(0x1000,resolvedWidth,resolvedHeight,0,nullptr,nullptr);
+    const bool reopenedAvailable=calibrationSceneAvailable&&video::g_hdrCalibrationCache.ready;
+    if(reopenedAvailable) {
+        Check(video::WaitForPresentGpu(),"reopened calibration present did not complete");
+        reopenedPixel=readFrozen();
+    }
+    settingsOpen=false;
+    brightnessOpen=false;
+    video::SetCalibrationGameMenuOpen(false);
+    Check(video::PreparePresentation(ticket,width,height),"native menu close preparation failed");
+    Check(video::WaitForPresentGpu(),"native menu close did not complete");
+    const bool releasedAfterMenu=!video::g_hdrCalibrationCache.copy&&!calibrationSceneAvailable;
+    resolvedOwner.reset(); resolved=nullptr;
+    gainOwner.reset(); gain=nullptr; gainEnabled=false;
+    resolvedWidth=resolvedHeight=0;
+    Check(brightnessAvailable,"settings calibration did not retain the last clean gameplay scene after menu overwrite");
+    Check(hdrGain ? brightnessPixel>=0x3E00u :
+          (brightnessPixel&0xFFu)>0x50u && ((brightnessPixel>>8)&0xFFu)>0x30u,
+        "settings calibration retained the blurred menu frame instead of gameplay");
+    Check(hdrAvailable&&hdrPixel==brightnessPixel,"HDR page lost the frozen gameplay scene");
+    Check(retainedAcrossSettings&&reopenedAvailable&&reopenedPixel==brightnessPixel,
+        "reopening Settings over the same game menu lost the frozen scene");
+    Check(releasedAfterMenu,"calibration scene survived the native menu closing");
 }
 void Resize() {
     // Config is the production window-owner pathway; do not call SDL from the render thread.
@@ -281,13 +545,16 @@ int main(int argc,char** argv) {
         fixture::Record("baseline");
         for(auto backend:{gpu::backend::Backend::D3D12,gpu::backend::Backend::Vulkan}) {
             if(mode=="vulkan-cycles" && backend==gpu::backend::Backend::D3D12) continue;
-            fixture::Start(backend); fixture::Resize(); fixture::Stop();
+            fixture::Start(backend); fixture::CheckCalibrationCopyRelease();
+            fixture::CheckCalibrationSceneOnSettingsOpen(false);
+            fixture::CheckCalibrationSceneOnSettingsOpen(true);
+            fixture::Resize(); fixture::Stop();
             const auto calls=xenos::GetDxcStatistics().calls;
             fixture::Start(backend);
             fixture::Check(xenos::GetDxcStatistics().calls==calls,"same-process reinit recompiled presentation");
             fixture::Stop();
         }
-        std::cout<<"PASS actual hidden video cycles; no guest, audio, draw, present, capture, or input injection"<<std::endl;
+        std::cout<<"PASS hidden video cycles and synthetic calibration presentation; no guest, audio, or input injection"<<std::endl;
         return 0;
     } catch(const std::exception& e) {
         std::cerr<<"FAIL "<<e.what()<<std::endl;

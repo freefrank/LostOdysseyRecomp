@@ -36,9 +36,10 @@ inline std::string_view ReviewReplaceHint(uint32_t language)
         "僅替換所選光碟編號與 DLC ID 的現有內容；未選內容與存檔保留。",
         "選択したディスク番号とDLC IDの既存データを置き換えます。未選択のデータとセーブは残ります。",
         "선택한 디스크 번호와 DLC ID의 기존 내용만 교체합니다. 선택하지 않은 내용과 저장 파일은 유지됩니다.",
-        "仅替换所选光盘编号与 DLC ID 的现有内容；未选内容和存档保留。"
+        "仅替换所选光盘编号与 DLC ID 的现有内容；未选内容和存档保留。",
+        "Los números de disco y los ID de DLC seleccionados sustituyen el contenido existente. El resto del contenido y las partidas se conservan."
     };
-    return hints[language < 5 ? language : 0];
+    return hints[language < std::size(hints) ? language : 0];
 }
 
 inline bool ShouldReportImportSuccess(const InstallResult& result, bool pathSaved)

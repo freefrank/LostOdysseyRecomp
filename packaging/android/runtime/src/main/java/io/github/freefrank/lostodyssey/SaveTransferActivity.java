@@ -3,6 +3,7 @@ package io.github.freefrank.lostodyssey;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -15,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Switch;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,6 +37,7 @@ import java.util.Locale;
  */
 public final class SaveTransferActivity extends Activity {
     static final String EXTRA_FROM_GAME = "from_game";
+    private static final String EXTRA_START_IMPORT = "start_import";
     private static final int REQUEST_EXPORT = 1;
     private static final int REQUEST_IMPORT = 2;
     private static final int REQUEST_EXPORT_LOGS = 3;
@@ -42,6 +45,7 @@ public final class SaveTransferActivity extends Activity {
     private boolean fromGame;
     private boolean busy;
     private LinearLayout page;
+    private Context strings;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,12 +74,19 @@ public final class SaveTransferActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        strings = SaveLocationStrings.context(this);
         render();
+        if (getIntent().getBooleanExtra(EXTRA_START_IMPORT, false)) {
+            getIntent().removeExtra(EXTRA_START_IMPORT);
+            startImport();
+        }
     }
 
     private File saveRoot() {
-        return SaveTransfer.saveRoot(getFilesDir());
+        return SaveLocationStore.currentRoot(this);
     }
+
+    private String string(int resource, Object... arguments) { return strings.getString(resource, arguments); }
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
@@ -107,7 +118,8 @@ public final class SaveTransferActivity extends Activity {
 
     private void render() {
         page.removeAllViews();
-        page.addView(text("Saves and logs", 24f, true));
+        page.addView(text(string(R.string.saves_title), 24f, true));
+        renderSaveLocation();
 
         List<File> slots = SaveTransfer.listSlots(saveRoot());
         if (slots.isEmpty()) {
@@ -135,6 +147,7 @@ public final class SaveTransferActivity extends Activity {
         Button importButton = button("Import saves…", v -> startImport());
         importButton.setEnabled(!busy);
         page.addView(importButton);
+        if (SaveLocationStore.guestStarted()) page.addView(dim(string(R.string.save_location_import_running)));
 
         page.addView(text("Logs", 18f, true));
         page.addView(dim(PlayerLogs.debugLogEnabled(this)
@@ -146,6 +159,89 @@ public final class SaveTransferActivity extends Activity {
         page.addView(logs);
 
         page.addView(button(fromGame ? "Back to game" : "Back", v -> finish()));
+    }
+
+    private void renderSaveLocation() {
+        SaveLocationState state = SaveLocationStore.load(this);
+        Switch toggle = new Switch(this);
+        toggle.setText(string(R.string.save_location_toggle));
+        toggle.setTextColor(Color.WHITE);
+        toggle.setPadding(0, dp(12), 0, dp(8));
+        toggle.setChecked(state.pendingRoot == null ? state.sharedRoot != null : !state.pendingRoot.isEmpty());
+        toggle.setEnabled(!busy);
+        toggle.setOnCheckedChangeListener((view, checked) -> {
+            File destination = null;
+            if (checked) {
+                File disc = GameStorage.disc1(this);
+                File custom = GameStorage.customRoot(this);
+                File game = custom != null ? custom : disc.getParentFile();
+                if (game == null || !game.isDirectory()
+                        || !GameStorage.hasDefaultXex(new File(game, "disc1"))) {
+                    Toast.makeText(this, string(R.string.save_location_no_game), Toast.LENGTH_LONG).show();
+                    render();
+                    return;
+                }
+                destination = new File(game, SaveTransfer.DIRECTORY);
+            }
+            SaveLocationStore.request(this, destination);
+            reviewSaveLocation();
+        });
+        page.addView(toggle);
+        page.addView(dim(string(R.string.save_location_help)));
+        page.addView(dim(string(R.string.save_location_restart_help)));
+        page.addView(dim(string(R.string.save_location_current, saveRoot().getAbsolutePath())));
+        if (state.sharedRoot != null)
+            page.addView(dim(string(R.string.save_location_fixed, state.sharedRoot)));
+        if (state.pendingRoot != null) {
+            page.addView(dim(string(R.string.save_location_pending, state.pendingRoot.isEmpty()
+                ? string(R.string.save_location_private) : state.pendingRoot)));
+            Button cancel = button(string(R.string.save_location_cancel_pending), v -> {
+                SaveLocationState latest = SaveLocationStore.load(this);
+                latest.pendingRoot = null;
+                latest.approvedFingerprint = null;
+                SaveLocationStore.save(this, latest);
+                render();
+            });
+            cancel.setEnabled(!busy);
+            page.addView(cancel);
+        }
+        SaveLocationState.Run run = SaveLocationStore.currentRun();
+        if (run != null && (run.fallback || run.conflict || run.error != null)) {
+            page.addView(dim(string(run.conflict ? R.string.save_location_conflict
+                : run.fallback ? R.string.save_location_fallback : R.string.save_location_failed)));
+            if (run.error != null) page.addView(dim(run.error));
+        }
+        if (state.pendingRoot != null || state.fallbackDirty) {
+            Button review = button(string(R.string.save_location_resolve), v -> reviewSaveLocation());
+            review.setEnabled(!busy);
+            page.addView(review);
+        }
+    }
+
+    private void reviewSaveLocation() {
+        // Reading is safe while the guest is paused. This never copies or changes a live
+        // save; the exact source and destination snapshots are rechecked at next start.
+        SaveLocationState state = SaveLocationStore.load(this);
+        File source = saveRoot();
+        File target = state.destination(SaveTransfer.saveRoot(getFilesDir()));
+        runInBackground(() -> {
+            SaveLocationMigration.Snapshot snapshot = SaveLocationMigration.inspect(source, target);
+            if (snapshot.conflicts.isEmpty())
+                return () -> Toast.makeText(this, string(R.string.save_location_queued), Toast.LENGTH_LONG).show();
+            return () -> new AlertDialog.Builder(this)
+                .setTitle(string(R.string.save_location_conflict_title))
+                .setMessage(string(R.string.save_location_conflict_message,
+                    String.join(", ", snapshot.conflicts), source.getAbsolutePath(), target.getAbsolutePath()))
+                .setPositiveButton(string(R.string.save_location_use_source), (dialog, which) -> {
+                    SaveLocationStore.approve(this, snapshot.fingerprint, false);
+                    Toast.makeText(this, string(R.string.save_location_queued), Toast.LENGTH_LONG).show();
+                })
+                .setNeutralButton(string(R.string.save_location_use_destination), (dialog, which) -> {
+                    SaveLocationStore.approve(this, snapshot.fingerprint, true);
+                    Toast.makeText(this, string(R.string.save_location_queued), Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton(string(R.string.save_location_cancel), null).show();
+        }, string(R.string.save_location_warning_title));
     }
 
     // Export ------------------------------------------------------------------
@@ -205,6 +301,20 @@ public final class SaveTransferActivity extends Activity {
     // Import ------------------------------------------------------------------
 
     private void startImport() {
+        if (SaveLocationStore.guestStarted()) {
+            new AlertDialog.Builder(this)
+                .setTitle(string(R.string.save_import_close_title))
+                .setMessage(string(R.string.save_import_close_message))
+                .setPositiveButton(string(R.string.save_import_close_action), (dialog, which) -> {
+                    Intent intent = new Intent(this, SaveTransferActivity.class);
+                    intent.putExtra(EXTRA_START_IMPORT, true);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
+                    Runtime.getRuntime().exit(0);
+                })
+                .setNegativeButton(string(R.string.save_location_cancel), null).show();
+            return;
+        }
         // File managers often label ZIPs as something else; accept any file.
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
@@ -250,6 +360,7 @@ public final class SaveTransferActivity extends Activity {
     }
 
     private void install(List<SaveTransfer.Slot> slots) {
+        if (SaveLocationStore.guestStarted()) return;
         boolean replacing = false;
         for (SaveTransfer.Slot slot : slots) replacing |= new File(saveRoot(), slot.name).exists();
         boolean replaced = replacing;

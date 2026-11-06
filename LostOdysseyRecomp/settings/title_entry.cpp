@@ -14,6 +14,7 @@
 #include "menu_render.h"
 #include "quit_action_hook.h"
 #include "title_entry.h"
+#include "title_input_gate.h"
 #include "translations.h"
 
 extern "C" PPC_FUNC(__imp__sub_8288AC10);
@@ -98,6 +99,8 @@ constexpr auto HintStale = std::chrono::milliseconds(250);
 // the size holds this long before it is rasterized again.
 constexpr auto ResizeSettle = std::chrono::milliseconds(150);
 std::atomic<Clock::rep> hintIdleSince{0}, hintTick{0};
+// Presentation owns the closing fade after the guest has dismissed the modal.
+std::atomic<bool> dialogDrawn{false};
 
 void ReportHint(bool idle)
 {
@@ -112,6 +115,8 @@ void ReportHint(bool idle)
 
 bool settings::title_entry::HintShown()
 {
+    if (settings::IsTitleQuitOpen() || dialogDrawn.load())
+        return true;
     const auto since = hintIdleSince.load(), tick = hintTick.load();
     return since && !settings::IsOpen() &&
            Clock::duration(Clock::now().time_since_epoch().count() - tick) <= HintStale;
@@ -119,6 +124,10 @@ bool settings::title_entry::HintShown()
 
 float settings::title_entry::HintOpacity()
 {
+    // The modal's own straight-alpha raster carries its 100 ms fade, including
+    // the dim. The footer keeps its original delayed opacity below.
+    if (settings::IsTitleQuitOpen() || dialogDrawn.load())
+        return 1.0f;
     if (!HintShown())
         return 0.0f;
     const auto since = hintIdleSince.load();
@@ -136,6 +145,20 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
     static uint32_t pendingWidth = 0, pendingHeight = 0;
     static Clock::time_point pendingSince;
+    static uint64_t dialogRevision = 0, uploadedDialogRevision = 0;
+    if (settings::DrawTitleQuit(hint.pixels, dialogRevision, outputWidth, outputHeight))
+    {
+        const bool opened = !dialogDrawn.exchange(true);
+        if (opened || uploadedDialogRevision != dialogRevision)
+            ++hint.revision;
+        uploadedDialogRevision = dialogRevision;
+        hint.x = hint.y = 0;
+        hint.width = outputWidth;
+        hint.height = outputHeight;
+        return &hint;
+    }
+    if (dialogDrawn.exchange(false))
+        cachedWidth = 0; // Restore the footer after its full-output modal raster.
     if (cachedWidth && (outputWidth != cachedWidth || outputHeight != cachedHeight))
     {
         const auto now = Clock::now();
@@ -174,7 +197,9 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         snapshot.help = Translate(language, L"Y: Settings", L"Y：設定");
         if (keyboard)
             snapshot.help[0] = L'S';
-        // Only the legend's own rectangle of the output is rasterized.
+        snapshot.titleQuitKey = keyboard ? L"Backspace" : L"Back";
+        snapshot.titleQuitLabel = Translate(language, L"Quit game", L"退出遊戲");
+        // Only the credit and legend's footer rectangle is rasterized.
         const auto bounds = TitleHintBounds(outputWidth, outputHeight);
         std::vector<uint32_t> pixels;
         if (RasterizeMenu(snapshot, outputWidth, outputHeight, pixels) &&
@@ -200,8 +225,13 @@ PPC_FUNC(sub_8234B9B8)
         entered = false;
         LOG_INFO("settings: title entry closed, title state {}", state);
     }
-    if (settings::ConsumeTitleShortcut(MenuIdle(base, title)))
+    const bool idle = MenuIdle(base, title);
+    const bool quitOwnsInput = settings::UpdateTitleQuit(base, idle);
+    if (settings::ConsumeTitleShortcut(idle && !quitOwnsInput))
         OpenSettings(ctx, base, title);
-    ReportHint(MenuIdle(base, title));
-    save_menu_holds::TitleTick(ctx, base);
+    ReportHint(MenuIdle(base, title) && !quitOwnsInput);
+    settings::title_entry::TickWithMenuInputMuted(quitOwnsInput, ctx.r4.u32,
+        [base](uint32_t address) { return PPC_LOAD_U32(address); },
+        [base](uint32_t address, uint32_t mask) { PPC_STORE_U32(address, mask); },
+        [&] { save_menu_holds::TitleTick(ctx, base); });
 }

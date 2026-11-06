@@ -1,30 +1,31 @@
-# 重编译配置笔记
+# Recompilation Configuration Notes
 
-> **专题参考。** 下文实现和测量只适用于各自注明的版本与范围；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+[简体中文](recomp.zh-CN.md)
 
-## 目标二进制
+> **Topic reference.** The implementation and measurements below apply only to the versions and scope stated for each one. For current delivery and acceptance status, see [project status](../STATUS.md) and [roadmap](../ROADMAP.md).
 
-四张盘的 default.xex 解密解压后逐字节相同（md5 f07cb5afd8ab6fa8fbdc14f4fceb5858），
-重编译目标唯一，用 Disc 1 的即可。镜像 base 0x82000000，size 0x13C0000，entry 0x827CA440。
+## Target binary
 
-## 节区布局（xexdump 输出）
+The decrypted and decompressed `default.xex` files from all four discs are byte-for-byte identical (md5 f07cb5afd8ab6fa8fbdc14f4fceb5858), so the recompilation target is unique. Using Disc 1 is enough. Image base 0x82000000, size 0x13C0000, entry 0x827CA440.
 
-| 节 | 起始 | 大小 | 说明 |
+## Section layout (xexdump output)
+
+| Section | Start | Size | Notes |
 |---|---|---|---|
-| .rdata | 0x82000600 | 0x21EF2C | 只读数据、字符串（UE3 反射名在这里找） |
-| .pdata | 0x8221F600 | 0x62798 | 函数表，XenonAnalyse 用它做函数边界 |
-| .text | 0x82290000 | 0xE4AA6C | 主代码，约 14.3 MB |
-| .embsec_* ×8 | 0x830DAC00 起 | 共约 0x50000 | 嵌入代码段，名字乱码，大概率是加密/压缩后的安全段或 XNET 相关，待查 |
-| .data | 0x83130000 | 0x248E98 | 可写数据 |
+| .rdata | 0x82000600 | 0x21EF2C | Read-only data and strings (UE3 reflection names are found here) |
+| .pdata | 0x8221F600 | 0x62798 | Function table. XenonAnalyse uses it for function boundaries |
+| .text | 0x82290000 | 0xE4AA6C | Main code, about 14.3 MB |
+| .embsec_* ×8 | from 0x830DAC00 | about 0x50000 in total | Embedded code sections. Their names are garbled. Most likely encrypted or compressed security sections, or related to XNET. Still to be checked |
+| .data | 0x83130000 | 0x248E98 | Writable data |
 | .tls | 0x83379000 | 9 | |
 | .XBMOVIE | 0x83379200 | 0xC | |
-| .idata | 0x83380000 | 0x452 | 导入表 |
+| .idata | 0x83380000 | 0x452 | Import table |
 | .XBLD | 0x83390000 | 0xD0 | |
 | .reloc | 0x83390200 | 0x144A24 | |
 
-## 已定位的辅助函数（tools/find_ppc_helpers.py，每个模式唯一命中）
+## Located helper functions (tools/find_ppc_helpers.py, each pattern matches exactly once)
 
-| 键 | 地址 |
+| Key | Address |
 |---|---|
 | restgprlr_14 | 0x82B7A700 |
 | savegprlr_14 | 0x82B7A6B0 |
@@ -35,87 +36,57 @@
 | restvmx_64 | 0x82DF2E2C |
 | savevmx_64 | 0x82DF2B94 |
 
-## 跳转表
+## Jump tables
 
-XenonAnalyse 检测到 841 张（全部为绝对地址表），写入 `config/switch_tables.toml`。
-漏检的表手工写在 `config/switch_tables_manual.toml`，重新跑 XenonAnalyse 后要重新 append。
-目前手工补了一张：82FB21AC 的 u16 偏移表（16 项）。
+XenonAnalyse found 841 tables (all are absolute address tables) and wrote them to `config/switch_tables.toml`.
+Tables it missed are written by hand in `config/switch_tables_manual.toml`. After XenonAnalyse is run again, that file must be appended again.
+So far, one table has been added by hand: the u16 offset table at 82FB21AC (16 entries).
 
 ## invalid_instructions
 
-函数之间夹着两类 8 字节的异常处理描述符（handler 指针 + 作用域表指针），第一字分别是
-`0x82B7A940`（C++ frame handler，2165 处）和 `0x830D9F4C`（C specific handler，35 处），
-以及 4 字节零填充。不跳过它们，XenonRecomp 的 pass2 边界分析会把描述符当代码吞掉后面整个函数
-并在带跳转表的函数上死循环（表现为零输出挂死）。另有 `.text` 尾部 830DA0BC 起四个不可解码的数据字。
+Between functions there are two kinds of 8-byte exception-handling descriptors (a handler pointer and a scope table pointer). The first word is `0x82B7A940` (C++ frame handler, 2165 occurrences) or `0x830D9F4C` (C specific handler, 35 occurrences). There is also 4 bytes of zero padding. If they are not skipped, XenonRecomp's pass2 boundary analysis treats the descriptors as code. It then swallows the whole function that follows and loops forever on functions that have jump tables. The symptom is a hang with no output. Also, four undecodable data words start at 830DA0BC near the end of `.text`.
 
-## 显式函数边界（tools/gen_function_bounds.py）
+## Explicit function boundaries (tools/gen_function_bounds.py)
 
-XenonRecomp 的边界分析把 `bctr` 当尾调用，不在 .pdata 里的叶函数只要带跳转表就会被截短，
-截短后函数内部的 `b` 变成"跳出函数"的未解析目标（首轮 91 个 switch 站点、96 个未解析目标）。
-脚本规则：
-1. 每个 `// ERROR <addr>` 目标成为一个函数（到下一个符号，且不超出所在 pdata 函数末尾），
-   目标跨轮累积在 `config/branch_targets.txt`；
-2. 每张 label 未被所在 pdata 函数覆盖的跳转表，从最近符号起、到最远 label 之后的下一个
-   pdata/bl 符号止，生成一个函数；
-3. `config/function_bounds_manual.txt` 放手工条目（目前一条：827C39F8 大小 0x18，
-   否则它流进 pdata 函数 827C3A10 抢走其跳转表）。
-4. **指针专属函数**（运行期发现）：只被虚表/函数指针表引用、不在 .pdata、也不是任何 `bl` 目标的函数，
-   边界分析看不到它们，会被并进前一个函数的尾部（例：0x823067C0 被并入 0x82306660，
-   虚表槽 67 调用它时函数表为空指针，宿主跳到地址 0 崩溃）。脚本扫描 .text 以外整个镜像里
-   指向 .text 的 4 字节对齐指针，要求：不在 .pdata 函数内、前一个字是 blr/bctr/b/0 填充、
-   不是开关表标签、不是**基线映射表**（`config/baseline_func_mapping.txt`，用不含指针专属函数的配置
-   跑一遍 XenonRecomp 得到的 `ppc_func_mapping.cpp`，重编译器自己能发现的 63032 个起点）里已有的起点。
-   命中 43 个，同时作为硬符号截断前面的函数。不加基线过滤时会误报 5000+ 个（重编译器靠
-   返回后顺延等方式发现的函数），并产生 `// ERROR`；每次改动后用 `grep -l '// ERROR' ppc/*.cpp` 检查必须为 0。运行期 `kernel/memory.cpp` 把函数表所有空槽填成 `MissingFunction` 记录桩，
-   日志出现 "call to unrecompiled guest function" 就说明还有漏网之鱼。
-5. **代码中物化的地址**：`lis rX,hi` + `addi/ori rX,rX,lo`（64 字节窗口内）拼出的 .text 地址，
-   同样要求不在 .pdata、不在基线映射、不是开关表标签，且前一个字必须是 `blr` 或 0 填充——
-   允许 `b` 的话会把计算跳转（`lis/addi` 基标签 + `bctr`）的 case 标签当成函数，产生 15 个错误文件。
-   运行期日志 "call to unrecompiled guest function ctr=0x82CF21C0" 就是这类（无静态引用、运行时填进对象）。
-   规则 2 挑选"拥有跳转表的函数"时，候选包含规则 4/5 的起点：表在某个指针专属函数之后，就归它。
-   脚本默认**不再**把重编译输出里的 `// ERROR` 目标累积进 `branch_targets.txt`（错误切分导致的假目标
-   会永久污染它），需要时设 `LO_ACCUMULATE_ERRORS=1`。
-生成结果写进 TOML 的 `functions = [...]`（116 项，含 47 个指针专属函数）。迭代到第 8 轮收敛：0 未解析目标、0 跳转表错误。
+XenonRecomp's boundary analysis treats `bctr` as a tail call. A leaf function that is not in .pdata gets cut short if it has a jump table. After it is cut, the `b` instructions inside the function become unresolved "jump out of function" targets (in the first round: 91 switch sites and 96 unresolved targets).
 
-## 生成结果
+Script rules:
+1. Each `// ERROR <addr>` target becomes a function (running to the next symbol, and not past the end of the containing pdata function). Targets accumulate across rounds in `config/branch_targets.txt`.
+2. For each jump table whose labels are not covered by the containing pdata function, a function is generated from the nearest symbol to the next pdata/bl symbol after the farthest label.
+3. `config/function_bounds_manual.txt` holds manual entries. There is currently one: 827C39F8, size 0x18. Without it, that entry would flow into pdata function 827C3A10 and take over its jump table.
+4. **Pointer-only functions** (found at run time): functions referenced only by vtables or function pointer tables, not in .pdata, and not the target of any `bl`. Boundary analysis cannot see them, so they get merged into the tail of the previous function. For example, 0x823067C0 was merged into 0x82306660. When vtable slot 67 called it, the function table entry was a null pointer, and the host jumped to address 0 and crashed. The script scans the whole image outside .text for 4-byte aligned pointers into .text. It requires that the pointer is not inside a .pdata function, that the word before it is blr/bctr/b/0 padding, that it is not a switch table label, and that it is not already a start point in the **baseline mapping table** (`config/baseline_func_mapping.txt`, which is `ppc_func_mapping.cpp` from one run of XenonRecomp without pointer-only functions. It lists the 63032 start points that the recompiler finds by itself, for example by resuming after a return). 43 matches were found. They also act as hard symbols that cut the preceding function short. Without baseline filtering, the script produced 5000+ false positives (functions the recompiler finds on its own, such as by resuming after a return), and it generated `// ERROR` output. After each change, `grep -l '// ERROR' ppc/*.cpp` must return 0. At run time, `kernel/memory.cpp` fills every empty slot of the function table with a `MissingFunction` record stub. If the log shows "call to unrecompiled guest function", some functions were missed.
+5. **Addresses materialized in code**: a .text address built by `lis rX,hi` followed by `addi/ori rX,rX,lo` (within a 64-byte window) must also not be in .pdata, not in the baseline mapping, and not a switch table label. The word before it must be `blr` or 0 padding. If `b` were allowed, the case labels of computed jumps (`lis/addi` base label + `bctr`) would be treated as functions. That produces 15 bad files. A run-time log line like "call to unrecompiled guest function ctr=0x82CF21C0" is this kind of case: there is no static reference, and the value is written into an object at run time. When rule 2 chooses "the function that owns the jump table", the candidates include the start points from rules 4 and 5. If a table comes after a pointer-only function, it belongs to that function.
+   By default, the script **no longer** accumulates `// ERROR` targets from the recompiler output into `branch_targets.txt`. Errors caused by bad splits would permanently pollute it. Set `LO_ACCUMULATE_ERRORS=1` when needed.
+The generated results are written into the TOML `functions = [...]` list (116 entries, including 47 pointer-only functions). It converged at round 8, with 0 unresolved targets and 0 jump table errors.
 
-`LostOdysseyRecompLib/ppc/`：250 个文件，252 MB，62808 个函数。用 MSVC 编出来的 XenonRecomp
-（`tools/xexdump/CMakeLists.txt` 里把 `__builtin_bswap*` 映射到 MSVC 内建）跑一轮约 90 秒。
+## Generated output
 
-## 上游 XenonRecomp 缺失的指令（已在本地补丁中实现）
+`LostOdysseyRecompLib/ppc/`: 250 files, 252 MB, 62808 functions. One pass of XenonRecomp built with MSVC (`__builtin_bswap*` is mapped to MSVC intrinsics in `tools/xexdump/CMakeLists.txt`) takes about 90 seconds.
 
-上游对 5985 处指令报 Unrecognized（3129 处在 .embsec 段），全部是 16 位向量运算及少量标量：
-vslh 2351、vsrah 979、vsubshs 901、vspltish 604、vandc 265、vmaxsh 238、vminsh 92、vpkswss 81、
-vctuxs 78、vcmpgtsh(.) 82、vcmpgtsw. 48、vaddsws 45、eqv 30、vaddsbs 26、vnor 20、vrlh 18、
-vcmpequh(.) 24、vavguh 16、vsrh 12、vpkuhus 12、vpkswus 12、mulhd 12、mulhdu 8、vsububm 7、
-vpkshss 7、vsrab 6、vpkuwus 6、cror/crorc 4、frsqrte 1；另 vcmpgtuh. 30 处缺 CR6 写回。
-实现在 `tools/patches/XenonRecomp-lostodyssey.patch`（对子模块 recompiler.cpp 的补丁，
-`tools/build_tools.bat` 编译前自动应用）。向量元素在宿主中是反序存放的，pack 类指令按上游
-VPKSHUS 的惯例传 (vB, vA)。这些实现尚未经测试验证，运行期若音频/DSP 路径出错优先怀疑这里。
+## Instructions missing from upstream XenonRecomp (implemented in local patches)
 
-剩余告警：830DA0BC 起 4 个数据字（`46000201` 等，夹在导入桩的 `mtctr r11; bctr` 之间）在函数
-重编译循环里无法解码，只输出为注释，不会被执行，可忽略。
+Upstream reports Unrecognized for 5985 instructions (3129 of them in the .embsec sections). All are 16-bit vector operations and a few scalar ones:
+vslh 2351, vsrah 979, vsubshs 901, vspltish 604, vandc 265, vmaxsh 238, vminsh 92, vpkswss 81,
+vctuxs 78, vcmpgtsh(.) 82, vcmpgtsw. 48, vaddsws 45, eqv 30, vaddsbs 26, vnor 20, vrlh 18,
+vcmpequh(.) 24, vavguh 16, vsrh 12, vpkuhus 12, vpkswus 12, mulhd 12, mulhdu 8, vsububm 7,
+vpkshss 7, vsrab 6, vpkuwus 6, cror/crorc 4, frsqrte 1. In addition, vcmpgtuh. has 30 cases that are missing the CR6 write-back.
+The implementation is in `tools/patches/XenonRecomp-lostodyssey.patch` (a patch to the submodule's recompiler.cpp). `tools/build_tools.bat` applies it automatically before building. Vector elements are stored in reverse order on the host. Pack instructions take (vB, vA), following upstream's VPKSHUS convention. These implementations have not been tested yet. If the audio or DSP path fails at run time, suspect them first.
 
-## bclr 的条件性（XenonAnalyse 边界分析修正，2026-09-04）
+Remaining warnings: four data words at 830DA0BC (such as `46000201`), placed between the import stub's `mtctr r11; bctr`, cannot be decoded in the function recompilation loop. They are output only as comments and are never executed, so they can be ignored.
 
-上游 `Function::Analyze` 用 `!(BO & 0x10)` 判断 `bclr/bcctr` 是否有条件，只看了"忽略 CR"位，没看"忽略 CTR"位
-（0x04）。`bdzlr`（BO=0x12）/`bdnzlr`（BO=0x10）因此被当成无条件返回，函数在那里截止，后续指令被切成独立函数。
-本镜像里命中的是 CRT `memset`（0x82B7BC40）的字节尾部 `stb; bdzlr; stb; bdzlr; stb; blr`：长度 %4 为 2 或 3 时
-少写 1~2 个字节。表现为 `USkeletalMeshComponent::SkelControlIndex` 63 项只有 61 项被填成 255，进战斗场景
-越界崩溃（见 [kernel.md](../archive/notes/kernel.md)）。修正为 `(BO & 0x14) != 0x14`，同时把该分支里 `SearchBlock(lBase)` 的相对偏移改成绝对
-地址（原来永远查不到，重复扫描）。修正在 `tools/patches/XenonRecomp-lostodyssey.patch`（XenonAnalyse/function.cpp）。
-重跑后函数数减 2（0x82B7BCD0/0x82B7BCD8 并回 memset），无其他变化；`baseline_func_mapping.txt` 中已删掉这两行。
-XenonRecomp 只重写内容变化的文件，但函数数变化会让 175 号之后的分文件全部重新编号、重新编译。
+## Conditional bclr (XenonAnalyse boundary analysis fix, 2026-09-04)
 
-## vupkd3d128 解包（2026-09-04）
+Upstream `Function::Analyze` checks whether `bclr/bcctr` is conditional with `!(BO & 0x10)`. That only checks the "ignore CR" bit and ignores the "ignore CTR" bit (0x04). As a result, `bdzlr` (BO=0x12) and `bdnzlr` (BO=0x10) were treated as unconditional returns. The function ended there, and the following instructions were split off as separate functions.
+This image hits the CRT `memset` (0x82B7BC40), whose byte tail is `stb; bdzlr; stb; bdzlr; stb; blr`. When the length mod 4 is 2 or 3, it writes 1 to 2 bytes too few. The symptom: 61 of the 63 entries of `USkeletalMeshComponent::SkelControlIndex` were filled with 255, and the battle scene crashed on an out-of-bounds access (see [kernel.md](../archive/notes/kernel.md)). The fix uses `(BO & 0x14) != 0x14`. It also changes the relative offset of `SearchBlock(lBase)` in that branch to an absolute address. The old offset never found anything, so it scanned repeatedly. The fix is in `tools/patches/XenonRecomp-lostodyssey.patch` (XenonAnalyse/function.cpp).
+After rerunning, the function count dropped by two (0x82B7BCD0 and 0x82B7BCD8 were merged back into memset). Nothing else changed. Those two lines were removed from `baseline_func_mapping.txt`.
+XenonRecomp rewrites only files whose content changed. However, a change in the function count renumbers every split file after 175, and all of them are recompiled.
 
-上游只实现了 D3DCOLOR 与 SHORT_2 两种，其余类型生成 `__builtin_debugtrap()`；本镜像有 36 处 FLOAT16_4（IMM=20，
-XAudio 的半精度转换，新游戏进战斗时命中并以 BREAKPOINT 崩溃）和 1 处 FLOAT16_2（IMM=12）。补丁按 Xenia 的通道映射实现了
-类型 2（UINT_2101010）、3（FLOAT16_2）、4（SHORT_4）、5（FLOAT16_4）：打包数据在最后一/两个 PPC 字（宿主 u32[0]/u32[1]），
-结果 x..w 对应宿主 f32[3..0]；`PPCHalfToFloat` 放在 XenonUtils/ppc_context.h（重编译时随头文件复制到 ppc/）。
-现在输出里只剩 1 处 `blrl` 的 trap。
+## vupkd3d128 unpacking (2026-09-04)
 
-## 待办
-- [x] setjmp = 0x82DF34A0（带全局钩子检查的入口，7 处 bl；本体 0x82DF34B4 保存 f14-f31/r13-r31/v 到 r3），longjmp = 0x82DF3060（21 处调用，手工恢复 FPR 后经 0x82DF334C 调 RtlUnwind）
-- [ ] .embsec_* 段的性质（8 个小代码段，名字乱码，.pdata 覆盖到 8312D330）
-- [x] clang-cl 22 全量编译通过（out/smoke/all，目标文件共约 250 MB）
+Upstream implements only D3DCOLOR and SHORT_2. Other types generate `__builtin_debugtrap()`. This image has 36 FLOAT16_4 cases (IMM=20, the half-precision conversion used by XAudio. New game hits it when entering battle and crashes with BREAKPOINT) and one FLOAT16_2 case (IMM=12). The patch implements types 2 (UINT_2101010), 3 (FLOAT16_2), 4 (SHORT_4), and 5 (FLOAT16_4), following Xenia's channel mapping. The packed data is in the last one or two PPC words (host u32[0]/u32[1]). The result x..w maps to host f32[3..0]. `PPCHalfToFloat` is in XenonUtils/ppc_context.h (it is copied to ppc/ with the header during recompilation).
+Now only one `blrl` trap remains in the output.
+
+## To do
+- [x] setjmp = 0x82DF34A0 (entry with the global hook check, 7 `bl` call sites. The body at 0x82DF34B4 saves f14-f31, r13-r31, and v into r3). longjmp = 0x82DF3060 (21 call sites, restores FPRs by hand, then calls RtlUnwind through 0x82DF334C).
+- [ ] Nature of the .embsec_* sections (8 small code sections with garbled names. .pdata covers up to 8312D330).
+- [x] Full clang-cl 22 build passed (out/smoke/all, object files about 250 MB total).

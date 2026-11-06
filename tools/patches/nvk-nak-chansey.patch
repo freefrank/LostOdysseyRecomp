@@ -1,0 +1,341 @@
+NAK (NVK shader compiler) changes from ChanseyIsTheBest/mesa-switch, branch
+unleashedrecomp-driver (acc21efd nfsmw-nx + 1e47a108 UnleashedRecomp), compiler
+files only, for mesa-switch 26.2.4 (danfromtico 0ff52079):
+- branch flattening (nir_opt_peephole_select limit 0 -> 8),
+- scheduler latencies 200 cycles (NAK_TEX_LATENCY/NAK_MEM_LATENCY/NAK_ATTR_LATENCY),
+- Maxwell operand reuse (NAK_DEBUG=noreuse turns it off),
+- FADD32I saturation fix.
+The driver-side half of that branch (ZCULL, Horizon and draw-path changes) does not
+apply to 26.2.4 and is not included. Used by tools/switch/Dockerfile.nak.
+
+diff --git a/src/nouveau/compiler/nak.h b/src/nouveau/compiler/nak.h
+index c53f3bc..ec273cc 100644
+--- a/src/nouveau/compiler/nak.h
++++ b/src/nouveau/compiler/nak.h
+@@ -26,6 +26,8 @@ struct nak_compiler *nak_compiler_create(const struct nv_device_info *dev);
+ void nak_compiler_destroy(struct nak_compiler *nak);
+ 
+ uint64_t nak_debug_flags(const struct nak_compiler *nak);
++/* NFSMW/UnleashedRecomp: NAK_TEX_LATENCY/NAK_MEM_LATENCY/NAK_ATTR_LATENCY, for cache keys */
++uint32_t nak_sched_latency_key(void);
+ 
+ const struct nir_shader_compiler_options *
+ nak_nir_options(const struct nak_compiler *nak);
+diff --git a/src/nouveau/compiler/nak/api.rs b/src/nouveau/compiler/nak/api.rs
+index 3bcd1ab..1422c61 100644
+--- a/src/nouveau/compiler/nak/api.rs
++++ b/src/nouveau/compiler/nak/api.rs
+@@ -28,6 +28,8 @@ enum DebugFlags {
+     Annotate,
+     NoUgpr,
+     Cycles,
++    NoReuse,
++    ReuseBasic,
+ }
+ 
+ pub struct Debug {
+@@ -54,6 +56,10 @@ impl Debug {
+                 "annotate" => flags |= 1 << DebugFlags::Annotate as u8,
+                 "nougpr" => flags |= 1 << DebugFlags::NoUgpr as u8,
+                 "cycles" => flags |= 1 << DebugFlags::Cycles as u8,
++                "noreuse" => flags |= 1 << DebugFlags::NoReuse as u8,
++                "reusebasic" => flags |= 1 << DebugFlags::ReuseBasic as u8,
++                // Operand reuse used to be opt-in; it is the default now.
++                "reuse" => (),
+                 unk => eprintln!("Unknown NAK_DEBUG flag \"{}\"", unk),
+             }
+         }
+@@ -91,6 +97,21 @@ pub trait GetDebugFlags {
+     fn cycles(&self) -> bool {
+         self.debug_flags() & (1 << DebugFlags::Cycles as u8) != 0
+     }
++
++    /// Maxwell operand-reuse flags (see assign_reuse_flags_sm50). On by default
++    /// since it was validated on hardware; NAK_DEBUG=noreuse turns it off. Being
++    /// a NAK_DEBUG flag, that is part of the value NVK hashes into its shader
++    /// cache keys, so binaries built with and without reuse never mix.
++    fn reuse(&self) -> bool {
++        self.debug_flags() & (1 << DebugFlags::NoReuse as u8) == 0
++    }
++
++    /// NAK_DEBUG=reusebasic limits operand reuse to FADD/FMUL/FFMA, the set that
++    /// was validated on hardware first; by default FMNMX, FSET, FSETP and SEL
++    /// take part as well.
++    fn reuse_basic(&self) -> bool {
++        self.debug_flags() & (1 << DebugFlags::ReuseBasic as u8) != 0
++    }
+ }
+ 
+ pub static DEBUG: OnceLock<Debug> = OnceLock::new();
+@@ -223,6 +244,14 @@ pub extern "C" fn nak_debug_flags(_nak: *const nak_compiler) -> u64 {
+     DEBUG.debug_flags().into()
+ }
+ 
++/// NFSMW/UnleashedRecomp: the scheduler latencies (NAK_TEX_LATENCY, NAK_MEM_LATENCY,
++/// NAK_ATTR_LATENCY), 10 bits each, for NVK's shader cache keys.
++#[no_mangle]
++pub extern "C" fn nak_sched_latency_key() -> u32 {
++    let latencies = crate::opt_instr_sched_common::sched_latencies();
++    latencies.tex | (latencies.mem << 10) | (latencies.attr << 20)
++}
++
+ #[no_mangle]
+ pub extern "C" fn nak_nir_options(
+     nak: *const nak_compiler,
+diff --git a/src/nouveau/compiler/nak/calc_instr_deps.rs b/src/nouveau/compiler/nak/calc_instr_deps.rs
+index c89c335..45c24c8 100644
+--- a/src/nouveau/compiler/nak/calc_instr_deps.rs
++++ b/src/nouveau/compiler/nak/calc_instr_deps.rs
+@@ -1059,6 +1059,115 @@ fn calc_delays(f: &mut Function, sm: &ShaderModelInfo) -> u64 {
+     min_num_static_cycles
+ }
+ 
++/// The register a source reads, if it is a single 32-bit GPR (RZ, immediates and
++/// constant-buffer operands have nothing to reuse).
++fn sm50_reuse_reg(src: &Src) -> Option<RegRef> {
++    match &src.src_ref {
++        SrcRef::Reg(reg) if reg.file() == RegFile::GPR && reg.comps() == 1 => {
++            Some(*reg)
++        }
++        _ => None,
++    }
++}
++
++/// The register operand in each of the hardware operand slots A, B and C, for the
++/// instructions handled here, exactly as sm50.rs encodes them:
++/// - FADD, FMUL, and (unless NAK_DEBUG=reusebasic) FMNMX, FSET, FSETP and SEL:
++///   src0 in A (bits 8..16); src1 in B (bits 20..28) in the register form, while
++///   the immediate and constant-buffer forms have no register in B. The other
++///   fields of the last four (a predicate in 39..42, the comparison) are no
++///   register operands.
++/// - FFMA: src0 in A; with src2 a register, src1 in B (register form only) and
++///   src2 in C (bits 39..47); with src2 in the constant buffer, src1 moves to C.
++fn sm50_reuse_slots(op: &Op) -> [Option<RegRef>; 3] {
++    let two_srcs = |srcs: &[Src; 2]| -> [Option<RegRef>; 3] {
++        [sm50_reuse_reg(&srcs[0]), sm50_reuse_reg(&srcs[1]), None]
++    };
++
++    match op {
++        Op::FAdd(op) => two_srcs(&op.srcs),
++        Op::FMul(op) => two_srcs(&op.srcs),
++        Op::FMnMx(op) if !DEBUG.reuse_basic() => two_srcs(&op.srcs),
++        Op::FSet(op) if !DEBUG.reuse_basic() => two_srcs(&op.srcs),
++        Op::FSetP(op) if !DEBUG.reuse_basic() => two_srcs(&op.srcs),
++        Op::Sel(op) if !DEBUG.reuse_basic() => two_srcs(&op.srcs),
++        Op::FFma(op) => {
++            let a = sm50_reuse_reg(&op.srcs[0]);
++            match &op.srcs[2].src_ref {
++                SrcRef::CBuf(_) => [a, None, sm50_reuse_reg(&op.srcs[1])],
++                _ => [
++                    a,
++                    sm50_reuse_reg(&op.srcs[1]),
++                    sm50_reuse_reg(&op.srcs[2]),
++                ],
++            }
++        }
++        _ => [None, None, None],
++    }
++}
++
++/// Maxwell operand reuse. Each instruction's control bits can ask the operand
++/// collector to keep the value it read in slot A, B or C for the next
++/// instruction, which then takes that operand from the reuse cache instead of
++/// the register file. That avoids register-bank conflicts (four banks, one read
++/// port each), which otherwise cost an extra cycle whenever two operands of one
++/// instruction live in the same bank. NVIDIA's compiler sets these flags all
++/// the time; NAK never did (InstrDeps::add_reuse had no caller).
++///
++/// The cached value is not invalidated by a later write, so the rules are strict
++/// and all local to two neighbouring instructions of one basic block (the second
++/// cannot be a branch target):
++/// - both are unpredicated instructions of sm50_reuse_slots, and the first does
++///   not yield;
++/// - the same single GPR sits in the same slot in both;
++/// - the first instruction does not write that register;
++/// - the second waits on no scoreboard, so no variable-latency result can land
++///   in between.
++/// The computation is unchanged either way; only register-file reads are saved.
++fn assign_reuse_flags_sm50(f: &mut Function) {
++    for b in f.blocks.iter_mut() {
++        for i in 1..b.instrs.len() {
++            let (head, tail) = b.instrs.split_at_mut(i);
++            let cur = &mut head[i - 1];
++            let next = &tail[0];
++
++            if !cur.pred.is_true() || !next.pred.is_true() {
++                continue;
++            }
++            if cur.deps.yld || next.deps.wt_bar_mask != 0 {
++                continue;
++            }
++
++            let cur_slots = sm50_reuse_slots(&cur.op);
++            let next_slots = sm50_reuse_slots(&next.op);
++
++            for slot in 0..3 {
++                let (Some(reg), Some(next_reg)) =
++                    (cur_slots[slot], next_slots[slot])
++                else {
++                    continue;
++                };
++                if reg != next_reg {
++                    continue;
++                }
++
++                let written = cur.dsts().iter().any(|dst| match dst {
++                    Dst::Reg(dst_reg) => {
++                        dst_reg.file() == RegFile::GPR
++                            && dst_reg.idx_range().contains(&reg.base_idx())
++                    }
++                    _ => false,
++                });
++                if written {
++                    continue;
++                }
++
++                cur.deps.add_reuse(slot as u8);
++            }
++        }
++    }
++}
++
+ impl Shader<'_> {
+     pub fn assign_deps_serial(&mut self) {
+         for f in &mut self.functions {
+@@ -1105,6 +1214,9 @@ impl Shader<'_> {
+             for f in &mut self.functions {
+                 assign_barriers(f, self.sm);
+                 min_num_static_cycles += calc_delays(f, self.sm);
++                if self.sm.is_maxwell() && DEBUG.reuse() {
++                    assign_reuse_flags_sm50(f);
++                }
+             }
+ 
+             if DEBUG.cycles() {
+diff --git a/src/nouveau/compiler/nak/opt_instr_sched_common.rs b/src/nouveau/compiler/nak/opt_instr_sched_common.rs
+index 2d8be48..c9365dd 100644
+--- a/src/nouveau/compiler/nak/opt_instr_sched_common.rs
++++ b/src/nouveau/compiler/nak/opt_instr_sched_common.rs
+@@ -5,6 +5,36 @@ use crate::ir::*;
+ use compiler::cfg::CFG;
+ use std::cmp::max;
+ use std::cmp::Reverse;
++use std::sync::OnceLock;
++
++/// NFSMW/UnleashedRecomp: the latencies estimate_variable_latency assumes for textures, memory
++/// and attribute access, in cycles. NAK_TEX_LATENCY, NAK_MEM_LATENCY and NAK_ATTR_LATENCY (1 to
++/// 1000) replace them, to measure other values without rebuilding. They only change the
++/// scheduler's priorities, i.e. instruction order and register pressure, never a result; NVK
++/// hashes them into its shader cache keys (nak_sched_latency_key).
++pub struct SchedLatencies {
++    pub tex: u32,
++    pub mem: u32,
++    pub attr: u32,
++}
++
++pub fn sched_latencies() -> &'static SchedLatencies {
++    static LATENCIES: OnceLock<SchedLatencies> = OnceLock::new();
++    LATENCIES.get_or_init(|| {
++        let read = |name: &str, default: u32| {
++            std::env::var(name)
++                .ok()
++                .and_then(|value| value.trim().parse::<u32>().ok())
++                .filter(|value| *value >= 1 && *value <= 1000)
++                .unwrap_or(default)
++        };
++        SchedLatencies {
++            tex: read("NAK_TEX_LATENCY", 200),
++            mem: read("NAK_MEM_LATENCY", 200),
++            attr: read("NAK_ATTR_LATENCY", 200),
++        }
++    })
++}
+ 
+ pub mod graph {
+     #[derive(Clone)]
+@@ -284,12 +314,17 @@ pub fn estimate_variable_latency(sm: &ShaderModelInfo, op: &Op) -> u32 {
+         Op::Redux(_) | Op::R2UR(_) => 15,
+ 
+         // Texture ops
++        //
++        // 32 falls far short on a SoC with shared memory (GM20B + LPDDR4): a texture miss costs
++        // hundreds of cycles. Raising it makes the pre-pass separate the sample from its consumer
++        // and keep more requests in flight. It only affects the scheduler's priority;
++        // the scoreboard barriers are computed separately in calc_instr_deps.rs.
+         Op::Tex(_)
+         | Op::Tld(_)
+         | Op::Tld4(_)
+         | Op::Tmml(_)
+         | Op::Txd(_)
+-        | Op::Txq(_) => 32,
++        | Op::Txq(_) => sched_latencies().tex,
+ 
+         // Surface ops
+         Op::SuLd(_)
+@@ -308,13 +343,17 @@ pub fn estimate_variable_latency(sm: &ShaderModelInfo, op: &Op) -> u32 {
+         | Op::St(_)
+         | Op::StSCheckUnlock(_)
+         | Op::Atom(_)
+-        | Op::AL2P(_)
+-        | Op::ALd(_)
+-        | Op::ASt(_)
+-        | Op::Ipa(_)
+         | Op::CCtl(_)
+         | Op::LdTram(_)
+-        | Op::MemBar(_) => 32,
++        // Like textures, a global memory load from shared LPDDR4 does not take
++        // 32 cycles.
++        | Op::MemBar(_) => sched_latencies().mem,
++
++        // Attribute access. Cheaper than memory; overestimating it places the loads earlier,
++        // which keeps every interpolated input live from the top of the shader.
++        Op::AL2P(_) | Op::ALd(_) | Op::ASt(_) | Op::Ipa(_) => {
++            sched_latencies().attr
++        }
+ 
+         // Control-flow ops
+         Op::WarpSync(_) => 16,
+diff --git a/src/nouveau/compiler/nak/sm50.rs b/src/nouveau/compiler/nak/sm50.rs
+index 29c068e..0ead7a6 100644
+--- a/src/nouveau/compiler/nak/sm50.rs
++++ b/src/nouveau/compiler/nak/sm50.rs
+@@ -647,9 +647,12 @@ impl SM50Op for OpFMul {
+         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F32);
+ 
+         if src1.as_imm_not_f20().is_some()
+-            && self.rnd_mode != FRndMode::NearestEven
++            && (self.rnd_mode != FRndMode::NearestEven || self.saturate)
+         {
+-            // Hardware cannot encode long-immediate + rounding mode
++            // Hardware cannot encode long-immediate + rounding mode.
++            // NFSMW: nor saturate. FADD32I has no SAT bit on SM50, so the
++            // .SAT of fsat(fadd(a, imm32)) was silently dropped (the sea of the
++            // coastal tracks came out black: saturate(x - 0.4) went negative).
+             b.copy_alu_src(src1, GPR, SrcType::F32);
+         }
+     }
+diff --git a/src/nouveau/compiler/nak_nir.c b/src/nouveau/compiler/nak_nir.c
+index beb01b1..3f55767 100644
+--- a/src/nouveau/compiler/nak_nir.c
++++ b/src/nouveau/compiler/nak_nir.c
+@@ -203,8 +203,19 @@ nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak)
+       LOOP_OPT(nir, nir_opt_dce);
+       LOOP_OPT(nir, nir_opt_cse);
+ 
++      /* NFSMW: NAK is the Mesa driver that flattens branches the least. With limit = 0 it only
++       * flattens ifs with both sides empty; ANV uses 8 and so does RADV. And NAK has no
++       * if-to-predicate pass, so every if that survives NIR becomes a real branch
++       * (SSY/BRA/SYNC) on Maxwell.
++       *
++       * In this game that matters a lot: the frame is pure shading, ~300 operations per
++       * fragment, and the scene runs at 31 % of the GPU's arithmetic peak. The shader translator
++       * already went from 1806 to 334 branches; the remaining ones have to be flattened by the driver.
++       *
++       * Watch with NVK_SHADER_STATS=1: flattening raises register pressure, and on GM20B a spill
++       * to local memory is very expensive. If "B de memoria local" goes above 0, go back to 0. */
+       nir_opt_peephole_select_options peephole_select_options = {
+-         .limit = 0,
++         .limit = 8,
+          .discard_ok = true,
+       };
+       LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_peephole_select,

@@ -5,10 +5,13 @@ Runs every scenario in tools/scenarios (or the ones named with --only), then
 compares each result with a local baseline: pass/fail, median FPS, median GPU
 time and the final screenshot. The baseline lives in out/regression/baseline and
 is never committed (screenshots are game images); `accept` makes a run the
-baseline.
+baseline. With --switch the scenarios run on a console through its debug server
+(tools/scenario.py --switch); its runs and baseline are kept apart, in
+out/regression/switch, and compare and accept take --switch for them.
 
 Usage:
   python3 tools/regression.py run [--only numara disc1-ship ...] [--accept]
+  python3 tools/regression.py run --switch 192.168.1.87 [--only disc1-ship ...] [--accept]
   python3 tools/regression.py compare out/regression/runs/<timestamp>
   python3 tools/regression.py accept out/regression/runs/<timestamp>
 
@@ -199,6 +202,13 @@ def accept(run_root: Path) -> None:
     print(f"baseline updated from {run_root} ({len(baseline)} scenarios)")
 
 
+def use_switch_folders() -> None:
+    """A console's figures are another machine's: its own runs and baseline."""
+    global REGRESSION, BASELINE
+    REGRESSION = REPO_ROOT / "out/regression/switch"
+    BASELINE = REGRESSION / "baseline"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", required=True)
@@ -208,9 +218,14 @@ def main() -> int:
     run.add_argument("--bin", default=str(scenario.DEFAULT_BIN))
     run.add_argument("--game", default=str(scenario.DEFAULT_GAME))
     run.add_argument("--saves", default=str(scenario.DEFAULT_SAVES))
+    scenario.add_switch_arguments(run)
     for name in ("compare", "accept"):
-        sub.add_parser(name).add_argument("run_dir", type=Path)
+        sp = sub.add_parser(name)
+        sp.add_argument("run_dir", type=Path)
+        sp.add_argument("--switch", action="store_true", help="against the console baseline (out/regression/switch)")
     args = ap.parse_args()
+    if args.switch:
+        use_switch_folders()
 
     if args.command == "accept":
         accept(args.run_dir.resolve())
@@ -228,7 +243,7 @@ def main() -> int:
     for i, path in enumerate(files, 1):
         s = scenario.load_scenario(path)
         print(f"[{i}/{len(files)}] {s['name']}: {s['description']}", flush=True)
-        result = scenario.Run(s, args, run_root).execute()
+        result = scenario.make_run(s, args, run_root).execute()
         print(f"   {'PASS' if result['passed'] else 'FAIL'}  fps={result['median_fps']} "
               f"gpu={result.get('median_gpu_ms')} ms", flush=True)
     rows, ok = compare(run_root)

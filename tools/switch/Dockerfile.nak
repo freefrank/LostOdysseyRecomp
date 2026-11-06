@@ -1,0 +1,25 @@
+# The switch-dev toolchain image with NVK rebuilt from the same mesa-switch
+# revision plus Chansey's shader compiler changes (tools/patches/nvk-nak-chansey.patch).
+# Built from tools/patches as the context, on top of an existing switch-dev image:
+#
+#   docker build -f tools/switch/Dockerfile.nak \
+#       --build-arg BASE=lo-switch-dev \
+#       --build-arg MESA_SWITCH_REVISION=<the base image's dev.autorun.mesa-switch label> \
+#       -t lo-switch-dev-nak tools/patches
+#
+# The base image keeps Mesa's build tools (Rust, Meson, LLVM, SPIRV-Tools) and
+# the build script; only libvulkan.a and its headers in portlibs are replaced.
+ARG BASE=lo-switch-dev
+FROM ${BASE}
+ARG MESA_SWITCH_REPOSITORY=https://github.com/danfromtico/mesa-switch.git
+ARG MESA_SWITCH_REVISION
+COPY nvk-nak-chansey.patch /tmp/nvk-nak-chansey.patch
+RUN set -eux; \
+    test -n "${MESA_SWITCH_REVISION}"; \
+    git init -q /tmp/mesa-switch; \
+    git -C /tmp/mesa-switch fetch -q --depth 1 "${MESA_SWITCH_REPOSITORY}" "${MESA_SWITCH_REVISION}"; \
+    git -C /tmp/mesa-switch checkout -q FETCH_HEAD; \
+    git -C /tmp/mesa-switch apply /tmp/nvk-nak-chansey.patch; \
+    cd /tmp/mesa-switch && bash /usr/local/share/switch-dev/mesa-build.sh; \
+    rm -rf /tmp/mesa-switch /tmp/nvk-nak-chansey.patch /root/.cargo/registry
+LABEL dev.autorun.mesa-switch-nak="chansey-1e47a108-compiler"

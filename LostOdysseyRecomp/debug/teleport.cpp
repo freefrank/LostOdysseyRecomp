@@ -1,5 +1,7 @@
 #include <stdafx.h>
+#include <atomic>
 #include "gpu/frame_plan.h"
+#include "gpu/cinematic_bars.h"
 #include <kernel/heap.h>
 #include <kernel/memory.h>
 #include <os/logger.h>
@@ -13,7 +15,10 @@
 #include <host_ui/host_ui.h>
 #include "cheats.h"
 #include "battle_tour.h"
+#include "soft_reset.h"
 #include <patches/mod_hot_reload.h>
+#include <patches/engine_delta_limit.h>
+#include <discord/game_state.h>
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -159,9 +164,13 @@ bool Request(Operation op, Position position = {}, uint64_t poiId = 0)
     return true;
 }
 
+// The last time something read the POIs (the Debug page, the overlay, the command file): the scan runs on the game
+// thread, so it only runs while somebody looks (2026-11-03: it was about 1% of Guest Main in a busy street).
+std::atomic<uint64_t> lastPoiReader{0};
+
 void RefreshPois(uint8_t* base, Identity current)
 {
-    if (!current.pawn || Now() < nextPoiRefresh) return;
+    if (!current.pawn || Now() < nextPoiRefresh || Now() - lastPoiReader.load(std::memory_order_relaxed) > 5000) return;
     auto fresh = debug_menu::ScanMapPois(base, current.world);
     std::lock_guard lock(stateMutex);
     std::vector<debug_menu::MapPoi> points;
@@ -188,9 +197,11 @@ void RefreshPois(uint8_t* base, Identity current)
 void PollCommandFile()
 {
     static const char* path = getenv("LO_TELEPORT_COMMAND_FILE");
-    static unsigned polls = 0;
     static uint64_t previousSerial = 0;
-    if (!path || ++polls % 12 != 0) return;
+    static unsigned polls = 0;
+    // Opening the file on the SD card from the game thread costs about 0.4% of Guest Main at every 12th tick, so it's
+    // every 48th (about 1.6 s). A helper thread can't be started from here: std::thread threw on the console.
+    if (!path || ++polls % 48 != 0) return;
     std::ifstream stream(path);
     uint64_t serial = 0;
     std::string operation;
@@ -202,6 +213,7 @@ void PollCommandFile()
     std::string map;
     if (operation == "map" && !(stream >> map)) return;
     previousSerial = serial;
+    lastPoiReader.store(Now(), std::memory_order_relaxed);
     bool accepted = false;
     if (operation == "map") accepted = debug_menu::RequestMapJump(map.c_str()) == nullptr;
     else if (operation == "save") accepted = debug_menu::RequestSavePosition();
@@ -433,6 +445,7 @@ void MapJumpTick(PPCContext& ctx, uint8_t* base)
         LOG_INFO("debug map jump rejected target={}: {}", map, reason);
     };
     const auto engine = PPC_LOAD_U32(EngineAddress);
+    if (PPC_LOAD_U32(0x832631D0) != 0) return refuse(L"地图切换进行中", "native reset pending");
     if (!ObjectAddress(engine)) return refuse(L"引擎未就绪，无法跳转地图", "engine");
     if (!FindPlayer(base).pawn) return refuse(L"无可控制角色，无法跳转地图", "no player");
     if (PPC_LOAD_U32(PendingMapAddress) != 0) return refuse(L"地图切换进行中", "map change pending");
@@ -471,6 +484,7 @@ void MapJumpTick(PPCContext& ctx, uint8_t* base)
 
 debug_menu::TeleportSnapshot debug_menu::GetTeleportSnapshot()
 {
+    lastPoiReader.store(Now(), std::memory_order_relaxed);
     std::lock_guard lock(stateMutex);
     auto result = snapshot;
     const bool paused = host_ui::IsGamePaused();
@@ -482,6 +496,12 @@ debug_menu::TeleportSnapshot debug_menu::GetTeleportSnapshot()
         result.status = L"等待可控制地图的更新";
     }
     return result;
+}
+
+bool debug_menu::TeleportRequestPending()
+{
+    std::lock_guard lock(stateMutex);
+    return pending != Operation::None || !pendingMap.empty();
 }
 
 bool debug_menu::RequestTeleport(Position p) { return Request(Operation::Absolute, p); }
@@ -515,11 +535,15 @@ PPC_FUNC(sub_82290B60)
     if (teleportCommandFile && !observed.exchange(true))
         LOG_INFO("teleport scene hook this={:#x} caller={:#x}", ctx.r3.u32, uint32_t(ctx.lr));
     const bool engine = ctx.r3.u32 == PPC_LOAD_U32(0x83315FB4);
-    if (engine) { debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+    if (engine) { debug_menu::soft_reset::Tick(ctx, base); debug_menu::cheats::Tick(ctx, base); gpu::frame_plan::BeginCpuFrame(); frame_timing::EngineTick(ctx.f1.f64); }
+    // After the timing record, so frame timing still reports the real delta (issue #17).
+    if (engine) ctx.f1.f64 = engine_delta::Limit(ctx.f1.f64, engine_delta::MaxSeconds());
     __imp__sub_82290B60(ctx, base);
     if (engine)
     {
         debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::PollSceneLoads(base); debug_menu::battle_tour::Poll(base);
+        gpu::cinematic_bars::UpdatePause(base);
+        discord_rpc::Tick(base);
         bool playerInField;
         {
             std::lock_guard lock(stateMutex);

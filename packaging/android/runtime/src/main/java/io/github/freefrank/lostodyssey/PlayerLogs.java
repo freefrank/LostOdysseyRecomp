@@ -149,12 +149,13 @@ final class PlayerLogs {
         File settings = new File(new File(context.getFilesDir(), "config"), "settings.ini");
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 new FileInputStream(settings), StandardCharsets.UTF_8))) {
+            // The old debug_log key is ignored, as in settings/config.cpp.
             for (String line; (line = reader.readLine()) != null; )
-                if (line.trim().equals("debug_log=1")) return true;
+                if (line.trim().equals("diagnostic_log=0")) return false;
         } catch (IOException ignored) {
-            // No settings yet: the default is off.
+            // No settings yet: the default is on.
         }
-        return false;
+        return true;
     }
 
     /** Creates the folder and README, then shows every log file to a PC over USB. */

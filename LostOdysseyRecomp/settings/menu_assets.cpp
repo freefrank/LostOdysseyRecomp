@@ -258,9 +258,14 @@ struct Index
             }
         }
     }
+    static std::string PackagePath(const std::string &language, const char *family)
+    {
+        return "bin\\xenon\\loc\\" + language + "\\menu\\" + family + "_" + language + ".xxx";
+    }
+    bool Has(const std::string &language, const char *family) const { return files.contains(PackagePath(language, family)); }
     std::vector<uint8_t> ReadPackage(const std::filesystem::path &disc, const std::string &language, const char *family) const
     {
-        const auto path = "bin\\xenon\\loc\\" + language + "\\menu\\" + family + "_" + language + ".xxx";
+        const auto path = PackagePath(language, family);
         const auto it = files.find(path); Check(it != files.end()); const auto &e = it->second;
         auto bytes = ReadFile(disc / e.archive, e.offset, e.size);
         if (bytes.size() >= 3 && bytes[0] == 'c' && bytes[1] == 'p' && bytes[2] == 'x')
@@ -322,16 +327,24 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         auto disc = gameRoot / "disc1";
         if (!std::filesystem::exists(disc / "LO.fpi")) disc = gameRoot;
         Index index(disc / "LO.fpi");
-        constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch"};
-        const std::string selected = languages[language < std::size(languages) ? language : 0];
+        constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch", "spa"};
+        std::string selected = languages[language < std::size(languages) ? language : 0];
+        // Spanish takes only the accented fonts from its discs (the USA/Europe edition; the Asia edition
+        // has none and uses English's); the menu art stays English's verified atlas.
+        std::string art = selected;
+        if (selected == "spa")
+        {
+            art = "int";
+            if (!index.Has(selected, "rpfontscommon")) selected = art;
+        }
         const auto commonPath = "bin/xenon/loc/" + selected + "/menu/rpfontscommon_" + selected + ".xxx";
         auto common = index.ReadPackage(disc, selected, "rpfontscommon");
         auto assets = std::make_shared<Assets>(); assets->language = selected;
         assets->body = DecodeFont(common, "Maru23", commonPath);
         try { assets->title = DecodeFont(common, "LocTit1", commonPath); } catch (...) { /* Body face remains available. */ }
         try { assets->fallback = DecodeFont(common, "Abc", commonPath); } catch (...) { /* Missing glyphs retain GDI fallback. */ }
-        const auto menuPath = "bin/xenon/loc/" + selected + "/menu/rpmenurescommon_" + selected + ".xxx";
-        auto menu = index.ReadPackage(disc, selected, "rpmenurescommon");
+        const auto menuPath = "bin/xenon/loc/" + art + "/menu/rpmenurescommon_" + art + ".xxx";
+        auto menu = index.ReadPackage(disc, art, "rpmenurescommon");
         assets->menu = DecodeTexture(menu, "UI_MAIN_00", menuPath);
         // The UV layout below is the verified 512x1024 common menu atlas.
         Check(assets->menu.width == 512 && assets->menu.height == 1024);

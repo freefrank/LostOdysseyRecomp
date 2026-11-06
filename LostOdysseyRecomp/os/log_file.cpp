@@ -1,4 +1,5 @@
 #include <os/log_file.h>
+#include <os/platform.h>
 #include <os/logger.h>
 #include <os/shader_log.h>
 
@@ -11,6 +12,8 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -33,14 +36,29 @@ namespace os::logger
         // Accessed only under g_mutex, together with the corresponding FILE*.
         std::filesystem::path g_filePath;
 
-        std::optional<std::string> LogTimestamp(const std::filesystem::path& path, bool allowShader = false)
+        // Files kept and removed with a session's runtime-<digits>.log: its shader log, and the stderr, crash, hang
+        // and exit reports ArchiveSessionFiles moves next to it (<prefix>-<digits>.log).
+        constexpr std::pair<std::u8string_view, std::u8string_view> kCompanions[] = {
+            {u8"shader-", u8".jsonl"}, {u8"stderr-", u8".log"}, {u8"crash-", u8".log"}, {u8"hang-", u8".log"},
+            {u8"exit-", u8".log"},
+        };
+
+        std::optional<std::string> LogTimestamp(const std::filesystem::path& path, bool allowCompanions = false)
         {
             const auto name = path.filename().u8string();
-            const bool shader = allowShader && name.starts_with(u8"shader-") && name.ends_with(u8".jsonl");
-            if ((!shader && (!name.starts_with(u8"runtime-") || !name.ends_with(u8".log"))) || name.size() <= (shader ? 13u : 12u))
+            std::u8string_view prefix = u8"runtime-", suffix = u8".log";
+            if (allowCompanions)
+                for (const auto& [companionPrefix, companionSuffix] : kCompanions)
+                    if (name.starts_with(companionPrefix) && name.ends_with(companionSuffix))
+                    {
+                        prefix = companionPrefix;
+                        suffix = companionSuffix;
+                        break;
+                    }
+            if (!name.starts_with(prefix) || !name.ends_with(suffix) || name.size() <= prefix.size() + suffix.size())
                 return std::nullopt;
             std::string digits;
-            for (const auto digit : name.substr(shader ? 7 : 8, name.size() - (shader ? 13 : 12)))
+            for (const auto digit : name.substr(prefix.size(), name.size() - prefix.size() - suffix.size()))
             {
                 if (digit < u8'0' || digit > u8'9')
                     return std::nullopt;
@@ -227,13 +245,79 @@ namespace os::logger
                     return a.timestamp.size() > b.timestamp.size();
                 return a.timestamp > b.timestamp;
             });
-            // Current always consumes one slot, even after a wall-clock reset.
-            for (size_t i = 2; i < candidates.size(); ++i)
+            // Current always consumes one slot, even after a wall-clock reset. The Switch keeps ten sessions: a
+            // player who crashes, starts again and crashes again still has the first crash, and a benchmark's
+            // repeated runs stay on the card until they are copied off.
+#if LO_PLATFORM_SWITCH
+            constexpr size_t kKeptOthers = 9;
+#else
+            constexpr size_t kKeptOthers = 2;
+#endif
+            for (size_t i = kKeptOthers; i < candidates.size(); ++i)
                 RemoveInactiveLogGroup(candidates[i].paths);
         }
         catch (...)
         {
             // Retention is optional; a cleanup failure must not disable logging.
+        }
+    }
+
+    void ArchiveSessionFiles(const std::filesystem::path& currentLog,
+        const std::vector<std::pair<std::filesystem::path, std::string>>& files) noexcept
+    {
+        try
+        {
+            std::error_code ec;
+            const auto current = std::filesystem::absolute(currentLog, ec).lexically_normal();
+            const auto currentTimestamp = LogTimestamp(current);
+            if (ec || !currentTimestamp)
+                return;
+            // The newest other runtime log is the previous session's.
+            std::optional<std::string> previous;
+            std::filesystem::directory_iterator it(current.parent_path(), ec), end;
+            for (; !ec && it != end; it.increment(ec))
+            {
+                const auto timestamp = LogTimestamp(it->path());
+                if (!timestamp || timestamp == currentTimestamp)
+                    continue;
+                if (!previous || timestamp->size() > previous->size() ||
+                    (timestamp->size() == previous->size() && *timestamp > *previous))
+                    previous = timestamp;
+            }
+            if (ec || !previous)
+                return;
+            for (const auto& [source, prefix] : files)
+            {
+                std::error_code fileError;
+                if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(source, fileError)) || fileError)
+                    continue;
+                const auto target = current.parent_path() / std::filesystem::u8path(prefix + "-" + *previous + ".log");
+                if (!std::filesystem::exists(target, fileError))
+                {
+                    std::filesystem::rename(source, target, fileError);
+                    continue;
+                }
+                // That session already has one (a session that ended before its runtime log opened): add to it.
+                FILE* in = fopen(source.string().c_str(), "rb");
+                FILE* out = in ? fopen(target.string().c_str(), "ab") : nullptr;
+                bool copied = in && out;
+                if (copied)
+                {
+                    static constexpr char kSeparator[] = "\n=== next session ===\n";
+                    fwrite(kSeparator, 1, sizeof(kSeparator) - 1, out);
+                    char buffer[16384];
+                    for (size_t n; (n = fread(buffer, 1, sizeof(buffer), in)) > 0;)
+                        copied &= fwrite(buffer, 1, n, out) == n;
+                }
+                if (out) fclose(out);
+                if (in) fclose(in);
+                if (copied)
+                    std::filesystem::remove(source, fileError);
+            }
+        }
+        catch (...)
+        {
+            // Keeping the files where they are is fine: they are archived on a later launch.
         }
     }
 

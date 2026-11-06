@@ -90,8 +90,12 @@ void PointerDrag(float x, float y, bool held);
 // Settings menu layout rules. Follow them when adding or moving a row:
 // - Tabs: 0 Gameplay (retail game options, Controls page, game actions),
 //   1 Audio (voice language, volumes, audio output, rear angle), 2 Graphics (display, rendering,
-//   frame rate, HDR), 3 System (interface and game language, updates, debug log,
-//   Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle, Save).
+//   frame rate, HDR), 3 System (interface and game language, updates, Discord status, debug log,
+//   Debug (the Switch), Achievements, TAA shader collection, Mods, Import discs & DLC, Shader bundle,
+//   Prepare shaders again, Save).
+// - Test options and A/B switches go on the Debug page (System → Debug, the Switch
+//   only), not on the tabs: applied and saved at once, logged with the frame they
+//   took effect at (debug/debug_options.h). env.txt stays the way to script runs.
 // - Gameplay starts with the seven retail guest settings in their retail order;
 //   host rows follow them.
 // - Host rows are grouped by topic. Controller and keyboard settings (button
@@ -99,13 +103,13 @@ void PointerDrag(float x, float y, bool held);
 //   Controls page, opened from Gameplay's Controls row; not on Audio.
 // - Actions come last on their tab: Controls / Restore / Quit to Main Menu on
 //   Gameplay, Brightness / Save on Graphics, Mods / Import / Shader bundle /
-//   Save on System.
-// - Gameplay, Audio and System fit the visible rows (kMenuVisibleRows) and never
-//   scroll; only Graphics scrolls. The pages opened from a row (Mods,
+//   Prepare shaders again / Save on System.
+// - Gameplay, Audio and System fit the visible rows and never scroll. System
+//   uses 12 compact rows; other tabs use 11. Only Graphics scrolls. Pages (Mods,
 //   Controls, Achievements) may scroll.
 // - Graphics order: display -> graphics preset -> resolution and shadows -> anti-aliasing,
 //   upscaling (quality, DLSS model, FSR sharpness), DLSS neural rendering and
-//   frame generation -> effects -> frame rate (VSync, performance overlay) ->
+//   frame generation -> effects -> frame rate (loading pace, VSync, performance overlay) ->
 //   HDR and brightness -> Save. A divider opens each group after the first
 //   (menu_render.cpp).
 // - Rows that only apply to one choice (DLSS model, HDR levels) are hidden
@@ -142,14 +146,18 @@ inline constexpr int AudioRowCount = 6;
 inline constexpr int SystemUiLanguageRow = 0;
 inline constexpr int SystemGameLanguageRow = 1;
 inline constexpr int SystemUpdatesRow = 2;
-inline constexpr int SystemDebugLogRow = 3;
-inline constexpr int SystemAchievementsRow = 4; // opens the Achievements page
-inline constexpr int SystemCollectionRow = 5;
-inline constexpr int SystemModsRow = 6; // opens the Mods page
-inline constexpr int SystemImportRow = 7;
-inline constexpr int SystemShaderBundleRow = 8; // downloads the shader bundle again on the next start
-inline constexpr int SystemSaveRow = 9;
-inline constexpr int SystemRowCount = 10;
+inline constexpr int SystemDiscordStatusRow = 3; // hidden on platforms without Discord IPC
+inline constexpr int SystemDebugLogRow = 4;
+inline constexpr int SystemDebugRow = 5; // opens the Debug page; the Switch only
+inline constexpr int SystemAchievementsRow = 6; // opens the Achievements page
+inline constexpr int SystemCollectionRow = 7;
+inline constexpr int SystemModsRow = 8; // opens the Mods page
+inline constexpr int SystemImportRow = 9;
+inline constexpr int SystemAddToSteamRow = 10; // desktop shortcut with library artwork
+inline constexpr int SystemShaderBundleRow = 11; // downloads the shader bundle again on the next start
+inline constexpr int SystemShaderPreparationRow = 12; // requests startup pipeline preparation
+inline constexpr int SystemSaveRow = 13;
+inline constexpr int SystemRowCount = 14;
 static_assert(GameControlsRow == GameRetailRowCount && GameMainMenuRow + 1 == GameRowCount);
 static_assert(AudioRearAngleRow + 1 == AudioRowCount && SystemSaveRow + 1 == SystemRowCount);
 // Logical ids for the graphics tab (2). MenuSnapshot::row stores these as int.
@@ -163,35 +171,38 @@ enum class GraphicsRow : int
     AspectRatio = 4,
     OutputResolution = 5,
     Preset = 6, // derived from the rows below; not saved
-    RenderResolution = 7,
-    ShadowResolution = 8,
-    DynamicShadows = 9,
-    AntiAliasing = 10,
-    DlssQuality = 11,
-    DlssModel = 12, // shown with DLSS
-    FsrSharpness = 13,
-    DlssNeuralRendering = 14,
-    NeuralRenderingTuning = 15, // opens the NR page; shown with the NR row
-    FrameGeneration = 16,
-    FrameGenerationMultiplier = 17,
-    AmbientOcclusion = 18,
-    AnisotropicFiltering = 19,
-    DepthOfField = 20,
-    Bloom = 21,
-    MotionBlur = 22,
-    Culling = 23,
-    ScalingQuality = 24,
-    RgbRange = 25,
-    FrameRate = 26,
-    VariableRefreshRate = 27,
-    PerformanceOverlay = 28,
-    Hdr = 29,
-    HdrPaperWhite = 30, // shown with HDR on
-    HdrPeak = 31, // shown with HDR on
-    HdrCalibration = 32, // opens the HDR peak page; shown with HDR on
-    Brightness = 33, // opens the brightness page
-    Save = 34,
-    Count = 35,
+    RenderResolution = 7, // the Switch: Maximum resolution (the scene height with dynamic resolution off)
+    DynamicResolution = 8, // the Switch only
+    MinimumResolution = 9, // the Switch only; shown with dynamic resolution
+    ShadowResolution = 10,
+    DynamicShadows = 11,
+    AntiAliasing = 12, // the Switch: FSR On / Off
+    DlssQuality = 13,
+    DlssModel = 14, // shown with DLSS
+    FsrSharpness = 15, // shown with FSR (the Switch: with its FSR row on)
+    DlssNeuralRendering = 16,
+    NeuralRenderingTuning = 17, // opens the NR page; shown with the NR row
+    FrameGeneration = 18,
+    FrameGenerationMultiplier = 19,
+    AmbientOcclusion = 20,
+    AnisotropicFiltering = 21,
+    DepthOfField = 22,
+    Bloom = 23,
+    MotionBlur = 24,
+    Culling = 25,
+    ScalingQuality = 26,
+    RgbRange = 27,
+    FrameRate = 28,
+    LoadingTransitions = 29,
+    VariableRefreshRate = 30,
+    PerformanceOverlay = 31,
+    Hdr = 32,
+    HdrPaperWhite = 33, // shown with HDR on
+    HdrPeak = 34, // shown with HDR on
+    HdrCalibration = 35, // opens the HDR peak page; shown with HDR on
+    Brightness = 36, // opens the brightness page
+    Save = 37,
+    Count = 38,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail
@@ -205,6 +216,21 @@ inline constexpr int ModsMoveLeft = 1112, ModsMoveWidth = 64, ModsMoveGap = 8;
 inline constexpr int AchievementsNotificationsRow = 0;
 inline constexpr int AchievementsSummaryRow = 1;
 inline constexpr int AchievementsFirstRow = 2;
+// Debug page (System → Debug, the Switch only): a list page of switches, each
+// applied and saved at once and logged as "option: frame=N key=value"
+// (debug/debug_options.h). A title over the ones that apply while the game runs,
+// one over the ones that apply at the next start; titles are never focused.
+inline constexpr int DebugLiveTitle = 0;
+inline constexpr int DebugOverlayRow = 1;
+inline constexpr int DebugMergeBarriersRow = 2;
+inline constexpr int DebugLeanBarriersRow = 3;
+inline constexpr int DebugNextStartTitle = 4;
+inline constexpr int DebugZcullRow = 5;
+inline constexpr int DebugDepthCompressionRow = 6;
+inline constexpr int DebugColorCompressionRow = 7;
+inline constexpr int DebugVsOutputsRow = 8;
+inline constexpr int DebugServerRow = 9;
+inline constexpr int DebugRowCount = 10;
 // Controls page (Gameplay → Controls): a list page. Button prompts and
 // Vibration, then a titled section per device with a row for each Xbox 360
 // input in hid/input_map.h order (the keyboard adds the left stick), then
@@ -230,13 +256,21 @@ bool FilterInput(uint16_t &buttons, int16_t leftX, int16_t leftY, uint16_t defau
 bool CaptureKey(uint32_t scancode, bool repeat);
 // Snapshot rendered on the presentation thread, never accessing guest memory.
 bool DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width = 1280, uint32_t height = 720);
+// Straight-alpha title confirmation, composited over the live title picture.
+// Stays drawable through its closing fade; revision also tracks fade frames.
+bool DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height);
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
+bool IsTitleQuitOpen();
 // Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
 // before a game is loaded. The title tick reports whether its menu is idle and
 // takes a fresh press made there, if any.
 inline constexpr uint16_t TitleSettingsButton = 0x8000; // XINPUT_GAMEPAD_Y
+inline constexpr uint16_t TitleQuitButton = 0x0020; // XINPUT_GAMEPAD_BACK (keyboard Backspace)
 bool ConsumeTitleShortcut(bool titleMenuIdle);
+// Tick the host Yes/No dialog before the title's input handler. True while it
+// owns input, including its dismissal tick. The retail Settings task stays idle.
+bool UpdateTitleQuit(uint8_t* base, bool titleMenuIdle);
 // The retail Settings task was just opened from the title menu. Until that task
 // is idle again, the per-save options are hidden (Gameplay's retail rows,
 // Restore game defaults and Quit to Main Menu; Audio's Voice language, Music and

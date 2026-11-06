@@ -3,6 +3,7 @@
 #include <stdafx.h>
 #include <gpu/video.h>
 #include <settings/config.h>
+#include <os/steam_shortcut.h>
 #define SDL_MAIN_HANDLED // This host fixture supplies its own main and does not initialize SDL.
 #include <SDL3/SDL.h>
 #include <fstream>
@@ -25,6 +26,17 @@ inline const wchar_t* Message(uint32_t) { return L"Message"; }
 inline bool Enabled() { return false; }
 inline int Consent() { return 0; }
 inline bool SetConsent(bool) { return true; }
+}
+namespace discord_rpc {
+unsigned menuFlowChanges = 0;
+bool menuFlowEnabled = true;
+void SetEnabled(bool enabled) { ++menuFlowChanges; menuFlowEnabled = enabled; }
+}
+// The Steam action records a result; menu fixtures never access a Steam install.
+namespace steam_shortcut {
+unsigned menuFlowAdds = 0;
+Status menuFlowStatus = Status::Added;
+Result AddToSteam(const std::filesystem::path &) { ++menuFlowAdds; return {menuFlowStatus, {}}; }
 }
 namespace settings {
 Config MenuFlowGetConfig();
@@ -231,6 +243,7 @@ settings::Config currentConfig{}, diskConfig{};
 unsigned saves = 0, previews = 0, requests = 0;
 bool saveFails = false, modeFailed = false;
 unsigned quitEventAttempts = 0, mainMenuRequests = 0, defaultsCalls = 0;
+bool titleQuitAccepted = true;
 gpu::video::DisplayChangeTracker displayChanges;
 void Require(bool condition, const char* message)
 {
@@ -296,6 +309,12 @@ extern "C" int SDLCALL MenuFlowPushEvent(SDL_Event* event)
     (void)event;
     ++quitEventAttempts;
     throw std::runtime_error("return to main menu must never push an SDL event");
+}
+
+bool settings::quit_action::PushQuit()
+{
+    ++quitEventAttempts;
+    return titleQuitAccepted;
 }
 void settings::RequestMainMenuAfterSettingsClose(PPCContext& ctx, uint8_t* base, uint32_t settingsMenu)
 {
@@ -464,6 +483,20 @@ void CheckBr03DlssMenu(uint8_t* base)
     Require(settings::edit.shadowResolution == 4, "shadow resolution selects 4x");
     settings::pending = 8; Tick(base);
     Require(settings::edit.shadowResolution == 1, "shadow resolution wraps to 1x");
+    {
+        const auto& shadows = settings::snapshot.rows[int(GraphicsRow::DynamicShadows)];
+        Require(shadows.choices == std::vector<std::wstring>{L"On", L"Low", L"Off"} && shadows.selectedChoice == 0,
+                "dynamic shadows default to On");
+        settings::row = int(GraphicsRow::DynamicShadows);
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 2 &&
+                settings::snapshot.rows[int(GraphicsRow::DynamicShadows)].value == L"Low" &&
+                settings::snapshot.rows[int(GraphicsRow::Preset)].value == L"Custom", "dynamic shadows select Low");
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 0, "dynamic shadows select Off");
+        settings::pending = 8; Tick(base);
+        Require(settings::edit.dynamicShadows == 1, "dynamic shadows wrap to On");
+    }
     settings::row = int(GraphicsRow::AmbientOcclusion);
     settings::pending = 8; Tick(base);
     Require(settings::edit.ambientOcclusion == 1 &&
@@ -1423,6 +1456,27 @@ void CheckHelpFit(uint8_t* base, const char* installRoot)
                             " audio " + std::to_string(output) + (pack ? " language pack" : ""));
                     }
         }
+        for (const auto& [key, traditional, where] : {
+                 std::tuple{L"Full shader preparation will run at the next start.",
+                            L"下次啟動時會完整準備著色器。", "shader preparation scheduled"},
+                 std::tuple{L"Could not schedule preparation. Check the settings folder.",
+                            L"無法安排著色器準備。請確認設定目錄可寫入。", "shader preparation failed"}})
+        {
+            const std::wstring line = settings::MenuFlowTranslate(language, key, traditional);
+            audit.MeasureBox(language, line, L"", where);
+            if (language == 0) english[where] = line;
+            else audit.CompareWithEnglish(english[where], line, language, where);
+        }
+        for (const auto result : {steam_shortcut::Status::Added, steam_shortcut::Status::AddedFromFlatpak,
+                                  steam_shortcut::Status::SteamRunning, steam_shortcut::Status::SteamNotFound,
+                                  steam_shortcut::Status::UserNotFound, steam_shortcut::Status::Error})
+        {
+            const auto where = "Steam result " + std::to_string(int(result));
+            const std::wstring line = settings::SteamShortcutMessage(result);
+            audit.MeasureBox(language, line, L"", where);
+            if (language == 0) english[where] = line;
+            else audit.CompareWithEnglish(english[where], line, language, where);
+        }
         settings::tab = 2;
         for (const auto& state : graphics)
             for (int row = 0; row < int(GraphicsRow::Count); ++row)
@@ -2088,6 +2142,103 @@ int main(int argc, char** argv)
         }
         std::puts("PASS Aspect ratio workflow: Auto lists by shape, 16:9/21:9/4:3 snap the resolution, 4:3 choices, Auto keeps the size, cancel discard, Save state machine");
 
+        // Loading pace belongs to Graphics and follows its edit / discard / Save workflow.
+        {
+            const auto priorCurrent = currentConfig;
+            const auto priorDisk = diskConfig;
+            auto saved = currentConfig;
+            saved.uiLanguage = 0;
+            saved.loadingTransitions = 2;
+            currentConfig = diskConfig = saved;
+            settings::edit = saved;
+            settings::status.clear();
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 0; Tick(base);
+            Require(int(GraphicsRow::LoadingTransitions) == int(GraphicsRow::FrameRate) + 1 &&
+                    int(GraphicsRow::VariableRefreshRate) == int(GraphicsRow::LoadingTransitions) + 1,
+                    "loading pace follows Frame rate before VSync");
+            const auto& pace = settings::snapshot.rows[int(GraphicsRow::LoadingTransitions)];
+            Require(pace.name == L"Loading speed" && pace.choices == std::vector<std::wstring>{L"Original", L"Fast"} &&
+                    pace.selectedChoice == 1 && !pace.hidden && pace.enabled,
+                    "loading pace offers Original and Fast, with Fast selected");
+            Require(settings::snapshot.help == L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                    "loading pace help describes loading and normal-speed effects");
+            const auto beforeEdit = saves;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.loadingTransitions == 2 && saves == beforeEdit,
+                    "Confirm on the loading option does not change or save it");
+            settings::pending = 8; Tick(base);
+            Require(settings::edit.loadingTransitions == 0 && currentConfig.loadingTransitions == 2 &&
+                    diskConfig.loadingTransitions == 2 && saves == beforeEdit,
+                    "Right selects Original without applying or saving the edit");
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.loadingTransitions == 2, "Left returns to Fast");
+            settings::pending = 8; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::active && settings::closing && saves == beforeEdit && diskConfig.loadingTransitions == 2,
+                    "Back discards the loading edit without saving");
+            Tick(base);
+            settings::releaseToParent = false;
+            settings::waitForRelease = false;
+            PPC_STORE_U32(Menu + 4, 4); Tick(base); Poll(0, true);
+            Require(settings::active && settings::edit.loadingTransitions == 2,
+                    "reopening restores the saved Fast loading choice");
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 0 && diskConfig.loadingTransitions == 0 && !settings::restartPrompt,
+                    "Graphics Save applies Original loading without a restart");
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            saveFails = true;
+            settings::row = int(GraphicsRow::Save);
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 0 && diskConfig.loadingTransitions == 0 &&
+                    settings::edit.loadingTransitions == 2 && settings::status == L"Could not save settings.",
+                    "failed Graphics Save retains the applied loading pace and pending edit");
+            saveFails = false;
+            settings::pending = 0x1000; Tick(base);
+            Require(currentConfig.loadingTransitions == 2 && diskConfig.loadingTransitions == 2,
+                    "Graphics Save applies Fast loading");
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            settings::pending = 8; Tick(base);
+            settings::tab = 3;
+            settings::row = settings::SystemSaveRow;
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.loadingTransitions == 0 && diskConfig.loadingTransitions == 2,
+                    "System Save leaves a pending loading pace edit unsaved");
+
+            const wchar_t* labels[] = {L"Loading speed", L"載入速度", L"ロード速度", L"로딩 속도", L"加载速度"};
+            const wchar_t* original[] = {L"Original", L"原版", L"オリジナル", L"원본", L"原版"};
+            const wchar_t* fast[] = {L"Fast", L"快速", L"速い", L"빠르게", L"快"};
+            const wchar_t* help[] = {
+                L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。",
+                L"オリジナルは Xbox 360 のロード速度、高速はより高いフレームレートで読み込みます。演出はどちらも通常の速度です。",
+                L"원본은 Xbox 360의 로딩 속도를 유지하고, 빠름은 더 높은 프레임 레이트로 불러옵니다. 효과는 어느 쪽이든 원래 속도로 재생됩니다.",
+                L"原版保持 Xbox 360 的加载节奏；快速以更高帧率加载。两种设置下过场效果都保持正常速度。"};
+            settings::tab = 2;
+            settings::row = int(GraphicsRow::LoadingTransitions);
+            for (uint32_t language = 0; language < 5; ++language)
+            {
+                settings::edit.uiLanguage = language;
+                settings::status.clear();
+                settings::pending = 0; Tick(base);
+                const auto& translated = settings::snapshot.rows[int(GraphicsRow::LoadingTransitions)];
+                Require(translated.name == labels[language] && translated.choices ==
+                        std::vector<std::wstring>{original[language], fast[language]} && settings::snapshot.help == help[language],
+                        "loading option label, choices and help are localized in every menu language");
+            }
+            currentConfig = priorCurrent;
+            diskConfig = priorDisk;
+            settings::edit = currentConfig;
+            settings::pending = 0; Tick(base);
+            std::puts("PASS loading pace Graphics placement, two choices, edit/discard/Save, failed save and five languages");
+        }
+
         // Start / Enter focus-jump, simultaneous confirm suppression, PointerClick viewport clipping and DLSS quality visibility:
         {
             const auto savesBefore = saves;
@@ -2127,20 +2278,26 @@ int main(int argc, char** argv)
             settings::row = 0;
             settings::pending = 0x10; Tick(base);
             Require(settings::row == settings::SystemSaveRow && settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
-                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings",
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" && settings::snapshot.scroll == 1,
                     "Start on System tab jumps to Save settings, the last row");
 
             // PointerClick boundary tests:
-            // Valid slot 0 (y = 150) hits row 0
+            // Valid slot 0 (y = 150) hits the first scrolled row.
             settings::PointerClick(100.0f, 150.0f, false);
-            Require(settings::mouseRow.load() == 0, "click at y=150 selects visible slot 0 (row 0)");
+            Require(settings::mouseRow.load() == settings::snapshot.scroll, "click at y=150 selects the first visible row");
+            settings::PointerClick(100.0f, 617.0f, false);
+            Require(settings::mouseRow.load() == settings::SystemSaveRow,
+                    "System's last row is visible and clickable after scrolling");
+            settings::mouseRow = -1;
+            settings::PointerClick(100.0f, 618.0f, false);
+            Require(settings::mouseRow.load() == -1, "System ignores the gap below its compact rows");
 
             // Click at y < 150 (above rows) is ignored
             settings::mouseRow = -1;
             settings::PointerClick(100.0f, 140.0f, false);
             Require(settings::mouseRow.load() == -1, "click above y=150 ignored");
 
-            // Click below visible viewport (y >= 640 or slot >= 11) is ignored
+            // Click below the visible viewport is ignored.
             settings::mouseRow = -1;
             settings::PointerClick(100.0f, 640.0f, false);
             Require(settings::mouseRow.load() == -1, "click at y=640 (below viewport) ignored");
@@ -2563,6 +2720,43 @@ int main(int argc, char** argv)
                     "down from Rear angle wraps to Voice language and stops the test noise and layout");
             settings::edit = currentConfig;
             std::puts("PASS Gameplay Vibration, Voice volume and Audio output: bounds, immediate save, live apply, Graphics edits untouched");
+            // Discord is a live host setting: save just that field and leave
+            // pending Graphics/System edits alone. A failed save keeps it active.
+            settings::tab = 3; settings::row = settings::SystemDiscordStatusRow;
+            currentConfig.discordStatus = diskConfig.discordStatus = settings::edit.discordStatus = true;
+            settings::edit.width = 1234;
+            settings::edit.automaticUpdates = !currentConfig.automaticUpdates;
+            const auto discordSaves = saves;
+            const auto discordChanges = discord_rpc::menuFlowChanges;
+            Tick(base);
+            Require(settings::snapshot.rows[settings::SystemDiscordStatusRow].name == L"Discord status" &&
+                    !settings::snapshot.rows[settings::SystemDiscordStatusRow].hidden &&
+                    settings::SystemDiscordStatusRow == settings::SystemUpdatesRow + 1 &&
+                    settings::SystemDebugLogRow == settings::SystemDiscordStatusRow + 1 &&
+                    settings::snapshot.help == L"Shows your location and activity on Discord. Applies and saves immediately.",
+                    "Discord status is grouped with host preferences and explains its live save");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::edit.discordStatus && saves == discordSaves &&
+                    discord_rpc::menuFlowChanges == discordChanges, "confirm does not toggle Discord status");
+            settings::pending = 8; Tick(base);
+            Require(!settings::edit.discordStatus && !currentConfig.discordStatus && !diskConfig.discordStatus &&
+                    !discord_rpc::menuFlowEnabled && saves == discordSaves + 1 &&
+                    discord_rpc::menuFlowChanges == discordChanges + 1 &&
+                    diskConfig.width != settings::edit.width &&
+                    diskConfig.automaticUpdates != settings::edit.automaticUpdates,
+                    "Discord disables live and persists without saving pending settings");
+            saveFails = true;
+            settings::pending = 4; Tick(base);
+            Require(!settings::edit.discordStatus && !discord_rpc::menuFlowEnabled &&
+                    discord_rpc::menuFlowChanges == discordChanges + 1 &&
+                    settings::snapshot.help == L"Could not save settings.",
+                    "failed Discord save retains the active preference");
+            saveFails = false;
+            settings::pending = 4; Tick(base);
+            Require(settings::edit.discordStatus && diskConfig.discordStatus && discord_rpc::menuFlowEnabled &&
+                    discord_rpc::menuFlowChanges == discordChanges + 2, "Discord enables live and persists");
+            settings::edit = currentConfig;
+            std::puts("PASS Discord setting: row placement, immediate save/live apply, failed save and pending settings");
             // System > Achievements opens the page; Notifications cycles On -> Silent -> Off and saves alone.
             settings::tab = 3; settings::row = settings::SystemAchievementsRow;
             settings::edit.achievementNotifications = true; settings::edit.achievementSound = true;
@@ -2987,7 +3181,7 @@ int main(int argc, char** argv)
                     settings::graphics_menu::IsAction(3, settings::SystemModsRow),
                     "the Mods action follows the TAA collection row on System");
             settings::pending = 2; Tick(base);
-            Require(settings::row == settings::SystemImportRow && settings::snapshot.scroll == 0 &&
+            Require(settings::row == settings::SystemImportRow &&
                     settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
                     settings::snapshot.rows[settings::SystemImportRow].name == L"Import discs & DLC" &&
                     settings::snapshot.rows[settings::SystemImportRow].value == L"Open" &&
@@ -2996,7 +3190,8 @@ int main(int argc, char** argv)
                     "gamepad reaches the importer action on System, before Shader bundle and Save settings");
             settings::pending = 8; Tick(base);
             Require(!settings::importPrompt && !settings::restart::Requested(), "right arrow cannot launch importer");
-            settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) * 43 + 20), false);
+            settings::PointerClick(500, float(150 + (settings::SystemImportRow - settings::snapshot.scroll) *
+                                               settings::MenuRowHeight(3) + 20), false);
             Tick(base);
             Require(settings::importPrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Open importer", L"Cancel"} &&
@@ -3051,16 +3246,72 @@ int main(int argc, char** argv)
                     "idle ticks do not create a second import request");
             std::puts("PASS import action: gamepad/mouse focus, cancel-first dialog, translations, guarded restart request, previews");
         }
-        // System → Shader bundle: cancel-first dialog, then one redownload request.
+        // System → Add to Steam uses the shared service and keeps its result
+        // visible until another action; this fixture never touches Steam files.
         {
             settings::tab = 3;
             settings::row = settings::SystemImportRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            const auto beforeAdds = steam_shortcut::menuFlowAdds;
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemAddToSteamRow &&
+                    settings::snapshot.rows[settings::SystemAddToSteamRow].name == L"Add to Steam" &&
+                    settings::snapshot.rows[settings::SystemAddToSteamRow].value == L"Add" &&
+                    !settings::snapshot.rows[settings::SystemAddToSteamRow].hidden &&
+                    settings::graphics_menu::IsAction(3, settings::SystemAddToSteamRow) &&
+                    settings::snapshot.help.find(L"Close Steam first.") != std::wstring::npos,
+                    "Steam action follows Import discs & DLC and explains closing Steam");
+            settings::pending = 8; Tick(base);
+            Require(steam_shortcut::menuFlowAdds == beforeAdds, "right arrow cannot add to Steam");
+            for (const auto& [result, message] : {
+                     std::pair{steam_shortcut::Status::Added, L"Added to Steam. Restart Steam to see it."},
+                     std::pair{steam_shortcut::Status::AddedFromFlatpak, L"Restart Steam to see it; if Steam was open, close it and add again."},
+                     std::pair{steam_shortcut::Status::SteamRunning, L"Close Steam, then try again."},
+                     std::pair{steam_shortcut::Status::SteamNotFound, L"Steam was not found. Install and open Steam first."},
+                     std::pair{steam_shortcut::Status::UserNotFound, L"No Steam user found. Sign in to Steam, close it, then try again."},
+                     std::pair{steam_shortcut::Status::Error, L"Could not add to Steam. Check the log for details."}})
+            {
+                steam_shortcut::menuFlowStatus = result;
+                const auto calls = steam_shortcut::menuFlowAdds;
+                settings::pending = 0x1000; Tick(base);
+                Require(steam_shortcut::menuFlowAdds == calls + 1 && settings::snapshot.help == message,
+                        "confirm runs one Steam action and shows its result");
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.help == message, "Steam result stays visible on an idle tick");
+                for (uint32_t language = 1; language < 5; ++language)
+                {
+                    settings::edit.uiLanguage = language;
+                    Require(std::wstring(settings::SteamShortcutMessage(result)) != message,
+                            "Steam result is translated in every menu language");
+                }
+                settings::edit.uiLanguage = 0;
+            }
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"加入 Steam"}, std::pair{2u, L"Steam に追加"},
+                     std::pair{3u, L"Steam에 추가"}, std::pair{4u, L"添加到 Steam"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::status.clear();
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::SystemAddToSteamRow].name == name &&
+                        settings::snapshot.help != L"Adds the game to your Steam library with artwork. Close Steam first. Add it again if you move the game.",
+                        "Steam action and help are translated");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            std::puts("PASS Add to Steam action: shared service dispatch, messages, idle persistence and all menu languages");
+        }
+        // System → Shader bundle: cancel-first dialog, then one redownload request.
+        {
+            settings::tab = 3;
+            settings::row = settings::SystemAddToSteamRow;
             settings::pending = 2; Tick(base);
             Require(settings::row == settings::SystemShaderBundleRow &&
                     settings::snapshot.rows[settings::SystemShaderBundleRow].name == L"Shader bundle" &&
                     settings::snapshot.rows[settings::SystemShaderBundleRow].value == L"Download again" &&
                     settings::graphics_menu::IsAction(3, settings::SystemShaderBundleRow),
-                    "the Shader bundle action follows Import discs & DLC on System");
+                    "the Shader bundle action follows Add to Steam on System");
             settings::pending = 0x1000; Tick(base);
             Require(settings::shaderBundlePrompt && settings::snapshot.dialogSelection == 1 &&
                     settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Download again", L"Cancel"},
@@ -3085,6 +3336,59 @@ int main(int argc, char** argv)
 #endif
             settings::pending = 0; Tick(base);
             std::puts("PASS shader bundle action: cancel-first dialog, one redownload request, restart on Windows");
+        }
+        // System → Prepare shaders again writes a one-shot request in an isolated directory.
+        {
+            const auto previousDirectory = std::filesystem::current_path();
+            const auto sandbox = std::filesystem::temp_directory_path() /
+                ("lo-menu-shader-preparation-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(sandbox);
+            std::filesystem::current_path(sandbox);
+            const auto marker = std::filesystem::absolute(gpu::shader_preparation::RequestPath());
+            settings::tab = 3;
+            settings::row = settings::SystemShaderBundleRow;
+            settings::edit.uiLanguage = 0;
+            settings::status.clear();
+            settings::pending = 2; Tick(base);
+            Require(settings::row == settings::SystemShaderPreparationRow &&
+                    settings::snapshot.rows[settings::SystemShaderPreparationRow].name == L"Prepare shaders again" &&
+                    settings::snapshot.rows[settings::SystemSaveRow].name == L"Save settings" &&
+                    settings::snapshot.rows.size() == size_t(settings::SystemRowCount) &&
+                    settings::graphics_menu::IsAction(3, settings::SystemShaderPreparationRow),
+                    "Prepare shaders again follows Shader bundle and precedes Save");
+            settings::pending = 0x1000; Tick(base);
+            Require(settings::shaderPreparationPrompt && settings::snapshot.dialogSelection == 1 &&
+                    settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Prepare again", L"Cancel"},
+                    "shader preparation confirmation defaults to Cancel");
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && !gpu::shader_preparation::PendingNextStart(marker) &&
+                    !settings::restart::Requested(), "default Cancel does not request shader preparation or restart");
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 0x2000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && !gpu::shader_preparation::PendingNextStart(marker),
+                    "Back cancels shader preparation on the virtual pad");
+            for (const auto& [language, name] : {
+                     std::pair{1u, L"重新準備著色器"}, std::pair{2u, L"シェーダーを再準備"},
+                     std::pair{3u, L"셰이더 다시 준비"}, std::pair{4u, L"重新准备着色器"}})
+            {
+                settings::edit.uiLanguage = language;
+                settings::pending = 0; Tick(base);
+                Require(settings::snapshot.rows[settings::SystemShaderPreparationRow].name == name,
+                        "translated shader preparation action");
+            }
+            settings::edit.uiLanguage = 0;
+            settings::pending = 0x1000; Tick(base);
+            settings::pending = 1; Tick(base);
+            settings::pending = 0x1000; Tick(base);
+            Require(!settings::shaderPreparationPrompt && gpu::shader_preparation::PendingNextStart(marker) &&
+                    settings::snapshot.help == L"Full shader preparation will run at the next start." &&
+                    !settings::restart::Requested(),
+                    "confirmation persists one next-start request without restarting");
+            std::filesystem::current_path(previousDirectory);
+            std::filesystem::remove(marker);
+            std::filesystem::remove(sandbox);
+            settings::pending = 0; Tick(base);
+            std::puts("PASS shader preparation action: System placement, translations, cancel-first dialog, persistent request, no restart");
         }
         // System → Mods over a real mods folder and mod-list.ini through the mod API.
         {
@@ -3692,6 +3996,72 @@ int main(int argc, char** argv)
                 output << contents;
                 Require(bool(output), "write isolated settings.ini");
             };
+            writeIni("");
+            Require(settings::Read().discordStatus, "Discord status defaults On for existing profiles");
+            for (const auto* contents : {"discord_status=2\n", "discord_status=-1\n", "discord_status=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().discordStatus, "invalid Discord preference keeps On default");
+            }
+            for (const bool enabled : {false, true})
+            {
+                writeIni(enabled ? "discord_status=1\n" : "discord_status=0\n");
+                auto discord = settings::Read();
+                Require(discord.discordStatus == enabled && settings::SaveConfig(discord) &&
+                        settings::GetConfig().discordStatus == enabled && settings::Read().discordStatus == enabled,
+                        "Discord preference reads, saves and reloads both modes");
+            }
+            std::puts("PASS Discord preference default, INI validation and On/Off roundtrip");
+            writeIni("");
+            Require(settings::Config{}.debugLog && settings::Read().debugLog,
+                    "debug log defaults on in new settings");
+            for (const auto* contents : {"debug_log=0\n", "debug_log=1\n", "diagnostic_log=2\n",
+                                         "diagnostic_log=-1\n", "diagnostic_log=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().debugLog, "legacy and invalid keys keep the enabled diagnostic default");
+            }
+            for (const bool enabled : {false, true})
+            {
+                writeIni(enabled ? "diagnostic_log=1\ndebug_log=0\n" : "diagnostic_log=0\ndebug_log=1\n");
+                auto diagnostic = settings::Read();
+                Require(diagnostic.debugLog == enabled, "diagnostic_log wins over the legacy key");
+                Require(settings::SaveConfig(diagnostic) && settings::GetConfig().debugLog == enabled &&
+                        settings::Read().debugLog == enabled, "diagnostic preference saves and reloads both modes");
+                std::ifstream diagnosticIni("settings.ini");
+                const std::string text((std::istreambuf_iterator<char>(diagnosticIni)), std::istreambuf_iterator<char>());
+                Require(text.find(enabled ? "\ndiagnostic_log=1\n" : "\ndiagnostic_log=0\n") != std::string::npos &&
+                        text.find("debug_log=") == std::string::npos, "save writes only the new diagnostic key");
+            }
+            std::puts("PASS diagnostic log default, legacy migration, validation and On/Off roundtrip");
+            writeIni("");
+            Require(settings::Read().askCompactGameData, "missing compaction preference offers to free disk space");
+            writeIni("ask_compact_game_data=0\n");
+            Require(!settings::Read().askCompactGameData, "Don't ask again reads from INI");
+            for (const auto* contents : {"ask_compact_game_data=2\n", "ask_compact_game_data=-1\n",
+                                         "ask_compact_game_data=invalid\n"})
+            {
+                writeIni(contents);
+                Require(settings::Read().askCompactGameData, "invalid compaction preference keeps enabled default");
+            }
+            settings::Config compact{};
+            compact.askCompactGameData = false;
+            Require(settings::SaveConfig(compact) && !settings::GetConfig().askCompactGameData &&
+                    !settings::Read().askCompactGameData, "Don't ask again persists through save and reload");
+            compact = settings::Read();
+            compact.debugLog = false;
+            Require(settings::SaveConfig(compact) && !settings::Read().askCompactGameData,
+                    "saving another setting preserves Don't ask again");
+            {
+                std::ifstream compactIni("settings.ini");
+                const std::string text((std::istreambuf_iterator<char>(compactIni)), std::istreambuf_iterator<char>());
+                Require(text.find("\nask_compact_game_data=0\n") != std::string::npos,
+                        "INI writes the compaction preference key");
+            }
+            compact.askCompactGameData = true;
+            Require(settings::SaveConfig(compact) && settings::Read().askCompactGameData,
+                    "enabled compaction preference roundtrips");
+            std::puts("PASS compaction preference default, validation, Don't ask again save/reload and unrelated save");
             writeIni("upscaler=2\nfsr_sharpness=75\n");
             Require(settings::Read().fsrSharpnessPercent == 75, "FSR sharpness reads from INI");
             writeIni("fsr_sharpness=101\n");
@@ -3852,6 +4222,121 @@ int main(int argc, char** argv)
         CaptureHelpRows(base, argc == 3 ? argv[1] : nullptr);
         CaptureSubpageEntries(base, argc == 3 ? argv[1] : nullptr);
         CheckHelpFit(base, argc == 3 ? argv[1] : nullptr);
+        {
+            // Exercise the same idle report / input polls / consume ordering
+            // as the title hook. No guest menu task or SDL event is started.
+            settings::active = false;
+            settings::controlsOpen = false;
+            settings::releaseToParent = false;
+            settings::cancelPolls = 0;
+            settings::pending = 0;
+            PPC_STORE_U32(ConfigData + 4, 0);
+            const unsigned beforeQuit = quitEventAttempts;
+            const auto titleTick = [&](bool idle) {
+                const bool owned = settings::UpdateTitleQuit(base, idle);
+                Require(!settings::ConsumeTitleShortcut(idle && !owned), "Quit never opens Settings");
+                return owned;
+            };
+            settings::ConsumeTitleShortcut(false);
+            Poll(0x20, false);
+            Require(!titleTick(true), "a held Back from outside the idle menu does not open Quit");
+            Poll(0x20, false);
+            Require(!titleTick(true), "holding Back across the idle gate is not a new press");
+            const auto openQuit = [&] {
+                Require(!titleTick(true), "title menu is idle before shortcut");
+                Poll(0, false); Poll(0x20, false);
+                Require(titleTick(true) && settings::IsOpen() && settings::IsTitleQuitOpen() && !settings::active,
+                        "fresh Back opens host confirmation without opening retail Settings");
+                Require(settings::snapshot.dialogOnly && settings::snapshot.dialogMessage == L"Quit the game?" &&
+                        settings::snapshot.dialogChoices == std::vector<std::wstring>{L"Yes", L"No"} &&
+                        settings::snapshot.dialogSelection == 1, "Quit defaults to No");
+                Poll(0x20, true); Poll(0, true);
+            };
+            const auto release = [&] { Poll(0, true); Poll(0, false); };
+            currentConfig.uiLanguage = 0;
+            openQuit();
+            settings::menuClockOffset = {};
+            settings::menuClockFixed = std::chrono::steady_clock::time_point{};
+            std::vector<uint32_t> dialogPixels, replacementPixels;
+            uint64_t dialogRevision = 0, replacementRevision = 0;
+            Require(!settings::DrawMenu(replacementPixels, replacementRevision, 320, 180) && replacementPixels.empty(),
+                    "title confirmation never replaces the live title through DrawMenu");
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 0,
+                    "title confirmation starts with transparent dim");
+            const auto colored = std::find_if(dialogPixels.begin(), dialogPixels.end(), [](uint32_t pixel) {
+                return (pixel & 0x00ffffffu) != 0;
+            });
+            Require(colored != dialogPixels.end(), "transparent opening retains dialog RGB for straight alpha");
+            const size_t coloredIndex = size_t(colored - dialogPixels.begin());
+            const uint32_t coloredRgb = *colored & 0x00ffffffu;
+            const uint64_t snapshotRevision = settings::snapshot.revision, openingRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(50);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 30 &&
+                    (dialogPixels[coloredIndex] & 0x00ffffffu) == coloredRgb && dialogRevision > openingRevision &&
+                    settings::snapshot.revision == snapshotRevision,
+                    "unchanged title snapshot advances its 100 ms dim without fading straight RGB");
+            const uint64_t halfOpenRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(100);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 61 &&
+                    dialogRevision > halfOpenRevision, "title dim reaches translucent alpha 61 after 100 ms");
+            const uint64_t settledRevision = dialogRevision;
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && dialogRevision == settledRevision,
+                    "settled title confirmation reuses its raster revision");
+            Poll(0x1000, true);
+            Require(titleTick(true) && !settings::IsOpen() && !settings::IsTitleQuitOpen() && quitEventAttempts == beforeQuit,
+                    "confirming default No holds guest input for its last tick and never quits");
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180),
+                    "dismissed No retains overlay for its closing fade");
+            settings::menuClockOffset = std::chrono::milliseconds(150);
+            Require(settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 30 &&
+                    (dialogPixels[coloredIndex] & 0x00ffffffu) == coloredRgb && dialogRevision > settledRevision,
+                    "No fades dim and dialog out over the live title without fading straight RGB");
+            const uint64_t halfClosedRevision = dialogRevision;
+            settings::menuClockOffset = std::chrono::milliseconds(200);
+            Require(!settings::DrawTitleQuit(dialogPixels, dialogRevision, 320, 180) && (dialogPixels.front() >> 24) == 0 &&
+                    dialogRevision > halfClosedRevision, "closing completes after 100 ms and publishes its last frame");
+            settings::menuClockOffset = {};
+            settings::menuClockFixed.reset();
+            Poll(0x1000, true); release();
+            openQuit();
+            Poll(1, true); titleTick(true); Poll(0, true); Poll(0x2000, true);
+            Require(titleTick(true) && !settings::IsOpen() && quitEventAttempts == beforeQuit,
+                    "B cancels even with Yes selected");
+            Poll(0x2000, true); release();
+            openQuit();
+            Require(settings::CalibrationKey(27), "Escape belongs to title confirmation");
+            Require(titleTick(true) && !settings::IsOpen(), "Escape returns to title");
+            release();
+            openQuit();
+            Poll(0x20, true);
+            Require(titleTick(true) && !settings::IsOpen(), "fresh Back cancels its confirmation");
+            release();
+            openQuit();
+            settings::PointerClick(500, 420, false);
+            Require(titleTick(true) && !settings::IsOpen() && quitEventAttempts == beforeQuit,
+                    "mouse No uses the shared dialog hit-test without quitting");
+            release();
+            titleQuitAccepted = false;
+            openQuit();
+            Poll(1, true); titleTick(true); Poll(0, true); Poll(0x10, true);
+            Require(titleTick(true) && !settings::IsOpen() && quitEventAttempts == beforeQuit + 1,
+                    "Yes via keyboard Enter uses shared Quit; rejected event stays on the title");
+            release();
+            titleQuitAccepted = true;
+            openQuit();
+            Poll(2, true); titleTick(true); Poll(0, true); Poll(0x1000, true);
+            Require(titleTick(true) && !settings::IsOpen() && quitEventAttempts == beforeQuit + 2,
+                    "fresh retry Yes queues the same normal quit path once");
+            release();
+            Require(!titleTick(true), "idle gate rearms after dialog");
+            Poll(0, false); Poll(0x20, false);
+            Require(!titleTick(false) && !titleTick(true) && !settings::IsOpen(),
+                    "queued shortcut is discarded when title leaves MenuIdle");
+            Poll(0, false); Poll(0x8000, false);
+            Require(settings::ConsumeTitleShortcut(true), "existing Y Settings shortcut remains available");
+            settings::ConsumeTitleShortcut(false);
+            std::puts("PASS title Quit: overlay-only 100 ms straight-alpha fades, idle edge gate, held input, default No, B/Back/Escape, release consumption, Yes and failed queue retry");
+        }
         VirtualFree(base, 0, MEM_RELEASE);
         return 0;
     }

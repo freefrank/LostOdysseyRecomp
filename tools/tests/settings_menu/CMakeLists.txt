@@ -5,6 +5,15 @@ set(RUNTIME "${REPO_ROOT}/LostOdysseyRecomp")
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(Threads REQUIRED)
 include(CTest)
+add_executable(LoCompactionPromptTest ../compaction_prompt_test.cpp)
+target_include_directories(LoCompactionPromptTest PRIVATE "${RUNTIME}")
+target_compile_features(LoCompactionPromptTest PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(LoCompactionPromptTest PRIVATE /UNDEBUG /utf-8)
+else()
+    target_compile_options(LoCompactionPromptTest PRIVATE -UNDEBUG)
+endif()
+add_test(NAME compaction_prompt COMMAND LoCompactionPromptTest)
 option(LO_MENU_SANITIZE "Enable Address/UndefinedBehavior sanitizers" OFF)
 # One generated fixture per executable. Visual Studio generators attach a shared
 # custom command to every consumer project and MSBuild runs them in parallel,
@@ -25,7 +34,24 @@ lo_settings_interaction(LoSettingsInteractionBoth LO_ENABLE_VULKAN_FSR_FG=1 LO_E
 # XeSS-enabled builds add a seventh AA choice on Windows.
 lo_settings_interaction(LoSettingsInteractionXess LO_ENABLE_STREAMLINE_FG=1 LO_HAS_XESS=1)
 add_executable(LoSettingsRaster raster_test.cpp "${RUNTIME}/settings/menu_render.cpp")
-foreach(target IN ITEMS LoSettingsInteraction LoSettingsInteractionFsr LoSettingsInteractionBoth LoSettingsInteractionXess LoSettingsRaster)
+add_executable(LoDebugOverlayTest ../debug_overlay_test.cpp "${RUNTIME}/debug/menu_overlay.cpp")
+add_executable(LoDebugMenuInteractionTest ../debug_menu_interaction_test.cpp "${RUNTIME}/debug/menu_overlay.cpp")
+set(encounter_fixture "${CMAKE_CURRENT_BINARY_DIR}/encounter_config_fixture.cpp")
+add_custom_command(OUTPUT "${encounter_fixture}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/generate_encounter_fixture.py"
+        --root "${REPO_ROOT}" --output "${encounter_fixture}"
+    DEPENDS generate_encounter_fixture.py "${RUNTIME}/settings/config.cpp" "${RUNTIME}/debug/no_encounters.cpp"
+        "${RUNTIME}/gpu/loading_pacing.h"
+    VERBATIM)
+add_executable(LoEncounterConfigTest "${encounter_fixture}")
+set(battle_exp_fixture "${CMAKE_CURRENT_BINARY_DIR}/battle_exp_fixture.cpp")
+add_custom_command(OUTPUT "${battle_exp_fixture}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/generate_battle_exp_fixture.py"
+        --root "${REPO_ROOT}" --output "${battle_exp_fixture}"
+    DEPENDS generate_battle_exp_fixture.py "${RUNTIME}/debug/battle_exp.cpp"
+    VERBATIM)
+add_executable(LoBattleExpTest "${battle_exp_fixture}")
+foreach(target IN ITEMS LoSettingsInteraction LoSettingsInteractionFsr LoSettingsInteractionBoth LoSettingsInteractionXess LoSettingsRaster LoDebugOverlayTest LoDebugMenuInteractionTest LoEncounterConfigTest LoBattleExpTest)
     target_include_directories(${target} PRIVATE "${RUNTIME}")
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_compile_definitions(${target} PRIVATE NOMINMAX)
@@ -45,4 +71,10 @@ add_test(NAME settings_interaction_fsr COMMAND LoSettingsInteractionFsr)
 add_test(NAME settings_interaction_both COMMAND LoSettingsInteractionBoth)
 add_test(NAME settings_interaction_xess COMMAND LoSettingsInteractionXess)
 add_test(NAME settings_raster COMMAND LoSettingsRaster)
+add_test(NAME debug_overlay COMMAND LoDebugOverlayTest)
+add_test(NAME debug_menu_interaction COMMAND LoDebugMenuInteractionTest)
+add_test(NAME encounter_config COMMAND LoEncounterConfigTest)
+add_test(NAME battle_exp_hook COMMAND LoBattleExpTest)
+add_test(NAME battle_exp_startup_on COMMAND LoBattleExpTest persisted-on)
 set_tests_properties(settings_interaction settings_interaction_fsr settings_interaction_both settings_interaction_xess settings_raster PROPERTIES TIMEOUT 120)
+set_tests_properties(debug_overlay debug_menu_interaction encounter_config battle_exp_hook battle_exp_startup_on PROPERTIES TIMEOUT 120)

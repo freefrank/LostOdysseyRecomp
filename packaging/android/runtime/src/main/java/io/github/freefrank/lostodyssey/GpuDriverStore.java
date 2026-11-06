@@ -192,6 +192,17 @@ final class GpuDriverStore {
         return null;
     }
 
+    /** Draw-ordering workaround for Adreno 650 Turnip hangs (#558), with less GPU overlap. */
+    static boolean needsAdreno650SyncDraw(String model, Metadata metadata) {
+        if (model == null || metadata == null || metadata.isPanVk()
+                || !model.trim().matches("(?i)Adreno\\s*650(?:\\s*v\\d+)?")) return false;
+        String name = metadata.name.toLowerCase(Locale.ROOT);
+        // The R8 Sysmem package replaces Turnip's debug flags with forced sysmem,
+        // so it cannot use this environment-controlled workaround.
+        return name.matches("(?s).*\\bturnip\\b.*")
+            && !name.matches("(?s).*\\b(?:panvk|sysmem)\\b.*");
+    }
+
     /** LO_VK_CUSTOM_DRIVER_MODE for a package: the player's choice, else its default. */
     static String loadMode(Context context, Installed driver) {
         String mode = preferences(context).getString(KEY_LOAD_MODE + driver.id(), null);

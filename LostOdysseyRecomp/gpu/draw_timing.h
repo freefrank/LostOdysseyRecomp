@@ -40,9 +40,20 @@ namespace gpu::draw_timing
         return (TargetFrame() && TargetFrame() == frame) || (Every() && frame && frame % Every() == 0);
     }
 
+    // LO_GPU_DRAW_TIMING_GROUP=N: draws per interval (default 4; 1 times each draw, at the cost of more GPU waits).
+    inline uint32_t GroupSize()
+    {
+        static const uint32_t size = [] {
+            const char* value = std::getenv("LO_GPU_DRAW_TIMING_GROUP");
+            const uint32_t n = value ? uint32_t(std::strtoul(value, nullptr, 10)) : 0u;
+            return n ? n : 4u;
+        }();
+        return size;
+    }
+
     class Probe
     {
-        static constexpr uint32_t kQueryCount = 2048;
+        static constexpr uint32_t kQueryCount = 4096;
         struct Draw {
             uint64_t vs, ps;
             uint32_t ordinal, indices, width, height;
@@ -80,7 +91,7 @@ namespace gpu::draw_timing
         {
             if (!recording || written >= kQueryCount - 1) return;
             draws.push_back({vs, ps, ordinal, indices, width, height});
-            if ((draws.size() % 4) == 0) Mark(list);
+            if ((draws.size() % GroupSize()) == 0) Mark(list);
         }
 
         void End(plume::RenderCommandList* list)

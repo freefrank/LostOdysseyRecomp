@@ -8,9 +8,18 @@
 namespace settings
 {
 namespace menu_assets { struct Assets; struct Image; }
-// Visible list slots: rows start at y=150 with height 43 and clip at y=640,
-// so (640 - 150) / 43 == 11 rows fit without scrolling.
+// Rows start at y=150 and clip at y=640. System shows 12 rows at 39 pixels;
+// other tabs and list pages use 11 at 43. Longer tabs scroll in this window.
 inline constexpr int kMenuVisibleRows = 11;
+inline constexpr int kMenuSystemVisibleRows = 12;
+inline constexpr int VisibleRowCount(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? kMenuSystemVisibleRows : kMenuVisibleRows;
+}
+inline constexpr int MenuRowHeight(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? 39 : 43;
+}
 struct MenuRow
 {
     std::wstring name, value;
@@ -54,7 +63,7 @@ struct MenuSnapshot
 {
     int tab = 0, row = 0;
     // First visible slot when rows overflow the list area. Publish keeps the
-    // focused row inside [scroll, scroll + kMenuVisibleRows).
+    // focused row inside [scroll, scroll + VisibleRowCount(tab, listPage)).
     int scroll = 0;
     uint32_t language = 0;
     bool playStationPrompts = false;
@@ -67,6 +76,9 @@ struct MenuSnapshot
     std::wstring dialogTitle, dialogMessage;
     std::vector<std::wstring> dialogChoices;
     int dialogSelection = 0;
+    // The shared confirmation over the game, without the Settings page.
+    // Output is straight alpha: a dim backdrop and the opaque dialog.
+    bool dialogOnly = false;
     uint64_t revision = 0;
     HdrCalibration calibration;
     BrightnessCalibration brightness;
@@ -85,10 +97,12 @@ struct MenuSnapshot
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.
     bool backdropOnly = false;
-    // Only help, a key then its label, at the title menu's lower right as
-    // straight alpha: the Settings legend (title_entry.cpp). The raster is
-    // just TitleHintBounds of the output.
+    // Title footer as straight alpha: the free-port credit at lower left and
+    // help (a key then its label) and the optional quit shortcut at lower right
+    // (title_entry.cpp). The raster
+    // is just TitleHintBounds of the output.
     bool titleHint = false;
+    std::wstring titleQuitKey, titleQuitLabel;
 };
 // How a single line of explanatory text fits its box: scale 1 when it is drawn
 // at its normal size, below 1 when the renderer shrinks it to fit the width.
@@ -111,6 +125,11 @@ HelpFit MeasureHelp(const MenuSnapshot &snapshot);
 // The text with its isolated A/B/X/Y (and LB/RB, LT/RT) button labels swapped for
 // the PlayStation faces when playStation is set; any other text is unchanged.
 std::wstring PromptGlyphs(const std::wstring &value, bool playStation);
+// Arabic text (as a language pack names itself or its achievements) in drawing order: joined
+// presentation forms, the line reversed when it starts with an Arabic letter. Other text unchanged.
+std::wstring ArabicDrawOrder(const std::wstring &value);
+// An Arabic presentation form or tatweel: drawn touching its neighbours, without a gap.
+bool ArabicJoinedForm(wchar_t c);
 // The list cursor arrow, top-left corner in the 1280x720 layout.
 struct MenuArrow
 {
@@ -128,7 +147,7 @@ struct MenuRect
 };
 // The list arrow at a layout position, and the output pixels it can cover.
 void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
-// The output pixels of the title menu's Settings legend: with titleHint,
+// The output pixels of the title menu's credit and shortcut legends: with titleHint,
 // RasterizeMenu returns only this rectangle, row by row.
 MenuRect TitleHintBounds(uint32_t width, uint32_t height);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);
@@ -174,7 +193,7 @@ struct MenuCascade
     size_t split = 0;
     std::vector<std::pair<size_t, size_t>> bands;
 };
-MenuCascade MenuOpenCascade(uint32_t width, uint32_t height);
+MenuCascade MenuOpenCascade(uint32_t width, uint32_t height, int tab = 0, bool listPage = false);
 
 class MenuTransition
 {

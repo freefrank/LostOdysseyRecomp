@@ -29,3 +29,4 @@
 	path = thirdparty/SDL-switch
 	url = https://github.com/devkitPro/SDL
 	branch = switch-sdl-3.4
+	ignore = dirty

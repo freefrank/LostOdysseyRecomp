@@ -175,13 +175,14 @@ public final class GameFolderActivity extends Activity {
         page.addView(actions);
 
         page.addView(text("Import", 18f, true));
-        page.addView(dim("Import the game on this device from disc images (.iso), for example in "
+        page.addView(dim("Import discs (.iso) or Xbox 360 DLC packages on this device, for example in "
             + "Download, on an SD card or a USB drive. Pick one disc image; the other discs in "
-            + "the same folder are found with it. For extracted discs pick default.xex. The "
+            + "the same folder are found with it. For extracted discs pick default.xex. For DLC, "
+            + "pick the original package file. The "
             + "importer writes to " + GameStorage.importRoot(this).getAbsolutePath() + " unless "
             + "you pick another destination; the four discs need about 20 GB. Needs \"All files "
             + "access\"."));
-        page.addView(button("Import disc images…", v -> {
+        page.addView(button("Import discs & DLC…", v -> {
             if (canReadSharedStorage()) pickDiscImages();
             else askForStorage(Pending.IMPORT);
         }));
@@ -325,7 +326,7 @@ public final class GameFolderActivity extends Activity {
             if (file == null || !file.isFile()) {
                 new AlertDialog.Builder(this).setTitle("Cannot open this file")
                     .setMessage("The importer reads files from the internal storage, an SD card or a "
-                        + "USB drive. Open the disc image from there in the picker's menu, not from "
+                        + "USB drive. Open the file from there in the picker's menu, not from "
                         + "cloud storage or Recent.")
                     .setPositiveButton("OK", null).show();
                 return;

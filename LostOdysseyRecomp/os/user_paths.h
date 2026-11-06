@@ -34,7 +34,12 @@ namespace os::user_paths
         g_usePortableLayout = directory.find(".app/Contents/") == std::string::npos &&
             IsExecutableDirWritable(executableDirectory);
 #else
-        g_usePortableLayout = IsExecutableDirWritable(executableDirectory);
+        // Extract-and-run AppImages have a writable temporary executable
+        // directory. Keep their persistent files in XDG storage, just as when
+        // the same AppImage is mounted read-only through FUSE.
+        const char* appImage = std::getenv("APPIMAGE");
+        g_usePortableLayout = (appImage == nullptr || *appImage == '\0') &&
+            IsExecutableDirWritable(executableDirectory);
 #endif
     }
     namespace detail
@@ -112,6 +117,21 @@ namespace os::user_paths
     // The running executable's directory; empty before Initialize.
     inline const std::filesystem::path& ExecutableDir() { return g_executableDirectory; }
 
+    // Bundled read-only assets follow the executable rather than the working
+    // directory. Windows/dev folders use assets/, installed Linux packages use
+    // share/lost-odyssey-recomp beside bin/, and macOS bundles use Resources/.
+    inline std::filesystem::path AssetPath(const std::filesystem::path& relative)
+    {
+        const auto& executable = ExecutableDir();
+        for (const auto& root : {executable / "assets",
+                                executable.parent_path() / "share/lost-odyssey-recomp",
+                                executable.parent_path() / "Resources/assets"}) {
+            std::error_code error;
+            if (std::filesystem::exists(root / relative, error)) return root / relative;
+        }
+        return executable / "assets" / relative;
+    }
+
     // Portable launches deliberately retain the working-directory settings
     // contract, including isolated --game launches. Read-only installations
     // use the same XDG path for startup detection, preferences, and persistence.
@@ -124,5 +144,11 @@ namespace os::user_paths
     {
         return detail::EnvironmentPath("LO_PROFILE_DIR",
             UsePortableLayout() ? std::filesystem::path("profile") : DataDir() / "profile");
+    }
+
+    inline std::filesystem::path SaveDir()
+    {
+        return detail::EnvironmentPath("LO_SAVE_DIR",
+            (UsePortableLayout() ? std::filesystem::current_path() : DataDir()) / "save");
     }
 }

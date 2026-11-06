@@ -24,12 +24,21 @@ namespace os::switch_platform
     // Docked (true) or handheld (false).
     bool IsDocked();
 
+    // The console's system language is Spanish (Spain or Latin America). False if set is not available.
+    bool SystemLanguageIsSpanish();
+
     // The libnx operation-mode hook only records a notification. Consume it
     // from the SDL event pump after appletMainLoop has processed the message.
     bool TakeOperationModeChanged();
 
     // Process memory and thread usage, for failure logs ("used/total MiB ...").
     std::string MemorySummary();
+    // Bytes of newlib's heap in use and the most it can grow to (MemorySummary's "heap in use").
+    void HeapUsage(uint64_t& used, uint64_t& limit);
+
+    // The CPU, GPU and memory clocks right now, in Hz (clkrst). A few IPC calls each time: not for every frame.
+    // False (the ones not read left at 0) when clkrst is not available.
+    bool ReadClockRates(uint32_t& cpuHz, uint32_t& gpuHz, uint32_t& memoryHz);
 
     // Handheld only: asks apm for GPU 460.8 MHz with the memory clock kept at
     // 1331.2 MHz (configuration 0x92220008, what commercial games use; from
@@ -47,6 +56,21 @@ namespace os::switch_platform
     // cores stay 0-2). handle 0 means the calling thread.
     uint32_t CurrentThreadHandle();
     uint32_t SetThreadIdealCore(uint32_t handle, int core);
+    void PinCurrentThread(int core);
+    void SleepNanoseconds(int64_t nanoseconds);
+
+    // Appends to a file in the app folder through a file system session of this module's own, opened
+    // in Initialize: no newlib, no allocation and none of libnx's shared file system sessions, so it
+    // still works when the rest of the process's file access is stuck (crash handler, hang watchdog).
+    // False if the session is not available or a request failed.
+    bool RawAppend(const char* fileName, const char* data, size_t size);
+
+    // Kernel handle of the calling thread, and its ideal core (0-2; allowed
+    // cores stay 0-2). handle 0 means the calling thread.
+    uint32_t CurrentThreadHandle();
+    uint32_t SetThreadIdealCore(uint32_t handle, int core);
+    void PinCurrentThread(int core);
+    void SleepNanoseconds(int64_t nanoseconds);
 
     // Raises the CPU clock while loading (applet CPU boost), off when false.
     void SetLoadingBoost(bool enabled);
@@ -57,5 +81,9 @@ namespace os::switch_platform
     // holds the exit; call this right before the process ends. Horizon kills
     // the game anyway 15 s after the request.
     void AllowExit();
+    // Ends the process at once after writing the logs (no newlib/libnx exit
+    // teardown): quitting through std::_Exit unmounted the SD card while game
+    // threads were still reading it, and one faulted in lseek.
+    [[noreturn]] void ExitNow();
 }
 #endif

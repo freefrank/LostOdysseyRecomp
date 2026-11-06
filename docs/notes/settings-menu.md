@@ -1,129 +1,139 @@
-# 设置菜单与显示选项
+# Settings menu and display options
 
-> **专题参考。** 下文实现和测量只适用于各自注明的版本与范围；现行交付及验收状态见[项目状态](../STATUS.md)和[路线图](../ROADMAP.md)。
+[简体中文](settings-menu.zh-CN.md)
 
-## 2026-10-07 现行设置菜单与更正（已合并到 main，尚未发布）
+> **Topic reference.** The implementation and measurements below apply only to the version and scope noted for each item. For current delivery and acceptance status, see [project status](../STATUS.md) and [roadmap](../ROADMAP.md).
 
-最新发布仍是 [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44)，不含本节各项。下列 PR 已于 2026-10-07 合并（`gh pr view` 读取）：[#269](https://github.com/freefrank/LostOdysseyRecomp/pull/269)（03:01:14Z，`35e22a28`）、[#270](https://github.com/freefrank/LostOdysseyRecomp/pull/270)（03:17:30Z，`3182adab`）、[#271](https://github.com/freefrank/LostOdysseyRecomp/pull/271)（03:35:13Z，`a5fa8961`）、[#274](https://github.com/freefrank/LostOdysseyRecomp/pull/274)（03:42:11Z，`475d8c65`）、[#276](https://github.com/freefrank/LostOdysseyRecomp/pull/276)（07:08:08Z，`6ed90748`）。Issue #104、#198、#174、#202、#201 均已关闭；关闭不等于报告者验收。
+## 2026-10-18 cutscene audio correction (#631)
 
-**显示模式。** 只有「窗口」和「全屏」（无边框）。独占全屏已在 #274 移除：菜单和 Windows 首次设置对话框不再提供，SDL 独占路径（Vulkan）与 DXGI `ResizeTarget`/`SetFullscreenState` 代码已删除，已保存的 `window_mode=2` 读取为全屏；模式切换仍通过窗口大小请求强制重建交换链。#276 起「无边框全屏」在所有界面语言里改称「全屏」。
+The earlier description below assigned the stream handles backwards. `sub_82B6DBD0` opens channel +100 with localization enabled; `sub_82B6D7E0` opens +124 without it. On rt089/rt091, +100 is the localized mono centre dialogue file and +124 is the base five-channel mix. The corresponding base and INT files are byte-identical in the Asian and USA/Europe data inspected.
 
-**图像页新增两行。**
-- GPU（`gpu_device`，按适配器名保存，重启后生效）：列出「自动」和当前后端报告的适配器；名称不存在、适配器无法打开或缺必需功能时回退自动并写警告；只有一个适配器或在 Android 上时隐藏（#202）。
-- 显示器（`display_name` + `display_index`，序号只用于区分同名显示器）：标签含序号、型号、尺寸和桌面位置，例如 `2: M27P20 · 3840×2160 (3840, 0)`；保存后窗口立即移到该显示器（先离开全屏、居中，再回到已保存的模式），全屏也使用它；「自动」不移动窗口；已保存的显示器不存在时回退自动；只有一块显示器或在 Android 上时隐藏。切换显示器后弹出「保留这台显示器吗？」：保留，或 5 秒内无回应、选还原时，把旧选择写回 `settings.ini` 并把窗口移回原显示器（只改模式或其他设置不询问）。Win+Shift+方向键或拖动窗口造成的显示器变化，窗口和全屏下都会被跟随，已保存的显示器选择随之更新，「自动」保持自动（#201）。
+`voice_volume.cpp` now recognizes a paired stream's actual mono FC source from `voice+28` (source count) and `voice+46` (speaker map), rather than a handle position. Only that separate dialogue source uses master × Voice volume. Other layouts retain the retail category. The extra Music multiplier from #632 is removed: the headers and event metadata do not prove that an RT base mix or its non-centre channels contain only music. Independent BGM streams, such as rt091's `s09_boss01`, already use the retail Music category. Mixed and unclassified RT audio remains on Sound effects; this does not make every cutscene's music independently adjustable.
 
-**保存行。** 焦点在「保存」行时，Start/Enter 现在会保存；在其他行上仍只是把焦点移到「保存」。此前 Enter 只移动焦点，显示器选择因此没有写入（#276）。
+The earlier be_0200 band-level measurement did not identify the actual opened file, so it does not validate the earlier handle interpretation.
 
-**声音页新增两行。**
-- 震动（`vibration`，0–100%，默认 100，即时生效，调整时有短暂预览脉冲，最小为关闭；`LO_CONTROLLER_RUMBLE=0` 仍整体关闭）（#198，#270）。
-- 音频输出（`audio_output`：立体声／5.1 环绕声，默认立体声，即时切换）：5.1 把游戏自带的六声道混音直接送出；设备声道数不足 6 时回到立体声下混并在帮助行提示；7.1 设备由 SDL 映射；Windows 需先把系统扬声器设为 5.1 或 7.1（#174，#271）。
+## 2026-10-07 current settings menu and corrections (merged to main, not yet released)
 
-**语音音量（#394）。** 声音页“音效音量”下面一行（`voice_volume`，0–100%，默认 100，步长 4，标题画面也显示）。原版的过场对白是某条过场流的语言音轨：播放 `snd\stream\be0200.xwv` 的声道（路径在声道 +127）在 +124 还有第二个 voice，由 `sub_82B6D7E0` 按同名文件在语言目录下打开（`snd\int\stream\be0200.xwv`），和这条流一样走音效音量。`patches/voice_volume.cpp` 钩流音量更新 `sub_82B6C650(channel, voice)`：更新的是这个语言音轨时，`sub_82B71E68` 返回的类别增益改为主音量 × 语音音量。音效包（.xse）里的语音（战斗喊声、部分过场短台词）和音效共用一个包，仍跟随音效音量。改值后和原版音量滑杆一样调用 `sub_82870E38`；之后开始的流用新值（正在播放的流是否立即更新没有实测）。psvita 开场战斗 be_0200 实测（语音 100 对 0）：有对白的秒语音频段低 0.4–6.6 dB，无对白的秒相差在 ±0.2 dB 内。
+The latest release is still [v0.8.44](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.8.44), which does not include the items in this section. The PRs below were merged on 2026-10-07 (read with `gh pr view`): [#269](https://github.com/freefrank/LostOdysseyRecomp/pull/269) (03:01:14Z, `35e22a28`), [#270](https://github.com/freefrank/LostOdysseyRecomp/pull/270) (03:17:30Z, `3182adab`), [#271](https://github.com/freefrank/LostOdysseyRecomp/pull/271) (03:35:13Z, `a5fa8961`), [#274](https://github.com/freefrank/LostOdysseyRecomp/pull/274) (03:42:11Z, `475d8c65`), [#276](https://github.com/freefrank/LostOdysseyRecomp/pull/276) (07:08:08Z, `6ed90748`). Issues #104, #198, #174, #202 and #201 are closed. Closure does not mean the reporter accepted the change.
 
-**F1 调试菜单。** Cheats 页的快进开关、模式（按住／切换）和倍率（2–8×）写入 `settings.ini` 的 `fast_forward`、`fast_forward_mode`、`fast_forward_rate`，下次启动恢复；默认关／按住／2×（#104，#269）。#104 原先要求加快游戏菜单动画；维护者回复这是原版体验，不会另加开关，建议用调试菜单的快进，已交付的是快进设置的保存。
+**Display mode.** Only "Windowed" and "Fullscreen" (borderless). Exclusive fullscreen was removed in #274: the menu and the Windows first-run setup dialog no longer offer it, the SDL exclusive path (Vulkan) and the DXGI `ResizeTarget`/`SetFullscreenState` code have been deleted, and a saved `window_mode=2` now loads as fullscreen. Mode changes still force a swap chain rebuild through a window size request. From #276 on, "Borderless fullscreen" is renamed "Fullscreen" in all interface languages.
 
-**检查范围与缺口**（来自各 PR 正文和维护者通知，未重跑）：
-- 显示器切换：维护者在有三台显示器的 Windows PC 上测试并于 2026-10-07 接受（来自维护者通知；PR #276 正文写的是仍在复测，Issue 无评论记录）。混合 DPI、原生 Linux、Android 未测。
-- GPU 选择：psvita（Proton Vulkan）自动选择 RADV，指名 `llvmpipe` 得到 llvmpipe，缺失名称写警告并回到 RADV；该机 D3D12 只列出一个适配器，行隐藏。M1 Max（Metal）按名称选择，未知名称回退。Optimus／多适配器 Direct3D 12 未测。
-- 5.1：psvita（Proton/WASAPI，空输出录音）六声道输出每个声道都有声音，对白在中置，LFE 的 98% 低于 150 Hz；折叠回立体声的结果与立体声录音在 0.1 dB 内一致；两声道设备回退，7.1 设备走重新打开路径。真实 5.1 扬声器、原生 Linux／macOS／Android 音频未测；#174 中有用户表示有 5.1 设备可以测试（2026-10-05）。
-- 震动：虚拟 SDL 手柄的 `LoHidTest`；没有用实体手柄（如 DualSense）确认强度档位的手感。
-- 快进设置：psvita（Proton D3D12）设为开／切换／4× 后重启，日志显示 `debug menu: fast-forward on (toggle, 4x)`；游戏内退出路径未测。
+**Two new rows on the Graphics page.**
+- GPU (`gpu_device`, saved by adapter name, takes effect after restart): lists "Auto" and the adapters reported by the current backend. If the name does not exist, the adapter cannot be opened, or a required feature is missing, it falls back to Auto and writes a warning. Hidden when there is only one adapter or on Android (#202).
+- Display (`display_name` + `display_index`; the index is used only to tell apart displays with the same name): the label includes the index, model, size and desktop position, for example `2: M27P20 · 3840×2160 (3840, 0)`. After saving, the window moves to that display at once (it leaves fullscreen, centres, then returns to the saved mode), and fullscreen also uses it. "Auto" does not move the window. If the saved display no longer exists, it falls back to Auto. Hidden when there is only one display or on Android. After switching displays, a "Keep this display?" prompt appears. If the user keeps it, or does not respond within 5 seconds, or chooses to revert, the old choice is written back to `settings.ini` and the window moves back to the original display. Changing only the mode or other settings does not ask. Display changes caused by Win+Shift+arrow keys or by dragging the window are followed in both windowed and fullscreen modes, the saved display choice is updated to match, and "Auto" stays Auto (#201).
 
-**对下文旧表述的更正**（旧文保留为 2026-09-05 的记录）：
-- 「窗口/无边框全屏/独占全屏」「DXGI 独占状态……切换」「无边框、独占全屏有实现……」：独占全屏已不存在，现行为窗口和全屏。当时「尚无可见桌面的全屏模式验收」的限制仍是那一时点的记录；显示器切换的验收见上。
-- 「应用显示设置后有 15 秒确认期」：整页确认已不存在（`78730ffb`，0.4.23，设置只保存一次；`menu_flow_test.cpp` 断言一次点击完成保存且没有 Keep changes）。`translations.h` 里残留的 15 秒字符串没有被菜单使用。现在唯一的限时确认是上面的 5 秒显示器保留／还原提示。
+**Save row.** When focus is on the "Save" row, Start/Enter now saves. On other rows it still only moves focus to "Save". Before this, Enter only moved focus, so the display choice was never written (#276).
 
-## 2026-09-19 Issue #54 语言选择安全修正（当时待发布）
+**Two new rows on the Sound page.**
+- Vibration (`vibration`, 0–100%, default 100, takes effect immediately, with a short preview pulse while adjusting; the minimum is off. `LO_CONTROLLER_RUMBLE=0` still turns it off entirely) (#198, #270).
+- Audio output (`audio_output`: Stereo / 5.1 Surround, default Stereo, switches immediately): 5.1 sends the game's own six-channel mix directly. If the device has fewer than 6 channels, it falls back to stereo downmix and shows a note in the help line. 7.1 devices are mapped by SDL. On Windows, the system speakers must first be set to 5.1 or 7.1 (#174, #271).
 
-语言菜单现在只接受原生语言表范围内的有效数量和索引。数量为零或超出容量、索引越界时，不读取对应语言表，也不改写当前选择；无效菜单项显示为 `—`，避免用 clamp 后的值伪造语言。菜单容量按原生 parser 的 16 项限制处理。既有 `82481BE8` USA/Europe 宿主覆盖语义保持不变，文字和配音选择仍独立处理。
+**Voice volume (#394).** Historical #394 description; the handle identification and its validation are superseded by the correction above. The row remains `voice_volume`, 0–100%, default 100, step 4, available on the title screen. Voices mixed into .xse effect banks still follow Sound effects.
 
-新增默认关闭且有界的 `LO_TRACE_LANGUAGE=1` 追踪，可记录 lookup 原始参数、host/original 返回指针、菜单 open/apply/default/close 的配置数量与索引、映射 ID，以及 `82481E78`/`82481F40` 的有效缓存 UTF-16 和返回 ID；close 快照位于 apply 之后、close 之前。该追踪用于后续问题取证；具体过场配音问题的根因尚未确认；没有存档，本次未做实机复现。本节撰写时修正待发布；#54/#55 后来已关闭，但关闭记录不补足上述实机证据。
+**F1 debug menu.** The fast-forward switch, mode (hold / toggle) and rate (2–8×) on the Cheats page are written to `fast_forward`, `fast_forward_mode` and `fast_forward_rate` in `settings.ini` and restored at the next launch. Defaults: off / hold / 2× (#104, #269). #104 originally asked for faster game menu animations. The maintainer replied that this is the original experience and no separate switch will be added, and suggested using the debug menu's fast-forward. What was delivered is saving the fast-forward settings.
 
-## 2026-09-14 欧美版字幕映射已包含在 v0.5.12
+**Scope of checks and gaps** (from the PR bodies and maintainer notices; not re-run):
+- Display switching: the maintainer tested it on a Windows PC with three displays and accepted it on 2026-10-07 (from the maintainer's notice; the PR #276 body says retesting was still in progress, and the Issue has no comment record). Mixed DPI, native Linux and Android were not tested.
+- GPU selection: on psvita (Proton Vulkan), auto selects RADV. Naming `llvmpipe` gives llvmpipe. A missing name writes a warning and returns to RADV. On this machine D3D12 lists only one adapter, so the row is hidden. On M1 Max (Metal), selection is by name, and unknown names fall back. Optimus / multi-adapter Direct3D 12 was not tested.
+- 5.1: on psvita (Proton/WASAPI, recording from an empty output), each of the six channels has sound on the output. Dialogue is in the centre, and 98% of LFE is below 150 Hz. The result folded back to stereo is within 0.1 dB of a stereo recording. Two-channel devices fall back, and 7.1 devices go through the reopen path. Real 5.1 speakers and native Linux / macOS / Android audio were not tested. In #174, a user said they have a 5.1 device that can be tested (2026-10-05).
+- Vibration: `LoHidTest` with a virtual SDL controller. The feel of the strength levels was not confirmed with a physical controller (such as a DualSense).
+- Fast-forward settings: on psvita (Proton D3D12), with on / toggle / 4× set and then restarted, the log shows `debug menu: fast-forward on (toggle, 4x)`. The exit path from inside the game was not tested.
 
-`82481BE8` hook 的 USA/Europe FMV／事件字幕语言映射修复已包含在已发布的 [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12)。本地 `game_language=5`、Vulkan 3840×2160 的西班牙语开场 FMV 检查已通过并获接受。2026-09-15 原报告者确认 v0.5.12 西班牙语开场 FMV 字幕（Vulkan 与 Direct3D 12），德语、法语、意大利语 FMV 覆盖亦已确认。Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) 已关闭。完整事件覆盖和全游戏验证仍未核验。发布检查未重新核对 50 文件 manifest。
+**Corrections to older statements below** (the old text is kept as the 2026-09-05 record):
+- "Window / borderless fullscreen / exclusive fullscreen", "DXGI exclusive state ... switching", "borderless and exclusive fullscreen are implemented ...": exclusive fullscreen no longer exists. The current modes are windowed and fullscreen. The limit at that time, "no fullscreen acceptance on a visible desktop yet", remains a record of that point. For display switching acceptance, see above.
+- "After applying display settings there is a 15-second confirmation period": the whole-page confirmation no longer exists (`78730ffb`, 0.4.23; settings are saved once, and `menu_flow_test.cpp` asserts that one click completes the save with no Keep changes). The 15-second string left in `translations.h` is not used by the menu. The only timed confirmation now is the 5-second display keep/revert prompt above.
 
-2026-09-05，实现及验证记录。参考 [reblue](https://github.com/zolaware/reblue) 将新菜单接回原入口、分离设置数据与绘制的结构；没有复制 Blue Dragon 的游戏地址或菜单实现。
+## 2026-09-19 Issue #54 language selection safety fix (pending release at the time)
 
-## 功能
+The language menu now accepts only counts and indexes within the native language table range. When the count is zero or above capacity, or the index is out of range, it does not read the corresponding language table and does not rewrite the current selection. Invalid menu items show as `—`, so a clamped value is not used to fake a language. Menu capacity follows the native parser's 16-item limit. The existing `82481BE8` USA/Europe host override semantics are unchanged. Text and voice selections are still handled separately.
 
-Windows / D3D12 下，从游戏原有 Settings 入口打开四个分类：游戏、声音、图像、语言。F1 调试菜单保留独立入口。
+A default-off, bounded `LO_TRACE_LANGUAGE=1` trace is added. It can record the raw lookup arguments, the host/original return pointers, the configured count and index at menu open/apply/default/close, the mapped ID, and the valid cached UTF-16 and returned IDs of `82481E78`/`82481F40`. The close snapshot is taken after apply and before close. The trace is for later problem investigation. The root cause of the specific cutscene voice problem is not confirmed. There is no save, and no live reproduction was done in this round. The fix in this section was pending release when it was written. #54/#55 were closed later, but the closure record does not supply the live evidence above.
 
-- 保留文字速度、字幕、语音语言、战斗光标记忆、后排自动输入、镜头上下/左右反转、确认按键、音乐/音效音量，以及原版亮度说明；增加恢复原游戏默认设置。
-- 设置界面和游戏文本均提供英文、日文、韩文、繁体中文、简体中文。界面语言即时预览，游戏语言保存后重启生效；保存成功提示明确说明需要重启。旧版未验证的德／法／西／意选项已移除。
-- 图像设置包含 FXAA 开关、输出分辨率、窗口/无边框全屏/独占全屏。输出分辨率是最终显示缩放，**不是提高游戏内部渲染分辨率**。无边框使用桌面尺寸。（2026-10-07 更正：独占全屏已移除，见文首。）
-- DLSS 和帧生成为禁用占位，不加载 SDK、不产生超分或插帧。
-- 应用显示设置后有 15 秒确认期；不确认或按取消会还原。显示切换失败时还原旧设置。确认后原子写入工作目录的 `settings.ini`。（2026-10-07 更正：整页确认期早已取消，见文首。）
-- 原有游戏选项直接修改原游戏配置对象，复用其应用函数与原版保存确认。新游戏的设置流程仍按原版继续；不另外覆盖用户的 save/profile。
+## 2026-09-14 Europe/US subtitle mapping included in v0.5.12
 
-分类位于顶部横排，选中项有高亮及金色下划线。手柄使用 LB/RB 切分类、方向键选择/调整、确认键选择、取消键返回。键盘沿用现有映射：Q/W、方向键、Z/X。鼠标可点分类与选项值，右键反向调整。原有确认按键设置也作用于新菜单。
+The USA/Europe FMV / event subtitle language mapping fix in the `82481BE8` hook is included in the released [v0.5.12](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.5.12). The local check of the Spanish opening FMV with `game_language=5` and Vulkan at 3840×2160 passed and was accepted. On 2026-09-15 the original reporter confirmed the Spanish opening FMV subtitles in v0.5.12 (Vulkan and Direct3D 12). German, French and Italian FMV coverage was also confirmed. Issue [#27](https://github.com/freefrank/LostOdysseyRecomp/issues/27) is closed. Full event coverage and whole-game validation are still not verified. The release check did not re-verify the 50-file manifest.
 
-## 接入点
+2026-09-05, implementation and validation record. Following [reblue](https://github.com/zolaware/reblue), the new menu is reconnected to the original entry, and settings data is separated from drawing. The Blue Dragon game addresses or menu implementation were not copied.
 
-- `settings/config.*`：宿主配置读取、预览、原子保存；游戏语言在本次进程启动后固定。
-- `settings/menu.*`：`822F19B0` 原设置任务更新钩子；配置对象 `8326A068`，数据指针来自对象存储。`82870E38` 应用音量/语音等，`828710A0` 恢复默认。
-- 原菜单内部有 13 个行位置，截图实际显示 11 项。内部 ID 11 是隐藏的画面位置，ID 12 才是可见的亮度说明。复用 ID 12 的原始打开流程。
-- 新界面在宿主离屏绘制后上传纹理，经 GPU 呈现；不使用覆盖桌面的独立设置窗口。设置页跳过 FXAA。
-- `gpu/presentation.*`：完整画面缩放、保持宽高比与黑边、FXAA；用完的原始 resolve 纹理恢复 COPY_SOURCE，与游戏渲染器状态一致。
-- `video.cpp`：SDL 操作保留在窗口消息线程；DXGI 独占状态在呈现线程切换并执行 ResizeBuffers。`LO_BACKGROUND` 强制窗口模式，避免测试修改桌面显示模式。（2026-10-07 更正：DXGI 独占切换已随独占全屏删除，见文首。）
-- `LO_SCREENSHOT_PRESENTED=1`：读取最终交换链图像，用于验证实际缩放输出；默认截图行为继续读取原始游戏帧。
+## Features
 
-## 已验证与边界
+On Windows / D3D12, four categories open from the game's original Settings entry: Game, Sound, Graphics and Language. The F1 debug menu keeps its own separate entry.
 
-- `LoPresentationTest`：原分辨率像素相同；非同比例输出黑边正确；斜边 FXAA 产生 32 个中间亮度像素，平坦区域保持不变。
-- `out/settings-preview-run2`：原入口、四页切换、初版中文界面（之后按用户要求改为繁体）、原版退出保存确认，使用最终交换链读回。
-- `out/settings-apply-run2`：1920×1080 预览，15 秒超时回到 1280×720；确认保存 1600×900。保存确认选择 No 返回新页面，再选择 Yes 继续新游戏。修正了返回菜单时尚未松开的确认键被重复处理的问题。
-- `out/settings-language-tw`：通过 `settings.ini` 以 1600×900、游戏语言 8 重启；原主菜单显示「新遊戲／繼續／千年之夢」，原亮度说明显示繁体中文；从亮度页返回新图像页正常。
-- `out/settings-language-tw2/graphics.png`：最终繁体设置页的实际交换链截图；原亮度页打开及返回再次通过。
-- 最终测试构建 `out/settings-preview.exe` 为 `0DD904CA`。编译和 LoPresentationTest 通过；完整构建产生的主程序已另存 `out/settings-full-build.exe`，并从已校验的 `out/voice-fixed.exe/.pdb` 恢复主目录到 `135DCA79`。未启动可见游戏，测试使用独立目录。
-- 无边框、独占全屏有实现，但后台测试禁止切换桌面模式，因此**尚无可见桌面的全屏模式验收**。不同显示器、DPI、切屏/失焦需要后续实际操作确认。（2026-10-07 更正：独占全屏已不存在；显示器切换的后续验收见文首。）
-- 不是全游戏语言、音频或渲染兼容性声明。字幕的日文专用多级模式、不同资源版本仍需覆盖。
+- Keeps text speed, subtitles, voice language, battle cursor memory, auto-input for the back row, camera up/down and left/right inversion, the confirm button, music/sound effect volume, and the original brightness description. Adds restore of the original game defaults.
+- The settings interface and game text are both available in English, Japanese, Korean, Traditional Chinese and Simplified Chinese. Interface language previews immediately. Game language takes effect after a restart when saved, and the save success message says a restart is needed. The old unverified German / French / Spanish / Italian options have been removed.
+- Graphics settings include an FXAA switch, output resolution, and window / borderless fullscreen / exclusive fullscreen. Output resolution is the final display scaling. **It does not raise the in-game internal rendering resolution.** Borderless uses the desktop size. (Correction 2026-10-07: exclusive fullscreen has been removed; see the top of this page.)
+- DLSS and frame generation are disabled placeholders. They do not load the SDK and do not produce upscaling or frame insertion.
+- After applying display settings there is a 15-second confirmation period. If the user does not confirm or presses cancel, the settings revert. If a display switch fails, the old settings are restored. After confirmation, `settings.ini` in the working directory is written atomically. (Correction 2026-10-07: the whole-page confirmation period was removed long ago; see the top of this page.)
+- The original game options change the original game configuration object directly, reusing its apply function and the original save confirmation. New game setup still follows the original flow. The user's save/profile is not separately overwritten.
+
+The categories sit in a horizontal row at the top. The selected item has a highlight and a gold underline. On a gamepad, LB/RB switch categories, the D-pad selects and adjusts, confirm selects, and cancel goes back. Keyboard keeps the existing mappings: Q/W, arrow keys, and Z/X. The mouse can click categories and option values, and right-click adjusts in reverse. The original confirm button setting also applies to the new menu.
+
+## Integration points
+
+- `settings/config.*`: host config reading, preview and atomic save. The game language is fixed for the current process after launch.
+- `settings/menu.*`: `822F19B0` hook for updating the original settings task. Config object `8326A068`, with the data pointer taken from object storage. `82870E38` applies volume/voice and others, and `828710A0` restores defaults.
+- The original menu has 13 row positions internally, and the screenshot actually shows 11 items. Internal ID 11 is a hidden graphics position; ID 12 is the visible brightness description. The original opening flow for ID 12 is reused.
+- The new interface is drawn off-screen by the host, the texture is uploaded, and it is presented through the GPU. It does not use a separate settings window that covers the desktop. The settings page skips FXAA.
+- `gpu/presentation.*`: full-frame scaling, keeping aspect ratio with black bars, and FXAA. The original resolve texture used after presentation is restored to COPY_SOURCE, matching the game renderer state.
+- `video.cpp`: SDL operations stay on the window message thread. DXGI exclusive state is switched on the presentation thread, which then runs ResizeBuffers. `LO_BACKGROUND` forces window mode, so tests do not change the desktop display mode. (Correction 2026-10-07: DXGI exclusive switching was removed with exclusive fullscreen; see the top of this page.)
+- `LO_SCREENSHOT_PRESENTED=1`: reads the final swap chain image to verify the actual scaled output. The default screenshot behaviour still reads the original game frame.
+
+## Validated and boundaries
+
+- `LoPresentationTest`: the original resolution gives identical pixels. Non-matching aspect output has correct black bars. A diagonal edge with FXAA produces 32 intermediate brightness pixels, and flat areas stay unchanged.
+- `out/settings-preview-run2`: original entry, switching among the four pages, the first Chinese interface (later changed to Traditional at the user's request), and the original exit save confirmation. Read back from the final swap chain.
+- `out/settings-apply-run2`: 1920×1080 preview, timeout after 15 seconds back to 1280×720; confirmed save at 1600×900. The save confirmation choice No returns to the new page, and choosing Yes continues the new game. Fixed the problem where the confirm button, still held when returning to the menu, was processed twice.
+- `out/settings-language-tw`: restarted at 1600×900 with game language 8 through `settings.ini`. The original main menu showed "新遊戲 / 繼續 / 千年之夢" in Traditional Chinese, and the original brightness description showed in Traditional Chinese. Returning from the brightness page to the new Graphics page works.
+- `out/settings-language-tw2/graphics.png`: actual swap chain screenshot of the final Traditional settings page. Opening and returning from the original brightness page passed again.
+- The final test build `out/settings-preview.exe` is `0DD904CA`. Compilation and LoPresentationTest passed. The full build's main program is saved separately as `out/settings-full-build.exe`, and the main directory was restored from the verified `out/voice-fixed.exe/.pdb` to `135DCA79`. No visible game was started, and tests used separate directories.
+- Borderless and exclusive fullscreen are implemented, but background tests forbid desktop mode changes, so **there is no fullscreen acceptance on a visible desktop yet**. Different displays, DPI, switching away and focus loss need later hands-on checks. (Correction 2026-10-07: exclusive fullscreen no longer exists. For later display switching acceptance, see the top of this page.)
+- This is not a statement of full-game language, audio or rendering compatibility. The Japanese-only multi-level subtitle mode and different resource versions still need coverage.
 
 
-## 2026-09-05 本地语言资源核对
+## 2026-09-05 local language resource check
 
-直接检查四盘 `xenon_loc.fpd`，每份 87,785,472 字节，SHA256 均为 `87d88853eee59a496066988c60c39e7e20023171e6691c09210ad3d6666be69a`。在同场景控制码包围的 UTF-16BE 文本中，确认至少五种实际译文，不是设置枚举或字体字符表：
+Directly inspected four `xenon_loc.fpd` files, each 87,785,472 bytes, all with SHA256 `87d88853eee59a496066988c60c39e7e20023171e6691c09210ad3d6666be69a`. In UTF-16BE text surrounded by the same scene control codes, at least five actual translations were confirmed. They are not settings enums or a font character table:
 
-| 文本语言 | 文件内偏移 | 同一战斗提示样本 |
+| Text language | Offset in file | Same battle hint sample |
 |---|---|---|
-| 繁体中文 | 0x1830 | 魔法岩的護盾效果解除了。 |
-| 英文 | 0x1662866 | Magic Rock's barrier effect deactivated. |
-| 日文 | 0x2077038 | 魔岩石のバリア効果が解除された |
-| 韩文 | 0x32a6838 | 마암석의 바리어 효과가 풀렸다. |
-| 简体中文 | 0x40EE830 | 魔岩石的魔法盾效果被解除 |
+| Traditional Chinese | 0x1830 | 魔法岩的護盾效果解除了。 |
+| English | 0x1662866 | Magic Rock's barrier effect deactivated. |
+| Japanese | 0x2077038 | 魔岩石のバリア効果が解除された |
+| Korean | 0x32a6838 | 마암석의 바리어 효과가 풀렸다. |
+| Simplified Chinese | 0x40EE830 | 魔岩石的魔法盾效果被解除 |
 
-另有同一议会剧情的多语种对应对白，支持上述资源确有翻译。结果保存在 `out/language-resource-audit.json`。本轮没有验证德/法/西/意语文本，不能宣称七种或八种全部支持，也没有证明这五种是压缩包内的全部语言。当前只确认资源存在；除此前英文/繁体外，其余语言的运行时选择映射、完整性、字体与加载仍未验收。不能从本地资源反推所有原版亚洲发行盘都附带简体中文，也未核实这份资源的来源/修改历史。
+The same council story scene also has matching dialogue in several languages, which supports that these resources really contain translations. The results are saved in `out/language-resource-audit.json`. German, French, Spanish and Italian text was not verified in this round. The claim of seven or eight fully supported languages cannot be made, and it has not been shown that these five are all the languages in the archive. The local resources are only confirmed to exist. Apart from the earlier English / Traditional Chinese, the runtime selection mapping, completeness, fonts and loading for the other languages are not yet accepted. The local resources cannot be used to infer that every original Asian retail disc includes Simplified Chinese, and the source and modification history of this resource is not verified.
 
-此前根据商品说明将本地文本限制为英/繁两种的结论撤回。按用户现有要求，没有增加简体设置界面，也没有删改当前游戏语言选项。未操作或重启正在运行的测试版。
-
-
-## 五语言与横排分类更新
-
-用户已明确要求加入简体及其他已确认资源语言，覆盖之前“不加简中界面”的偏好。UI 的持久值保留 0=英文、1=繁体，追加 2=日文、3=韩文、4=简体。游戏语言使用原程序 `0x832455F0` 表映射：1=INT、2=JPN、7=KOR、8=CHI、9=SCH；不使用桌面系统地区猜测简繁体。非法或旧未支持的游戏语言值回退英文。
-
-全部设置项、分类、操作提示、失败/还原/保存状态均提供五语，标题和分类使用同一翻译表。横排分类的鼠标命中范围与绘制坐标同步调整；键盘/手柄切页映射保持 Q/W、LB/RB。
+The earlier conclusion, drawn from the product description, that local text was limited to English and Traditional Chinese has been withdrawn. Following the user's existing request, no Simplified interface was added and the current game language options were not changed. The running test build was not operated on or restarted.
 
 
-五语言回归完成：`out/settings-five-languages` 的日／韩／简三轮分别验证宿主翻译和顶部横排切页；`out/settings-five-brightness` 进一步确认原版日文、韩文亮度说明实际加载。仅设置简中 ID 9 曾回退英文，原因是发行配置的语言别名回退；`82481BE8` 的宿主钩子仅在选择简中、查询当前语言注册表且请求为 0/9 时，返回原可执行文件表中的 SCH 指针，其他语言和调用仍执行原函数。`out/settings-sch-resolved/simplified/shot_1034.png` 已确认原版简体设置和亮度说明正常显示。
+## Five-language and horizontal category update
 
-新的 `out/settings-preview.exe/.pdb` 已同步包含该修正，另存同内容 `out/settings-language-preview.exe/.pdb`。主构建仍保留 135DCA79，旧测试版保存在 `out/settings-preview-0DD904CA.exe/.pdb`。以上均为限时隔离副本，已全部退出，未改用户 save/profile；无提交推送。验证不是全游戏翻译完整性声明。
+The user has now explicitly asked to add Simplified and the other confirmed resource languages, overriding the earlier preference of "no Simplified Chinese interface". The UI's persisted values keep 0=English and 1=Traditional, and add 2=Japanese, 3=Korean, 4=Simplified. Game language uses the original program's `0x832455F0` table mapping: 1=INT, 2=JPN, 7=KOR, 8=CHI, 9=SCH. The desktop system region is not used to guess Simplified or Traditional. An invalid or old unsupported game language value falls back to English.
 
-用户随后授权 commit/push，本设置菜单源码、测试与文档随本次提交同步；上述“未提交”表述仅描述当时实验状态。
+All settings items, categories, operation hints, and failure / revert / save status are provided in all five languages. The title and categories use the same translation table. The mouse hit area for the horizontal category row is adjusted together with the drawing coordinates. The keyboard/gamepad page switching mapping stays Q/W and LB/RB.
 
-## 2026-09-14 欧美版字幕映射当前状态
 
-当前 `82481BE8` 宿主 hook 已不再只为简体中文（SCH）返回原可执行文件语言表指针：当 `r3=0x8336A5F0` 且请求为 `r4=0` 或当前语言 ID 时，宿主 `GameLanguage()` ID 1–9 均走同一返回路径。客体表 `0x832455F0` 的 ID 顺序为 1=INT、2=JPN、3=DEU、4=FRA、5=SPA、6=ITA、7=KOR、8=CHI、9=SCH。原函数对运行时 allowlist 缺少的 ID 使用 ID-0（INT）回退；调用方预先以 `r4=0` 查询时，这会使欧美版事件／FMV 字幕无法选择对应语言后缀。此处记录的是当前修复，不改写下方 2026-09-05 的 SCH 历史验证范围。
+Five-language regression complete: `out/settings-five-languages` verifies host translation and the top horizontal page switching in three rounds, for Japanese, Korean and Simplified. `out/settings-five-brightness` further confirms that the original Japanese and Korean brightness descriptions actually load. Only the Simplified Chinese setting with ID 9 once fell back to English. The cause was the language alias fallback in the retail configuration. The `82481BE8` host hook returns the SCH pointer from the original executable table only when Simplified is selected, the current language registry is queried, and the request is 0/9. For other languages and calls the original function still runs. `out/settings-sch-resolved/simplified/shot_1034.png` confirms that the original Simplified settings and brightness description display correctly.
 
-## 2026-09-06 按游戏版本提供语言（已包含在 v0.2）
+The new `out/settings-preview.exe/.pdb` includes this fix, and an identical copy is saved as `out/settings-language-preview.exe/.pdb`. The main build still keeps 135DCA79. The old test build is saved as `out/settings-preview-0DD904CA.exe/.pdb`. These are all time-limited isolated copies, all exited, and the user's save/profile was not changed. Nothing committed or pushed. The validation is not a statement of full-game translation completeness.
 
-游戏语言选项现在按安装数据的 XEX 版本自动选择。欧美版使用 1=English、2=日本語、3=Deutsch、4=Français、5=Español、6=Italiano；亚洲版继续使用 1/2/7/8/9。首次启动与游戏内菜单共用列表，旧配置中不适用于当前版本的游戏语言回退英文。设置界面翻译仍为原有英／繁／日／韩／简五种，未增加德／法／西／意界面翻译。
+The user then authorised commit/push. This settings menu source, tests and documentation were synced with that commit. The "not committed" wording above describes only the experimental state at the time.
 
-运行时先确定数据目录，再检测版本，最后加载设置或打开首次设置。缺少资源时先完成导入，以便首次设置显示正确语言。版本检测读取 XEX 元数据；完整 SHA256 支持校验由导入器执行，不能把运行时列表选择当作任意 XEX 兼容性认证。
+## 2026-09-14 Europe/US subtitle mapping current status
 
-Release 编译及 11 轮隐藏首次设置测试通过，覆盖两版精确选项列表、全部语言 ID 保存及旧不兼容配置回退；记录为 `out/eu-import-audit/setup-tests/results.json`。六种语言启动均通过；英／德／法／西／意主菜单已目视确认，日文标题菜单本身使用英文，另以原版日文亮度／设置页确认资源语言。验证仅覆盖菜单与设置，不是游戏流程。详见[欧美版支持记录](europe-support.md)。此更新已随 `dcc9462` 双推并正式发布于 v0.2；v0.1 历史内容不变。
+The current `82481BE8` host hook no longer returns the original executable language table pointer only for Simplified Chinese (SCH). When `r3=0x8336A5F0` and the request is `r4=0` or the current language ID, host `GameLanguage()` IDs 1–9 all take the same return path. The ID order of the guest table `0x832455F0` is 1=INT, 2=JPN, 3=DEU, 4=FRA, 5=SPA, 6=ITA, 7=KOR, 8=CHI, 9=SCH. For IDs missing from the runtime allowlist, the original function falls back to ID 0 (INT). When the caller first queries with `r4=0`, this stops Europe/US event and FMV subtitles from selecting the matching language suffix. This records the current fix. It does not rewrite the scope of the 2026-09-05 SCH historical validation below.
 
-本轮另修正宿主语音选择器：此前固定英／日／韩三个选项，现在读取原游戏资源填充的列表，名称和循环数量均跟随列表。原函数 `82482028/82482038` 对应注册表 `8336A5F0` 的 `+419` 数量与 `+288` 语言 ID 数组，宿主读取限制为最多 10 项。欧美版原设置页显示英／日／德／法／意五种语音选项。最新 Release 构建通过，欧美版宿主语音循环已通过实际截图验证：Français → Italiano → English → 日本語 → Deutsch → Français（`out/eu-import-audit/voice-eu/options.png`），日志对应 ID 1/2/3/4/6；亚洲版回归亦已目视确认 English → 日本語 → 한국어 → English → 日本語 → 한국어（`out/eu-import-audit/voice-asia/options.png`），ID 为 1/2/7；此处仅说明菜单选项，不证明各语言完整配音播放正确。
+## 2026-09-06 languages by game version (included in v0.2)
 
-## v0.2 发布验证
+The game language options are now chosen automatically from the XEX version of the installed data. The Europe/US version uses 1=English, 2=日本語, 3=Deutsch, 4=Français, 5=Español, 6=Italiano. The Asian version continues to use 1/2/7/8/9. The first launch and the in-game menu share the same list. In old configs, a game language that does not apply to the current version falls back to English. The settings interface translation is still the original five languages, English / Traditional / Japanese / Korean / Simplified. No German / French / Spanish / Italian interface translation was added.
 
-正式发布包于 2026-09-06 17:16 UTC 上线，包内导入器自测、完整清单校验和精简 PATH 下 30 秒实际渲染启动均通过，德语标题菜单已目视确认。详见[发布记录](../STATUS.md)。上述旧构建名与哈希保留作历史证据，完整语言配音与章节剧情仍未覆盖。
+At runtime, the data directory is determined first, then the version is detected, and finally settings are loaded or the first-run setup is opened. If resources are missing, import is completed first, so the first-run setup shows the correct language. Version detection reads XEX metadata. Full SHA256 support checks are run by the importer. The runtime list selection must not be taken as proof that any XEX is compatible.
+
+The Release build and 11 rounds of hidden first-run setup tests passed. They cover the exact option lists of both versions, saving of all language IDs, and fallback for old incompatible configs. The record is `out/eu-import-audit/setup-tests/results.json`. Launches in all six languages passed. The English, German, French, Spanish and Italian main menus were confirmed visually. The Japanese title menu itself uses English, and resource languages were confirmed separately on the original Japanese brightness / settings page. The validation covers only menus and settings, not gameplay. See the [Europe support record](europe-support.md) for details. This update was pushed to `dcc9462` and officially released in v0.2. The v0.1 history is unchanged.
+
+This round also corrected the host voice selector. It previously had three fixed options: English, Japanese and Korean. It now reads the list filled in by the original game resources, and the names and loop count follow the list. The original functions `82482028/82482038` correspond to the `+419` count and the `+288` language ID array in registry `8336A5F0`. The host read is limited to at most 10 items. The original Europe/US settings page shows five voice options: English, Japanese, German, French and Italian. The latest Release build passed. The Europe/US host voice loop was verified with actual screenshots: Français → Italiano → English → 日本語 → Deutsch → Français (`out/eu-import-audit/voice-eu/options.png`). The log matches IDs 1/2/3/4/6. The Asian version regression was also confirmed visually: English → 日本語 → 한국어 → English → 日本語 → 한국어 (`out/eu-import-audit/voice-asia/options.png`), with IDs 1/2/7. This only shows the menu options. It does not prove that full voice playback is correct for each language.
+
+## v0.2 release validation
+
+The official release package went live on 2026-09-06 at 17:16 UTC. The importer self-test in the package, the full manifest check, and a 30-second actual render start under a minimal PATH all passed. The German title menu was confirmed visually. See the [release record](../STATUS.md) for details. The old build names and hashes above are kept as historical evidence. Full language voice coverage and chapter story are still not covered.

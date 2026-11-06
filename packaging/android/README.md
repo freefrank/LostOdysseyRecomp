@@ -301,25 +301,27 @@ name the phone, every Vulkan device and its driver before device creation.
 
 ## Continuous integration
 
-Two Gitea workflows build this APK through `tools/android/ci_build.sh` on
-git.zkx.ca's privileged Linux runner, after the same host recompiler tools and
+Two GitHub Actions workflows build this APK through `tools/android/ci_build.sh` on
+GitHub-hosted `ubuntu-22.04` runners, after the same host recompiler tools and
 PPC code generation as the Linux release job. The script installs the Android
 SDK packages with `sdkmanager`, seeds the Android DXC from the verified
 prebuilt in the private build-inputs repository (`android/libdxcompiler.so`,
 hash pinned in the script; `tools/android/build-dxc.sh` only compiles it as a
 fallback, which exceeds the runner's memory), runs `tools/android/build-runtime.sh`
 (assemble + lint) and `:runtime:testDebugUnitTest`. The SDK/NDK, the DXC build,
-the Gradle home and ccache live on the runner's `LO_CI_CACHE` volume. Every
+the Gradle home and ccache are restored through GitHub Actions caches. Private inputs
+are fetched with the existing `LO_BUILD_INPUT_KEY` SSH deploy key. Every
 APK is signed with the project's debug keystore from the private build-inputs
 repository (`android/debug.keystore`, the key that signed v0.8.0); the
 maintainer decided on 2026-10-03 that the app stays debug-signed and never gets
 a release keystore, so each release installs over the previous one.
 
-- `.gitea/workflows/android-apk.yml` runs on pushes that touch
-  `packaging/android`, `tools/android` or `thirdparty/libadrenotools`, and on
-  manual dispatch; it uploads `LostOdysseyRecomp-android-arm64-debug` and
-  mirrors the result to the GitHub commit as `gitea/android-apk`.
-- `.gitea/workflows/release.yml` has an Android job for every `v*` tag (and
+- `.github/workflows/android-apk.yml` runs on matching branch pushes and manual
+  dispatch; its path filters include `packaging/android`, `tools/android`,
+  `thirdparty/libadrenotools`, Signalsmith and audio changes. It uploads
+  `LostOdysseyRecomp-android-arm64-debug` and reports a native GitHub check.
+  It has no pull-request trigger, preserving the private-input boundary for forks.
+- `.github/workflows/release.yml` has an Android job for every `v*` tag (and
   build-only dispatches). It builds the release build type with the tag as
   `versionName` (`versionCode` = major×1000000 + minor×10000 + patch) and
   publishes `LostOdysseyRecomp-android-arm64-<tag>.apk` with the other

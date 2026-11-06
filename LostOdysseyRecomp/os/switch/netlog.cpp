@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
@@ -112,44 +113,81 @@ void Serve(void*)
 }
 }
 
-void Start(const char* setting)
+bool Start(const char* setting, bool debugServer)
 {
-    if (!setting || !*setting || std::strcmp(setting, "0") == 0)
+    const bool netlog = setting && *setting && std::strcmp(setting, "0") != 0;
+    if (!netlog && !debugServer)
     {
         g_state = Off;
         std::lock_guard lock(g_mutex);
         std::string().swap(g_history);
-        return;
+        return false;
     }
-    if (const int port = std::atoi(setting); port > 1 && port < 65536)
+    if (const int port = netlog ? std::atoi(setting) : 0; port > 1 && port < 65536)
         g_port = port;
 
-    // Small socket buffers: the log only goes out, and the memory comes from
-    // the same heap as guest memory.
+    // The socket service's buffers come from a transfer memory block taken from the same heap as guest memory:
+    // sb_efficiency * page_round(tcp_tx_max + tcp_rx_max + udp_tx + udp_rx) (libnx bsdInitialize), whatever the
+    // number of sockets. libnx's default is 4 * 0x8d000 = 2.2 MiB.
+    // The network log alone: small buffers, the log only goes out. 2 * 0x2e000 = 368 KiB.
     SocketInitConfig config = *socketGetDefaultInitConfig();
     config.tcp_rx_buf_size = 0x1000;
     config.tcp_rx_buf_max_size = 0;
     config.tcp_tx_buf_max_size = 0x20000;
     config.sb_efficiency = 2; // room for a closing connection's buffers next to the new one
     config.num_bsd_sessions = 2;
+    if (debugServer)
+    {
+        // The debug server also receives (uploads: a 110 MB NRO), and up to 4 connections and the network log can
+        // send at once (the log stream, a screenshot, a file): 128 KiB windows both ways, 4 buffers of each.
+        // 4 * 0x4d000 = 1.2 MiB, only while it is turned on. One session per thread that can block in the socket
+        // service at the same time (the listener, 4 connections; the network log's 2), so none waits for another.
+        config.tcp_rx_buf_size = 0x4000;
+        config.tcp_rx_buf_max_size = 0x20000;
+        config.sb_efficiency = 4;
+        config.num_bsd_sessions = (netlog ? 2 : 0) + 1 + 4;
+    }
+    const auto page = [](uint32_t size) { return (size + 0xFFF) & ~0xFFFu; };
+    const uint32_t transferBytes = config.sb_efficiency * page(
+        (config.tcp_tx_buf_max_size ? config.tcp_tx_buf_max_size : config.tcp_tx_buf_size) +
+        (config.tcp_rx_buf_max_size ? config.tcp_rx_buf_max_size : config.tcp_rx_buf_size) +
+        config.udp_tx_buf_size + config.udp_rx_buf_size);
     if (const Result rc = socketInitialize(&config); R_FAILED(rc))
     {
         g_state = Off;
         std::fprintf(stderr, "netlog: socketInitialize failed (%#x)\n", rc);
-        return;
+        return false;
     }
+    std::fprintf(stderr, "network: socket service up (%u KiB of socket buffers, %u sessions)\n", transferBytes >> 10,
+        config.num_bsd_sessions);
+    // The debug server's log stream reads the history too.
+    g_state = On;
+    if (!netlog)
+        return true;
     // Above the game's threads (0x2C): Horizon runs strictly by priority, and a
     // busy game thread on the same core would starve a lower one. It sleeps
     // between sends, so it costs the game little.
     if (R_FAILED(threadCreate(&g_thread, Serve, nullptr, nullptr, 0x10000, 0x2B, -2)) ||
         R_FAILED(threadStart(&g_thread)))
     {
-        g_state = Off;
         std::fprintf(stderr, "netlog: cannot start its thread\n");
-        return;
+        if (!debugServer)
+            g_state = Off; // nobody reads the history
+        return debugServer;
     }
-    g_state = On;
     std::fprintf(stderr, "netlog: listening on port %d (tools/switch/netlog.py <console IP>)\n", g_port);
+    return true;
+}
+
+uint64_t Read(uint64_t& position, std::string& text)
+{
+    std::lock_guard lock(g_mutex);
+    const uint64_t first = g_end - g_history.size();
+    const uint64_t dropped = position < first ? first - position : 0;
+    const uint64_t from = std::max(position, first);
+    text.append(g_history, size_t(std::min(from, g_end) - first), std::string::npos);
+    position = g_end;
+    return dropped;
 }
 
 void Write(const char* data, size_t size)
