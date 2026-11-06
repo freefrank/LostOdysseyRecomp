@@ -3,6 +3,9 @@
 #include "guest_address_space.h"
 #include "updater/apply_arguments.h"
 #include <os/logger.h>
+#if LO_PLATFORM_SWITCH
+#include <os/switch_platform.h>
+#endif
 #include <set>
 #include <utility>
 #include <mutex>
@@ -220,7 +223,19 @@ uint32_t PageAllocator::Alloc(Region& region, uint32_t size, uint32_t alignment,
             region.used[page + i] = 0;
         std::lock_guard sizeLock(m_sizesMutex);
         m_allocationSizes.erase(address);
-        LOG_ERROR("guest memory commit failed: {:#x} + {:#x}", address, size);
+        // Which step failed and its result code (on the Switch: "create shared backing" with rc 0 is the
+        // memalign of the chunk, with an rc the code-memory map; "map alias view" a view), and the heap
+        // and process memory at that moment: the next failure says its cause.
+        const auto failure = GuestAddressSpace::GetFailureInfo();
+        LOG_ERROR("guest memory commit failed: {:#x} + {:#x} ({} rc {:#x}, view {}, chunk offset {:#x}, size {:#x}){}{}",
+            address, size, GuestAddressSpace::FailureOperationName(failure.operation), failure.error, failure.viewIndex,
+            failure.offset, failure.size,
+#if LO_PLATFORM_SWITCH
+            ", ", os::switch_platform::MemorySummary()
+#else
+            "", ""
+#endif
+        );
         return 0;
     }
     memset(g_memory.Translate(address), 0, size);
