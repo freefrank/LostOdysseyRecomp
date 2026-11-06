@@ -33,6 +33,7 @@ fi
 apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-sdl3.patch"
 apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-android.patch"
 apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-pipeline-stats.patch"
+apply_patch_once "$repo/thirdparty/plume" "$repo/tools/patches/plume-pass-timing.patch"
 apply_patch_once "$repo/thirdparty/SDL" "$repo/tools/patches/sdl-android-surface-lock.patch"
 
 cmake -S "$repo" -B "$build" -G Ninja \

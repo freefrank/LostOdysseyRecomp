@@ -1,0 +1,236 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index fadba5c..f8fbe73 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -8,6 +8,9 @@
+ #define VMA_IMPLEMENTATION
+ #define VOLK_IMPLEMENTATION 
+ 
++#include <chrono>
++#include <map>
++#include <mutex>
+ #include "plume_vulkan.h"
+ #include <cstdlib>
+ #include <cstring>
+@@ -3574,6 +3577,117 @@ namespace plume {
+ 
+     // VulkanCommandList
+ 
++    // LostOdysseyRecomp pass-timing diag: per-render-pass GPU time, aggregated by framebuffer shape
++    // and written to $LO_LOG_DIR/pass-timing.txt every few seconds so two drivers' runs of the same
++    // scene can be compared pass class by pass class.
++    namespace {
++        struct PassAggregate {
++            uint64_t count = 0;
++            uint64_t totalNs = 0;
++            uint64_t maxNs = 0;
++            uint64_t draws = 0;
++        };
++
++        std::mutex passTimingMutex;
++        std::map<std::string, PassAggregate> passTimingAggregates;
++        std::chrono::steady_clock::time_point passTimingLastReport;
++        std::chrono::steady_clock::time_point passTimingStart;
++        bool passTimingStarted = false;
++        uint64_t passTimingLists = 0;
++        FILE *passTimingOut = nullptr;
++
++        void passTimingReport(VulkanDevice *device) {
++            const auto now = std::chrono::steady_clock::now();
++            if (passTimingOut == nullptr) {
++                const char *dir = getenv("LO_LOG_DIR");
++                std::string path = std::string((dir != nullptr) ? dir : ".") + "/pass-timing.txt";
++                passTimingOut = fopen(path.c_str(), "a");
++                if (passTimingOut == nullptr) {
++                    passTimingLastReport = now;
++                    return;
++                }
++                fprintf(passTimingOut, "device %s driver=%u\n", device->physicalDeviceProperties.deviceName,
++                    unsigned(device->physicalDeviceProperties.driverVersion));
++            }
++
++            const double seconds = std::chrono::duration<double>(now - passTimingLastReport).count();
++            const double sinceStart = std::chrono::duration<double>(now - passTimingStart).count();
++            std::vector<std::pair<std::string, PassAggregate>> rows(passTimingAggregates.begin(), passTimingAggregates.end());
++            std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.second.totalNs > b.second.totalNs; });
++            uint64_t totalNs = 0;
++            uint64_t totalCount = 0;
++            for (const auto &row : rows) {
++                totalNs += row.second.totalNs;
++                totalCount += row.second.count;
++            }
++            fprintf(passTimingOut, "interval t=%.1f secs=%.2f lists=%llu passes=%llu total_ms=%.2f\n", sinceStart, seconds,
++                (unsigned long long)passTimingLists, (unsigned long long)totalCount, double(totalNs) / 1.0e6);
++            for (const auto &row : rows) {
++                fprintf(passTimingOut, "pass %s n=%llu avg_us=%.1f max_us=%.1f total_ms=%.2f draws=%llu\n", row.first.c_str(),
++                    (unsigned long long)row.second.count, double(row.second.totalNs) / double(row.second.count) / 1000.0,
++                    double(row.second.maxNs) / 1000.0, double(row.second.totalNs) / 1.0e6, (unsigned long long)row.second.draws);
++            }
++            fflush(passTimingOut);
++            passTimingAggregates.clear();
++            passTimingLists = 0;
++            passTimingLastReport = now;
++        }
++
++        std::string passTimingKey(const VulkanFramebuffer *framebuffer, uint32_t clearMask) {
++            std::string key = std::to_string(framebuffer->width) + "x" + std::to_string(framebuffer->height);
++            for (const VkAttachmentDescription &attachment : framebuffer->attachmentDescriptions) {
++                key += " f" + std::to_string(unsigned(attachment.format));
++                if (attachment.samples != VK_SAMPLE_COUNT_1_BIT) {
++                    key += "s" + std::to_string(unsigned(attachment.samples));
++                }
++            }
++            key += framebuffer->hasDepth ? " depth" : " nodepth";
++            if (clearMask != 0) {
++                key += " clr" + std::to_string(clearMask);
++            }
++            return key;
++        }
++    }
++
++    static void passTimingCollect(VulkanCommandList *list) {
++        if (list->timingPool == VK_NULL_HANDLE || list->timedPasses.empty()) {
++            return;
++        }
++
++        const uint32_t queryCount = uint32_t(list->timedPasses.size()) * 2;
++        std::vector<uint64_t> data(size_t(queryCount) * 2);
++        VkResult res = vkGetQueryPoolResults(list->queue->device->vk, list->timingPool, 0, queryCount,
++            data.size() * sizeof(uint64_t), data.data(), 2 * sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
++        if (res == VK_SUCCESS || res == VK_NOT_READY) {
++            const double period = double(list->queue->device->physicalDeviceProperties.limits.timestampPeriod);
++            std::lock_guard<std::mutex> lock(passTimingMutex);
++            if (!passTimingStarted) {
++                passTimingStarted = true;
++                passTimingStart = passTimingLastReport = std::chrono::steady_clock::now();
++            }
++            for (size_t i = 0; i < list->timedPasses.size(); i++) {
++                const uint64_t begin = data[(i * 2) * 2];
++                const uint64_t beginAvailable = data[(i * 2) * 2 + 1];
++                const uint64_t end = data[(i * 2 + 1) * 2];
++                const uint64_t endAvailable = data[(i * 2 + 1) * 2 + 1];
++                if (!beginAvailable || !endAvailable || end < begin) {
++                    continue;
++                }
++
++                const uint64_t ns = uint64_t(double(end - begin) * period);
++                PassAggregate &aggregate = passTimingAggregates[list->timedPasses[i].key];
++                aggregate.count++;
++                aggregate.totalNs += ns;
++                aggregate.maxNs = std::max(aggregate.maxNs, ns);
++                aggregate.draws += list->timedPasses[i].draws;
++            }
++            passTimingLists++;
++            if (std::chrono::steady_clock::now() - passTimingLastReport > std::chrono::seconds(10)) {
++                passTimingReport(list->queue->device);
++            }
++        }
++    }
++
+     VulkanCommandList::VulkanCommandList(VulkanCommandQueue *queue) {
+         assert(queue != nullptr);
+ 
+@@ -3601,9 +3715,22 @@ namespace plume {
+             PLUME_LOG_ERROR("Vulkan", "vkAllocateCommandBuffers", LogErrorDomain::VkResult, res, "");
+             return;
+         }
++
++        VkQueryPoolCreateInfo timingInfo = {};
++        timingInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
++        timingInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
++        timingInfo.queryCount = MaxTimedPasses * 2;
++        if (queue->device->physicalDeviceProperties.limits.timestampComputeAndGraphics &&
++            vkCreateQueryPool(queue->device->vk, &timingInfo, nullptr, &timingPool) != VK_SUCCESS) {
++            timingPool = VK_NULL_HANDLE;
++        }
+     }
+ 
+     VulkanCommandList::~VulkanCommandList() {
++        if (timingPool != VK_NULL_HANDLE) {
++            vkDestroyQueryPool(queue->device->vk, timingPool, nullptr);
++        }
++
+         if (vk != VK_NULL_HANDLE) {
+             vkFreeCommandBuffers(queue->device->vk, commandPool, 1, &vk);
+         }
+@@ -3614,6 +3741,9 @@ namespace plume {
+     }
+ 
+     void VulkanCommandList::begin() {
++        passTimingCollect(this);
++        timedPasses.clear();
++        timedPassOpen = false;
+         vkResetCommandBuffer(vk, 0);
+         activeGraphicsDescriptorSets.clear();
+         startClearMask = 0;
+@@ -3635,6 +3765,9 @@ namespace plume {
+         }
+ 
+         recording = true;
++        if (timingPool != VK_NULL_HANDLE) {
++            vkCmdResetQueryPool(vk, timingPool, 0, MaxTimedPasses * 2);
++        }
+     }
+ 
+     void VulkanCommandList::end() {
+@@ -3801,6 +3934,7 @@ namespace plume {
+         assert(activeGraphicsPipelineLayout != nullptr);
+         checkActiveRenderPass();
+ 
++        if (timedPassOpen) timedPasses.back().draws++;
+         vkCmdDraw(vk, vertexCountPerInstance, instanceCount, startVertexLocation, startInstanceLocation);
+     }
+     
+@@ -3808,6 +3942,7 @@ namespace plume {
+         assert(activeGraphicsPipelineLayout != nullptr);
+         checkActiveRenderPass();
+ 
++        if (timedPassOpen) timedPasses.back().draws++;
+         vkCmdDrawIndexed(vk, indexCountPerInstance, instanceCount, startIndexLocation, baseVertexLocation, startInstanceLocation);
+     }
+ 
+@@ -4553,6 +4688,12 @@ namespace plume {
+                 beginInfo.clearValueCount = uint32_t(startClearValues.size());
+                 beginInfo.pClearValues = startClearValues.data();
+             }
++            const bool timePass = (timingPool != VK_NULL_HANDLE) && (timedPasses.size() < MaxTimedPasses);
++            if (timePass) {
++                vkCmdWriteTimestamp(vk, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timingPool, uint32_t(timedPasses.size()) * 2);
++                timedPasses.push_back({ passTimingKey(targetFramebuffer, clearMask), 0 });
++                timedPassOpen = true;
++            }
+             vkCmdBeginRenderPass(vk, &beginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+             activeRenderPass = beginInfo.renderPass;
+             if (clearMask && (clearPass == VK_NULL_HANDLE)) {
+@@ -4594,6 +4735,10 @@ namespace plume {
+         if (activeRenderPass != VK_NULL_HANDLE) {
+             vkCmdEndRenderPass(vk);
+             activeRenderPass = VK_NULL_HANDLE;
++            if (timedPassOpen) {
++                vkCmdWriteTimestamp(vk, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timingPool, uint32_t(timedPasses.size() - 1) * 2 + 1);
++                timedPassOpen = false;
++            }
+         }
+     }
+ 
+diff --git a/plume_vulkan.h b/plume_vulkan.h
+index 8c0feeb..7b08769 100644
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -409,6 +409,16 @@ namespace plume {
+         // Graphics pipeline binds skipped on this list (diagnostics). A plain
+         // counter: the recording thread owns the list.
+         uint64_t skippedPipelineBinds = 0;
++        // LostOdysseyRecomp pass-timing diag: two timestamps around every render pass of this
++        // list (queries 2*i and 2*i+1), read back the next time the list is begun.
++        static constexpr uint32_t MaxTimedPasses = 192;
++        struct TimedPass {
++            std::string key;
++            uint32_t draws = 0;
++        };
++        VkQueryPool timingPool = VK_NULL_HANDLE;
++        std::vector<TimedPass> timedPasses;
++        bool timedPassOpen = false;
+ 
+         VulkanCommandList(VulkanCommandQueue *queue);
+         ~VulkanCommandList() override;
