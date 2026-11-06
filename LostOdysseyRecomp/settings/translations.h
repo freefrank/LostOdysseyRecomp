@@ -572,6 +572,7 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
             {L"Quit game", L"Salir del juego"},
             {L"Quit the game?", L"¿Salir del juego?"},
             {L"If you paid for this, ask for a refund.", L"Si has pagado por esto, pide un reembolso."},
+            {L"By Ad0ky and depende3000. Based on freefrank's recomp.", L"Por Ad0ky y depende3000. Basado en el recomp de freefrank."},
             {L"Gameplay", L"Jugabilidad"},
             {L"Audio", L"Audio"},
             {L"Graphics", L"Gráficos"},

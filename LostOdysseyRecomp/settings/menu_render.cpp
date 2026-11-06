@@ -55,8 +55,9 @@ namespace
     constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
                   kHintBottom = kQuitHintY + kHintHeight + 4;
     // Share the legend's centred canvas and safe margin, leaving a gap before
-    // its key. Both lines also clear the achievement toast's shadow above.
-    constexpr int kCreditX = 64, kCreditY = 654, kCreditWidth = 948, kCreditLineHeight = 20;
+    // its key. All lines also clear the achievement toast's shadow above; the
+    // last one ends at 714, inside the 720-row canvas.
+    constexpr int kCreditX = 64, kCreditY = 654, kCreditWidth = 948, kCreditLineHeight = 20, kCreditLines = 3;
     int FooterOffset(const Canvas &output)
     {
         return output.scale > 0 ? int(std::floor(output.offsetY / output.scale)) : 0;
@@ -460,7 +461,7 @@ settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
     return {edge(c.offsetX + (kCreditX - 8) * c.scale, width),
             edge(c.offsetY + std::min(kHintTop + footerOffset, creditY - 4) * c.scale, height),
             edge(c.offsetX + kHintRight * c.scale, width),
-            edge(c.offsetY + std::max(kHintBottom + footerOffset, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
+            edge(c.offsetY + std::max(kHintBottom + footerOffset, creditY + kCreditLines * kCreditLineHeight + 4) * c.scale, height)};
 }
 
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
@@ -1003,13 +1004,17 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         const int hintY = kHintY + FooterOffset(output), quitY = kQuitHintY + FooterOffset(output);
         const std::wstring refund = Translate(current.language, L"If you paid for this, ask for a refund.",
                                               L"本移植免費開源。如果你是花錢買到的，請申請退款。");
+        const std::wstring authors = Translate(current.language, L"By Ad0ky and depende3000. Based on freefrank's recomp.",
+                                               L"由 Ad0ky 與 depende3000 製作。基於 freefrank 的移植。");
         const auto legend = [&](bool credit) {
             if (credit)
             {
                 text(kCreditX, creditY, kCreditWidth, kCreditLineHeight,
-                     L"Lost Odyssey Recomp · Free & open source · github.com/freefrank/LostOdysseyRecomp",
+                     L"Lost Odyssey Recomp · Free & open source · github.com/Ad0ky/LostOdysseyRecomp",
                      14, face, false, 0, outline, 12, false, true);
-                text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
+                text(kCreditX, creditY + kCreditLineHeight, kCreditWidth, kCreditLineHeight, authors,
+                     14, face, false, 0, outline, 12, false);
+                text(kCreditX, creditY + 2 * kCreditLineHeight, kCreditWidth, kCreditLineHeight, refund,
                      14, face, false, 0, outline, 12, false);
                 return;
             }
