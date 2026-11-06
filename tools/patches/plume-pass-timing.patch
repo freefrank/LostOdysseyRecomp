@@ -1,5 +1,5 @@
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index fadba5c..f8fbe73 100644
+index fadba5c..d77ccd5 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -8,6 +8,9 @@
@@ -12,7 +12,7 @@ index fadba5c..f8fbe73 100644
  #include "plume_vulkan.h"
  #include <cstdlib>
  #include <cstring>
-@@ -3574,6 +3577,117 @@ namespace plume {
+@@ -3574,6 +3577,129 @@ namespace plume {
  
      // VulkanCommandList
  
@@ -127,10 +127,22 @@ index fadba5c..f8fbe73 100644
 +        }
 +    }
 +
++    void VulkanCommandList::timingCollect() {
++        passTimingCollect(this);
++        timedPasses.clear();
++        timedPassOpen = false;
++    }
++
++    void VulkanCommandList::timingReset() {
++        if (timingPool != VK_NULL_HANDLE) {
++            vkCmdResetQueryPool(vk, timingPool, 0, MaxTimedPasses * 2);
++        }
++    }
++
      VulkanCommandList::VulkanCommandList(VulkanCommandQueue *queue) {
          assert(queue != nullptr);
  
-@@ -3601,9 +3715,22 @@ namespace plume {
+@@ -3601,9 +3727,22 @@ namespace plume {
              PLUME_LOG_ERROR("Vulkan", "vkAllocateCommandBuffers", LogErrorDomain::VkResult, res, "");
              return;
          }
@@ -153,27 +165,23 @@ index fadba5c..f8fbe73 100644
          if (vk != VK_NULL_HANDLE) {
              vkFreeCommandBuffers(queue->device->vk, commandPool, 1, &vk);
          }
-@@ -3614,6 +3741,9 @@ namespace plume {
+@@ -3614,6 +3753,7 @@ namespace plume {
      }
  
      void VulkanCommandList::begin() {
-+        passTimingCollect(this);
-+        timedPasses.clear();
-+        timedPassOpen = false;
++        timingCollect();
          vkResetCommandBuffer(vk, 0);
          activeGraphicsDescriptorSets.clear();
          startClearMask = 0;
-@@ -3635,6 +3765,9 @@ namespace plume {
+@@ -3635,6 +3775,7 @@ namespace plume {
          }
  
          recording = true;
-+        if (timingPool != VK_NULL_HANDLE) {
-+            vkCmdResetQueryPool(vk, timingPool, 0, MaxTimedPasses * 2);
-+        }
++        timingReset();
      }
  
      void VulkanCommandList::end() {
-@@ -3801,6 +3934,7 @@ namespace plume {
+@@ -3801,6 +3942,7 @@ namespace plume {
          assert(activeGraphicsPipelineLayout != nullptr);
          checkActiveRenderPass();
  
@@ -181,7 +189,7 @@ index fadba5c..f8fbe73 100644
          vkCmdDraw(vk, vertexCountPerInstance, instanceCount, startVertexLocation, startInstanceLocation);
      }
      
-@@ -3808,6 +3942,7 @@ namespace plume {
+@@ -3808,6 +3950,7 @@ namespace plume {
          assert(activeGraphicsPipelineLayout != nullptr);
          checkActiveRenderPass();
  
@@ -189,7 +197,7 @@ index fadba5c..f8fbe73 100644
          vkCmdDrawIndexed(vk, indexCountPerInstance, instanceCount, startIndexLocation, baseVertexLocation, startInstanceLocation);
      }
  
-@@ -4553,6 +4688,12 @@ namespace plume {
+@@ -4553,6 +4696,12 @@ namespace plume {
                  beginInfo.clearValueCount = uint32_t(startClearValues.size());
                  beginInfo.pClearValues = startClearValues.data();
              }
@@ -202,7 +210,7 @@ index fadba5c..f8fbe73 100644
              vkCmdBeginRenderPass(vk, &beginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
              activeRenderPass = beginInfo.renderPass;
              if (clearMask && (clearPass == VK_NULL_HANDLE)) {
-@@ -4594,6 +4735,10 @@ namespace plume {
+@@ -4594,6 +4743,10 @@ namespace plume {
          if (activeRenderPass != VK_NULL_HANDLE) {
              vkCmdEndRenderPass(vk);
              activeRenderPass = VK_NULL_HANDLE;
@@ -214,10 +222,10 @@ index fadba5c..f8fbe73 100644
      }
  
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 8c0feeb..7b08769 100644
+index 8c0feeb..b0c287a 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
-@@ -409,6 +409,16 @@ namespace plume {
+@@ -409,6 +409,20 @@ namespace plume {
          // Graphics pipeline binds skipped on this list (diagnostics). A plain
          // counter: the recording thread owns the list.
          uint64_t skippedPipelineBinds = 0;
@@ -231,6 +239,10 @@ index 8c0feeb..7b08769 100644
 +        VkQueryPool timingPool = VK_NULL_HANDLE;
 +        std::vector<TimedPass> timedPasses;
 +        bool timedPassOpen = false;
++        // Read back the previous recording's timestamps / reset the pool for the next one. begin()
++        // does both; callers that begin the command buffer themselves call them around it.
++        void timingCollect();
++        void timingReset();
  
          VulkanCommandList(VulkanCommandQueue *queue);
          ~VulkanCommandList() override;

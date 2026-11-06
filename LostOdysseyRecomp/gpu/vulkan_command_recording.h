@@ -12,6 +12,7 @@ inline void ClearBindings(plume::VulkanCommandList& list) {
 inline VkResult BeginCommands(plume::VulkanCommandList& list) {
     if (!list.vk || list.recording || list.externalCommandsOpen || list.activeRenderPass)
         return VK_ERROR_UNKNOWN;
+    list.timingCollect();
     const auto reset = vkResetCommandBuffer(list.vk, 0);
     if (reset != VK_SUCCESS) return reset;
     ClearBindings(list);
@@ -19,6 +20,7 @@ inline VkResult BeginCommands(plume::VulkanCommandList& list) {
     info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     const auto result = vkBeginCommandBuffer(list.vk, &info);
     list.recording = result == VK_SUCCESS;
+    if (list.recording) list.timingReset();
     return result;
 }
 inline VkResult EndCommands(plume::VulkanCommandList& list) {
