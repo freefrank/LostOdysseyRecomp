@@ -196,9 +196,9 @@ Config Validate(Config value)
     // The Xbox 360 image: the game's own scene, retail shadow maps and none
     // of the host AA, AO, filtering, upscaling or HDR passes. The menu hides them.
     // The scene renders at Graphics → Maximum resolution for the current mode:
-    // automatically 960x540 in handheld mode (the GPU-bound console gains about a
-    // third in battle) and the Xbox 360's 720p when docked, where the GPU clocks
-    // higher; the final pass scales to the 720p output (bilinear, or FSR 1).
+    // automatically 960x540 in both modes (the GPU-bound console gains about a
+    // third in battle; 720p docked is a choice, not yet tested with deko3d); the
+    // final pass scales to the 720p output (bilinear, or FSR 1).
     // gpu/video.cpp re-applies this when the console is docked or undocked.
     // LO_SWITCH_RENDER_HEIGHT (env.txt, RenderHeightOverride) wins over the menu.
     for (uint32_t *heights : {value.maximumHeight, value.minimumHeight})

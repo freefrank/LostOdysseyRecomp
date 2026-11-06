@@ -85,6 +85,8 @@ inline constexpr uint32_t SwitchSceneHeights[] = {360, 432, 504, 540, 576, 648, 
 // Automatic maximum: 540 rows in both modes (720 docked is not yet tested with deko3d; the Maximum resolution
 // row offers it). The release env.txt sets no height, so these rows decide it.
 inline constexpr uint32_t SwitchAutomaticHeight(bool docked) { return docked ? 540 : 540; }
+// The Balanced and Performance presets' Minimum resolution, in both operation modes.
+inline constexpr uint32_t SwitchPresetMinimumHeight = 360;
 // Audio output: the stereo downmix, the game's 5.1 channels passed through,
 // or 5.1 matrix-encoded into stereo for a receiver to decode.
 inline constexpr uint32_t AudioOutputStereo = 0;
@@ -167,8 +169,16 @@ struct Config
     int displayBrightness = 0;
     uint32_t displayGamma = 100;
     uint32_t anisotropicFiltering = 0; // 0 Off, otherwise 2/4/8/16x. Applied live by the renderer.
+#if defined(__SWITCH__)
+    uint32_t depthOfFieldPercent = 50; // Tone-map DoF strength; 0 Off, 100 retail. Applied live. 50: Balanced.
+#else
     uint32_t depthOfFieldPercent = 100; // Tone-map DoF strength; 0 Off, 100 retail. Applied live.
+#endif
+#if defined(__SWITCH__)
+    bool bloom = false; // Tone-map bloom. Applied live by the renderer. Off: the Switch's Balanced preset.
+#else
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
+#endif
     bool motionBlur = true; // The game's motion blur pass. Applied live.
     // The game's per-object shadows, applied live: 0 Off, 1 On (retail), 2 Low
     // (only objects large on screen cast one, patches/shadow_budget.cpp).
@@ -193,10 +203,19 @@ struct Config
     // [1] docked), 0 automatic: maximum SwitchAutomaticHeight, minimum 80% of the maximum. With dynamic resolution
     // off the maximum is the scene height. env.txt's LO_SWITCH_UPSCALER, LO_SWITCH_RCAS_STOPS,
     // LO_SWITCH_RENDER_HEIGHT and LO_DYNAMIC_RESOLUTION(_MIN) win over them. Applied when saved.
+#if defined(__SWITCH__)
+    // A fresh settings.ini starts on the Balanced preset (graphics_menu.h): FSR, dynamic resolution 360-540 rows,
+    // depth of field at 50% and no bloom. A saved settings.ini keeps its own values.
+    bool switchFsr = true;
+    bool dynamicResolution = true;
+    uint32_t maximumHeight[2] = {0, 0};
+    uint32_t minimumHeight[2] = {SwitchPresetMinimumHeight, SwitchPresetMinimumHeight};
+#else
     bool switchFsr = false;
     bool dynamicResolution = false;
     uint32_t maximumHeight[2] = {0, 0};
     uint32_t minimumHeight[2] = {0, 0};
+#endif
     // DLSS 5 Neural Rendering passes on the DLSS output: 0 Off, 1-4. Needs the
     // player's nvngx_dlssnr.dll; Windows only. Applied after saving.
     uint32_t dlssNeuralRendering = 0;

@@ -48,7 +48,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIOS = REPO_ROOT / "tools/scenarios"
 RELEASE_ENV = REPO_ROOT / "tools/switch/release-env.txt"
 # What a run renders when neither its base env.txt nor --set says (the console's Graphics menu would decide).
-PINNED_RENDERING = (("LO_SWITCH_RENDER_HEIGHT", "540"), ("LO_DYNAMIC_RESOLUTION", "0"))
+# FSR stays off: the Switch's presets turn it on, and it adds GPU time at the output's size.
+PINNED_RENDERING = (("LO_SWITCH_RENDER_HEIGHT", "540"), ("LO_DYNAMIC_RESOLUTION", "0"), ("LO_SWITCH_UPSCALER", "bilinear"))
 DEFAULT_OUT = REPO_ROOT / "out/bench"
 DATA_ROOT = "sdmc:/switch/LostOdysseyRecomp"
 NETLOG_PORT = 28780

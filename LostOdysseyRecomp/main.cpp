@@ -37,6 +37,9 @@
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#if LO_PLATFORM_SWITCH
+#include "settings/graphics_menu.h"
+#endif
 #include "settings/game_path.h"
 #include "settings/restart.h"
 #include "updater/update.h"
@@ -750,6 +753,16 @@ int main(int argc, char* argv[])
                    int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, c.vsync,
                    c.variableRefreshRate, int(c.frameGenerationProvider),
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
+#if LO_PLATFORM_SWITCH
+        // The Switch's Graphics rows as the run uses them (env.txt's LO_SWITCH_UPSCALER and LO_DYNAMIC_RESOLUTION win),
+        // so a log says whether FSR and dynamic resolution were on.
+        LOG_NOTICE("settings: switch preset={} fsr={} fsr_sharpness={} dynamic_resolution={} maximum_height={}/{} "
+                   "minimum_height={}/{} bloom={} motion_blur={} depth_of_field={} dynamic_shadows={} scaling_quality={}",
+                   uint32_t(settings::graphics_menu::PresetOf(c)), settings::graphics_menu::FsrOn(c), c.fsrSharpnessPercent,
+                   settings::graphics_menu::DynamicResolutionOn(c), c.maximumHeight[0], c.maximumHeight[1],
+                   c.minimumHeight[0], c.minimumHeight[1], c.bloom, c.motionBlur, c.depthOfFieldPercent, c.dynamicShadows,
+                   c.scalingQuality);
+#endif
         const auto pack = settings::GameLanguagePack();
         modding::text_overlay::SelectLanguagePack(pack);
         for (const auto& languagePack : modding::LanguagePacks())

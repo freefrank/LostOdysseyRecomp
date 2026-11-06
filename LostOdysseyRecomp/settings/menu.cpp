@@ -1675,9 +1675,16 @@ void Publish(uint8_t *base, uint32_t config)
             if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1]) outputChoice = i;
         }
         placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
+#if LO_PLATFORM_SWITCH
+        placeGraphics(GraphicsRow::Preset, makeChoices(L"Graphics preset", L"畫質預設",
+                   {Tr(L"Quality", L"品質"), Tr(L"Balanced (recommended)", L"平衡（建議）"), Tr(L"Performance", L"效能"),
+                    Tr(L"Custom", L"自訂")},
+                   uint32_t(graphics_menu::PresetOf(edit))));
+#else
         placeGraphics(GraphicsRow::Preset, makeChoices(L"Graphics preset", L"畫質預設",
                    {Tr(L"Original", L"原版"), Tr(L"Low-end", L"低配置"), Tr(L"Custom", L"自訂")},
                    uint32_t(graphics_menu::PresetOf(edit))));
+#endif
         std::vector<std::wstring> renderChoices;
         for (const int height : graphics_menu::RenderResolutions)
             renderChoices.push_back(height == 0 ? Tr(L"Follow output", L"跟隨輸出") :
@@ -2041,8 +2048,9 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         case GraphicsRow::Preset:
 #if LO_PLATFORM_SWITCH
-            next.help = Tr(L"Both run at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom.",
-                           L"兩者皆為 30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈。");
+            next.help = Tr(L"All use FSR at 30 FPS. Quality: fixed 540p, every effect. Balanced: dynamic 360-540p, depth of field 50%, no bloom. "
+                           L"Performance: also no dynamic shadows, motion blur or depth of field.",
+                           L"皆使用 FSR、30 FPS。品質：固定 540p，所有效果。平衡：動態 360-540p，景深 50%，無光暈。效能：另關閉動態陰影、動態模糊與景深。");
 #else
             next.help = Tr(L"Both use 720p at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
                            L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
@@ -2051,10 +2059,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::RenderResolution:
 #if LO_PLATFORM_SWITCH
             next.help = graphics_menu::DynamicResolutionOn(edit)
-                ? Tr(L"The highest scene height dynamic resolution uses. Auto: 540p handheld, 720p docked.",
-                     L"動態解析度使用的最高場景高度。自動：手提模式 540p，TV 模式 720p。")
-                : Tr(L"Scene height, scaled to the 720p screen. Auto: 540p handheld, 720p docked.",
-                     L"場景高度，縮放至 720p 畫面。自動：手提模式 540p，TV 模式 720p。");
+                ? Tr(L"The highest scene height dynamic resolution uses. Auto: 540p.",
+                     L"動態解析度使用的最高場景高度。自動：540p。")
+                : Tr(L"Scene height, scaled to the 720p screen. Auto: 540p.",
+                     L"場景高度，縮放至 720p 畫面。自動：540p。");
             SwitchEnvironmentHelp(next.help, graphics_menu::MaximumHeightFromEnvironment(), L"LO_SWITCH_RENDER_HEIGHT");
             break;
 #endif
@@ -4051,7 +4059,8 @@ PPC_FUNC(sub_822F19B0)
             }
             case GraphicsRow::Preset:
             {
-                // Original and Low-end; from Custom, Right picks Original and Left Low-end.
+                // The presets in order (Original and Low-end; the Switch's Quality, Balanced and Performance);
+                // from Custom, Right picks the first and Left the last.
                 const auto current = graphics_menu::PresetOf(edit);
                 const uint32_t index = current == graphics_menu::Preset::Custom ? (delta > 0 ? graphics_menu::PresetChoiceCount - 1 : 0)
                                                                                 : uint32_t(current);

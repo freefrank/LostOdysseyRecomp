@@ -109,9 +109,13 @@ LO_PIPELINE_PREBUILD=all
 
 ### In the game
 
-Open **Settings → Graphics → Graphics preset** and choose **Low-end**. It turns off dynamic shadows, motion blur, depth of field and bloom, which gives about 10–20% more speed. Choose **Original** to get the full effects back.
+**Settings → Graphics → Graphics preset** has three presets, all with FSR:
 
-**Settings → Graphics** also has **Render resolution** (called Maximum resolution while dynamic resolution is on; Automatic is 540p, handheld and docked; each mode keeps its own), **Dynamic resolution** (off by default) with its **Minimum resolution**, and **FSR** with **FSR sharpness**, which sharpens a scene rendered below 720p. The release `env.txt` sets none of these. A line you add to `env.txt` (`LO_SWITCH_RENDER_HEIGHT`, `LO_DYNAMIC_RESOLUTION`, `LO_DYNAMIC_RESOLUTION_MIN`, `LO_SWITCH_UPSCALER`, `LO_SWITCH_RCAS_STOPS`) wins over its row, which then shows greyed out; delete the line to choose it in the menu again.
+- **Balanced (recommended)**, the default: dynamic resolution from 360p to 540p, depth of field at 50%, no bloom, dynamic shadows and motion blur on.
+- **Quality**: a fixed 540p with every effect.
+- **Performance**: Balanced without dynamic shadows, motion blur or depth of field, for the most speed.
+
+**Settings → Graphics** also has **Render resolution** (called Maximum resolution while dynamic resolution is on; Automatic is 540p, handheld and docked; each mode keeps its own), **Dynamic resolution** with its **Minimum resolution**, and **FSR** with **FSR sharpness**, which sharpens a scene rendered below 720p. The release `env.txt` sets none of these. A line you add to `env.txt` (`LO_SWITCH_RENDER_HEIGHT`, `LO_DYNAMIC_RESOLUTION`, `LO_DYNAMIC_RESOLUTION_MIN`, `LO_SWITCH_UPSCALER`, `LO_SWITCH_RCAS_STOPS`) wins over its row, which then shows greyed out; delete the line to choose it in the menu again.
 
 ### Overclocking
 
@@ -135,7 +139,7 @@ The graphics chip is the limit, so a GPU overclock (for example with sys-clk) he
 | Objects or effects missing, invisible characters | Check that `shaders/` has both `portable_vk.lospv` and `deko3d_shaders.lodk` from the same release as the `.nro`. With the USA/Europe edition, report it (see the shaders note above). |
 | A graphics problem that looks like a bug | Try NVK by deleting `LO_SWITCH_BACKEND=deko3d` from `env.txt`. Report whether it happens with both or only with deko3d. |
 | The game asks for another disc | Copy all four disc folders. The game changes discs by itself when they're present. |
-| Very low frame rate | Choose the **Low-end** preset. A GPU overclock helps most. |
+| Very low frame rate | Choose the **Performance** preset. A GPU overclock helps most. |
 | No cutscene video | Remove `LO_NATIVE_MOVIES=1` from `env.txt` to use the original decoder, and report it. |
 
 ## Reporting a problem

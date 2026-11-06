@@ -133,26 +133,51 @@ inline bool FsrOn(const Config& config)
 // rows match (Custom otherwise). Nothing of its own is saved. Both render the
 // original 720p at 30 FPS; Low-end also turns off the game's costliest effects
 // for weak hardware, Original keeps their retail state.
+#if LO_PLATFORM_SWITCH
+// The Switch's presets, all at 30 FPS with FSR on (it scales the 540-row scene to the screen):
+//   Quality      a fixed 540-row scene, every effect;
+//   Balanced     dynamic resolution 360-540 rows, depth of field at 50%, no bloom (the default, Config's own values);
+//   Performance  Balanced with the Low-end effects (no dynamic shadows, motion blur, depth of field or bloom).
+// The heights are Automatic (540) in both operation modes, the minimum 360 in both.
+enum class Preset : uint32_t { Quality, Balanced, Performance, Custom };
+inline constexpr uint32_t PresetChoiceCount = 3; // Custom is shown, never chosen
+inline void ApplyPreset(Config& config, Preset preset)
+{
+    const bool low = preset == Preset::Performance;
+    const bool dynamic = preset != Preset::Quality;
+    config.frameRate = 30;
+    config.dynamicShadows = low ? 0 : 1;
+    config.motionBlur = !low;
+    config.depthOfFieldPercent = low ? 0 : preset == Preset::Balanced ? 50 : 100;
+    config.bloom = preset == Preset::Quality;
+    config.switchFsr = true;
+    config.dynamicResolution = dynamic;
+    for (uint32_t mode = 0; mode < 2; ++mode)
+    {
+        config.maximumHeight[mode] = 0;
+        config.minimumHeight[mode] = dynamic ? SwitchPresetMinimumHeight : 0;
+    }
+}
+inline constexpr Preset PresetChoices[] = {Preset::Quality, Preset::Balanced, Preset::Performance};
+#else
 enum class Preset : uint32_t { Original, LowEnd, Custom };
 inline constexpr uint32_t PresetChoiceCount = 2; // Custom is shown, never chosen
 inline void ApplyPreset(Config& config, Preset preset)
 {
     const bool low = preset == Preset::LowEnd;
-#if !LO_PLATFORM_SWITCH // the Switch picks its scene height (settings::Validate)
     config.internalResolution = 720;
-#endif
     config.frameRate = 30;
     config.dynamicShadows = low ? 0 : 1;
     config.motionBlur = !low;
     config.depthOfFieldPercent = low ? 0 : 100;
     config.bloom = !low;
-#if !LO_PLATFORM_SWITCH // bicubic's final pass costs the console about 7 ms (Config::scalingQuality)
     config.scalingQuality = low ? 0 : 1; // Standard (bilinear) or High (bicubic)
-#endif
 }
+inline constexpr Preset PresetChoices[] = {Preset::Original, Preset::LowEnd};
+#endif
 inline Preset PresetOf(const Config& config)
 {
-    for (const Preset preset : {Preset::Original, Preset::LowEnd})
+    for (const Preset preset : PresetChoices)
     {
         Config applied = config;
         ApplyPreset(applied, preset);
