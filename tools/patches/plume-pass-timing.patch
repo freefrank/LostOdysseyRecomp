@@ -222,10 +222,20 @@ index fadba5c..d77ccd5 100644
      }
  
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 8c0feeb..b0c287a 100644
+index 8c0feeb..1dc2f24 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
-@@ -409,6 +409,20 @@ namespace plume {
+@@ -374,6 +374,9 @@ namespace plume {
+         virtual uint32_t getCount() const override;
+     };
+ 
++    // LostOdysseyRecomp: set when VulkanCommandList has timingCollect()/timingReset().
++    #define LO_PASS_TIMING 1
++
+     struct VulkanCommandList : RenderCommandList {
+         VkCommandBuffer vk = VK_NULL_HANDLE;
+         VkCommandPool commandPool = VK_NULL_HANDLE;
+@@ -409,6 +412,20 @@ namespace plume {
          // Graphics pipeline binds skipped on this list (diagnostics). A plain
          // counter: the recording thread owns the list.
          uint64_t skippedPipelineBinds = 0;

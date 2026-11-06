@@ -15,6 +15,8 @@ on:
       - LostOdysseyRecomp/apu/**
       - tools/android/**
       - tools/patches/plume-pipeline-stats.patch
+      - tools/patches/plume-pass-timing.patch
+      - LostOdysseyRecomp/gpu/vulkan_command_recording.h
 permissions:
   contents: read
 jobs:
