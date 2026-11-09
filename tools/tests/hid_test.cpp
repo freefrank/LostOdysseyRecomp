@@ -114,6 +114,14 @@ int main()
     prompts.Disconnected(12);
     Check(!prompts.PlayStation(), "all controllers removed");
 
+    // Keep host controllers out of this test. hid::Init() opens every gamepad,
+    // and an idle physical pad found first stays the prompt device (a DualSense
+    // forces PlayStation prompts). SDL applies this allow-list to hardware
+    // backends only, so the virtual pads below stay visible. OVERRIDE wins over
+    // an SDL_GAMECONTROLLER_IGNORE_DEVICES[_EXCEPT] environment variable.
+    Check(SDL_SetHintWithPriority(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT,
+                                  "0x0000/0x0000", SDL_HINT_OVERRIDE),
+          "isolate virtual test controllers");
     hid::Init();
     const SDL_JoystickID first = AttachVirtualGamepad();
     const SDL_JoystickID second = AttachVirtualGamepad();
