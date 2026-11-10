@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting! Your **save file** from just before the problem, plus the **logs** from the run where it happened, let us reproduce it much faster, so please attach them. Logs can only be copied after the game has closed. [Where the files are](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#reporting-a-problem).
+        Thanks for reporting! Your **save file** from just before the problem lets us reproduce it much faster, so please attach it. The **logs** from the run where it happened help too, if you can add them; they can only be copied after the game has closed. [Where the files are](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#reporting-a-problem).
 
         Please don't attach the game's disc files (the `game/` folder).
   - type: textarea
@@ -59,10 +59,6 @@ body:
         - `crash.log`, `hang.log` and `exit.log`, if they exist.
 
         Several files can go in one zip. For a more detailed log, add `LO_DEBUG_LOG=1` to `env.txt`, play until it happens, and remove the line afterwards.
-        If you can't add the logs, write the reason here instead.
-      placeholder: "logs.zip attached (runtime-....log, stderr.log, crash.log) or: no logs because ..."
-    validations:
-      required: true
   - type: input
     id: version
     attributes:
