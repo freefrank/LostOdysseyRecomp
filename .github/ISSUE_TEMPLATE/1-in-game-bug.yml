@@ -1,0 +1,91 @@
+name: In-game bug
+description: Something goes wrong while playing (graphics, gameplay, sound, controls, a crash or freeze during play).
+labels: ["bug", "in-game"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The **logs** from the run where it happened let us find most problems, so please attach them. Logs can only be copied after the game has closed. [Where the files are](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#reporting-a-problem).
+
+        Please don't attach game files or saves.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead. Screenshots or a short video help a lot (the console's Capture button works).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did right before it happened, and whether it happens every time.
+      placeholder: |
+        1. Go to ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where in the game
+      description: The disc, the area or town, and the story point (for example the boss or the last event you saw).
+      placeholder: "e.g. disc 1, Uhra, after the first battle with ..."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        From `sdmc:/switch/LostOdysseyRecomp/`, drag in:
+        - the newest `state/logs/runtime-*.log` (the last run);
+        - `stderr.log` (graphics messages);
+        - `crash.log`, `hang.log` and `exit.log`, if they exist.
+
+        Several files can go in one zip. For a more detailed log, add `LO_DEBUG_LOG=1` to `env.txt`, play until it happens, and remove the line afterwards.
+        If you can't add the logs, write the reason here instead.
+      placeholder: "logs.zip attached (runtime-....log, stderr.log, crash.log) or: no logs because ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release (e.g. v1.1.0_NX), or the commit if you built it yourself (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Game edition
+      options:
+        - Asian multilingual
+        - USA/Europe
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Console mode
+      options:
+        - Handheld
+        - Docked
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: Console and setup
+      description: Console model, firmware and Atmosphère version, the graphics preset, and your overclock if you use one (sys-clk profile).
+      placeholder: "e.g. Switch OLED, 19.0.1, Atmosphère 1.8.0, Balanced preset, stock clocks"
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: env.txt
+      description: The contents of `sdmc:/switch/LostOdysseyRecomp/env.txt`, or "release default" if you didn't change it. If it's a graphics problem, say whether it also happens with NVK (delete the `LO_SWITCH_BACKEND=deko3d` line).
+      render: shell

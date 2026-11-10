@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea or a wish for the Switch port (an option, a setting, a mod, ...).
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the feature and why it would help.
+    validations:
+      required: true
+  - type: input
+    id: mode
+    attributes:
+      label: Console mode (if it matters)
+      placeholder: "e.g. handheld, docked"
