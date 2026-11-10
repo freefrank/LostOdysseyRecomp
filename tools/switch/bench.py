@@ -173,6 +173,8 @@ def env_lines(settings: dict, args) -> list[str]:
         # The run's own save folder: the player's slots are never read or written.
         lines.append(f"LO_SAVE_DIR={DATA_ROOT}/bench/save")
     lines.append(f"LO_NETLOG={args.netlog_port}")
+    # Scripted presses are not input to the system: without this a long run could put the console to sleep.
+    lines.append("LO_SWITCH_AUTO_SLEEP=0")
     return lines
 
 

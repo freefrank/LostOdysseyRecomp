@@ -67,6 +67,12 @@ struct Slot
 #endif
 };
 Slot g_slots[kMaxConns];
+// Steady-clock ms when the last connection closed (-1: none yet); client_within reads it with the open slots.
+std::atomic<int64_t> g_lastClientMs{-1};
+int64_t steady_ms()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 std::mutex g_sockMu; // fd of the slots, closed by the connection or by stop
 
 void say(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
@@ -478,6 +484,7 @@ void connection(void* arg)
             break;
     }
     close_slot(slot);
+    g_lastClientMs.store(steady_ms(), std::memory_order_relaxed);
     slot.state = 2;
 }
 
@@ -645,6 +652,15 @@ bool start(const Config& config)
 }
 
 bool running() { return g_running.load(std::memory_order_relaxed); }
+
+bool client_within(int seconds)
+{
+    for (const Slot& slot : g_slots)
+        if (slot.state.load(std::memory_order_relaxed) == 1)
+            return true;
+    const int64_t last = g_lastClientMs.load(std::memory_order_relaxed);
+    return last >= 0 && steady_ms() - last <= int64_t(seconds) * 1000;
+}
 
 void add_command(const char* name, const char* usage, Handler handler)
 {

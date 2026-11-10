@@ -52,11 +52,15 @@ FILE* g_stderrFile = nullptr;
 devoptab_t g_stderrDevice{};
 AppletHookCookie g_operationModeHook{};
 std::atomic<bool> g_operationModeChanged{false};
+void StartBoostThread(); // below
 
 void OnAppletEvent(AppletHookType hook, void*)
 {
     if (hook == AppletHookType_OnOperationMode)
         g_operationModeChanged.store(true, std::memory_order_release);
+    // A game started docked gets the handheld GPU configuration when it is first undocked.
+    if (hook == AppletHookType_OnPerformanceMode && appletGetPerformanceMode() == ApmPerformanceMode_Normal)
+        StartBoostThread();
 }
 
 ssize_t StderrWrite(struct _reent*, void*, const char* data, size_t size)
@@ -277,6 +281,12 @@ namespace
 {
 constexpr u32 kHandheldGpu460Memory1331 = 0x92220008;
 Thread g_apmThread;
+bool g_apmThreadCreated = false;          // g_apmThread holds a thread to close before the next one
+std::atomic<bool> g_apmWanted{false};     // StartHandheldGpuBoost was called
+std::atomic<bool> g_apmRunning{false};    // ApmThreadMain is running
+std::atomic<bool> g_apmDone{false};       // it ran in handheld mode: applied, reverted or not available
+std::atomic<bool> g_apmApplied{false};    // the configuration is ours: ExitNow puts g_apmOriginal back
+u32 g_apmOriginal = 0;                    // apm's handheld configuration before ours
 
 bool ReadClocks(u32& gpuHz, u32& memoryHz)
 {
@@ -305,19 +315,24 @@ bool ReadClocks(u32& gpuHz, u32& memoryHz)
 
 // apmSetPerformanceConfiguration returns before pcv applies the clocks, so the
 // result is checked by polling. The apm session stays open for the process.
+// apm keeps a configuration per performance mode, so the handheld one set here
+// also applies after the console is docked and undocked again.
 void ApmThreadMain(void*)
 {
+    struct Done { ~Done() { g_apmRunning.store(false, std::memory_order_release); } } done;
     if (R_FAILED(apmInitialize()))
     {
         std::fprintf(stderr, "[apm] apm is not available; clocks unchanged.\n");
+        g_apmDone = true;
         return;
     }
     ApmPerformanceMode mode = ApmPerformanceMode_Invalid;
     if (R_FAILED(apmGetPerformanceMode(&mode)) || mode != ApmPerformanceMode_Normal)
     {
-        std::fprintf(stderr, "[apm] Console is not in handheld mode; clocks unchanged.\n");
+        std::fprintf(stderr, "[apm] Console is not in handheld mode; clocks unchanged until it is undocked.\n");
         return;
     }
+    g_apmDone = true;
     u32 original = 0;
     const bool hasOriginal = R_SUCCEEDED(apmGetPerformanceConfiguration(mode, &original));
     u32 gpuBefore = 0, memoryBefore = 0;
@@ -331,6 +346,11 @@ void ApmThreadMain(void*)
     {
         std::fprintf(stderr, "[apm] Configuration 0x%08X is not available on this firmware.\n", configuration);
         return;
+    }
+    if (hasOriginal)
+    {
+        g_apmOriginal = original;
+        g_apmApplied.store(true, std::memory_order_release);
     }
     u32 gpuAfter = 0, memoryAfter = 0;
     bool memoryStable = true;
@@ -353,12 +373,155 @@ void ApmThreadMain(void*)
     {
         if (hasOriginal)
             apmSetPerformanceConfiguration(mode, original);
+        g_apmApplied = false;
         std::fprintf(stderr, "[apm] 0x%08X changed the memory clock (%.1f -> %.1f MHz); reverted to 0x%08X.\n",
             configuration, memoryBefore / 1e6, memoryAfter / 1e6, original);
         return;
     }
-    std::fprintf(stderr, "[apm] GPU %.1f -> %.1f MHz, memory %.1f -> %.1f MHz (configuration 0x%08X).\n",
-        gpuBefore / 1e6, gpuAfter / 1e6, memoryBefore / 1e6, memoryAfter / 1e6, configuration);
+    std::fprintf(stderr, "[apm] GPU %.1f -> %.1f MHz, memory %.1f -> %.1f MHz (configuration 0x%08X, was 0x%08X).\n",
+        gpuBefore / 1e6, gpuAfter / 1e6, memoryBefore / 1e6, memoryAfter / 1e6, configuration, original);
+}
+
+// Once per process in handheld mode; a start in docked mode tries again at the next undock.
+void StartBoostThread()
+{
+    if (!g_apmWanted.load(std::memory_order_acquire) || g_apmDone.load(std::memory_order_acquire) ||
+        g_apmRunning.exchange(true, std::memory_order_acq_rel))
+        return;
+    if (g_apmThreadCreated) // ended: g_apmRunning was false
+    {
+        threadWaitForExit(&g_apmThread);
+        threadClose(&g_apmThread);
+        g_apmThreadCreated = false;
+    }
+    // A libnx thread: it ends on its own; the next start or nothing closes it.
+    if (R_SUCCEEDED(threadCreate(&g_apmThread, ApmThreadMain, nullptr, nullptr, 0x10000, 0x3B, -2)))
+    {
+        g_apmThreadCreated = true;
+        if (R_SUCCEEDED(threadStart(&g_apmThread)))
+            return;
+    }
+    g_apmRunning = false;
+}
+
+// ExitNow: apm's handheld configuration as the game found it. apm also resets it
+// when the process ends (every start reads GPU 307.2 MHz before the boost), so
+// this is for the HOME menu between the quit and the end of the process.
+void RestoreApmForExit(void (*mark)(const char*))
+{
+    if (!g_apmApplied.exchange(false, std::memory_order_acq_rel))
+        return;
+    const Result rc = apmSetPerformanceConfiguration(ApmPerformanceMode_Normal, g_apmOriginal);
+    char line[160];
+    u32 gpuHz = 0, memoryHz = 0;
+    if (R_SUCCEEDED(rc) && appletGetOperationMode() == AppletOperationMode_Handheld)
+        for (int i = 0; i < 10 && ReadClocks(gpuHz, memoryHz) && gpuHz > 461000000; ++i)
+            svcSleepThread(50'000'000);
+    std::snprintf(line, sizeof(line), "exit: apm handheld configuration 0x%08X restored (result 0x%x), GPU %.1f MHz, memory %.1f MHz\n",
+        g_apmOriginal, rc, gpuHz / 1e6, memoryHz / 1e6);
+    mark(line);
+}
+
+// Idle dimming and auto-sleep (issue #7). The system dims the screen and then
+// sleeps after the player's own settings without input. The game keeps the
+// screen on only while nobody needs to touch the controls; SetScreenAwake
+// passes the reasons (start-up, a load, the preparation screen, a movie, an
+// in-engine cutscene, a debug-server client). While any holds, auto-sleep is
+// off and AwakeThreadMain reports the player active every 15 s; a movie or a
+// cutscene also sets the media playback state. When one ends, the idle time
+// starts again. With LO_SWITCH_AUTO_SLEEP=0 auto-sleep stays off for the whole
+// session and nothing else is done.
+bool g_autoSleep = true;
+Thread g_awakeThread;
+bool g_idleTest = false;      // LO_SWITCH_IDLE_SECONDS: debug-server clients do not count
+Mutex g_awakeMutex;
+uint32_t g_awakeReasons = 0;  // under g_awakeMutex
+bool g_mediaPlayback = false; // what the applet has now
+bool g_sleepDisabled = false;
+
+const char* AwakeReasonName(uint32_t bit)
+{
+    using namespace os::switch_platform;
+    switch (bit)
+    {
+    case AwakeStartup: return "start-up";
+    case AwakeLoading: return "load";
+    case AwakePreparing: return "preparation";
+    case AwakeMovie: return "movie";
+    case AwakeCutscene: return "cutscene";
+    case AwakeDebugClient: return "debug client";
+    case AwakeTestWatching: return "test (watching)";
+    case AwakeTestBusy: return "test (busy)";
+    default: return "?";
+    }
+}
+
+// idle:sys ReportUserIsActive, as an input does: the screen lights up again and the idle time restarts.
+Result ReportUserActive()
+{
+    Result rc = idlesysInitialize();
+    if (R_SUCCEEDED(rc))
+    {
+        rc = idlesysReportUserIsActive();
+        idlesysExit();
+    }
+    return rc;
+}
+
+// While a reason holds, the player counts as active every 15 s. Neither the media playback state nor auto-sleep
+// off stops the system dimming the screen (measured on a console set to sleep after 10 min and to sleep while
+// playing media: dimmed 31 and 35 s after an idle restart with either one held), and media playback does not stop
+// auto-sleep there either.
+void AwakeThreadMain(void*)
+{
+    for (unsigned seconds = 0;; ++seconds)
+    {
+        svcSleepThread(1'000'000'000);
+        mutexLock(&g_awakeMutex);
+        const bool held = g_awakeReasons != 0;
+        mutexUnlock(&g_awakeMutex);
+        if (held && seconds % 15 == 0)
+            ReportUserActive();
+    }
+}
+
+void ApplyAwakeLocked(uint32_t previous, uint32_t reasons)
+{
+    using namespace os::switch_platform;
+    if (!g_autoSleep)
+        return;
+    // A reason that ends starts the idle time again (idle:sys ReportUserIsActive): the system counts it from the
+    // last input, so after a cutscene, movie or load longer than the player's sleep setting the console would dim
+    // and sleep at once. Measured with a 20 s dim / 60 s sleep test override, 10 minutes after the last input:
+    // dimmed 21 s and asleep about 90 s after a hold ended.
+    const bool restart = (previous & ~reasons) != 0;
+    const Result idleResult = restart ? ReportUserActive() : 0;
+    // Every reason turns auto-sleep off: on a console set to sleep while playing media, the media playback state
+    // alone let it sleep during a movie.
+    constexpr uint32_t watching = AwakeMovie | AwakeCutscene | AwakeTestWatching;
+    const bool media = (reasons & watching) != 0;
+    const bool disabled = reasons != 0;
+    Result mediaResult = 0, sleepResult = 0;
+    if (media != g_mediaPlayback)
+    {
+        mediaResult = appletSetMediaPlaybackState(media);
+        g_mediaPlayback = media;
+    }
+    if (disabled != g_sleepDisabled)
+    {
+        sleepResult = appletSetAutoSleepDisabled(disabled);
+        g_sleepDisabled = disabled;
+    }
+    char names[128] = "none";
+    size_t length = 0;
+    for (uint32_t bit = 1; bit <= AwakeTestBusy; bit <<= 1)
+        if (reasons & bit)
+            length += std::snprintf(names + length, sizeof(names) - length, "%s%s", length ? ", " : "", AwakeReasonName(bit));
+    char idle[48] = "";
+    if (restart)
+        std::snprintf(idle, sizeof(idle), ", idle time restarted (0x%x)", idleResult);
+    std::fprintf(stderr, "[applet] screen kept on: %s (media playback %d, auto-sleep off %d%s%s)\n", names, int(media), int(disabled),
+                 idle, R_FAILED(mediaResult) || R_FAILED(sleepResult) ? ", a request failed" : "");
 }
 }
 
@@ -403,9 +566,54 @@ bool RawAppend(const char* fileName, const char* data, size_t size)
 
 void StartHandheldGpuBoost()
 {
-    // A libnx thread: it ends on its own and is never joined.
-    if (R_SUCCEEDED(threadCreate(&g_apmThread, ApmThreadMain, nullptr, nullptr, 0x10000, 0x3B, -2)))
-        threadStart(&g_apmThread);
+    g_apmWanted.store(true, std::memory_order_release);
+    StartBoostThread();
+}
+
+std::string ScreenSummary()
+{
+    mutexLock(&g_awakeMutex);
+    const uint32_t reasons = g_awakeReasons;
+    const bool media = g_mediaPlayback, disabled = g_sleepDisabled;
+    mutexUnlock(&g_awakeMutex);
+    char names[128] = "none";
+    size_t length = 0;
+    for (uint32_t bit = 1; bit <= AwakeTestBusy; bit <<= 1)
+        if (reasons & bit)
+            length += std::snprintf(names + length, sizeof(names) - length, "%s%s", length ? ", " : "", AwakeReasonName(bit));
+    // lbl's dimming flag is set while the system has the screen dimmed.
+    bool dimmed = false;
+    const bool lbl = R_SUCCEEDED(lblInitialize());
+    if (lbl)
+    {
+        if (R_FAILED(lblIsDimmingEnabled(&dimmed)))
+            dimmed = false;
+        lblExit();
+    }
+    char text[256];
+    if (!g_autoSleep)
+        std::snprintf(text, sizeof(text), "auto-sleep off for the session (LO_SWITCH_AUTO_SLEEP=0)");
+    else
+        std::snprintf(text, sizeof(text), "kept on: %s (media playback %d, auto-sleep off %d)", names, int(media), int(disabled));
+    std::string out = text;
+    if (lbl)
+        out += dimmed ? "; dimmed now" : "; not dimmed";
+    return out;
+}
+
+void SetScreenAwake(uint32_t mask, uint32_t reasons)
+{
+    if (g_idleTest)
+        reasons &= ~uint32_t(AwakeDebugClient);
+    mutexLock(&g_awakeMutex);
+    const uint32_t next = (g_awakeReasons & ~mask) | (reasons & mask);
+    if (next != g_awakeReasons)
+    {
+        const uint32_t previous = g_awakeReasons;
+        g_awakeReasons = next;
+        ApplyAwakeLocked(previous, next);
+    }
+    mutexUnlock(&g_awakeMutex);
 }
 
 void Initialize(const std::filesystem::path& dataRoot)
@@ -435,8 +643,6 @@ void Initialize(const std::filesystem::path& dataRoot)
     devoptab_list[STD_ERR] = &g_stderrDevice;
     std::setvbuf(stderr, nullptr, _IOLBF, 1024);
 
-    // Keep running (and rendering) while the HOME menu overlay is open, and
-    // never let the console sleep during long loads or cutscenes.
     // The console has no environment: <dataRoot>/env.txt supplies the LO_*
     // switches the PC build reads from it (one KEY=VALUE per line, # comments).
     if (FILE* env = std::fopen((dataRoot / "env.txt").c_str(), "r"))
@@ -466,8 +672,50 @@ void Initialize(const std::filesystem::path& dataRoot)
     os::pgo::StartAutoSave();
 #endif
 
-    appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
-    appletSetAutoSleepDisabled(true);
+    // The HOME menu and sleep suspend the game, as the system does for every game
+    // (libnx's SuspendHomeSleep). LO_SWITCH_HOME_SUSPEND=0 keeps it running and
+    // rendering behind the HOME menu instead (benchmarks, debug server).
+    const char* homeSuspend = getenv("LO_SWITCH_HOME_SUSPEND");
+    const bool suspend = !(homeSuspend && std::strcmp(homeSuspend, "0") == 0);
+    appletSetFocusHandlingMode(suspend ? AppletFocusHandlingMode_SuspendHomeSleep : AppletFocusHandlingMode_NoSuspend);
+    // Idle dimming and auto-sleep follow the system's settings; SetScreenAwake keeps the screen on while nobody
+    // needs the controls. LO_SWITCH_AUTO_SLEEP=0 turns auto-sleep off for the session (long unattended runs).
+    const char* autoSleep = getenv("LO_SWITCH_AUTO_SLEEP");
+    g_autoSleep = !(autoSleep && std::strcmp(autoSleep, "0") == 0);
+    mutexInit(&g_awakeMutex);
+    if (!g_autoSleep)
+        appletSetAutoSleepDisabled(true);
+    else if (R_SUCCEEDED(threadCreate(&g_awakeThread, AwakeThreadMain, nullptr, nullptr, 0x4000, 0x3B, -2)))
+        threadStart(&g_awakeThread);
+    std::fprintf(stderr, "[applet] HOME menu: %s; auto-sleep: %s\n", suspend ? "suspends the game" : "game keeps running (LO_SWITCH_HOME_SUSPEND=0)",
+                 g_autoSleep ? "system settings, off during start-up, loads, preparation, movies and cutscenes" : "off (LO_SWITCH_AUTO_SLEEP=0)");
+    if (R_SUCCEEDED(setsysInitialize()))
+    {
+        // The player's System Settings → Sleep Mode, for reports (flags bit 0: sleeps while playing media).
+        static const char* const handheld[] = { "1 min", "3 min", "5 min", "10 min", "30 min", "never" };
+        SetSysSleepSettings sleep{};
+        if (R_SUCCEEDED(setsysGetSleepSettings(&sleep)))
+            std::fprintf(stderr, "[applet] sleep settings: handheld plan %d (%s), docked plan %d, %s while playing media (flags 0x%x)\n",
+                         sleep.handheld_sleep_plan,
+                         sleep.handheld_sleep_plan >= 0 && sleep.handheld_sleep_plan <= 5 ? handheld[sleep.handheld_sleep_plan] : "?",
+                         sleep.console_sleep_plan, (sleep.flags & 1) ? "sleeps" : "does not sleep", sleep.flags);
+        setsysExit();
+    }
+    SetScreenAwake(AwakeStartup, AwakeStartup);
+    // Test only: LO_SWITCH_IDLE_SECONDS=<dim>,<sleep> overrides the system's idle times for this session
+    // (ISelfController OverrideAutoSleepTimeAndDimmingTime: sleep handheld, sleep docked, dim handheld, dim docked);
+    // 0,0 keeps the system's. Either way debug-server clients then do not keep the screen on.
+    if (const char* idle = getenv("LO_SWITCH_IDLE_SECONDS"))
+    {
+        int dim = 0, asleep = 0;
+        if (std::sscanf(idle, "%d,%d", &dim, &asleep) == 2 && dim >= 0 && asleep >= 0)
+        {
+            const Result rc = dim > 0 && asleep > 0 ? appletOverrideAutoSleepTimeAndDimmingTime(asleep, asleep, dim, dim) : 0;
+            std::fprintf(stderr, "[applet] idle test: dim after %d s, sleep after %d s (0: the system's; result 0x%x); "
+                         "debug-server clients do not keep the screen on\n", dim, asleep, rc);
+            g_idleTest = true;
+        }
+    }
     appletLockExit();
     appletHook(&g_operationModeHook, OnAppletEvent, nullptr);
 }
@@ -498,6 +746,7 @@ void ExitNow()
     os::pgo::SaveOnExit(); // training build: the counters since the last save
     mark("exit: profile saved\n");
 #endif
+    RestoreApmForExit(mark);
     os::logger::DrainForExit();
     // Not fflush(nullptr): it locks every open file, game files included.
     std::fflush(stdout);

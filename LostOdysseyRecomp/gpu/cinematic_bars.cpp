@@ -97,6 +97,10 @@ bool gpu::cinematic_bars::Active()
 #endif
     return rtActive.load(std::memory_order_relaxed) || pauseActive.load(std::memory_order_relaxed) || movie;
 }
+bool gpu::cinematic_bars::CutsceneActive()
+{
+    return rtActive.load(std::memory_order_relaxed);
+}
 
 // The scenario request starts its fade BEFORE it starts Matinee. Inspect only
 // this call site's already-selected request, once per request, not per frame.

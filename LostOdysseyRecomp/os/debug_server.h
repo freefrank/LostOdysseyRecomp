@@ -30,6 +30,9 @@ struct Held
 // is turned on.
 void StartNetwork(const char* dataRoot);
 bool Running();
+// A client (lo_debug.py, bench.py) is connected or was in the last 5 minutes: such runs are unattended, so the
+// console is kept awake (os::switch_platform::AwakeDebugClient).
+bool ClientRecently();
 // hid::GetState: a line sent with "input", in LO_TEST_INPUT_FILE's format
 // ("serial hexButtonMask leftX leftY polls [LT RT [rightX rightY]]"), once.
 bool TakeTestInput(char* line, size_t size);
@@ -41,6 +44,7 @@ bool TakeShotRequest(const char*& path);
 void ShotDone(uint32_t swap, bool saved);
 #else
 inline bool Running() { return false; }
+inline bool ClientRecently() { return false; }
 inline bool TakeTestInput(char*, size_t) { return false; }
 inline bool HeldInput(Held&) { return false; }
 inline bool TakeShotRequest(const char*&) { return false; }
