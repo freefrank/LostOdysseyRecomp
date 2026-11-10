@@ -222,6 +222,11 @@ Config Validate(Config value)
     // The guest's display gamma ramp already darkens the blacks like the Xbox 360;
     // expanding 16-235 on top of it crushes everything below 32/255 to black.
     value.expandRgbRange = false;
+    // 30 FPS, the game's own rate and every preset's. The screen has no VRR and the console does not hold 30 in
+    // the heavy areas, so 60 would pace unevenly and halve dynamic resolution's GPU budget (frame_plan.cpp);
+    // 90/120 cannot be shown at 60 Hz. The menu hides the row; a PC settings.ini's 60/90/120 becomes 30.
+    // LO_FPS (env.txt) stays the diagnostic override.
+    value.frameRate = gpu::frame_rate::kDefault;
 #endif
 #if LO_PLATFORM_MACOS
     // Metal always keeps display sync; the menu offers only ProMotion there.

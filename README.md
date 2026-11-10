@@ -81,7 +81,6 @@ On the title screen, **Y** opens **Settings**. Settings are saved in `settings.i
 | **Motion blur** | The blur during fast camera and character movement. Off keeps moving scenes sharp. |
 | **Culling** | How soon objects at the screen edges stop being drawn. 100% is the original; lower costs frame rate, higher hides them sooner. |
 | **Scaling filter** | The filter used when the scene is scaled without FSR: **Standard** (bilinear) or **High** (bicubic, slower on the Switch). |
-| **Frame rate** | The game's frame rate target. Lost Odyssey runs at 30 FPS, and the presets use that. |
 | **Loading speed** | **Original** keeps the Xbox 360's loading pace; **Fast** loads quicker. Effects play at normal speed either way. |
 | **Performance overlay** | Off by default. **FPS** shows the frame rate; **Detailed** adds a bar with the render resolution, FSR, and the CPU and GPU load. |
 | **Brightness** | Opens a page to adjust brightness and gamma. |
