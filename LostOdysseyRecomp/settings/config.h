@@ -107,7 +107,7 @@ struct DebugOptions
     bool deko3dDepthCompression = false;
     bool deko3dColorCompression = true;
     bool deko3dVsOutputs = false;
-    // The debug server of issue #10, at the next start (not in the build yet).
+    // The debug server of issue #10 (os/debug_server.h), at the next start.
     bool debugServer = false;
     bool operator==(const DebugOptions &) const = default;
 };

@@ -1266,8 +1266,10 @@ bool SystemRowHidden(int r)
 {
 #if LO_PLATFORM_SWITCH
     // No updater, network download, log upload or disc importer on the console (docs/SWITCH.md): the discs and
-    // the shader pack are copied to the SD card.
-    if (r == SystemUpdatesRow || r == SystemCollectionRow || r == SystemImportRow || r == SystemShaderBundleRow)
+    // the shader pack are copied to the SD card. Shader preparation: the release env.txt's LO_PIPELINE_PREBUILD=all
+    // already builds every known pipeline at start, in the background.
+    if (r == SystemUpdatesRow || r == SystemCollectionRow || r == SystemImportRow || r == SystemShaderBundleRow ||
+        r == SystemShaderPreparationRow)
         return true;
 #else
     if (r == SystemDebugRow) return true;
@@ -1306,12 +1308,13 @@ bool GraphicsRowHidden(int r)
     // The console owns the display and output size, and settings::Validate pins the Xbox 360 image (retail shadow
     // maps, no host AA, AO, filtering, HDR or PC upscalers). The rows that do something here, and the Switch's own:
     // the scene height (Render / Maximum, Dynamic and Minimum resolution) and FSR 1 with its sharpness.
+    // Frame rate is pinned at 30 (Validate).
     switch (GraphicsRow(r))
     {
     case GraphicsRow::Preset: case GraphicsRow::RenderResolution: case GraphicsRow::DynamicResolution:
     case GraphicsRow::DynamicShadows: case GraphicsRow::AntiAliasing: case GraphicsRow::DepthOfField:
     case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::Culling: case GraphicsRow::ScalingQuality:
-    case GraphicsRow::FrameRate: case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
+    case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
     case GraphicsRow::Brightness: case GraphicsRow::Save:
         return false;
     case GraphicsRow::MinimumResolution:
@@ -1963,8 +1966,13 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Shows your location and activity on Discord. Applies and saves immediately.",
                        L"在 Discord 顯示目前地點與活動。立即套用並儲存。");
     if (tab == 3 && row == SystemDebugLogRow)
+#if LO_PLATFORM_SWITCH
+        next.help = Tr(L"Writes detailed logs in state/logs/ to help diagnose problems. On by default. Applies when saved.",
+                       L"在 state/logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
+#else
         next.help = Tr(L"Writes detailed logs in logs/ to help diagnose problems. On by default. Applies when saved.",
                        L"在 logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
+#endif
 #if LO_PLATFORM_SWITCH
     if (tab == 3 && row == SystemDebugRow)
         next.help = Tr(L"A/B switches for benchmark runs. Each change is logged with its frame number.",
