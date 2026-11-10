@@ -26,6 +26,17 @@ if(LO_TARGET_PLATFORM STREQUAL "switch" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     if(LO_SWITCH_RECOMP_O2)
         target_compile_options(LostOdysseyRecompLib PRIVATE -O2)
     endif()
+    # FP contraction stays at GCC's default (-ffp-contract=fast). PowerPC fmadd/fmadds
+    # are fused, and XenonRecomp writes each one as one expression (a * b + c), so
+    # contraction keeps them fused; -ffp-contract=off would split about 32,000 of them
+    # into two roundings. Only separate double fmul + fadd pairs fuse beyond that, and
+    # they are few (about 1,000 fmul); fmuls + fadds round to float in between, which
+    # blocks fusion. #17 ruled it out as that bug's cause. See #4.
+    # LO_SWITCH_FP_CONTRACT_OFF is for A/B tests: -ffp-contract=on (GCC 15) still fuses
+    # within one expression, so fmadd stays fused and only those pairs split.
+    if(LO_SWITCH_FP_CONTRACT_OFF)
+        target_compile_options(LostOdysseyRecompLib PRIVATE -ffp-contract=on)
+    endif()
     # Profile-guided build: only the files that hold the hot code. Instrumenting all 96 MB would make training unusable.
     if(NOT LO_SWITCH_PGO STREQUAL "OFF")
         file(STRINGS "${CMAKE_SOURCE_DIR}/tools/switch/pgo_hot_files.txt" _lo_pgo_names)
