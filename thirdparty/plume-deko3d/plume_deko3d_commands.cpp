@@ -625,6 +625,71 @@ namespace plume {
         }
     }
 
+    // LostOdysseyRecomp (2026-11-10, issue #26): LO_DEKO3D_ZCULL_STATS=1 logs the GPU's four Zcull counters
+    // (DkCounter_ZcullStats) per depth target size, every 300 command lists. Each report also flushes the tiled cache
+    // (dkCmdBufReportCounter), so this is for reading the counters, not for timing.
+    static bool zcullStatsOn() {
+        static const bool on = envInt("LO_DEKO3D_ZCULL_STATS", 0) != 0;
+        return on;
+    }
+
+    namespace {
+        struct ZcullTotals {
+            Mutex mutex;
+            uint32_t lists = 0;
+            uint32_t keys[16] = {};
+            uint64_t spans[16] = {};
+            uint64_t sums[16][4] = {};
+        };
+        ZcullTotals g_zcullTotals;  // zero-initialised: an unlocked libnx Mutex is 0
+    }
+
+    void Deko3DCommandList::zcullSnapshot(uint32_t key) {
+        if (zcullSnapCount >= ZcullSnapMax)
+            return;
+        void *cpu = nullptr;
+        DkGpuAddr gpu = 0;
+        if (!transientAlloc(16, 16, &cpu, &gpu))
+            return;
+        dkCmdBufReportCounter(cmd, DkCounter_ZcullStats, gpu);
+        zcullSnap[zcullSnapCount] = static_cast<const volatile uint32_t *>(cpu);
+        zcullSnapKey[zcullSnapCount] = key;
+        zcullSnapCount++;
+    }
+
+    void Deko3DCommandList::zcullCollect() {
+        // The application waited for this list's last submission: its reports are written.
+        const uint32_t n = zcullSnapCount;
+        zcullSnapCount = 0;
+        if (n < 2)
+            return;
+        ZcullTotals &t = g_zcullTotals;
+        mutexLock(&t.mutex);
+        for (uint32_t i = 0; i + 1 < n; i++) {
+            const uint32_t key = zcullSnapKey[i];
+            uint32_t slot = 0;
+            while (slot < 16 && t.spans[slot] && t.keys[slot] != key)
+                slot++;
+            if (slot == 16)
+                continue;
+            t.keys[slot] = key;
+            t.spans[slot]++;
+            for (uint32_t c = 0; c < 4; c++)
+                t.sums[slot][c] += uint32_t(zcullSnap[i + 1][c] - zcullSnap[i][c]);
+        }
+        if (++t.lists >= 300) {
+            for (uint32_t s = 0; s < 16 && t.spans[s]; s++)
+                logf("zcull stats: depth %ux%u, %llu spans in %u lists, per list: %.0f %.0f %.0f %.0f", t.keys[s] >> 16,
+                     t.keys[s] & 0xFFFF, static_cast<unsigned long long>(t.spans[s]), t.lists, double(t.sums[s][0]) / t.lists,
+                     double(t.sums[s][1]) / t.lists, double(t.sums[s][2]) / t.lists, double(t.sums[s][3]) / t.lists);
+            memset(t.keys, 0, sizeof(t.keys));
+            memset(t.spans, 0, sizeof(t.spans));
+            memset(t.sums, 0, sizeof(t.sums));
+            t.lists = 0;
+        }
+        mutexUnlock(&t.mutex);
+    }
+
     void Deko3DCommandList::begin() {
         if (deferred(*this)) {
             // LostOdysseyRecomp (2026-11-03): the recording thread's own state starts over with the list.
@@ -637,6 +702,8 @@ namespace plume {
         // The application waited for this list's last submission (as Vulkan requires before a reset): its command and
         // transient memory is free again. dkCmdBufClear rewinds into the memory fed last, so the first block is fed
         // explicitly (SwitchWakerHD: deko3d 0.5.0's clear keeps the old position).
+        if (zcullStatsOn())
+            zcullCollect();  // before the transient memory holding the reports is reused
         dkCmdBufClear(cmd);
         pendingBarrier = false;  // banjo-nx (2026-10-19): nothing held over from the list before
         pendingBarrierMode = DkBarrier_None;
@@ -701,6 +768,8 @@ namespace plume {
         // Whatever the GPU holds of descriptors and shader code from before is dropped.
         dkCmdBufBarrier(cmd, DkBarrier_None, DkInvalidateFlags_Descriptors | DkInvalidateFlags_Shader);
         descriptorEpoch = currentEpoch();
+        if (zcullStatsOn())
+            zcullSnapshot(0);
     }
 
     // Descriptors written and shader code loaded so far, as one number (flushDescriptorInvalidate).
@@ -717,6 +786,8 @@ namespace plume {
             return;
         }
         flushBarriers();
+        if (zcullStatsOn())
+            zcullSnapshot(0);
         list = dkCmdBufFinishList(cmd);
         open = false;
         // banjo-nx (2026-10-19, render-thread proposal 13): this list's draws into the totals.
@@ -1591,6 +1662,11 @@ namespace plume {
         for (uint32_t i = 0; i < f->colorCount; i++)
             colors[i] = &f->colors[i];
         flushBarriers();
+        if (zcullStatsOn()) {
+            const uint32_t key = f->hasDepth ? (f->width << 16 | (f->height & 0xFFFF)) : 0;
+            if (!zcullSnapCount || zcullSnapKey[zcullSnapCount - 1] != key)
+                zcullSnapshot(key);
+        }
         dkCmdBufBindRenderTargets(cmd, colors, f->colorCount, f->hasDepth ? &f->depth : nullptr);
         writeFramebufferSrgb(cmd, f->colorCount && f->srgb[0]);
     }

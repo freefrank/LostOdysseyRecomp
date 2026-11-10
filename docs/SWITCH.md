@@ -594,7 +594,9 @@ built when devkitPro's deko3d library is installed (`dkp-pacman -S deko3d`; the 
   (on by default, not part of `LO_DEKO3D_GPU_FAST`); compressed targets get memory blocks of their own, since the
   compression state of reused image memory showed as stripes after dynamic resolution resized the targets. Without
   these lines the values saved on the Debug page (Settings → System → Debug, "Debug page" above) apply. The
-  runtime log's `video: deko3d GPU options` line and its `option:` lines show what is on. With `LO_RENDER_TIMING=1`, a `deko3d frame work`
+  runtime log's `video: deko3d GPU options` line and its `option:` lines show what is on. `LO_DEKO3D_ZCULL_STATS=1` logs
+  the GPU's Zcull counters per depth target size every 300 command lists (Info lines: `diagnostic_log=1`; each report also
+  flushes the tiled cache, so not for timing; see SWITCH-BENCHMARKS.md, "Zcull after #29"). With `LO_RENDER_TIMING=1`, a `deko3d frame work`
   line every 150 frames gives the draws, binds, barriers and copies per frame.
 - Not on deko3d yet: LSFG frame generation, the driver pipeline cache (not needed: no pipeline compiles). Host
   occlusion queries are on since `91b7b3ba` (`LO_DEKO3D_OCCLUSION=0` or a made-up `LO_ZPD_MODE` such as `xenia` turns
@@ -620,7 +622,7 @@ In the back end (`thirdparty/plume-deko3d`):
 | Lean shader translation, levels 1-3 | `LO_DEKO3D_LEAN_SHADERS` | about 4 ms of GPU in battle at level 3; needs its shader pack |
 | Copies and resolves cut to both images' bounds | — | no out-of-bounds copies |
 | Last buffer found cached per command list | — | less CPU per bind |
-| Zcull kept through copies, dropped only after a copy into a depth target (#29) | — | Zcull works across a frame's resolves |
+| Zcull kept through copies, dropped only after a copy into a depth target (#29) | — | Zcull works across a frame's resolves: about -2% GPU in battle (#26) |
 | Each texture's image descriptor made once | `LO_DEKO3D_DESCRIPTOR_CACHE` | part of +3.6% in a busy street |
 | Relaxed descriptor counters | `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` | same |
 | Re-binding the framebuffer already bound skipped | `LO_DEKO3D_FB_DEDUPE` | same |

@@ -123,7 +123,9 @@ void StartDeko3d()
         const auto option = Deko3d(i);
         const Info &info = Of(option);
         const bool savedValue = saved.debug.*info.saved;
-        const char *env = set(info.env);
+        // The variable's name: its value is read below (#26: this held the value, and getenv("1") made every
+        // LO_DEKO3D_<NAME> line fall back to the saved value).
+        const char *env = set(info.env) ? info.env : nullptr;
         if (!env && option != Deko3d::ColorCompression && fast) env = "LO_DEKO3D_GPU_FAST";
         const char *value = env ? std::getenv(env) : nullptr;
         *field[i] = value ? std::strcmp(value, "0") != 0 : savedValue;

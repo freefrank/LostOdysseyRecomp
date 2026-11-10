@@ -48,6 +48,7 @@ DESCRIPTIONS = {
     "LO_THREAD_PLACEMENT": "1: log each core's idle share and the busy threads' placement every 30 s",
     "LO_THREAD_CORES": "With LO_THREAD_PLACEMENT=1: name=core:hexmask,... moves busy threads, for placement experiments",
     "LO_DEKO3D_BARRIER_TRACE": "Log every barrier of one frame in N",
+    "LO_DEKO3D_ZCULL_STATS": "deko3d: log the Zcull counters per depth target (1); needs diagnostic_log=1",
     # Threads and scheduling
     "LO_MAIN_CORE": "Core Guest Main stays on; -1 leaves it free to move",
     "LO_XAUDIO_WORKER_PRIORITY": "Hex priority of the XAudio workers (0x2D); 0 keeps the default 0x3B",
