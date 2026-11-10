@@ -4,7 +4,8 @@
 // sessions), and zeroes them, so nothing is counted twice.
 //
 // Saves happen on their own, so a profile can be recorded by just playing, with no PC on the network:
-//   - every LO_PGO_SAVE_SECONDS seconds of play (default 60; 0 saves only on quit), on a thread of their own;
+//   - every LO_PGO_SAVE_SECONDS seconds of play (default 60; 0 saves only on quit), on a libnx thread of their own
+//     (std::thread throws std::system_error on the Switch);
 //   - when the game is quit from its menus (ExitNow). Closing it from the HOME menu loses the time since the last save.
 // Each save adds a line to pgo/pgo.log. The debug server's "pgo dump | reset | status" (tools/switch/pgo_train.py)
 // still works next to it.
@@ -12,14 +13,13 @@
 #if LO_PLATFORM_SWITCH && defined(LO_SWITCH_PGO_GEN)
 #include "debug_server_core.h"
 #include <os/logger.h>
+#include <switch.h>
 #include <sys/stat.h>
-#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <string>
-#include <thread>
 
 extern "C"
 {
@@ -69,6 +69,19 @@ int Save(const char* why)
     return number;
 }
 
+Thread g_thread;
+long g_interval = 60;
+
+void SaveThread(void*)
+{
+    for (;;)
+    {
+        svcSleepThread(static_cast<int64_t>(g_interval) * 1'000'000'000LL);
+        const int number = Save("timer");
+        LOG_INFO("pgo: profile save {}", number);
+    }
+}
+
 debugsrv::Reply Command(const debugsrv::Args& args)
 {
     const std::string what = args.empty() ? "status" : args[0];
@@ -113,14 +126,10 @@ void StartAutoSave()
                seconds > 0 ? "every " + std::to_string(seconds) + " s and on quit" : std::string("on quit only"));
     if (seconds <= 0)
         return;
-    std::thread([seconds] {
-        for (;;)
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(seconds));
-            const int number = Save("timer");
-            LOG_INFO("pgo: profile save {}", number);
-        }
-    }).detach();
+    g_interval = seconds;
+    // Low priority, like the APM thread: a save may wait while the game is busy, the one on quit still comes.
+    if (R_FAILED(threadCreate(&g_thread, SaveThread, nullptr, nullptr, 0x10000, 0x3B, -2)) || R_FAILED(threadStart(&g_thread)))
+        LOG_NOTICE("pgo: no thread for the timed saves, the profile is saved on quit only");
 }
 
 void SaveOnExit()
