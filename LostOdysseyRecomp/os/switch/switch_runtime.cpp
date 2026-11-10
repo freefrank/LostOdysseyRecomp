@@ -21,6 +21,10 @@
 #include <malloc.h>
 #include <system_error>
 
+#ifdef LO_SWITCH_PGO_GEN
+namespace os::pgo { void StartAutoSave(); void SaveOnExit(); } // os/switch/pgo_switch.cpp: training builds only
+#endif
+
 extern "C"
 {
     // A full application (title takeover) gets all the memory and every
@@ -457,6 +461,10 @@ void Initialize(const std::filesystem::path& dataRoot)
     // The network log (LO_NETLOG) and the debug server (LO_DEBUG_SERVER, settings.ini debug_server) share one
     // socket service setup; both stay off, and cost nothing, unless turned on.
     os::debug_server::StartNetwork(dataRoot.string().c_str());
+#ifdef LO_SWITCH_PGO_GEN
+    // Training build: the profile is saved to the SD card on its own (os/switch/pgo_switch.cpp).
+    os::pgo::StartAutoSave();
+#endif
 
     appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
     appletSetAutoSleepDisabled(true);
@@ -470,6 +478,7 @@ void AllowExit()
 }
 
 extern "C" void __nx_win_exit(void) __attribute__((weak));
+
 
 void ExitNow()
 {
@@ -485,6 +494,10 @@ void ExitNow()
     char line[96];
     std::snprintf(line, sizeof(line), "exit: started (system tick %llu)\n", static_cast<unsigned long long>(armGetSystemTick()));
     mark(line);
+#ifdef LO_SWITCH_PGO_GEN
+    os::pgo::SaveOnExit(); // training build: the counters since the last save
+    mark("exit: profile saved\n");
+#endif
     os::logger::DrainForExit();
     // Not fflush(nullptr): it locks every open file, game files included.
     std::fflush(stdout);

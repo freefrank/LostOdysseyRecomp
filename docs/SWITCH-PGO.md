@@ -23,7 +23,28 @@ This is separate from `LO_PGO_MODE` in `cmake/LoOptimization.cmake`, the Clang p
 `pgo_hot_files.txt` lists the 61 of 246 `ppc_recomp.N.cpp` files holding 99.5% of the guest samples of a CPU profile
 (`tools/switch/switch-cpu-profile.py`). Instrumenting all 96 MB of game code would make training unusable.
 
-## Procedure
+## Recording a profile by playing (no PC needed)
+
+The training build saves its profile to the SD card on its own, so the debug server and `pgo_train.py` are optional.
+
+1. Build it: `tools\switch\build-switch.ps1 -Pgo GEN` (or `PGO=GEN bash tools/switch/build-switch.sh` in the image).
+   The NRO lands in `out\switch\pgo-GEN\`.
+2. Copy that NRO to `sdmc:/switch/LostOdysseyRecomp/` in place of the normal one, and delete
+   `sdmc:/switch/LostOdysseyRecomp/pgo/` if an older profile is there.
+3. Play. Spend most of the time where speed matters: battles, busy towns, the field. Menus and loading screens add
+   little. The build is slow; that is expected.
+4. Quit from the game's own menu, which writes the last counters. Closing from the HOME menu loses up to one save
+   interval and nothing else.
+5. Copy every `.gcda` file from `sdmc:/switch/LostOdysseyRecomp/pgo/` into `out\pgo\` (flat, no subfolders).
+6. Build `tools\switch\build-switch.ps1 -Pgo USE`; the optimised NRO lands in `out\switch\pgo-USE\`.
+   Put the normal or the USE NRO back on the SD card.
+
+The counters are written every `LO_PGO_SAVE_SECONDS` seconds (env.txt, default `60`; `0` writes only on quit) and on
+quit. Each write adds to the files on the SD card, so several sessions build one profile; delete the folder to start
+over. `pgo/pgo.log` lists every session and write. A write of the whole profile takes a moment and can show as a
+short hitch in the training build; that does not matter for the profile.
+
+## Procedure with the debug server
 
 Use a build folder per mode. All commands run inside the `switch-dev` image, with `ninja -j 4` (`cmake --build ... -j 4`).
 

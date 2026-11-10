@@ -275,6 +275,7 @@ Switch-specific options and diagnostics:
 | `LO_AUDIO_SKIP_GUEST` | off | Diagnostic only: `1` never calls the game's audio callback, so no sound, no XAudio mixing and almost no XMA decoding (the game may wait on its voices). In the busy street it took the game from 26.89 to 29.88 FPS (the 30 FPS cap): the game's audio costs about 11% there, since the three cores are full |
 | `LO_NATIVE_MOVIES` | on | Cutscene video is decoded on the host with FFmpeg (the game's own decoder freezes cutscenes on the Switch); `0` uses the guest decoder alone. Failures fall back to the guest decoder |
 | `LO_MOVIE_GUEST_VIDEO_PRIORITY` | `0` | Hex priority (`2C`–`3F`) for the guest video thread while native movies are active; `0` keeps the game's priority. Off by default: at `3F` a busy game thread starved it in the Gongora coronation video, with no sound and a hang when the video closed |
+| `LO_PGO_SAVE_SECONDS` | `60` | Training builds only (`-Pgo GEN`): seconds between writes of the profile to `sdmc:/switch/LostOdysseyRecomp/pgo/`; `0` writes only on quit. See [SWITCH-PGO.md](SWITCH-PGO.md) |
 | `LO_IO_PROFILE` | off | Set to `1` to log periodic game-file read statistics |
 | `LO_LOAD_PROFILE` | off | Set to `1` to log thread dumps during long scene or battle loads |
 | `LO_WAIT_PROFILE` | off | Set to `1` to log guest waits of at least 1 ms every 10 seconds |
