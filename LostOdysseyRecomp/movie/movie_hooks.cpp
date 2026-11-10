@@ -421,12 +421,11 @@ PPC_FUNC(sub_82CE9FD8)
 // priority, so it only gets CPU time the audio, the game and the host decoder
 // leave over. Off by default (2026-11-10): the pump is not idle work. It feeds
 // the player's reader, so the movie's audio stops when it is starved, and
-// closing the movie waits for it to stop. In the Gongora coronation video
-// (mv_32v.wmv, disc 3) a busy game thread on its core starved it at 0x3F: the
-// video played without sound, and when the cutscene ended the render thread
-// waited for the pump in the player's close for good (black screen, no crash).
-// When it is lowered, closing or releasing the movie gives it back the game's
-// priority first (RestoreGuestVideoPriority).
+// closing the movie waits for it to stop. When it is lowered, closing or
+// releasing the movie gives it back the game's priority first
+// (RestoreGuestVideoPriority). The black screen after the Gongora coronation
+// video was the pump stuck in the read callback during the close, at any
+// priority; see sub_82813948 in gpu/movie_replace.cpp.
 PPC_FUNC(sub_82CF8140)
 {
     bool lower = false;
