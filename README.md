@@ -114,7 +114,7 @@ All screenshots were taken on a Switch in handheld mode at 960×540.
 
 Also attach the files the game writes in `sdmc:/switch/LostOdysseyRecomp/`: `state/logs/runtime-*.log`, `stderr.log` and, if they exist, `crash.log`, `hang.log` and `exit.log`.
 
-Don't attach game files or saves.
+For a problem while playing, also zip the `save/` folder (your saves) and say which slot it happens on. Don't attach the game's disc files (`game/`).
 
 Questions and help: the [Discord](https://discord.gg/z2yPct6z2w).
 

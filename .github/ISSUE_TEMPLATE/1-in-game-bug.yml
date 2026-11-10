@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting! The **logs** from the run where it happened let us find most problems, so please attach them. Logs can only be copied after the game has closed. [Where the files are](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#reporting-a-problem).
+        Thanks for reporting! Your **save file** from just before the problem, plus the **logs** from the run where it happened, let us reproduce it much faster, so please attach them. Logs can only be copied after the game has closed. [Where the files are](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#reporting-a-problem).
 
-        Please don't attach game files or saves.
+        Please don't attach the game's disc files (the `game/` folder).
   - type: textarea
     id: what
     attributes:
@@ -31,6 +31,21 @@ body:
       label: Where in the game
       description: The disc, the area or town, and the story point (for example the boss or the last event you saw).
       placeholder: "e.g. disc 1, Uhra, after the first battle with ..."
+    validations:
+      required: true
+  - type: textarea
+    id: savefile
+    attributes:
+      label: Save file, or why you can't add it
+      description: |
+        **Please attach your save** (it only holds your progress):
+        1. If you can, save in the game right before the problem happens (at a save point, or with **Save Anywhere** in the **LB+RB** debug menu), then close the game.
+        2. Copy the whole `sdmc:/switch/LostOdysseyRecomp/save/` folder from the SD card (in the computer, or over USB with hekate's *Tools → USB Tools → SD Card*). Each slot is a `userNN` folder inside it.
+        3. Zip the folder and drag the zip into this box.
+
+        Also say which slot the problem is on (as shown in the game's load menu).
+        If you can't add the save, write the reason here instead.
+      placeholder: "save.zip attached, slot 3 (the newest), saved right before ... or: no save because ..."
     validations:
       required: true
   - type: textarea

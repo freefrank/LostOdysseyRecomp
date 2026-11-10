@@ -160,7 +160,10 @@ Attach these to your report, together with:
 - handheld or docked;
 - whether you use an overclock;
 - your `env.txt`;
+- for a problem while playing, the `save/` folder zipped (each `userNN` folder in it is one slot), and which slot it happens on. Save right before the problem if you can;
 - what was on screen when it happened. A screenshot helps.
+
+Don't attach the game's disc files (`game/`).
 
 Logs can only be copied after the game has closed.
 
