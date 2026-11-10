@@ -177,6 +177,7 @@ PPC_FUNC(sub_82814570)
 {
     if (Trace())
         LOG_INFO("movie trace: release M={:08x} lr={:08x}", ctx.r3.u32, uint32_t(ctx.lr));
+    movie::RestoreGuestVideoPriority(Word(ctx.r3.u32 + 20));
     __imp__sub_82814570(ctx, base);
 }
 
@@ -186,6 +187,7 @@ PPC_FUNC(sub_82815640)
     const uint32_t movie = ctx.r3.u32;
     if (Trace())
         LOG_INFO("movie trace: close M={:08x} r4={:08x} lr={:08x}", movie, ctx.r4.u32, uint32_t(ctx.lr));
+    movie::RestoreGuestVideoPriority(Word(movie + 20)); // the close waits for the guest video pump
     __imp__sub_82815640(ctx, base);
     movie::StopReplacement(movie);
 }

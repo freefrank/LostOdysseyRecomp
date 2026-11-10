@@ -417,10 +417,16 @@ PPC_FUNC(sub_82CE9FD8)
 }
 
 // The guest video pump keeps decoding (about one core) although its frames
-// are replaced; at the lowest application priority it only gets CPU time the
-// audio, the game and the host decoder leave over. Nothing waits for it. The
-// audio pump (vtable +140) is a separate thread and keeps its priority.
-// LO_MOVIE_GUEST_VIDEO_PRIORITY=0 keeps the game's priority (hex value: use it).
+// are replaced. LO_MOVIE_GUEST_VIDEO_PRIORITY=<hex 2C-3F> runs it at a lower
+// priority, so it only gets CPU time the audio, the game and the host decoder
+// leave over. Off by default (2026-11-10): the pump is not idle work. It feeds
+// the player's reader, so the movie's audio stops when it is starved, and
+// closing the movie waits for it to stop. In the Gongora coronation video
+// (mv_32v.wmv, disc 3) a busy game thread on its core starved it at 0x3F: the
+// video played without sound, and when the cutscene ended the render thread
+// waited for the pump in the player's close for good (black screen, no crash).
+// When it is lowered, closing or releasing the movie gives it back the game's
+// priority first (RestoreGuestVideoPriority).
 PPC_FUNC(sub_82CF8140)
 {
     bool lower = false;
@@ -431,7 +437,7 @@ PPC_FUNC(sub_82CF8140)
 #if LO_PLATFORM_SWITCH
     static const int priority = [] {
         const char* value = std::getenv("LO_MOVIE_GUEST_VIDEO_PRIORITY");
-        return value && *value ? int(std::strtol(value, nullptr, 16)) : 0x3F;
+        return value && *value ? int(std::strtol(value, nullptr, 16)) : 0;
     }();
     if (lower && priority >= 0x2C && priority <= 0x3F)
     {
@@ -459,11 +465,30 @@ bool movie::NativeMoviesEnabled()
     return Enabled();
 }
 
+void movie::RestoreGuestVideoPriority(uint32_t player)
+{
+#if LO_PLATFORM_SWITCH
+    std::lock_guard lock(g_mutex);
+    if (!player || !g_movie || g_movie->player != player || !g_movie->guestVideoThread || g_movie->guestVideoPriority < 0)
+        return;
+    os::switch_platform::SetThreadPriority(g_movie->guestVideoThread, g_movie->guestVideoPriority);
+    LOG_NOTICE("native movie: {} closing, guest video decoder thread back at priority {:#x}", g_movie->name,
+               g_movie->guestVideoPriority);
+    g_movie->guestVideoPriority = -1;
+#else
+    (void)player;
+#endif
+}
+
 #else
 
 bool movie::NativeMoviesEnabled()
 {
     return false;
+}
+
+void movie::RestoreGuestVideoPriority(uint32_t)
+{
 }
 
 #endif
