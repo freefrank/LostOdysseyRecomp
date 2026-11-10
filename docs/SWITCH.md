@@ -237,7 +237,11 @@ The PC build reads its `LO_*` diagnostic switches from the environment. On the
 console put them in `sdmc:/switch/LostOdysseyRecomp/env.txt`, one `KEY=VALUE`
 per line (`#` starts a comment; keep one above each setting saying what it does:
 `bench.py`, `lo_debug.py env` and `scenario.py` add one from
-`tools/switch/env_comments.py` to every setting they write); `stderr.log` lists the ones applied. Useful
+`tools/switch/env_comments.py` to every setting they write); `stderr.log` lists the ones applied. The file is
+applied before the program's static initializers too, so switches read there (`LO_GPU_STATS`, `LO_VERBOSE`,
+`LO_CP_FUSED_PLAIN_RUN`, `LO_DEKO3D_DESCRIPTOR_CACHE`...) take it; until 2026-11-11 they kept their defaults whatever
+env.txt said. `stderr.log`'s `env.txt: N settings applied before static initialization; read there:` line names
+them, and a `read before env.txt was applied` line would name any it can't set. Useful
 ones: `LO_CPU_PROFILE=1` (below), `LO_FRAME_TIMING=1` (one line per second:
 command flush, waits, present), `LO_RENDER_TIMING=1` (per-frame timing with GPU
 timestamps), `LO_GPU_DRAW_TIMING_EVERY=300` (GPU time of every group of four
@@ -621,9 +625,9 @@ In the back end (`thirdparty/plume-deko3d`):
 | Copies and resolves cut to both images' bounds | — | no out-of-bounds copies |
 | Last buffer found cached per command list | — | less CPU per bind |
 | Zcull kept through copies, dropped only after a copy into a depth target (#29) | — | Zcull works across a frame's resolves |
-| Each texture's image descriptor made once | `LO_DEKO3D_DESCRIPTOR_CACHE` | part of +3.6% in a busy street |
-| Relaxed descriptor counters | `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` | same |
-| Re-binding the framebuffer already bound skipped | `LO_DEKO3D_FB_DEDUPE` | same |
+| Each texture's image descriptor made once | `LO_DEKO3D_DESCRIPTOR_CACHE` | not measured on its own: `=0` did nothing in the +3.6% A/B (see `SWITCH-BENCHMARKS.md`, "Switches env.txt didn't reach") |
+| Relaxed descriptor counters | `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` | same as the descriptor cache |
+| Re-binding the framebuffer already bound skipped | `LO_DEKO3D_FB_DEDUPE` | part of +3.6% in a busy street |
 | Commands recorded on a second thread, off by default | `LO_DEKO3D_RECORD_THREAD=1` | lowers `GPU CmdProc` time, but measured slower overall |
 | Hardware occlusion queries, in testing | `LO_DEKO3D_OCCLUSION` | real culling in towns |
 | Barrier trace | `LO_DEKO3D_BARRIER_TRACE` | diagnostics |
@@ -637,7 +641,7 @@ In the renderer, on deko3d (`LostOdysseyRecomp/gpu`):
 | Fewer resolve passes, off by default | `LO_RESOLVE_FOLD_TRANSFER=1`, `LO_RESOLVE_SHARE=1` | not measured yet |
 | Render targets reused for consecutive draws | `LO_RT_REUSE` | small |
 | Scene renderer's occlusion reads answered at once while counts are made up | `LO_EARLY_QUERY_ANSWER` | +6.9% in a busy street |
-| Constant runs in one pass, lock-free write pointer, wide upload copies | `LO_CP_FUSED_PLAIN_RUN`, `LO_CP_WPTR_LOCKFREE`, `LO_UPLOAD_VECTOR_COPY` | part of +3.6% in a busy street |
+| Constant runs in one pass, lock-free write pointer, wide upload copies | `LO_CP_FUSED_PLAIN_RUN`, `LO_CP_WPTR_LOCKFREE`, `LO_UPLOAD_VECTOR_COPY` | part of +3.6% in a busy street, but not `LO_CP_FUSED_PLAIN_RUN`: its `=0` did nothing in that A/B |
 | Dynamic resolution without flicker after a size change | `LO_RESIZE_FIX` | checked on the console |
 | FSR 1 (EASU and RCAS) from a smaller scene, off by default | Graphics → FSR; `LO_SWITCH_UPSCALER=fsr\|easu\|rcas`, `LO_SWITCH_RCAS_STOPS` | sharp picture from 360 rows |
 | Display scaling: present a smaller image and let the display scale it | `LO_SWITCH_OUTPUT_HEIGHT` | GPU -0.75 to -1.3 ms, slightly softer |
