@@ -201,6 +201,7 @@ A release is a profile-guided build, about 6% faster than this one. See
 
 CMake options (`cmake/LoSwitch.cmake`): `LO_SWITCH_RECOMP_O2`,
 `LO_SWITCH_LTO`, `LO_SWITCH_DATA_ROOT`, `LO_SWITCH_APP_TITLE`.
+`LO_SWITCH_FP_CONTRACT_OFF` (off) builds the game code with `-ffp-contract=on` instead of GCC's `fast`, for A/B tests only (#4).
 
 ### Without a console toolchain
 
