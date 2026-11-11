@@ -44,13 +44,30 @@ namespace
     std::vector<SDL_JoystickID> g_physicalControllerIds;
     std::atomic<uint32_t> g_physicalControllerCount{0};
     hid::prompts::ActiveController g_promptController;
-    std::atomic<uint8_t> g_autoPromptFamily{0};
+    std::atomic<uint8_t> g_autoPromptFamily{uint8_t(hid::prompts::DefaultFamily)};
     std::atomic<bool> g_promptsByPosition{false};
+    // Whether the Switch icons follow the button positions instead of the letters (glyph_atlases.cpp).
+    // Not called before main(): SwitchLetterLayout keeps the first LO_SWITCH_BUTTONS it reads.
+    bool PadPromptsByPosition(SDL_Gamepad* pad)
+    {
+#if LO_PLATFORM_SWITCH
+        // Every pad is read through the console's layout (face_buttons.h): by default the A button is the guest's A,
+        // so the icons are picked by letter; LO_SWITCH_BUTTONS=position reads the buttons, and picks icons, by position.
+        (void)pad;
+        return !hid::face_buttons::SwitchLetterLayout();
+#else
+        return hid::face_buttons::LabelType(pad) == SDL_GAMEPAD_TYPE_STANDARD;
+#endif
+    }
     std::atomic<uint32_t> g_promptStyle{0};
     void PublishPromptStyle()
     {
         g_autoPromptFamily.store(uint8_t(g_promptController.ActiveFamily()), std::memory_order_relaxed);
+#if LO_PLATFORM_SWITCH
+        g_promptsByPosition.store(PadPromptsByPosition(nullptr), std::memory_order_relaxed); // also with no pad yet
+#else
         g_promptsByPosition.store(g_promptController.ActivePositional(), std::memory_order_relaxed);
+#endif
     }
 
     void ObserveController(SDL_Gamepad* controller)
@@ -168,7 +185,7 @@ namespace
                 }
                 g_promptController.Connected(id, hid::prompts::FamilyOf(SDL_GetGamepadType(pad), SDL_GetGamepadVendor(pad),
                                                                      SDL_GetGamepadProduct(pad)),
-                                             hid::face_buttons::LabelType(pad) == SDL_GAMEPAD_TYPE_STANDARD);
+                                             PadPromptsByPosition(pad));
                 PublishPromptStyle();
                 LOG_INFO("controller added: {} instance={} ({} connected)", SDL_GetGamepadName(pad), id, g_controllers.size());
             }

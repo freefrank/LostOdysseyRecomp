@@ -107,8 +107,9 @@ The performance overlay shows the same: FPS mode adds `FSR ON 540p FIXED` (or
 with `FSR ON | FIXED 960x540 → 1280x720`.
 
 Also on the tab: Graphics preset, Dynamic shadows, Depth of field, Bloom,
-Motion blur, Culling, Scaling filter, Loading speed, Performance overlay and
-Brightness / Gamma. The preset leaves the scaling filter alone on the console
+Motion blur, Scene fades, Culling, Scaling filter, Loading speed, Performance
+overlay and Brightness / Gamma. Scene fades Off cuts between scenes instead of
+drawing the full-screen crossfade. The preset leaves the scaling filter alone on the console
 (bicubic costs about 7 ms). Frame rate is hidden and pinned at 30 FPS: the
 screen is 60 Hz with no VRR, and a 60 target would also halve dynamic
 resolution's GPU budget (`LO_FPS` in `env.txt` stays a diagnostic override).
@@ -267,7 +268,7 @@ Switch-specific options and diagnostics:
 | `LO_THREAD_PLACEMENT` | off | Set to `1` to log every 30 s (`switch: placement`) each core's idle share and, per thread above 1% CPU, its priority, ideal core, allowed mask, and the cores it was seen on |
 | `LO_THREAD_CORES` | off | With `LO_THREAD_PLACEMENT=1`: `name=core:hexmask,...` sets the ideal core and allowed mask of a thread of that name once a report finds it above 50% CPU, for placement experiments |
 | `LO_DEKO3D_BARRIER_TRACE` | off | Set to `<n>`: every barrier of one frame in n goes to the log (`barrier trace:`), with what it waits for, its textures and the caller's address relative to `Deko3DBarrierTrace` |
-| `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout |
+| `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout. Button prompts on Auto show the Switch icons, picked by letter or, with `position`, by position |
 | `LO_ZPD_MODE` | host queries | Set to `xenia` for made-up occlusion query counts instead of host queries |
 | `LO_SKIP_NOOP_DRAWS` | `1` | Set to `0` to draw the draws that write no colour, depth or stencil |
 | `LO_SPARSE_CONSTANTS` | `1` | A draw's ALU constants go to the CPU-uncached upload ring only for the slots its shaders read (about 14 of 256 for a vertex shader, 10 for a pixel shader; all of them with relative addressing), and an earlier upload is extended in place when the slots both read hold the same values. Not while motion replay or the FSR alpha passes exist. The busiest street spot, same build: 22.42 to 22.63 FPS. `0`: the whole 4 KB banks |

@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include "controller_glyphs.h"
 #include "prompt_family.h"
+#include <os/platform.h>
 #include <algorithm>
 #include <cstdint>
 #include <vector>
@@ -15,8 +16,21 @@ inline bool IsPlayStation(SDL_GamepadType type)
            type == SDL_GAMEPAD_TYPE_PS5;
 }
 
+// The family Auto shows before a pad is seen. On the Switch every pad is the console's own.
+#if LO_PLATFORM_SWITCH
+inline constexpr Family DefaultFamily = Family::Switch;
+#else
+inline constexpr Family DefaultFamily = Family::Xbox;
+#endif
+
 inline Family FamilyOf(SDL_GamepadType type, uint16_t vendor, uint16_t product)
 {
+#if LO_PLATFORM_SWITCH
+    // devkitPro's SDL names every pad "Switch Controller" and builds its GUID from that name, so the type is not a
+    // Nintendo one and vendor and product are 0: the checks below would give Xbox icons.
+    (void)type, (void)vendor, (void)product;
+    return Family::Switch;
+#endif
     if (IsPlayStation(type)) return Family::PlayStation;
     if (type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO || type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT ||
         type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT || type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR)
@@ -71,7 +85,7 @@ public:
         if (active_ == UINT32_MAX) return Family::Keyboard;
         for (const auto &device : devices_)
             if (device.id == active_) return device.family;
-        return Family::Xbox;
+        return DefaultFamily;
     }
     bool PlayStation() const { return ActiveFamily() == Family::PlayStation; }
     bool ActivePositional() const
