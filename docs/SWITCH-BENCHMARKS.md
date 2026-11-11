@@ -554,3 +554,17 @@ The 286 KB is one step at 721 s, the network log's history (`os/switch/netlog.cp
 The census itself, on: about 3,800 frees, 3,400 memaligns, 280 reallocs and 190 mallocs a second in the battle, one
 sample in 32 KiB (36,000 in 26 minutes, 2,300 held at a time, 394 call stacks); 28.2 FPS in the battle with it on
 (not an A/B).
+
+Same-binary FPS A/B of the fix (2026-11-11/12), census off: two builds of the same tree (LostOdysseyNX `2c6efaed` with
+PR 36, PGO USE `out/pgo-street5`, before PR 39's PGO flags), one without and one with the fix. `new-game-battle` without UP, the battle's
+command menu, ABBA blocks base / fix / fix / base, each one warm-up and 2 counted runs (450 frames), handheld, stock
+clocks, 540 rows, the release env.txt.
+
+| | FPS (runs) | mean FPS | 1% low FPS | p99 ms | GPU ms/frame |
+|---|---|---:|---:|---:|---:|
+| base | 28.37, 28.53, 28.44, 28.33 | 28.42 | 24.79 | 40.4 | 32.65 |
+| fix | 28.44, 28.47, 28.53, 28.27 | 28.43 | 24.78 | 40.4 | 32.60 |
+
+No change: +0.01 FPS, inside the 0.26 FPS spread of either build. Block 3's first try lost the console: on the game's
+restart the system's `vi` service aborted (Atmosphere report at 23:37:22) and the game with it; the same pair is in
+the reports from 21:25, with the original NRO. The rerun of blocks 3 and 4 had no trouble.
