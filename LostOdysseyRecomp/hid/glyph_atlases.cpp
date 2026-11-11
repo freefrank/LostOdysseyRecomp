@@ -155,7 +155,9 @@ std::shared_ptr<Atlas> ComposeKeyboard(const Atlas &sheet, const input_map::Keyb
 struct Cache
 {
     std::mutex mutex;
-    bool unpacked = false;
+    // Each family is unpacked on its first use: 2 MiB per 1024x512 atlas and 7 MiB for the key sheet, from the
+    // same heap as guest memory on the Switch, which only ever shows the Switch pair.
+    bool switchUnpacked = false, steamDeckUnpacked = false, sheetUnpacked = false;
     std::shared_ptr<const Atlas> switchPositions, switchLabels, steamDeck, sheet, keyboard;
     input_map::KeyboardMap keyboardKeys{};
 };
@@ -171,9 +173,9 @@ std::shared_ptr<const Atlas> FamilyAtlas(prompts::Family family)
     if (family == prompts::Family::Xbox || family == prompts::Family::PlayStation) return {};
     auto &cache = State();
     std::lock_guard lock(cache.mutex);
-    if (!cache.unpacked)
+    if (family == prompts::Family::Switch && !cache.switchUnpacked)
     {
-        cache.unpacked = true;
+        cache.switchUnpacked = true;
         const auto positions = Unpack(packed::Switch, sizeof(packed::Switch), AtlasWidth, AtlasHeight);
         if (positions)
         {
@@ -187,7 +189,15 @@ std::shared_ptr<const Atlas> FamilyAtlas(prompts::Family family)
             cache.switchLabels = labels;
         }
         cache.switchPositions = positions;
+    }
+    if (family == prompts::Family::SteamDeck && !cache.steamDeckUnpacked)
+    {
+        cache.steamDeckUnpacked = true;
         cache.steamDeck = Unpack(packed::SteamDeck, sizeof(packed::SteamDeck), AtlasWidth, AtlasHeight);
+    }
+    if (family == prompts::Family::Keyboard && !cache.sheetUnpacked)
+    {
+        cache.sheetUnpacked = true;
         cache.sheet = Unpack(packed::KeySheet, sizeof(packed::KeySheet), packed::KeySheetWidth, packed::KeySheetHeight);
     }
     if (family == prompts::Family::Switch) return PromptsByPosition() ? cache.switchPositions : cache.switchLabels;
