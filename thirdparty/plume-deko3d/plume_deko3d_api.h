@@ -64,6 +64,16 @@ namespace plume {
     };
     Deko3DCounters Deko3DReadCounters();
 
+    // LostOdysseyRecomp (2026-11-11, issue #3): what deko3d holds of the heap, counted when LO_DEKO3D_HEAP_STATS=1
+    // (on false otherwise): blocks made and freed, bytes held, and the 1 KiB control memory chunks made and freed.
+    // selfCheck*: the chunks the start-up check's first list made, and those its next 99 made (0 with clear fixed).
+    struct Deko3DHeapCounters {
+        bool on = false;
+        uint64_t allocs = 0, frees = 0, bytes = 0, chunkAllocs = 0, chunkFrees = 0;
+        uint64_t selfCheckFirst = 0, selfCheckRest = 0;
+    };
+    Deko3DHeapCounters Deko3DReadHeapCounters();
+
     // LO_DEKO3D_BARRIER_TRACE: while on, every barrier that reaches the GPU is logged with what it waits for, its
     // textures, the draws recorded so far in the list and the caller (LostOdysseyRecomp, 2026-10-30).
     void Deko3DBarrierTrace(bool on);

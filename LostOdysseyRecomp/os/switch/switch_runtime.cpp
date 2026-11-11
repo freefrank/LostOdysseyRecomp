@@ -830,6 +830,13 @@ bool TakeOperationModeChanged()
     return g_operationModeChanged.exchange(false, std::memory_order_acq_rel);
 }
 
+static std::atomic<std::string (*)()> g_memorySummaryExtra{nullptr};
+
+void SetMemorySummaryExtra(std::string (*extra)())
+{
+    g_memorySummaryExtra.store(extra, std::memory_order_release);
+}
+
 std::string MemorySummary()
 {
     u64 used = 0, total = 0, threadsUsed = 0, threadsLimit = 0;
@@ -856,6 +863,8 @@ std::string MemorySummary()
         static_cast<unsigned long long>(heapLimit >> 20),
         static_cast<unsigned long long>(used >> 20), static_cast<unsigned long long>(total >> 20),
         static_cast<unsigned long long>(threadsUsed), static_cast<unsigned long long>(threadsLimit));
+    if (const auto extra = g_memorySummaryExtra.load(std::memory_order_acquire))
+        return text + extra();
     return text;
 }
 

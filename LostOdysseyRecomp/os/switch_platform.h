@@ -33,6 +33,8 @@ namespace os::switch_platform
 
     // Process memory and thread usage, for failure logs ("used/total MiB ...").
     std::string MemorySummary();
+    // Appended to MemorySummary when set (LO_DEKO3D_HEAP_STATS: the deko3d back end's heap blocks, issue #3).
+    void SetMemorySummaryExtra(std::string (*extra)());
     // Bytes of newlib's heap in use and the most it can grow to (MemorySummary's "heap in use").
     void HeapUsage(uint64_t& used, uint64_t& limit);
 
