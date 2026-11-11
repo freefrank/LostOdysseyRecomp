@@ -21,7 +21,8 @@ enum class WindowMode : uint32_t
 };
 using GraphicsBackend = gpu::backend::Backend;
 // Stable persisted IDs: retain the original EN/TW UI values.
-inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文", L"Español"};
+inline constexpr const wchar_t *UiLanguageNames[] = {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文",
+                                                     L"Español", L"Français", L"Deutsch", L"Italiano"};
 inline constexpr uint32_t UiLanguageSpanish = 5;
 // The debug menu's own languages (debug/translations.h): 0 English, 1 Simplified Chinese, 2 Spanish.
 inline constexpr uint32_t DebugLanguageCount = 3;
@@ -180,6 +181,9 @@ struct Config
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
 #endif
     bool motionBlur = true; // The game's motion blur pass. Applied live.
+    // The game's full-screen colour fades between scenes. Off skips the partly
+    // faded frames, so a fade becomes a cut. Applied live.
+    bool sceneFades = true;
     // The game's per-object shadows, applied live: 0 Off, 1 On (retail), 2 Low
     // (only objects large on screen cast one, patches/shadow_budget.cpp).
     uint32_t dynamicShadows = 1;
@@ -234,7 +238,9 @@ struct Config
     uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.
     uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     uint32_t vibrationPercent = 100; // Controller rumble strength; 0 Off, 100 retail. Applied live.
-    uint32_t buttonPrompts = 0; // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation. Applied live.
+    // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation, 3 Switch,
+    // 4 Steam Deck, 5 keyboard. Applied live.
+    uint32_t buttonPrompts = 0;
     // Gameplay → Controls: the controller button and the key for each Xbox 360
     // input (hid/input_map.h). Applied live.
     hid::input_map::ControllerMap controllerMap = hid::input_map::DefaultController;

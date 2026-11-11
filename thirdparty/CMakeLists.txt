@@ -98,10 +98,20 @@ if(LO_BUILD_GPU)
     if(LO_TARGET_PLATFORM STREQUAL "switch")
         # deko3d back end (LO_SWITCH_BACKEND=deko3d, docs/SWITCH.md): plume's deko3d back end from sa2-nx/banjo-nx
         # (plume-deko3d/, MIT) with uam, devkitPro's deko3d shader compiler (uam/: zlib, Mesa's files MIT,
-        # SwitchWakerHD's patches MPL-2.0), and SPIRV-Cross to turn the Vulkan SPIR-V into uam's GLSL. Built only
-        # when devkitPro's deko3d library is installed ("dkp-pacman -S deko3d"); NVK stays the default.
+        # SwitchWakerHD's patches MPL-2.0), and SPIRV-Cross to turn the Vulkan SPIR-V into uam's GLSL. deko3d itself
+        # is built from deko3d/ (0.5.0 with the fixes in deko3d/PATCHES.md); LO_SWITCH_DEKO3D_SOURCE=OFF links
+        # devkitPro's libdeko3d.a instead, when installed ("dkp-pacman -S deko3d"). NVK stays the default.
+        option(LO_SWITCH_DEKO3D_SOURCE "deko3d from thirdparty/deko3d (with its fixes), not devkitPro's libdeko3d.a" ON)
         set(LO_SWITCH_DEKO3D_LIBRARY "${DEVKITPRO}/libnx/lib/libdeko3d.a" CACHE FILEPATH "devkitPro deko3d (libdeko3d.a)")
-        if(EXISTS "${LO_SWITCH_DEKO3D_LIBRARY}" OR LO_SWITCH_CHECK_ONLY)
+        if(LO_SWITCH_DEKO3D_SOURCE OR EXISTS "${LO_SWITCH_DEKO3D_LIBRARY}" OR LO_SWITCH_CHECK_ONLY)
+            if(LO_SWITCH_DEKO3D_SOURCE)
+                add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/deko3d" "${CMAKE_CURRENT_BINARY_DIR}/deko3d" EXCLUDE_FROM_ALL)
+                set(_lo_deko3d_lib lo_deko3d)
+                set(_lo_deko3d_what "thirdparty/deko3d")
+            else()
+                set(_lo_deko3d_lib "${LO_SWITCH_DEKO3D_LIBRARY}")
+                set(_lo_deko3d_what "${LO_SWITCH_DEKO3D_LIBRARY}")
+            endif()
             set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
             set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
             set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
@@ -120,7 +130,9 @@ if(LO_BUILD_GPU)
                 "${_lo_dk}/plume_deko3d.cpp" "${_lo_dk}/plume_deko3d_commands.cpp" "${_lo_dk}/plume_deko3d_spirv.cpp")
             target_include_directories(lo_plume_deko3d PUBLIC "${_lo_dk}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/uam")
             target_compile_features(lo_plume_deko3d PUBLIC cxx_std_20)
-            target_link_libraries(lo_plume_deko3d PUBLIC plume PRIVATE spirv-cross-glsl)
+            # deko3d PRIVATE: its headers are plume-deko3d's alone (the game includes plume_deko3d_api.h); the static
+            # library still reaches the game's link.
+            target_link_libraries(lo_plume_deko3d PUBLIC plume PRIVATE spirv-cross-glsl ${_lo_deko3d_lib})
             if(NOT LO_SWITCH_CHECK_ONLY)
                 # uam's Mesa (19) and NVK's newer Mesa define C functions of the same names with other signatures:
                 # uam is linked as one object whose strong symbols are local except its API (uam::*), so each
@@ -137,9 +149,9 @@ if(LO_BUILD_GPU)
                     VERBATIM)
                 add_custom_target(lo_uam_local DEPENDS "${_lo_uam_local}")
                 add_dependencies(lo_plume_deko3d lo_uam_local)
-                target_link_libraries(lo_plume_deko3d PUBLIC "${_lo_uam_local}" "${LO_SWITCH_DEKO3D_LIBRARY}" nx)
+                target_link_libraries(lo_plume_deko3d PUBLIC "${_lo_uam_local}" nx)
             endif()
-            message(STATUS "LostOdysseyRecomp: deko3d back end (${LO_SWITCH_DEKO3D_LIBRARY})")
+            message(STATUS "LostOdysseyRecomp: deko3d back end (${_lo_deko3d_what})")
         else()
             message(STATUS "LostOdysseyRecomp: no deko3d library at ${LO_SWITCH_DEKO3D_LIBRARY}: NVK only")
         endif()

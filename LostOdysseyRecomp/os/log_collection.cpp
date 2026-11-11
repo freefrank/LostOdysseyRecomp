@@ -374,7 +374,7 @@ const wchar_t* Label(uint32_t language)
 {
     static constexpr const wchar_t* text[] = {L"Log collection", L"日誌收集", L"ログ収集", L"로그 수집", L"日志收集",
                                                   L"Recopilación de registros"};
-    return text[std::min(language, uint32_t(std::size(text) - 1))];
+    return text[language < std::size(text) ? language : 0];
 }
 
 const wchar_t* Message(uint32_t language)
@@ -404,7 +404,7 @@ const wchar_t* Message(uint32_t language)
         L"versión, versión de Windows, GPU y controlador, nombres de mapas, errores, informes de cierres y bloqueos, y registros de discrepancias de TAA/jitter con ID de shaders. "
         L"Los nombres de cuenta de las rutas de carpetas se sustituyen; otros nombres de carpetas pueden quedar. No incluye partidas guardadas, capturas ni identificadores personales o del dispositivo. "
         L"Los registros del servidor se eliminan a los 30 días; un archivo privado de investigación conserva copias. Puedes desactivarlo en Ajustes en cualquier momento. ¿Activar la recopilación de registros?"};
-    return text[std::min(language, uint32_t(std::size(text) - 1))];
+    return text[language < std::size(text) ? language : 0];
 }
 
 void PromptFirstRun(uint32_t language)

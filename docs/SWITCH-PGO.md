@@ -95,7 +95,8 @@ First battle, 960x540, handheld at CPU 1020 / GPU 460 / memory 1331 MHz, lean sh
 - **At 360 rows, one run each:** 23.27 to 25.22 FPS (+8.4%), which is closer to the CPU's gain, since the GPU limits 540 at 39 ms.
 - **The merchant ship** holds 30 FPS at 540 with the full profile, p99 34.5 ms.
 - With the ship profile the code shrank 0.13%, with 1,603 cold parts split out, against the 29% growth of GCC's default options.
-- `-freorder-functions` does group the hot functions, but gains nothing here, so the USE flags stay as in SwitchWakerHD.
+- `-freorder-functions` does group the hot functions, and gains nothing here (23.27 against 23.37 FPS). It is on anyway since #35:
+  without it, block partitioning writes wrong exception tables (see the traps below).
 
 The GPU now sets the limit at 540: 39 ms per frame allows 25.6 FPS at best.
 
@@ -142,8 +143,14 @@ The profile is only read while compiling, and its gain is in the machine code of
    docker run --rm -v "$PWD:/work" -w /work -e PGO=USE ghcr.io/autorunhq/switch-dev:2026.10.05 bash tools/switch/build-switch.sh
    ```
 
-5. **Test that NRO on the console,** then publish it. The training build must never ship.
-6. **Keep the matching `.elf`** from `out/switch/pgo-USE/`: crash addresses from that release only resolve against it.
+5. **Check the ELF's exception tables.** It must report 0:
+
+   ```bash
+   python3 tools/switch/check_eh_tables.py out/switch/pgo-USE/LostOdysseyRecomp.elf
+   ```
+
+6. **Test that NRO on the console,** then publish it. The training build must never ship.
+7. **Keep the matching `.elf`** from `out/switch/pgo-USE/`: crash addresses from that release only resolve against it.
 
 The level 3 shader pack is separate from the NRO, and `tools/switch/release-env.txt` asks for it: a release must include `shaders/deko3d_shaders_lean3.lodk`, or the console compiles every shader itself. It's built with `LO_DEKO3D_LEAN_SHADERS=3 deko3d_shader_tool cache|variants`, then `pack_dkcache.py`.
 
@@ -158,6 +165,11 @@ A code change after step 3 is safe, but the functions it touches lose their gain
 - **GCC's default `-fprofile-use` options inflate the code**, by 29% in SwitchWakerHD (unrolling, peeling, tail duplication).
   They are off here, and block partitioning is on. `LO_SWITCH_PGO_USE_FLAGS` appends more.
 - **Precompiled header**: the runtime's flags are per target, not per file, or the header would not match.
+- **Block partitioning needs `-freorder-functions`** (#35). With `-fno-reorder-functions`, GCC 15.2 keeps each `.cold` part
+  in its hot part's section and writes the cold part's exception table from the hot start. The unwinder reads it from
+  the cold start, so every landing pad is off by the hot part's size. v1.1.0 and v1.1.0A had 1,213 and 1,178 such
+  tables. A throw caught normally in v1.0.6 looped instead: menu_assets' `Check` jumped into `Le16`, which threw
+  again, until GPU CmdProc's 128 KiB stack overflowed. `tools/switch/check_eh_tables.py` finds them in an ELF.
 - Compare speed at the stock clocks only, and train at any.
 
 ## Hidden symbols

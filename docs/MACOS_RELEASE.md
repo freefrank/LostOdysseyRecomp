@@ -63,6 +63,27 @@ outputs and ccache are cached with toolchain, SDL and configuration identities;
 see [CI caches](notes/ci.md#caches). A hosted build, package check or headless load
 does not establish gameplay or macOS 15 runtime acceptance.
 
+### v1.1.0 image
+
+The v1.1.0 release was published at 2026-10-26T01:12:52Z from tag `v1.1.0` at
+`fcfda131` ([release record](STATUS.md#v110-published--2026-10-26)). The image
+was built by the macOS Release job of GitHub Actions run 40251890719, on a
+GitHub-hosted macOS runner, not on the maintainer's Mac. The run succeeded in
+every job. The asset `LostOdysseyRecomp-macos-arm64-v1.1.0.dmg` is 65,651,556
+bytes. GitHub reports its SHA-256 as
+`9172b4df54c2c523a6c7d2f743b9563986da1ce04fb5b4722173c90ca6c07409`; the file was
+not downloaded again for this record.
+
+The first run for this tag, 40250845608, failed in the macOS job before publish.
+`tools/package_macos.py` reused a loop variable for the Steam artwork, so the DMG
+was named `icon.png.dmg` and the upload step found no macOS DMG. No asset from
+that run was published. PR #729 fixed the name; the image above comes from the
+second run.
+
+Limits: no game run with this image is recorded. The local pre-release smoke test
+ran on Windows from main `5fd18ccc`, not on this image, and no macOS device run is
+recorded; the test hosts were away.
+
 ### v1.0.6 image
 
 The v1.0.6 release was published at 2026-10-19T04:32:05Z from tag `v1.0.6` at

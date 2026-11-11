@@ -466,12 +466,22 @@ namespace
             (unsigned long long)(HANG_DUMP_AFTER_NS[2] / 1000000000ull));
         uint64_t lastBeat = 0;
         uint64_t lastBeatTick = armGetSystemTick();
+        uint64_t lastLoopTick = lastBeatTick;
         uint32_t dumps = 0;
         for (;;)
         {
             svcSleepThread(250'000'000);
             const uint64_t beat = g_heartbeat.load(std::memory_order_relaxed);
             const uint64_t tick = armGetSystemTick();
+            // A 250 ms sleep that took over 2 s: the whole process was suspended (HOME menu, sleep mode), the frames
+            // too. The wait for a frame starts again from now.
+            const bool suspended = tick - lastLoopTick > armNsToTicks(2'000'000'000ull);
+            lastLoopTick = tick;
+            if (suspended)
+            {
+                lastBeatTick = tick;
+                dumps = 0;
+            }
             if (beat != lastBeat)
             {
                 lastBeat = beat;

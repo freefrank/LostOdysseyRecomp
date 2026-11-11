@@ -378,6 +378,17 @@ void TestSceneInputRecovery() {
     temporal::CommitTemporalFrameEnd(history, frameEnd, now, supportedFrame, epoch, previousTime);
     Require(history.reset && epoch == 4 && supportedFrame == ~0ull,
         "incomplete frame discards history and advances temporal epoch");
+    // #702: split-screen frames (two scene cameras) are shown as rendered.
+    temporal::FrameStartPolicy splitStart{};
+    splitStart.dlssInputs = splitStart.dlssSr = true;
+    splitStart.frame = 102;
+    Require(temporal::ResolveFrameStartConsumers(splitStart).jitter, "SR jitters every frame");
+    splitStart.previousSplitView = true;
+    const auto afterSplit = temporal::ResolveFrameStartConsumers(splitStart);
+    Require(afterSplit.dlssSr && !afterSplit.jitter && !afterSplit.allowHistory,
+        "the frame after a split view keeps SR but draws without jitter");
+    splitStart.diagnosticJitter = 1;
+    Require(temporal::ResolveFrameStartConsumers(splitStart).jitter, "the jitter diagnostic still decides");
     const auto continued = planner.Begin(Input(sizing, false));
     Require(continued.consumer == requested.consumer &&
         continued.requestSignature == requested.requestSignature &&

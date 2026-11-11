@@ -2,7 +2,7 @@
 
 An **experimental** homebrew build of [Lost Odyssey Recomp](https://github.com/freefrank/LostOdysseyRecomp) for Nintendo Switch consoles running custom firmware. It runs the recompiled game natively on the console. You need your own Lost Odyssey discs; this download contains no game files.
 
-> **Expect rough edges.** The game is playable, but the Switch's graphics chip is the limit. At stock clocks in handheld mode, battles and lighter areas run at 30 fps, and the heavier field areas at about 20–25 fps. Crashes and missing effects are possible. Please report problems with your logs (see [Reporting a problem](#reporting-a-problem)).
+> **Expect rough edges.** The game is playable, but the Switch's graphics chip is the limit. At the official handheld clocks (CPU 1020 MHz, GPU 460 MHz; the game asks for the same GPU profile commercial games use), battles and lighter areas run at 30 fps, and the heavier field areas at about 20–25 fps. Crashes and missing effects are possible. Please report problems with your logs (see [Reporting a problem](#reporting-a-problem)).
 
 ## Contents
 
@@ -81,6 +81,7 @@ sdmc:/switch/LostOdysseyRecomp/
 2. **Don't start it from the Album.** The game needs the console's full application memory, which the Album doesn't give it, so it stops with a message there.
 3. After the game starts, it takes about 40 seconds to prepare its graphics states in the background. Loading a new area or a battle can take 10–20 seconds.
 4. The first time you enter an area, the game may compile a few shaders in the background, so it can briefly run slower. They are saved in `cache/deko3d_runtime.dkcache`, and the next visit is faster.
+5. The HOME button and sleep mode pause the game, as for any game. The screen dims and the console sleeps after your Sleep Mode settings when you leave it alone, but not while a cutscene or a video plays, or while the game loads.
 
 ## Settings
 
