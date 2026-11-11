@@ -27,4 +27,17 @@
     <string name="save_location_cancel_pending">예약된 변경 취소</string>
     <string name="touch_hide_all">모든 터치 컨트롤 숨기기</string>
     <string name="touch_hide_all_help">시스템 표시줄을 열거나 Android 뒤로 가기를 사용하면 CTRL이 4초 동안 표시됩니다.</string>
+    <string name="touch_settings_title">터치 조작 설정</string>
+    <string name="touch_show_controls">터치 컨트롤 표시</string>
+    <string name="touch_controller_hint">컨트롤러가 연결되어 있습니다. 터치 컨트롤은 자동으로 숨겨집니다. 함께 사용하려면 여기서 켜세요.</string>
+    <string name="touch_control_size">컨트롤 크기: %1$d%%</string>
+    <string name="touch_opacity">불투명도: %1$d%%</string>
+    <string name="touch_ctrl_auto_hide">CTRL 버튼 자동 숨기기</string>
+    <string name="touch_gpu_driver">GPU 드라이버: %1$s …</string>
+    <string name="touch_gpu_driver_system">시스템</string>
+    <string name="touch_saves_logs">저장 파일과 로그: 내보내기 / 가져오기…</string>
+    <string name="touch_game_folder">게임 폴더…</string>
+    <string name="touch_apply">적용</string>
+    <string name="touch_edit_layout">배치 편집</string>
+    <string name="touch_cancel">취소</string>
 </resources>

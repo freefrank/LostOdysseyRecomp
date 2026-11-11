@@ -27,4 +27,17 @@
     <string name="save_location_cancel_pending">切り替え予約を取り消す</string>
     <string name="touch_hide_all">すべてのタッチ操作を非表示</string>
     <string name="touch_hide_all_help">システムバーを表示するか Android の「戻る」を使うと、CTRL が4秒間表示されます。</string>
+    <string name="touch_settings_title">タッチ操作設定</string>
+    <string name="touch_show_controls">タッチ操作を表示</string>
+    <string name="touch_controller_hint">コントローラーが接続されています。タッチ操作は自動で非表示になります。併用する場合はここでオンにしてください。</string>
+    <string name="touch_control_size">操作ボタンのサイズ：%1$d%%</string>
+    <string name="touch_opacity">不透明度：%1$d%%</string>
+    <string name="touch_ctrl_auto_hide">CTRL ボタンを自動で非表示</string>
+    <string name="touch_gpu_driver">GPU ドライバー：%1$s …</string>
+    <string name="touch_gpu_driver_system">システム</string>
+    <string name="touch_saves_logs">セーブとログ：エクスポート／インポート…</string>
+    <string name="touch_game_folder">ゲームフォルダー…</string>
+    <string name="touch_apply">適用</string>
+    <string name="touch_edit_layout">配置を編集</string>
+    <string name="touch_cancel">キャンセル</string>
 </resources>

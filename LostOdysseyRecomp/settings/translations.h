@@ -1,9 +1,12 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
+#include "translations_eu.h"
 namespace settings
 {
-// English and Traditional Chinese are provided at the call site.
+// English and Traditional Chinese are provided at the call site; Japanese,
+// Korean and Simplified Chinese are below, the European languages in
+// translations_eu.h.
 // Keep the lookup and its table in the same translation unit, including incremental builds.
 static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wchar_t *traditional)
 {
@@ -13,7 +16,8 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         return traditional;
     if (language == 5) // UiLanguageSpanish
     {
-        // Keyed by the English text like the table below; anything missing stays English.
+        // Spanish is looked up here first, keyed by the English text like the table below. A text this
+        // table lacks comes from translations_eu.h, then stays English.
         struct Spanish
         {
             const wchar_t *key, *text;
@@ -145,6 +149,9 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
             {L"Motion blur", L"Desenfoque de movimiento"},
             {L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
              L"El desenfoque del juego con movimientos rápidos de cámara y personajes. Desactivado mantiene nítidas las escenas en movimiento. Se aplica al guardar."},
+            {L"Scene fades", L"Fundidos de escena"},
+            {L"The game's full-screen fades between scenes. Off cuts straight to the next scene. Applies immediately after saving.",
+             L"Los fundidos a pantalla completa del juego entre escenas. Desactivado pasa directamente a la escena siguiente. Se aplica al guardar."},
             {L"Culling", L"Ocultación"},
             {L"How soon characters and objects at screen edges stop being drawn. 100% is original; lower costs frame rate, higher hides them sooner.",
              L"Lo pronto que dejan de dibujarse los personajes y objetos en los bordes de la pantalla. 100% es el original; menos cuesta rendimiento, más los oculta antes."},
@@ -712,6 +719,14 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         for (const auto &entry : spanish)
             if (std::wstring_view(en) == entry.key)
                 return entry.text;
+    }
+    if (language >= 5)
+    {
+        // Spanish, French, German, Italian; English where a text has none.
+        for (const auto &text : EuropeanTexts)
+            if (std::wstring_view(en) == text.key)
+                return language == 5 ? text.spanish : language == 6 ? text.french : language == 7 ? text.german
+                                                                                                   : text.italian;
         return en;
     }
     struct Entry
@@ -899,6 +914,11 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
          L"カメラやキャラクターが速く動くときのぼかし。オフにすると動く場面もくっきり表示されます。保存後すぐに適用されます。",
          L"카메라와 캐릭터가 빠르게 움직일 때 생기는 흐림입니다. 끄면 움직이는 장면도 선명하게 보입니다. 저장 후 바로 적용됩니다.",
          L"游戏在镜头与角色快速移动时的模糊。关闭后移动画面保持清晰。保存后立即应用。"},
+        {L"Scene fades", L"場面のフェード", L"장면 페이드", L"场景淡入淡出"},
+        {L"The game's full-screen fades between scenes. Off cuts straight to the next scene. Applies immediately after saving.",
+         L"場面と場面の間の画面全体のフェード。オフにすると次の場面へ直接切り替わります。保存後すぐに適用されます。",
+         L"장면 사이의 화면 전체 페이드입니다. 끄면 다음 장면으로 바로 전환됩니다. 저장 후 바로 적용됩니다.",
+         L"游戏在场景之间的全屏淡入淡出。关闭后直接切换到下一个场景。保存后立即应用。"},
         {L"Culling", L"カリング", L"컬링", L"剔除"},
         {L"How soon characters and objects at screen edges stop being drawn. 100% is original; lower costs frame rate, higher hides them sooner.",
          L"画面端のキャラクターや物体の描画をやめるタイミング。100% が元の動作。下げると重くなり、上げると早く消えます。",
@@ -951,6 +971,8 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"Restore game defaults", L"ゲーム設定を初期化", L"게임 설정 초기화", L"恢复游戏默认设置"},
         {L"Restore", L"初期化", L"초기화", L"恢复"},
         {L"Quit to Main Menu", L"メインメニューに戻る", L"메인 메뉴로 돌아가기", L"退出到主菜单"},
+        {L"Menu", L"メニュー", L"메뉴", L"菜单"},
+        {L"Help", L"ヘルプ", L"도움말", L"帮助"},
         {L"Return", L"戻る", L"돌아가기", L"返回"},
         {L"Import discs & DLC", L"ディスクとDLCをインポート", L"디스크 및 DLC 가져오기", L"导入光盘与 DLC"},
         {L"Add to Steam", L"Steam に追加", L"Steam에 추가", L"添加到 Steam"},

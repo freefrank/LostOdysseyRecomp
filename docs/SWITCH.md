@@ -153,8 +153,9 @@ The performance overlay shows the same: FPS mode adds `FSR ON 540p FIXED` (or
 with `FSR ON | FIXED 960x540 → 1280x720`.
 
 Also on the tab: Graphics preset, Dynamic shadows, Depth of field, Bloom,
-Motion blur, Culling, Scaling filter, Loading speed, Performance overlay and
-Brightness / Gamma. The preset leaves the scaling filter alone on the console
+Motion blur, Scene fades, Culling, Scaling filter, Loading speed, Performance
+overlay and Brightness / Gamma. Scene fades Off cuts between scenes instead of
+drawing the full-screen crossfade. The preset leaves the scaling filter alone on the console
 (bicubic costs about 7 ms). Frame rate is hidden and pinned at 30 FPS: the
 screen is 60 Hz with no VRR, and a 60 target would also halve dynamic
 resolution's GPU budget (`LO_FPS` in `env.txt` stays a diagnostic override).

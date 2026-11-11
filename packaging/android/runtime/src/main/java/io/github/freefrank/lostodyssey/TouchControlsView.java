@@ -398,13 +398,14 @@ final class TouchControlsView extends View {
 
     private void showSettings() {
         clearTouches();
+        Context strings = SaveLocationStrings.context(activity);
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
         int padding = Math.round(20f * getResources().getDisplayMetrics().density);
         content.setPadding(padding, 0, padding, 0);
 
         CheckBox toggle = new CheckBox(activity);
-        toggle.setText("Show touch controls");
+        toggle.setText(strings.getString(R.string.touch_show_controls));
         toggle.setChecked(visibility.visible());
         settingsChoiceEdited = false;
         toggle.setOnCheckedChangeListener((button, checked) -> {
@@ -412,7 +413,7 @@ final class TouchControlsView extends View {
         });
         content.addView(toggle);
         TextView hint = new TextView(activity);
-        hint.setText("Physical controller connected. Touch controls hide automatically; turn them on here to use both together.");
+        hint.setText(strings.getString(R.string.touch_controller_hint));
         hint.setVisibility(visibility.controllerPresent() ? VISIBLE : GONE);
         content.addView(hint);
         settingsToggle = toggle;
@@ -422,9 +423,9 @@ final class TouchControlsView extends View {
         SeekBar size = new SeekBar(activity);
         size.setMax(80);
         size.setProgress(Math.round(layout.size * 100f) - 60);
-        sizeLabel.setText("Control size: " + (size.getProgress() + 60) + "%");
+        sizeLabel.setText(strings.getString(R.string.touch_control_size, size.getProgress() + 60));
         size.setOnSeekBarChangeListener(seekListener(value ->
-            sizeLabel.setText("Control size: " + (value + 60) + "%")));
+            sizeLabel.setText(strings.getString(R.string.touch_control_size, value + 60))));
         content.addView(sizeLabel);
         content.addView(size);
 
@@ -432,18 +433,17 @@ final class TouchControlsView extends View {
         SeekBar opacity = new SeekBar(activity);
         opacity.setMax(75);
         opacity.setProgress(Math.round(layout.opacity * 100f) - 25);
-        opacityLabel.setText("Opacity: " + (opacity.getProgress() + 25) + "%");
+        opacityLabel.setText(strings.getString(R.string.touch_opacity, opacity.getProgress() + 25));
         opacity.setOnSeekBarChangeListener(seekListener(value ->
-            opacityLabel.setText("Opacity: " + (value + 25) + "%")));
+            opacityLabel.setText(strings.getString(R.string.touch_opacity, value + 25))));
         content.addView(opacityLabel);
         content.addView(opacity);
 
         CheckBox ctrlAutoHide = new CheckBox(activity);
-        ctrlAutoHide.setText("Auto-hide CTRL button");
+        ctrlAutoHide.setText(strings.getString(R.string.touch_ctrl_auto_hide));
         ctrlAutoHide.setChecked(ctrl.enabled());
         content.addView(ctrlAutoHide);
 
-        Context strings = SaveLocationStrings.context(activity);
         CheckBox hideAll = new CheckBox(activity);
         hideAll.setText(strings.getString(R.string.touch_hide_all));
         hideAll.setChecked(ctrl.hideAll());
@@ -457,34 +457,34 @@ final class TouchControlsView extends View {
         if (GpuDriverStore.supported()) {
             driverButton = new Button(activity);
             GpuDriverStore.Installed driver = GpuDriverStore.selectedDriver(activity);
-            driverButton.setText("GPU driver: " + (driver != null ? driver.metadata.name : "System")
-                + " …");
+            driverButton.setText(strings.getString(R.string.touch_gpu_driver,
+                driver != null ? driver.metadata.name : strings.getString(R.string.touch_gpu_driver_system)));
             driverButton.setAllCaps(false);
             content.addView(driverButton);
         }
         Button savesButton = new Button(activity);
-        savesButton.setText("Saves and logs: export / import …");
+        savesButton.setText(strings.getString(R.string.touch_saves_logs));
         savesButton.setAllCaps(false);
         content.addView(savesButton);
         Button folderButton = new Button(activity);
-        folderButton.setText("Game folder …");
+        folderButton.setText(strings.getString(R.string.touch_game_folder));
         folderButton.setAllCaps(false);
         content.addView(folderButton);
 
         ScrollView scroll = new ScrollView(activity);
         scroll.addView(content);
         AlertDialog settingsDialog = new AlertDialog.Builder(activity)
-            .setTitle("Controller settings")
+            .setTitle(strings.getString(R.string.touch_settings_title))
             .setView(scroll)
-            .setPositiveButton("Apply", (dialog, which) ->
+            .setPositiveButton(strings.getString(R.string.touch_apply), (dialog, which) ->
                 applySettings(toggle.isChecked(), size.getProgress() + 60,
                               opacity.getProgress() + 25, ctrlAutoHide.isChecked(), hideAll.isChecked()))
-            .setNeutralButton("Edit layout", (dialog, which) -> {
+            .setNeutralButton(strings.getString(R.string.touch_edit_layout), (dialog, which) -> {
                 applySettings(toggle.isChecked(), size.getProgress() + 60,
                               opacity.getProgress() + 25, ctrlAutoHide.isChecked(), hideAll.isChecked());
                 enterEditor();
             })
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(strings.getString(R.string.touch_cancel), null)
             .create();
         settingsDialog.setOnDismissListener(ignored -> {
             settingsToggle = null;

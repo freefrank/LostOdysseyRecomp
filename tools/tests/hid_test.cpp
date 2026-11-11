@@ -90,9 +90,9 @@ int main()
     Check(lines(Face::A).size() == 2 && lines(Face::A)[0] == std::array{3, 3, 17, 17}, "cross strokes");
     Check(lines(Face::X).size() == 4 && lines(Face::X)[0] == std::array{3, 3, 17, 3}, "square strokes");
     ActiveController prompts;
-    prompts.Connected(11, SDL_GAMEPAD_TYPE_PS4);
+    prompts.Connected(11, Family::PlayStation);
     Check(prompts.PlayStation(), "PS4 connected");
-    prompts.Connected(12, SDL_GAMEPAD_TYPE_XBOXONE);
+    prompts.Connected(12, Family::Xbox);
     prompts.Observe(12, 1u << SDL_GAMEPAD_BUTTON_SOUTH, false);
     Check(!prompts.PlayStation(), "Xbox activity takes over");
     prompts.Observe(11, 0, true);
@@ -106,7 +106,7 @@ int main()
     Check(prompts.PlayStation(), "new PS4 button press takes over");
     prompts.Disconnected(11);
     Check(!prompts.PlayStation(), "PS4 removal falls back to Xbox");
-    prompts.Connected(13, SDL_GAMEPAD_TYPE_PS5);
+    prompts.Connected(13, Family::PlayStation);
     prompts.Observe(13, 1u << SDL_GAMEPAD_BUTTON_NORTH, false);
     Check(prompts.PlayStation(), "PS5 button takes over");
     prompts.Disconnected(13);

@@ -27,4 +27,17 @@
     <string name="save_location_cancel_pending">取消待应用的切换</string>
     <string name="touch_hide_all">隐藏所有触控控件</string>
     <string name="touch_hide_all_help">呼出系统栏或使用 Android 返回，可显示 CTRL 4 秒。</string>
+    <string name="touch_settings_title">触控设置</string>
+    <string name="touch_show_controls">显示触控控件</string>
+    <string name="touch_controller_hint">已连接实体手柄。触控控件会自动隐藏；在此开启即可同时使用。</string>
+    <string name="touch_control_size">控件大小：%1$d%%</string>
+    <string name="touch_opacity">不透明度：%1$d%%</string>
+    <string name="touch_ctrl_auto_hide">自动隐藏 CTRL 按钮</string>
+    <string name="touch_gpu_driver">GPU 驱动：%1$s …</string>
+    <string name="touch_gpu_driver_system">系统</string>
+    <string name="touch_saves_logs">存档与日志：导出／导入…</string>
+    <string name="touch_game_folder">游戏文件夹…</string>
+    <string name="touch_apply">应用</string>
+    <string name="touch_edit_layout">编辑布局</string>
+    <string name="touch_cancel">取消</string>
 </resources>

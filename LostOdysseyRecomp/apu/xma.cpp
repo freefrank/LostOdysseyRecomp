@@ -575,6 +575,10 @@ namespace apu::xma
                 LOG_WARNING("xma: context {} has an output ring of {} bytes", id, ring.capacity);
                 return;
             }
+            // Match RingBuffer cursor setters: both guest offsets wrap within
+            // the configured ring before free-space accounting or any write.
+            ring.read %= ring.capacity;
+            ring.write %= ring.capacity;
             if (!PhysicalBacked(data.outputPtr(), ring.capacity))
                 return;
             ctx.freeBlocks = int32_t(ring.WriteCount() / kOutputBytesPerBlock);

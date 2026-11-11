@@ -10,7 +10,17 @@ import java.util.Locale;
 
 /** Uses Settings language, including when it differs from the Android language. */
 final class SaveLocationStrings {
+    // Stable settings::UiLanguageNames indices (settings/config.h).
+    private static final String[] LANGUAGE_TAGS = {
+        "en", "zh-TW", "ja", "ko", "zh-CN", "es", "fr", "de", "it"
+    };
+
     private SaveLocationStrings() {}
+
+    static Locale localeForLanguage(int language) {
+        int index = language >= 0 && language < LANGUAGE_TAGS.length ? language : 0;
+        return Locale.forLanguageTag(LANGUAGE_TAGS[index]);
+    }
 
     static Context context(Context context) {
         int language = 0;
@@ -24,9 +34,8 @@ final class SaveLocationStrings {
                 }
             }
         } catch (IOException | NumberFormatException ignored) { }
-        String[] tags = { "en", "zh-TW", "ja", "ko", "zh-CN" };
         Configuration configuration = new Configuration(context.getResources().getConfiguration());
-        configuration.setLocale(Locale.forLanguageTag(tags[language >= 0 && language < tags.length ? language : 0]));
+        configuration.setLocale(localeForLanguage(language));
         return context.createConfigurationContext(configuration);
     }
 }

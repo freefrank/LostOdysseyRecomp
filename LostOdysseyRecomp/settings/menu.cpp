@@ -30,6 +30,7 @@
 #if LO_PLATFORM_SWITCH
 #include <debug/debug_options.h>
 #endif
+#include <hid/glyph_atlases.h>
 #if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
 #include <discord/presence.h>
 #endif
@@ -788,6 +789,27 @@ std::wstring InputLabel(int input)
     }
     return L"?";
 }
+// The game's prompt icon for an input whose label is words, 0 otherwise.
+wchar_t InputIcon(int input)
+{
+    switch (input)
+    {
+    case input_map::LeftThumb: return ButtonIconLeftThumb;
+    case input_map::RightThumb: return ButtonIconRightThumb;
+    case input_map::DpadUp: return ButtonIconDpadUp;
+    case input_map::DpadDown: return ButtonIconDpadDown;
+    case input_map::DpadLeft: return ButtonIconDpadLeft;
+    case input_map::DpadRight: return ButtonIconDpadRight;
+    }
+    return 0;
+}
+// InputIcon of a controller source's default input.
+wchar_t SourceIcon(input_map::Source source)
+{
+    for (int i = 0; i < input_map::ControllerInputCount; ++i)
+        if (input_map::DefaultController[i] == source) return InputIcon(i);
+    return 0;
+}
 // A controller source by the Xbox 360 name of its default input; the extra
 // buttons some controllers have by their own names.
 std::wstring SourceLabel(input_map::Source source)
@@ -1308,12 +1330,13 @@ bool GraphicsRowHidden(int r)
     // The console owns the display and output size, and settings::Validate pins the Xbox 360 image (retail shadow
     // maps, no host AA, AO, filtering, HDR or PC upscalers). The rows that do something here, and the Switch's own:
     // the scene height (Render / Maximum, Dynamic and Minimum resolution) and FSR 1 with its sharpness.
-    // Frame rate is pinned at 30 (Validate).
+    // Frame rate is pinned at 30 (Validate). Scene fades Off skips the crossfade's full-screen quad.
     switch (GraphicsRow(r))
     {
     case GraphicsRow::Preset: case GraphicsRow::RenderResolution: case GraphicsRow::DynamicResolution:
     case GraphicsRow::DynamicShadows: case GraphicsRow::AntiAliasing: case GraphicsRow::DepthOfField:
-    case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::Culling: case GraphicsRow::ScalingQuality:
+    case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::SceneFades: case GraphicsRow::Culling:
+    case GraphicsRow::ScalingQuality:
     case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
     case GraphicsRow::Brightness: case GraphicsRow::Save:
         return false;
@@ -1549,7 +1572,8 @@ void Publish(uint8_t *base, uint32_t config)
             : Tr(L"A: change     Start: save     B: back", L"A：變更     Start：儲存     B：返回");
         next.rows.resize(size_t(ControlsRowCount));
         next.rows[ControlsPromptRow] = makeChoices(L"Button prompts", L"按鍵提示",
-            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"}, std::min(edit.buttonPrompts, 2u));
+            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation", L"Switch", L"Steam Deck", Tr(L"Keyboard", L"鍵盤")},
+            std::min(edit.buttonPrompts, 5u));
         next.rows[ControlsVibrationRow] = {Tr(L"Vibration", L"震動"), std::to_wstring(edit.vibrationPercent) + L"%", true, {}, 0,
                                            int(std::min(edit.vibrationPercent, 100u))};
         auto title = [&](const wchar_t *en, const wchar_t *zh) {
@@ -1562,7 +1586,7 @@ void Publish(uint8_t *base, uint32_t config)
         // The row being captured counts down in place of its binding.
         const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(captureDeadline - MenuNow()).count();
         const auto seconds = std::to_wstring(std::max<long long>(0, (left + 999) / 1000));
-        auto binding = [&](int r, std::wstring value, bool literal) {
+        auto binding = [&](int r, std::wstring value, bool literal, wchar_t valueIcon = 0) {
             bool keyboard = false;
             const int input = ControlsInput(r, keyboard);
             if (r == captureRow)
@@ -1573,10 +1597,13 @@ void Publish(uint8_t *base, uint32_t config)
             }
             Row mapping{InputLabel(input), value, true, {value}, 0};
             mapping.literal = literal;
+            mapping.nameIcon = InputIcon(input);
+            if (r != captureRow) mapping.valueIcon = valueIcon;
             next.rows[size_t(r)] = std::move(mapping);
         };
         for (int i = 0; i < input_map::ControllerInputCount; ++i)
-            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false);
+            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false,
+                    SourceIcon(controlsController[size_t(i)]));
         for (int i = 0; i < input_map::KeyboardInputCount; ++i)
             binding(ControlsKeyboardFirst + i, KeyLabel(controlsKeyboard[size_t(i)]),
                     controlsKeyboard[size_t(i)] != input_map::NoKey);
@@ -1815,6 +1842,7 @@ void Publish(uint8_t *base, uint32_t config)
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
         placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
+        placeGraphics(GraphicsRow::SceneFades, makeChoices(L"Scene fades", L"場景淡入淡出", onOff(), edit.sceneFades ? 0 : 1));
         std::vector<std::wstring> cullingChoices;
         for (uint32_t percent = 0; percent <= 200; percent += 10)
             cullingChoices.push_back(std::to_wstring(percent) + L"%");
@@ -2193,6 +2221,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::MotionBlur:
             next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
                            L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
+            break;
+        case GraphicsRow::SceneFades:
+            next.help = Tr(L"The game's full-screen fades between scenes. Off cuts straight to the next scene. Applies immediately after saving.",
+                           L"遊戲在場景之間的全螢幕淡入淡出。關閉後直接切換到下一個場景。儲存後立即套用。");
             break;
         case GraphicsRow::Culling:
             next.help = Tr(L"How soon characters and objects at screen edges stop being drawn. 100% is original; lower costs frame rate, higher hides them sooner.",
@@ -3825,7 +3857,7 @@ PPC_FUNC(sub_822F19B0)
         else if (delta && controlsFocus == ControlsPromptRow)
         {
             // Host setting: applied and saved at once, like Vibration.
-            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 2u)) + 3 + delta) % 3);
+            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 5u)) + 6 + delta) % 6);
             edit.buttonPrompts = style;
             Config saved = GetConfig();
             saved.buttonPrompts = style;
@@ -4160,6 +4192,9 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::MotionBlur:
                 edit.motionBlur = !edit.motionBlur;
                 break;
+            case GraphicsRow::SceneFades:
+                edit.sceneFades = !edit.sceneFades;
+                break;
             case GraphicsRow::Culling:
                 edit.cullingPercent = uint32_t(std::clamp(int(std::min(edit.cullingPercent, 200u) + 5) / 10 * 10 + delta * 10, 0, 200));
                 break;
@@ -4486,6 +4521,15 @@ bool settings::IsTitleQuitOpen()
     return titleQuitOpen.load();
 }
 
+bool settings::MenuOverGame()
+{
+    // Opened in a game, the retail Settings screen keeps drawing its header
+    // (title, gold, time, location) under the menu. Not from the title menu,
+    // and not on the pages that preview the scene.
+    return active.load() && !titleQuitOpen.load() && !titleEntry.load() && !calibrationOpen.load() &&
+           !brightnessOpen.load() && !nrOpen.load();
+}
+
 bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
 {
     const auto close = [] {
@@ -4589,13 +4633,36 @@ void settings::MarkTitleEntry()
     titleEntry = true;
 }
 
+std::shared_ptr<const settings::menu_assets::Image> settings::PromptIcons(int family)
+{
+    static std::shared_ptr<const hid::glyphs::Atlas> sources[hid::prompts::FamilyCount];
+    static std::shared_ptr<const menu_assets::Image> images[hid::prompts::FamilyCount];
+    if (family < 0 || family >= hid::prompts::FamilyCount) return {};
+    auto source = hid::glyphs::FamilyAtlas(hid::prompts::Family(family));
+    if (!source) return {};
+    if (source != sources[family])
+    {
+        // RGBA bytes are the raster's order (host_ui::PackRgba) on this little-endian host.
+        auto image = std::make_shared<menu_assets::Image>();
+        image->width = source->width;
+        image->height = source->height;
+        image->scale = source->width / 256;
+        image->pixels.resize(size_t(source->width) * source->height);
+        std::memcpy(image->pixels.data(), source->rgba.data(), image->pixels.size() * 4);
+        images[family] = std::move(image);
+        sources[family] = std::move(source);
+    }
+    return images[family];
+}
+
 bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
     // This overlay has its own cache and motion. DrawMenu is a full-screen
     // replacement for the retail Settings task; the title must stay underneath.
     static uint64_t cachedRevision = ~uint64_t{}, outputRevision = 0;
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, shown = false, closing = false;
+    static int cachedPromptFamily = -1;
+    static bool shown = false, closing = false;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
     static MenuTransition motion;
     static std::vector<uint32_t> raster;
@@ -4649,10 +4716,12 @@ bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, 
         current = snapshot;
     }
     current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
     const bool opened = !shown;
     if (opened || closing || !compatible || cachedRevision != current.revision ||
-        cachedPlayStation != current.playStationPrompts || cachedAssets != current.assets)
+        cachedPromptFamily != current.promptFamily || cachedAssets != current.assets)
     {
         if (!RasterizeMenu(current, width, height, raster))
             return false;
@@ -4673,7 +4742,7 @@ bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, 
         cachedRevision = current.revision;
         cachedWidth = width;
         cachedHeight = height;
-        cachedPlayStation = current.playStationPrompts;
+        cachedPromptFamily = current.promptFamily;
         cachedAssets = current.assets;
         revision = ++outputRevision;
         return true;
@@ -4688,7 +4757,8 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     // This cache belongs to the sole presentation thread. Dimensions must be
     // checked independently: portrait and landscape buffers can have equal area.
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
+    static int cachedPromptFamily = -1;
+    static bool cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
     static int cachedTab = -1;
     static std::wstring cachedPage;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
@@ -4728,7 +4798,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         const double phase = seconds(now - openTime) / seconds(menu_motion::ArrowSwayPeriod);
         const int x = arrow.x + int(std::lround(menu_motion::ArrowSway * (0.5 - 0.5 * std::cos(6.283185307179586 * phase))));
         const int y = int(std::lround(arrowY));
-        DrawMenuArrow(pixels, width, height, x, y);
+        DrawMenuArrow(pixels, width, height, x, y, cachedAssets.get());
         arrowDrawn = MenuArrowBounds(width, height, x, y);
     };
     if (titleQuitOpen.load())
@@ -4789,9 +4859,11 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
     const bool opened = !shown;
     if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
-        cachedPlayStation == current.playStationPrompts && !pixels.empty())
+        cachedPromptFamily == current.promptFamily && !pixels.empty())
     {
         const auto now = MenuNow();
         motion.Advance(pixels, now);
@@ -4823,7 +4895,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
                 motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height, current.tab, !current.pageTitle.empty()));
     }
     else if (!opened && cachedWidth == width && cachedHeight == height &&
-             cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
+             cachedPromptFamily == current.promptFamily && !previewPage && !cachedPreviewPage)
     {
         // Settle this frame's image first. The arrow goes into the outgoing
         // image only when the new raster draws it itself (under a prompt).
@@ -4858,7 +4930,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     shown = true;
     cachedWidth = width;
     cachedHeight = height;
-    cachedPlayStation = current.playStationPrompts;
+    cachedPromptFamily = current.promptFamily;
     cachedPreviewPage = previewPage;
     cachedDialog = dialog;
     cachedTab = current.tab;
