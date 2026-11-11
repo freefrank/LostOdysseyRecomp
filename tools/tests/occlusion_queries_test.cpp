@@ -421,6 +421,39 @@ int main()
         for (int i = 0; i < 6; ++i) drawn += step(0) != 0;
         Check(drawn == 6 && sticky.GetStats().hysteresis == 3, "zeros within 4 issues of a visible count stay drawn");
         Check(step(0) == 0, "then the object is culled");
+        // A query read for more objects than a slot keeps inline: each one gets the count.
+        HistoryAnswers many;
+        many.BeginFrame();
+        const uint64_t shared = many.Issue(0x7400, 0x823CD744, true);
+        many.BeginFrame();
+        for (uint64_t k = 0; k < 10; ++k) many.Read(Kind::Shadow, 1000 + k, 0x7400, true, false, 0);
+        many.Completed(shared, 0);
+        many.Issue(0x7400, 0x823CD744, true);
+        many.BeginFrame();
+        uint32_t zeros = 0;
+        for (uint64_t k = 0; k < 10; ++k) zeros += many.Read(Kind::Shadow, 1000 + k, 0x7400, true, false, 0) == 0;
+        Check(zeros == 10, "a count read for ten objects reaches all ten");
+        Check(many.OverflowCapacity() == 8, "eight keys past the inline two, in the pool");
+        // The pool holds what is pending, not what every slot ever held: three times round the ring with five reads
+        // per query, each counted, leaves room for three keys.
+        HistoryAnswers ring;
+        for (uint32_t i = 0; i < 3 * 32768; ++i) {
+            ring.BeginFrame();
+            const uint64_t o = ring.Issue(0x7500, 0x823CD744, true);
+            ring.BeginFrame();
+            for (uint64_t k = 0; k < 5; ++k) ring.Read(Kind::Primitive, 2000 + k, 0x7500, true, false, 0);
+            ring.Completed(o, 1);
+        }
+        Check(ring.OverflowCapacity() == 3, "counted reads give their keys back");
+        // A slot whose count never came is taken over by a later owner: its keys go back too.
+        HistoryAnswers lost;
+        for (uint32_t i = 0; i < 2 * 32768 + 7; ++i) {
+            lost.BeginFrame();
+            lost.Issue(0x7600, 0x823CD744, true);
+            lost.BeginFrame();
+            for (uint64_t k = 0; k < 4; ++k) lost.Read(Kind::Primitive, 3000 + k, 0x7600, true, false, 0);
+        }
+        Check(lost.OverflowCapacity() == 2 * 32768, "a taken-over slot's keys are reused");
     }
     std::cout << "PASS: occlusion query bookkeeping\n";
     return 0;
