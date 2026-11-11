@@ -314,12 +314,14 @@ debugsrv::Reply Info(const debugsrv::Args&)
         "clocks cpu %u MHz, gpu %u MHz, memory %u MHz\n"
         "memory %s\n"
         "battery %s\n"
+        "screen %s\n"
         "program %016llx (%s)\n"
         "address %s:%d\n",
         lo_version::Source, LO_BUILD_REVISION, static_cast<unsigned long long>(g_startTick), uptime,
         g_presentedSwaps.load(std::memory_order_relaxed), perf_stats::MapName().c_str(),
         os::switch_platform::IsDocked() ? "docked" : "handheld", cpuHz / 1000000, gpuHz / 1000000, memoryHz / 1000000,
-        os::switch_platform::MemorySummary().c_str(), PowerText().c_str(), static_cast<unsigned long long>(program),
+        os::switch_platform::MemorySummary().c_str(), PowerText().c_str(),
+        os::switch_platform::ScreenSummary().c_str(), static_cast<unsigned long long>(program),
         RestartWorks() ? "restart works: HOME-menu forwarder" : "a game's ID: title takeover, restart is off",
         AddressText().c_str(), g_port);
     std::string out = text;
@@ -394,6 +396,18 @@ void StartNetwork(const char* dataRoot)
     g_port = port;
     g_startTick = Now();
     debugsrv::add_command("info", "info                   build, session, frame, map, mode, clocks, memory, address", Info);
+    debugsrv::add_command("screen", "screen [watch|busy on|off]  why the screen stays on; holds a test reason (as a movie, as a load)",
+        [](const debugsrv::Args& a) {
+            using namespace os::switch_platform;
+            if (a.size() == 2 && (a[0] == "watch" || a[0] == "busy") && (a[1] == "on" || a[1] == "off"))
+            {
+                const uint32_t bit = a[0] == "watch" ? AwakeTestWatching : AwakeTestBusy;
+                SetScreenAwake(bit, a[1] == "on" ? bit : 0);
+            }
+            else if (!a.empty())
+                return debugsrv::err("usage: screen [watch|busy on|off]");
+            return debugsrv::ok(ScreenSummary() + "\n");
+        });
     debugsrv::add_command("input", "input <serial> <mask> <x> <y> <polls> [lt rt [rx ry]]  one LO_TEST_INPUT_FILE pulse", Input);
     debugsrv::add_command("press", "press <buttons> [ms]   A B X Y LB RB LT RT START BACK UP DOWN LEFT RIGHT LS RS, A+B "
         "together; 120 ms; replies once released",
@@ -422,6 +436,8 @@ void StartNetwork(const char* dataRoot)
 }
 
 bool Running() { return g_running.load(std::memory_order_relaxed); }
+
+bool ClientRecently() { return Running() && debugsrv::client_within(300); }
 
 bool TakeTestInput(char* line, size_t size)
 {

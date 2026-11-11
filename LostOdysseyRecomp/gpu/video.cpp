@@ -65,6 +65,10 @@
 #include <os/platform.h>
 #if LO_PLATFORM_SWITCH
 #include <os/switch_platform.h>
+#include <os/debug_server.h>
+#include <debug/map_info.h>
+#include <movie/movie_player.h>
+#include "cinematic_bars.h"
 #endif
 #if LO_PLATFORM_MACOS
 #include <objc/message.h>
@@ -3539,6 +3543,21 @@ namespace gpu::video
         const bool phaseChanged = (progress >> 56) != (shownProgress >> 56);
         const uint32_t total = uint32_t((progress >> 28) & kProgressMask);
         const uint32_t done = uint32_t(progress & kProgressMask);
+#if LO_PLATFORM_SWITCH
+        {
+            // Screen on while nobody needs the controls (issue #7); only changes reach the applet.
+            using namespace os::switch_platform;
+            constexpr uint32_t kMask = AwakeLoading | AwakePreparing | AwakeMovie | AwakeCutscene | AwakeDebugClient;
+            const uint32_t reasons = (debug_menu::LoadInProgress() ? AwakeLoading : 0) | (total ? AwakePreparing : 0) |
+                (movie::GuestPlaying() ? AwakeMovie : 0) | (gpu::cinematic_bars::CutsceneActive() ? AwakeCutscene : 0) |
+                (os::debug_server::ClientRecently() ? AwakeDebugClient : 0);
+            static uint32_t shownReasons = ~0u;
+            if (reasons != shownReasons) {
+                shownReasons = reasons;
+                SetScreenAwake(kMask, reasons);
+            }
+        }
+#endif
 #if defined(__ANDROID__)
         // The virtual pad publishes JNI snapshots, not SDL controller events.
         if (((shaderProgress >> 28) & kProgressMask) && !ShaderPreparationSkipped() &&

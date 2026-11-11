@@ -7,4 +7,7 @@ namespace gpu::cinematic_bars
 void UpdatePause(uint8_t* base);
 // Presentation consumes host atomics, never follows guest objects.
 bool Active();
+// An in-engine cutscene (a scenario task or a Matinee, until control and the screen fade are back); not the pause
+// overlay and not movies. Any thread.
+bool CutsceneActive();
 }

@@ -234,6 +234,7 @@ static int RunGuest(uint32_t entry)
 
 #if LO_PLATFORM_SWITCH
     os::switch_platform::SetLoadingBoost(false);
+    os::switch_platform::SetScreenAwake(os::switch_platform::AwakeStartup, 0);
     os::switch_platform::StartHandheldGpuBoost();
     {
         std::error_code ec;

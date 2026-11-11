@@ -59,6 +59,8 @@ struct Config
 // Starts the listening thread; false when the port cannot be opened. The Switch: sockets must be initialised.
 bool start(const Config& config);
 bool running();
+// A connection is open now or closed at most seconds ago (unattended tools: the game keeps the console awake).
+bool client_within(int seconds);
 // Commands the game adds; any thread, before or after start. Handlers run on the connection's thread.
 void add_command(const char* name, const char* usage, Handler handler);
 // Closes the sockets (before the program restarts).
