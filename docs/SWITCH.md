@@ -183,6 +183,8 @@ mesa-switch (NVK). Nothing else is installed on the PC.
 The script applies the dependency patches, builds the host tools, dumps the
 Disc 1 image, recompiles the PowerPC code when `LostOdysseyRecompLib/ppc/` is
 empty, then cross-compiles and packages `out/switch/LostOdysseyRecomp.nro`.
+deko3d is compiled from `thirdparty/deko3d` with the rest, not taken from the
+image ("deko3d back end" below).
 Keep `out/switch/LostOdysseyRecomp.elf` with it: crash addresses resolve
 against it.
 
@@ -266,6 +268,7 @@ Switch-specific options and diagnostics:
 | `LO_GUEST_AFFINITY` | off | Set to `1` to map Xbox guest thread affinity onto the Switch's three cores |
 | `LO_THREAD_PLACEMENT` | off | Set to `1` to log every 30 s (`switch: placement`) each core's idle share and, per thread above 1% CPU, its priority, ideal core, allowed mask, and the cores it was seen on |
 | `LO_THREAD_CORES` | off | With `LO_THREAD_PLACEMENT=1`: `name=core:hexmask,...` sets the ideal core and allowed mask of a thread of that name once a report finds it above 50% CPU, for placement experiments |
+| `LO_DEKO3D_HEAP_STATS` | off | `1`: deko3d's heap blocks are counted. The memory lines (`info`, every 30 s in the log) add `deko3d heap <KiB> in <n> blocks, control chunks <made> made <freed> freed (self-check <a> then <b>), heap uordblks <bytes>`. A steady scene makes no control chunks. The self-check at device creation clears a 3-chunk list 99 times: `then 0` means `clear()` keeps the chunks (fixed), `then 198` means it loses them (stock deko3d) |
 | `LO_DEKO3D_BARRIER_TRACE` | off | Set to `<n>`: every barrier of one frame in n goes to the log (`barrier trace:`), with what it waits for, its textures and the caller's address relative to `Deko3DBarrierTrace` |
 | `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout |
 | `LO_ZPD_MODE` | host queries | Set to `xenia` for made-up occlusion query counts instead of host queries |
@@ -549,10 +552,13 @@ instructions per call, so it shifts little time.
 
 ## deko3d back end (experimental)
 
-`LO_SWITCH_BACKEND=deko3d` in `env.txt` renders through deko3d, the Switch's own GPU API, instead of Mesa NVK. It is
-built when devkitPro's deko3d library is installed (`dkp-pacman -S deko3d`; the CMake log says
-`LostOdysseyRecomp: deko3d back end`). NVK stays the default.
+`LO_SWITCH_BACKEND=deko3d` in `env.txt` renders through deko3d, the Switch's own GPU API, instead of Mesa NVK. NVK
+stays the default.
 
+- deko3d itself: built from `thirdparty/deko3d` (deko3d 0.5.0, devkitPro's, with the fixes in
+  `thirdparty/deko3d/PATCHES.md`), with upstream's release flags. The CMake log says
+  `LostOdysseyRecomp: deko3d back end (thirdparty/deko3d)`. devkitPro's `deko3d` package is not needed.
+  `-DLO_SWITCH_DEKO3D_SOURCE=OFF` links its `libdeko3d.a` instead (`dkp-pacman -S deko3d`), without the fixes.
 - Back end: `thirdparty/plume-deko3d`, plume's deko3d back end from sa2-nx/banjo-nx, with LostOdysseyRecomp's changes:
   shaders are taken as SPIR-V, descriptors live in two device-wide heaps, and texture handles come from the bound
   descriptor sets.

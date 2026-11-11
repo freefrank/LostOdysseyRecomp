@@ -99,6 +99,8 @@
 #include <plume_deko3d_api.h>
 #include "deko3d_shader_cache.h"
 #include <debug/debug_options.h>
+#include <malloc.h>
+#include <cstdio>
 #endif
 #ifdef _WIN32
 #include <plume_d3d12.h>
@@ -466,6 +468,22 @@ namespace gpu::video
             const std::filesystem::path root = LO_SWITCH_DATA_ROOT;
             lo::deko3d::InstallShaderCache(root / "shaders" / (spirvOptions.leanShaders ? "deko3d_shaders_lean" + std::to_string(spirvOptions.leanShaders) + ".lodk" : std::string("deko3d_shaders.lodk")), root / "cache" / "deko3d_runtime.dkcache");
             LOG_NOTICE("video: deko3d back end (LO_SWITCH_BACKEND=deko3d)");
+            // LO_DEKO3D_HEAP_STATS=1 (issue #3): the memory lines also give deko3d's heap blocks and its 1 KiB command
+            // buffer control chunks, made and freed, and the heap's exact bytes in use.
+            os::switch_platform::SetMemorySummaryExtra([]() -> std::string {
+                const plume::Deko3DHeapCounters c = plume::Deko3DReadHeapCounters();
+                if (!c.on)
+                    return {};
+                char text[256];
+                std::snprintf(text, sizeof(text),
+                    "; deko3d heap %llu KiB in %llu blocks, control chunks %llu made %llu freed (self-check %llu then %llu), "
+                    "heap uordblks %llu",
+                    static_cast<unsigned long long>(c.bytes >> 10), static_cast<unsigned long long>(c.allocs - c.frees),
+                    static_cast<unsigned long long>(c.chunkAllocs), static_cast<unsigned long long>(c.chunkFrees),
+                    static_cast<unsigned long long>(c.selfCheckFirst), static_cast<unsigned long long>(c.selfCheckRest),
+                    static_cast<unsigned long long>(mallinfo().uordblks));
+                return text;
+            });
             return plume::CreateDeko3DInterface();
         }
 #endif
