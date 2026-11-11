@@ -296,6 +296,24 @@ Switch-specific options and diagnostics:
 The runtime log (`state/logs/runtime-*.log`) is buffered on the console and
 written at least once a second; warnings and errors are written at once.
 
+### Heap census
+
+Builds configured with `-DLO_SWITCH_HEAP_CENSUS=ON` route newlib's allocator (`_malloc_r`, `_free_r`, `_calloc_r`,
+`_realloc_r`, `_memalign_r`) through `os/switch/heap_census.cpp`; a default build has neither the wrappers nor the
+census. In such a build `LO_HEAP_CENSUS=1` in env.txt (or a sampling period in bytes, 32768 by default) counts every
+allocation and free by chunk size class (exact: the bytes are what `mallinfo().uordblks` adds up), and samples one
+allocation in about every period bytes allocated on a thread, with its call stack (any allocation of at least the
+period always). Every `LO_HEAP_CENSUS_SECONDS` (60 by default) the log gets `heap census:` NOTICE lines (uordblks, call
+counts, the five call sites holding the most) and `state/heap-census/<seconds>.txt` the full tables. On the PC:
+
+    tools/switch/lo_debug.py get state/heap-census/000600.txt out/a.txt
+    tools/switch/lo_debug.py get state/heap-census/003000.txt out/b.txt
+    python3 tools/switch/heap_census.py out/a.txt out/b.txt --elf out/build/switch-pgo-use/LostOdysseyRecomp/LostOdysseyRecomp.elf
+
+prints what grew between the two: uordblks, each size class, and the sites by their live estimate (each sampled
+allocation still held counts max(size, period) bytes), with the frames named. Sampling unwinds the stack
+(`_Unwind_Backtrace`), a few microseconds per sample.
+
 ### Live log over the network
 
 The log files cannot be read over FTP while the game has them open. With

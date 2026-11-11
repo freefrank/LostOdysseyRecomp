@@ -26,6 +26,7 @@
 #include <os/detach_thread.h>
 #if LO_PLATFORM_SWITCH
 #include <os/switch_cpu_profiler.h>
+#include <os/heap_census.h>
 #endif
 #include <os/user_paths.h>
 #include <os/shader_log.h>
@@ -243,6 +244,7 @@ static int RunGuest(uint32_t entry)
         os::switch_cpu_profiler::Start(sampler);
         LOG_INFO("switch: CPU profiler sampler {}", sampler ? "on" : "off");
     }
+    os::heap_census::Start(); // LO_SWITCH_HEAP_CENSUS builds: LO_HEAP_CENSUS=1
     LOG_INFO("switch: {} mode, guest memory committed {} MiB, {}", os::switch_platform::IsDocked() ? "docked" : "handheld",
              GuestAddressSpace::CommittedBytes() >> 20, os::switch_platform::MemorySummary());
     // Opt-in game file reads every 10 s (LO_IO_PROFILE=1) distinguish slow SD
