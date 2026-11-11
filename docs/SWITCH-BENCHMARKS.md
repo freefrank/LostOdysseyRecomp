@@ -549,3 +549,81 @@ work, as #26 expected.
 each one fell back to the Debug page's value (0, but 1 for colour compression). `LO_DEKO3D_ZCULL=0` still gave off; `LO_DEKO3D_ZCULL=1` gave off too.
 `LO_DEKO3D_GPU_FAST` alone was not affected. Any A/B made with one of these six lines between `50dd1fcf` (2026-10-29) and the fix measured the Debug
 page's value, not the line's.
+
+## Heap growth in the first battle: the occlusion history's pending ring (2026-11-11)
+
+PR 37 (issue 3) saw newlib's heap in use (`mallinfo().uordblks`) grow by about 2.7 KB/s, 10 MB/h, in the first battle with
+every build, and by 0.1 KB/s in Uhra's station square, with deko3d's own blocks flat. The heap census
+(`-DLO_SWITCH_HEAP_CENSUS=ON`, `LO_HEAP_CENSUS=1`, docs/SWITCH.md) found where: `gpu/occlusion_history.h`.
+
+Setup: `new-game-battle` without the title menu's UP (no save on the console), left in the battle's command menu,
+census report every 120 s, handheld, stock clocks, 540 rows, the console's release env.txt, LostOdysseyNX `2c6efaed`
+with the census and PR 36's keep-awake (for runs over 18 minutes). The battle runs from about 120 s.
+
+| Battle, seconds since start | 360 | 601 | 962 | 1,323 | 1,683 | 2,044 | 2,164 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| uordblks growth, KB/s (previous 120 s) | 2.82 | 2.42 | 1.92 | 1.47 | 1.18 | 0.89 | 0.77 |
+| of which 128-255 byte chunks, KB/s | 2.36 | 2.05 | 1.76 | 1.40 | 1.18 | 0.89 | 0.79 |
+
+After the first 6 minutes all of the growth is 128-255 byte chunks (+2.87 MB of +3.43 MB from 240 to 2,164 s; the
+rest is the network log's history string, below). The sampled call stacks put them in `occlusion_history::Read`: the
+`more` vector of `HistoryAnswers`' pending reads. The 32,768 slots of that ring each kept a vector for the keys of a
+query read for more than two objects, and `clear()` keeps a vector's capacity, so every slot that ever overflowed
+kept the largest buffer it had needed (8 keys, a 144-byte chunk, in this battle). The rate falls off as more of the
+slots already hold one: about exp(-t / 27 min), which leaves about 1.3 MB to come after 36 minutes. A cache filling,
+not a leak without end.
+But its size is set by the worst query each slot ever saw: a scene with more objects per query raises it for the
+rest of the session. Uhra's square was not measured again (the console's saves were gone).
+
+Fix (PR with the census): the keys after the first two go to one pool for all slots, as a list per slot given back when the
+count arrives or the slot is taken over. The pool holds the keys pending now; reads still do not allocate once it has
+grown to that. Same battle, census build with the fix:
+
+| uordblks | 361 → 842 s | 842 → 1,323 s | 128-255 byte chunks, 361 → 1,323 s |
+|---|---:|---:|---:|
+| before | +1,396 KB | +797 KB | +1,701 KB |
+| with the fix | +286 KB | **-0.5 KB** | **+0** |
+
+The 286 KB is one step at 721 s, the network log's history (`os/switch/netlog.cpp`) doubling its string from 256 to
+512 KiB; it stops at 2 MiB and only runs with `LO_NETLOG`, which bench env files turn on.
+
+The census itself, on: about 3,800 frees, 3,400 memaligns, 280 reallocs and 190 mallocs a second in the battle, one
+sample in 32 KiB (36,000 in 26 minutes, 2,300 held at a time, 394 call stacks); 28.2 FPS in the battle with it on
+(not an A/B).
+
+Same-binary FPS A/B of the fix (2026-11-11/12), census off: two builds of the same tree (LostOdysseyNX `2c6efaed` with
+PR 36, PGO USE `out/pgo-street5`, before PR 39's PGO flags), one without and one with the fix. `new-game-battle` without UP, the battle's
+command menu, ABBA blocks base / fix / fix / base, each one warm-up and 2 counted runs (450 frames), handheld, stock
+clocks, 540 rows, the release env.txt.
+
+| | FPS (runs) | mean FPS | 1% low FPS | p99 ms | GPU ms/frame |
+|---|---|---:|---:|---:|---:|
+| base | 28.37, 28.53, 28.44, 28.33 | 28.42 | 24.79 | 40.4 | 32.65 |
+| fix | 28.44, 28.47, 28.53, 28.27 | 28.43 | 24.78 | 40.4 | 32.60 |
+
+No change: +0.01 FPS, inside the 0.26 FPS spread of either build. Block 3's first try lost the console: on the game's
+restart the system's `vi` service aborted (Atmosphere report at 23:37:22) and the game with it; the same pair is in
+the reports from 21:25, with the original NRO. The rerun of blocks 3 and 4 had no trouble.
+
+## Switches env.txt didn't reach (until 2026-11-11)
+
+Before 2026-11-11 the console applied env.txt in `switch_platform::Initialize`, from `main`, after the static
+initializers. Nine switches are read there, so env.txt couldn't change them: `LO_CP_FUSED_PLAIN_RUN`, `LO_GPU_STATS`,
+`LO_GPU_TRACE` and `LO_SHADER_DUMP_DIR` (`gpu/command_processor.cpp`), `LO_DEKO3D_DESCRIPTOR_CACHE` and
+`LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` (`plume_deko3d.cpp`), `LO_VERBOSE` (`os/logger.h`, in 84 files' initializers),
+`LO_TRACE_FUNCS` (`g_memory`'s constructor) and `LO_TEST_ACHIEVEMENTS`. The list comes from the source and from the
+built program: every `getenv` call reachable from its 126 constructors.
+env.txt is now also applied by a constructor that runs before them (`os/switch/env_file.cpp`), and `stderr.log` names
+every switch read before env.txt's logged pass. Checked on the console (2026-11-11, title screen, 60 s each, env.txt
+`LO_GPU_STATS=1 LO_VERBOSE=1 LO_DEBUG_LOG=1`): the build before printed 0 `frame N stats` and 0 `[verb]` lines (4,889
+info lines, so `LO_DEBUG_LOG` worked); the fixed build printed 67 and 7,257, and its stderr.log listed exactly the
+nine switches above (plus libstdc++'s `GLIBCXX_TUNABLES`) as read before the logged pass, none before the early one.
+With `LO_DEKO3D_DESCRIPTOR_CACHE=0` and `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH=0` plume logs both off.
+
+One result used them. The "less work per draw" A/B of 2026-11-04 (`ff013164`, busy street, 540 rows, two alternated
+pairs, `out/bench/pg-k0` to `pg-k3`): 24.73 to 25.62 FPS (+3.6%), median frame 40.3 to 38.9 ms. Its "off" runs set
+seven switches to 0, but `LO_CP_FUSED_PLAIN_RUN`, `LO_DEKO3D_DESCRIPTOR_CACHE` and `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH`
+stayed on in both modes. The +3.6% is `LO_CP_WPTR_LOCKFREE`, `LO_HOST_INPUT_REUSE`, `LO_UPLOAD_VECTOR_COPY` and
+`LO_DEKO3D_FB_DEDUPE` alone; the other three haven't been measured. Results that compare builds, such as the
+milestones, are unaffected: each build ran with its own defaults. (The six `LO_DEKO3D_<NAME>` lines had a different
+bug, fixed in #34: each one fell back to the Debug page's value.)

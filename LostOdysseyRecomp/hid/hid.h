@@ -16,10 +16,19 @@ namespace hid
     void PumpHostInput();
     // Atomic presentation hint for host UI; does not change the guest's buttons.
     bool UsesPlayStationPrompts();
-    // Auto prompts after a key press: host UI names keyboard keys instead.
+    // Keyboard prompts (Auto after a key press, or chosen): host UI names keyboard keys instead.
     bool UsesKeyboardPrompts();
-    // Button icon style: 0 Auto (follow the last active controller), 1 Xbox, 2 PlayStation.
+    // The button icon family (hid::prompts::Family as a number): the chosen
+    // style, or with Auto the last active controller's.
+    uint8_t PromptFamily();
+    // Button icon style: 0 Auto (follow the last active controller), 1 Xbox,
+    // 2 PlayStation, 3 Switch, 4 Steam Deck, 5 keyboard.
     void SetPromptStyle(uint32_t style);
+    // The active pad's face buttons keep their Xbox positions (Steam Input)
+    // instead of hid reading Nintendo pads by their printed letter.
+    bool PromptsByPosition();
+    // The keyboard layout in use (input_map.h), for keyboard button icons.
+    input_map::KeyboardMap KeyboardMapSnapshot();
     // Physical SDL controllers may be discovered through HIDAPI without an Android InputDevice.
     bool HasConnectedController();
     // Player rumble strength, 0-100 percent of the guest's motor speeds (100 = retail).

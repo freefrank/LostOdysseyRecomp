@@ -323,6 +323,10 @@ bool debug_menu::CurrentLoad(std::string& what, uint64_t& startMs) {
     return true;
 }
 
+bool debug_menu::LoadInProgress() {
+    return loadStartMs.load(std::memory_order_relaxed) != 0;
+}
+
 bool debug_menu::LoadProfileEnabled() {
 #if LO_PLATFORM_SWITCH
     static const bool enabled = [] {

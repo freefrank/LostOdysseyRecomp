@@ -44,12 +44,30 @@ namespace
     std::vector<SDL_JoystickID> g_physicalControllerIds;
     std::atomic<uint32_t> g_physicalControllerCount{0};
     hid::prompts::ActiveController g_promptController;
-    std::atomic<bool> g_playStationPrompts{false}, g_keyboardPrompts{false};
+    std::atomic<uint8_t> g_autoPromptFamily{uint8_t(hid::prompts::DefaultFamily)};
+    std::atomic<bool> g_promptsByPosition{false};
+    // Whether the Switch icons follow the button positions instead of the letters (glyph_atlases.cpp).
+    // Not called before main(): SwitchLetterLayout keeps the first LO_SWITCH_BUTTONS it reads.
+    bool PadPromptsByPosition(SDL_Gamepad* pad)
+    {
+#if LO_PLATFORM_SWITCH
+        // Every pad is read through the console's layout (face_buttons.h): by default the A button is the guest's A,
+        // so the icons are picked by letter; LO_SWITCH_BUTTONS=position reads the buttons, and picks icons, by position.
+        (void)pad;
+        return !hid::face_buttons::SwitchLetterLayout();
+#else
+        return hid::face_buttons::LabelType(pad) == SDL_GAMEPAD_TYPE_STANDARD;
+#endif
+    }
     std::atomic<uint32_t> g_promptStyle{0};
     void PublishPromptStyle()
     {
-        g_playStationPrompts.store(g_promptController.PlayStation(), std::memory_order_relaxed);
-        g_keyboardPrompts.store(g_promptController.KeyboardActive(), std::memory_order_relaxed);
+        g_autoPromptFamily.store(uint8_t(g_promptController.ActiveFamily()), std::memory_order_relaxed);
+#if LO_PLATFORM_SWITCH
+        g_promptsByPosition.store(PadPromptsByPosition(nullptr), std::memory_order_relaxed); // also with no pad yet
+#else
+        g_promptsByPosition.store(g_promptController.ActivePositional(), std::memory_order_relaxed);
+#endif
     }
 
     void ObserveController(SDL_Gamepad* controller)
@@ -165,7 +183,9 @@ namespace
                     g_physicalControllerIds.push_back(id);
                     g_physicalControllerCount.store(uint32_t(g_physicalControllerIds.size()), std::memory_order_relaxed);
                 }
-                g_promptController.Connected(id, SDL_GetGamepadType(pad));
+                g_promptController.Connected(id, hid::prompts::FamilyOf(SDL_GetGamepadType(pad), SDL_GetGamepadVendor(pad),
+                                                                     SDL_GetGamepadProduct(pad)),
+                                             PadPromptsByPosition(pad));
                 PublishPromptStyle();
                 LOG_INFO("controller added: {} instance={} ({} connected)", SDL_GetGamepadName(pad), id, g_controllers.size());
             }
@@ -242,16 +262,23 @@ void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
     }
 }
 
-bool hid::UsesPlayStationPrompts()
+uint8_t hid::PromptFamily()
 {
     const uint32_t style = g_promptStyle.load(std::memory_order_relaxed);
-    return style == 0 ? g_playStationPrompts.load(std::memory_order_relaxed) : style == 2;
+    return style == 0 ? g_autoPromptFamily.load(std::memory_order_relaxed) : uint8_t(style - 1);
 }
-bool hid::UsesKeyboardPrompts()
+bool hid::UsesPlayStationPrompts() { return PromptFamily() == uint8_t(prompts::Family::PlayStation); }
+bool hid::UsesKeyboardPrompts() { return PromptFamily() == uint8_t(prompts::Family::Keyboard); }
+void hid::SetPromptStyle(uint32_t style)
 {
-    return g_promptStyle.load(std::memory_order_relaxed) == 0 && g_keyboardPrompts.load(std::memory_order_relaxed);
+    g_promptStyle.store(style <= uint32_t(prompts::FamilyCount) ? style : 0, std::memory_order_relaxed);
 }
-void hid::SetPromptStyle(uint32_t style) { g_promptStyle.store(style <= 2 ? style : 0, std::memory_order_relaxed); }
+bool hid::PromptsByPosition() { return g_promptsByPosition.load(std::memory_order_relaxed); }
+hid::input_map::KeyboardMap hid::KeyboardMapSnapshot()
+{
+    std::lock_guard lock(g_hidMutex);
+    return g_keyboardMap;
+}
 bool hid::HasConnectedController() { return g_physicalControllerCount.load(std::memory_order_relaxed) != 0; }
 
 void hid::SetInputMaps(const input_map::ControllerMap& controller, const input_map::KeyboardMap& keyboard)

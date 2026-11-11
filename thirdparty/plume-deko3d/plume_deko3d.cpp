@@ -53,6 +53,104 @@ namespace plume {
         processFree = total > used ? total - used : 0;
     }
 
+    // LostOdysseyRecomp (2026-11-11, issue #3): LO_DEKO3D_HEAP_STATS=1 gives the device allocation callbacks that count
+    // what deko3d takes from the heap: its objects, CPU-side memory blocks and the command buffers' control memory.
+    // Control memory comes in 1 KiB chunks (dk_cmdbuf.cpp, 16 + 1008 bytes); stock 0.5.0's CmdBuf::clear() kept only
+    // the newest chunk of a list, so with it the 1 KiB count grows with every clear of a list that needed more than one
+    // (thirdparty/deko3d/PATCHES.md).
+    // Off (the default): deko3d's own aligned_alloc and free.
+    static constexpr size_t kCtrlChunkBytes = 1024;
+    static struct {
+        std::atomic<uint64_t> allocs{0}, frees{0}, bytes{0}, chunkAllocs{0}, chunkFrees{0};
+        std::atomic<uint64_t> selfCheckFirst{0}, selfCheckRest{0};
+        std::atomic<bool> on{false};
+    } g_heapStats;
+
+    // Each block has a header of max(alignment, 16) bytes in front: the block's size and the header's.
+    static DkResult countingAlloc(void *, size_t alignment, size_t size, void **out) {
+        const size_t head = alignment > 16 ? alignment : 16;
+        char *base = static_cast<char *>(aligned_alloc(head, (head + size + head - 1) & ~(head - 1)));
+        if (base == nullptr) {
+            *out = nullptr;
+            return DkResult_OutOfMemory;
+        }
+        size_t *p = reinterpret_cast<size_t *>(base + head);
+        p[-1] = size;
+        p[-2] = head;
+        g_heapStats.allocs.fetch_add(1, std::memory_order_relaxed);
+        g_heapStats.bytes.fetch_add(size, std::memory_order_relaxed);
+        if (size == kCtrlChunkBytes)
+            g_heapStats.chunkAllocs.fetch_add(1, std::memory_order_relaxed);
+        *out = p;
+        return DkResult_Success;
+    }
+
+    static void countingFree(void *, void *mem) {
+        if (mem == nullptr)
+            return;
+        size_t *p = static_cast<size_t *>(mem);
+        const size_t size = p[-1], head = p[-2];
+        g_heapStats.frees.fetch_add(1, std::memory_order_relaxed);
+        g_heapStats.bytes.fetch_sub(size, std::memory_order_relaxed);
+        if (size == kCtrlChunkBytes)
+            g_heapStats.chunkFrees.fetch_add(1, std::memory_order_relaxed);
+        free(reinterpret_cast<char *>(mem) - head);
+    }
+
+    Deko3DHeapCounters Deko3DReadHeapCounters() {
+        Deko3DHeapCounters c;
+        c.on = g_heapStats.on.load(std::memory_order_acquire);
+        c.allocs = g_heapStats.allocs.load(std::memory_order_relaxed);
+        c.frees = g_heapStats.frees.load(std::memory_order_relaxed);
+        c.bytes = g_heapStats.bytes.load(std::memory_order_relaxed);
+        c.chunkAllocs = g_heapStats.chunkAllocs.load(std::memory_order_relaxed);
+        c.chunkFrees = g_heapStats.chunkFrees.load(std::memory_order_relaxed);
+        c.selfCheckFirst = g_heapStats.selfCheckFirst.load(std::memory_order_relaxed);
+        c.selfCheckRest = g_heapStats.selfCheckRest.load(std::memory_order_relaxed);
+        return c;
+    }
+
+    // With LO_DEKO3D_HEAP_STATS=1, at device creation: a scratch command buffer records lists of 128 fence signals
+    // (each one a control command, and a GPFIFO entry for its commands: several 1 KiB chunks), cleared before each list;
+    // nothing is submitted. The first list makes its chunks. With deko3d's CmdBuf::clear fixed the next 99 reuse them
+    // and make none; stock 0.5.0 loses all but the newest at each clear, so each list makes them again.
+    static void heapStatsSelfCheck(DkDevice dk) {
+        DkMemBlockMaker bm;
+        dkMemBlockMakerDefaults(&bm, dk, 64u << 10);
+        bm.flags = DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached;
+        DkMemBlock mem = dkMemBlockCreate(&bm);
+        DkCmdBufMaker cm;
+        dkCmdBufMakerDefaults(&cm, dk);
+        DkCmdBuf cmd = dkCmdBufCreate(&cm);
+        if (mem == nullptr || cmd == nullptr) {
+            logf("device: heap stats self-check skipped (no memory)");
+            if (cmd) dkCmdBufDestroy(cmd);
+            if (mem) dkMemBlockDestroy(mem);
+            return;
+        }
+        static DkFence fences[128];
+        const auto made = [] { return g_heapStats.chunkAllocs.load(std::memory_order_relaxed); };
+        const uint64_t start = made(), freed = g_heapStats.chunkFrees.load(std::memory_order_relaxed);
+        uint64_t first = 0;
+        for (int i = 0; i < 100; i++) {
+            dkCmdBufClear(cmd);
+            dkCmdBufAddMemory(cmd, mem, 0, 64u << 10);
+            for (DkFence &f : fences)
+                dkCmdBufSignalFence(cmd, &f, false);
+            dkCmdBufFinishList(cmd);
+            if (i == 0)
+                first = made() - start;
+        }
+        const uint64_t rest = made() - start - first;
+        g_heapStats.selfCheckFirst.store(first, std::memory_order_relaxed);
+        g_heapStats.selfCheckRest.store(rest, std::memory_order_relaxed);
+        dkCmdBufDestroy(cmd);
+        dkMemBlockDestroy(mem);
+        logf("device: heap stats self-check: control chunks made by the first list %" PRIu64 ", by the next 99 after a clear "
+             "each %" PRIu64 " (0: clear keeps them), freed with the buffer %" PRIu64, first, rest,
+             g_heapStats.chunkFrees.load(std::memory_order_relaxed) - freed);
+    }
+
     static constexpr uint32_t alignUp(uint32_t v, uint32_t a) { return (v + a - 1) / a * a; }
     static constexpr uint64_t alignUp64(uint64_t v, uint64_t a) { return (v + a - 1) / a * a; }
 
@@ -945,11 +1043,20 @@ namespace plume {
         // Upper-left origin and depth from 0 to 1 (Vulkan's, D3D's); with the upper-left origin deko3d 0.5.0 maps clip
         // space y = +1 to the top row, D3D's convention: the deko3d shaders are compiled without -fvk-invert-y.
         dm.flags = DkDeviceFlags_OriginUpperLeft | DkDeviceFlags_DepthZeroToOne;
+        // Read here, after env.txt (LO_DEKO3D_HEAP_STATS above).
+        if (const char *v = getenv("LO_DEKO3D_HEAP_STATS"); v && strcmp(v, "1") == 0) {
+            g_heapStats.on.store(true, std::memory_order_release);
+            dm.cbAlloc = countingAlloc;
+            dm.cbFree = countingFree;
+            logf("device: counting deko3d's heap blocks (LO_DEKO3D_HEAP_STATS)");
+        }
         dk = dkDeviceCreate(&dm);
         if (!dk) {
             logf("dkDeviceCreate failed");
             return false;
         }
+        if (g_heapStats.on.load(std::memory_order_relaxed))
+            heapStatsSelfCheck(dk);
         DkQueueMaker qm;
         dkQueueMakerDefaults(&qm, dk);
         // Zcull off unless Deko3DOptions::zcull (SwitchWakerHD: with it deko3d dropped depth-biased decals in whole 4x8
@@ -1013,6 +1120,9 @@ namespace plume {
         capabilities.occlusionQueries = envFlag("LO_DEKO3D_OCCLUSION");
         capabilities.occlusionQueryPrecise = true;
         logf("device: occlusion queries %s (LO_DEKO3D_OCCLUSION)", capabilities.occlusionQueries ? "on" : "off");
+        // LostOdysseyRecomp (2026-11-11): read at static initialization, so only env.txt's early pass reaches them.
+        logf("device: descriptor cache %s (LO_DEKO3D_DESCRIPTOR_CACHE), relaxed descriptor epoch %s "
+             "(LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH)", g_descriptorCache ? "on" : "off", g_relaxedDescriptorEpoch ? "on" : "off");
         capabilities.resolveRegion = false;
         description.name = "deko3d (Tegra X1, Maxwell GM20B)";
         description.type = RenderDeviceType::INTEGRATED;

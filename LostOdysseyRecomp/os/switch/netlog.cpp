@@ -42,29 +42,62 @@ bool Closed(int client)
     return n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
 }
 
-// One client at a time; the next one waits until the current one closes.
-void Serve(void*)
+// A socket listening on g_port, or -1.
+int Listen()
 {
     const int server = socket(AF_INET, SOCK_STREAM, 0);
+    if (server < 0)
+        return -1;
+    int one = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(uint16_t(g_port));
     address.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (server < 0 || bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
-        listen(server, 1) != 0)
+    if (bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 || listen(server, 1) != 0)
+    {
+        close(server);
+        return -1;
+    }
+    return server;
+}
+
+// One client at a time; the next one waits until the current one closes.
+void Serve(void*)
+{
+    int server = Listen();
+    if (server < 0)
     {
         std::fprintf(stderr, "netlog: cannot listen on port %d\n", g_port);
         return;
     }
     std::string chunk;
+    int failures = 0; // accept() failures in a row
     for (;;)
     {
         const int client = accept(server, nullptr, nullptr);
         if (client < 0)
         {
+            // Sleep mode closes every socket, the listening one too: accept() then fails at once from the
+            // wake-up on (as in the debug server). After a few failures the socket is opened again.
+            if (++failures >= 3)
+            {
+                close(server);
+                server = Listen();
+                std::fprintf(stderr, server >= 0 ? "netlog: listening again on port %d (errno %d)\n"
+                                                 : "netlog: cannot listen on port %d again yet (errno %d); retrying\n",
+                             g_port, errno);
+                failures = 0;
+                while (server < 0)
+                {
+                    svcSleepThread(1'000'000'000);
+                    server = Listen();
+                }
+            }
             svcSleepThread(1'000'000'000);
             continue;
         }
+        failures = 0;
         // A dead link (Wi-Fi drop, PC asleep) fails the send instead of
         // blocking this thread, and every later client, for minutes.
         const timeval sendTimeout{5, 0};

@@ -20,6 +20,7 @@ PREAMBLE = r'''
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <hid/glyph_atlases.h>
 #include <apu/audio.h>
 #include <settings/graphics_menu.h>
 #include <settings/menu_render.h>
@@ -64,6 +65,8 @@ struct FileSystem { static std::filesystem::path GetGameRoot(){return {};} };
 namespace hid {
 bool playStationPrompts = false;
 bool UsesPlayStationPrompts() { return playStationPrompts; }
+uint8_t PromptFamily() { return uint8_t(playStationPrompts ? prompts::Family::PlayStation : prompts::Family::Xbox); }
+namespace glyphs { std::shared_ptr<const Atlas> FamilyAtlas(prompts::Family) { return {}; } }
 void SetVibrationStrength(uint32_t) {}
 void SetPromptStyle(uint32_t) {}
 void PreviewVibration() {}

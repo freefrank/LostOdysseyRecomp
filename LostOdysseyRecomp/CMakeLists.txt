@@ -179,6 +179,8 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
         ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
         ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # os/switch/env_file.cpp: names the LO_* switches read before env.txt was applied (stderr.log).
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=getenv")
     # thirdparty/plume-deko3d: LO_DEKO3D_PRESENT_THREAD hands deko3d's buffer-queue calls to a worker.
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=nwindowQueueBuffer,--wrap=nwindowDequeueBuffer")
     # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.
@@ -197,6 +199,14 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     endif()
     # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
+    # os/switch/heap_census.cpp (LO_SWITCH_HEAP_CENSUS, cmake/LoSwitch.cmake): every allocation and free goes through
+    # newlib's _r entry points, which these wrap.
+    if(LO_SWITCH_HEAP_CENSUS)
+        # The two files that use it only: the rest of the runtime compiles as in a default build.
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/os/switch/heap_census.cpp ${LO_RUNTIME_ROOT}/main.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS LO_SWITCH_HEAP_CENSUS=1)
+        target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=_malloc_r,--wrap=_free_r,--wrap=_calloc_r,--wrap=_realloc_r,--wrap=_memalign_r")
+    endif()
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS
@@ -849,6 +859,11 @@ add_executable(LoEngineDeltaLimitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools
 target_include_directories(LoEngineDeltaLimitTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoEngineDeltaLimitTest PRIVATE cxx_std_20)
 
+add_executable(LoPresentationProgressTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/presentation_progress_test.cpp)
+target_include_directories(LoPresentationProgressTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPresentationProgressTest PRIVATE cxx_std_20)
+target_link_libraries(LoPresentationProgressTest PRIVATE Threads::Threads)
+
 add_executable(LoHostUiCompositeTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/host_ui_composite_test.cpp)
 target_include_directories(LoHostUiCompositeTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoHostUiCompositeTest PRIVATE cxx_std_20)
@@ -913,7 +928,7 @@ if(WIN32)
     target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
-    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo xxHash::xxhash)
 
     add_executable(LoMenuFlowTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
@@ -923,7 +938,7 @@ if(WIN32)
     target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME LO_ENABLE_D3D12_FG FRAMEGEN_WITH_DLSS FRAMEGEN_WITH_FSR)
-    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt)
+    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt xxHash::xxhash)
 endif()
 
 if(LO_BUILD_GPU)
