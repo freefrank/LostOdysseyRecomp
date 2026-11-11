@@ -33,6 +33,8 @@ namespace os::switch_platform
 
     // Process memory and thread usage, for failure logs ("used/total MiB ...").
     std::string MemorySummary();
+    // Appended to MemorySummary when set (LO_DEKO3D_HEAP_STATS: the deko3d back end's heap blocks, issue #3).
+    void SetMemorySummaryExtra(std::string (*extra)());
     // Bytes of newlib's heap in use and the most it can grow to (MemorySummary's "heap in use").
     void HeapUsage(uint64_t& used, uint64_t& limit);
 
@@ -43,8 +45,32 @@ namespace os::switch_platform
     // Handheld only: asks apm for GPU 460.8 MHz with the memory clock kept at
     // 1331.2 MHz (configuration 0x92220008, what commercial games use; from
     // UnleashedRecomp-NX, ChanseyIsTheBest's fork). Reverts if the memory clock
-    // moves. Runs on its own thread; logs the result to stderr.
+    // moves. Runs on its own thread; logs the result to stderr. A game started
+    // docked asks at the first undock. ExitNow puts the configuration back.
     void StartHandheldGpuBoost();
+
+    // Why the screen stays on although nobody touches the controls. The system
+    // dims the screen and sleeps after its own idle settings otherwise. Every
+    // reason turns auto-sleep off and counts as player activity every 15 s
+    // (idle:sys), which keeps the screen from dimming; Movie and Cutscene also
+    // set the applet's media playback state. When a reason ends the idle time
+    // starts again. Initialize sets Startup.
+    enum AwakeReason : uint32_t
+    {
+        AwakeStartup = 1,     // until RunGuest: game files, XEX, install
+        AwakeLoading = 2,     // a map or battle load (debug_menu::CurrentLoad)
+        AwakePreparing = 4,   // the preparation screen (shaders, mods)
+        AwakeMovie = 8,       // a cutscene video (movie::GuestPlaying)
+        AwakeCutscene = 16,   // an in-engine cutscene (gpu::cinematic_bars::CutsceneActive)
+        AwakeDebugClient = 32, // a debug-server client in the last few minutes (unattended tools)
+        AwakeTestWatching = 64, // the debug server's "screen watch on": as Movie, for tests
+        AwakeTestBusy = 128     // "screen busy on": as Loading, for tests
+    };
+    // Sets the reasons in mask to those in reasons. Any thread, as often as wanted: only changes reach the applet.
+    // Nothing changes with LO_SWITCH_AUTO_SLEEP=0, where auto-sleep is off for the whole session.
+    void SetScreenAwake(uint32_t mask, uint32_t reasons);
+    // For the debug server's info: the reasons and what the applet was asked.
+    std::string ScreenSummary();
 
     // Horizon thread priority of the calling thread (0x2C is above the 0x3B
     // every pthread gets; lower numbers run first).

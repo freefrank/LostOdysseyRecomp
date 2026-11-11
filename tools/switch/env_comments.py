@@ -25,6 +25,9 @@ DESCRIPTIONS = {
     "LO_ZPD_MODE": "xenia: made-up occlusion query counts (faster) instead of host queries",
     "LO_PIPELINE_PREBUILD": "Prepare known graphics states in the background at start (all)",
     "LO_SWITCH_BUTTONS": "position: the physical A/B/X/Y layout instead of the letters",
+    "LO_SWITCH_AUTO_SLEEP": "0: the console never sleeps while the game runs, as before (benchmarks); 1: the system's settings",
+    "LO_SWITCH_IDLE_SECONDS": "Test only: <dim>,<sleep> seconds instead of the system's (0,0 keeps them); debug clients don't keep it on",
+    "LO_SWITCH_HOME_SUSPEND": "0: keep running behind the HOME menu (benchmarks, debug server); 1: the HOME menu suspends",
     # Debug server and network log
     "LO_DEBUG_SERVER": "Debug server for tools/switch/lo_debug.py: 1 (or a port) on, 0 off; wins over the Debug settings",
     "LO_DEBUG_RESTART": "1: the debug server's restart command works here (a HOME-menu forwarder); 0: never",
@@ -46,6 +49,8 @@ DESCRIPTIONS = {
     "LO_LOAD_PROFILE": "1: log thread dumps during long loads",
     "LO_WAIT_PROFILE": "1: log guest waits of 1 ms or more every 10 seconds",
     "LO_THREAD_PLACEMENT": "1: log each core's idle share and the busy threads' placement every 30 s",
+    "LO_HEAP_CENSUS": "Heap census builds (-DLO_SWITCH_HEAP_CENSUS=ON): 1 (or a sampling period in bytes) counts allocations by size and call site",
+    "LO_HEAP_CENSUS_SECONDS": "Heap census: seconds between reports (state/heap-census/<seconds>.txt)",
     "LO_THREAD_CORES": "With LO_THREAD_PLACEMENT=1: name=core:hexmask,... moves busy threads, for placement experiments",
     "LO_DEKO3D_BARRIER_TRACE": "Log every barrier of one frame in N",
     # Threads and scheduling

@@ -65,6 +65,10 @@
 #include <os/platform.h>
 #if LO_PLATFORM_SWITCH
 #include <os/switch_platform.h>
+#include <os/debug_server.h>
+#include <debug/map_info.h>
+#include <movie/movie_player.h>
+#include "cinematic_bars.h"
 #endif
 #if LO_PLATFORM_MACOS
 #include <objc/message.h>
@@ -99,6 +103,8 @@
 #include <plume_deko3d_api.h>
 #include "deko3d_shader_cache.h"
 #include <debug/debug_options.h>
+#include <malloc.h>
+#include <cstdio>
 #endif
 #ifdef _WIN32
 #include <plume_d3d12.h>
@@ -466,6 +472,22 @@ namespace gpu::video
             const std::filesystem::path root = LO_SWITCH_DATA_ROOT;
             lo::deko3d::InstallShaderCache(root / "shaders" / (spirvOptions.leanShaders ? "deko3d_shaders_lean" + std::to_string(spirvOptions.leanShaders) + ".lodk" : std::string("deko3d_shaders.lodk")), root / "cache" / "deko3d_runtime.dkcache");
             LOG_NOTICE("video: deko3d back end (LO_SWITCH_BACKEND=deko3d)");
+            // LO_DEKO3D_HEAP_STATS=1 (issue #3): the memory lines also give deko3d's heap blocks and its 1 KiB command
+            // buffer control chunks, made and freed, and the heap's exact bytes in use.
+            os::switch_platform::SetMemorySummaryExtra([]() -> std::string {
+                const plume::Deko3DHeapCounters c = plume::Deko3DReadHeapCounters();
+                if (!c.on)
+                    return {};
+                char text[256];
+                std::snprintf(text, sizeof(text),
+                    "; deko3d heap %llu KiB in %llu blocks, control chunks %llu made %llu freed (self-check %llu then %llu), "
+                    "heap uordblks %llu",
+                    static_cast<unsigned long long>(c.bytes >> 10), static_cast<unsigned long long>(c.allocs - c.frees),
+                    static_cast<unsigned long long>(c.chunkAllocs), static_cast<unsigned long long>(c.chunkFrees),
+                    static_cast<unsigned long long>(c.selfCheckFirst), static_cast<unsigned long long>(c.selfCheckRest),
+                    static_cast<unsigned long long>(mallinfo().uordblks));
+                return text;
+            });
             return plume::CreateDeko3DInterface();
         }
 #endif
@@ -3575,6 +3597,21 @@ namespace gpu::video
         const bool phaseChanged = (progress >> 56) != (shownProgress >> 56);
         const uint32_t total = uint32_t((progress >> 28) & kProgressMask);
         const uint32_t done = uint32_t(progress & kProgressMask);
+#if LO_PLATFORM_SWITCH
+        {
+            // Screen on while nobody needs the controls (issue #7); only changes reach the applet.
+            using namespace os::switch_platform;
+            constexpr uint32_t kMask = AwakeLoading | AwakePreparing | AwakeMovie | AwakeCutscene | AwakeDebugClient;
+            const uint32_t reasons = (debug_menu::LoadInProgress() ? AwakeLoading : 0) | (total ? AwakePreparing : 0) |
+                (movie::GuestPlaying() ? AwakeMovie : 0) | (gpu::cinematic_bars::CutsceneActive() ? AwakeCutscene : 0) |
+                (os::debug_server::ClientRecently() ? AwakeDebugClient : 0);
+            static uint32_t shownReasons = ~0u;
+            if (reasons != shownReasons) {
+                shownReasons = reasons;
+                SetScreenAwake(kMask, reasons);
+            }
+        }
+#endif
 #if defined(__ANDROID__)
         // The virtual pad publishes JNI snapshots, not SDL controller events.
         if (((shaderProgress >> 28) & kProgressMask) && !ShaderPreparationSkipped() &&

@@ -12,9 +12,10 @@ Switch layer follows the Sonic Unleashed Switch ports
 [ChanseyIsTheBest/UnleashedRecomp-NX](https://github.com/ChanseyIsTheBest/UnleashedRecomp-NX)).
 
 > **Status: early.** The game runs on a console. The GPU is the limit: with
-> deko3d at stock clocks in handheld mode, battles and lighter areas hold
-> 30 fps and heavier field areas run at about 20–25 fps. Expect crashes and
-> missing features.
+> deko3d at the official handheld clocks (CPU 1020 MHz, GPU 460.8 MHz, memory
+> 1331.2 MHz; see [Clocks, sleep and the HOME menu](#clocks-sleep-and-the-home-menu)),
+> battles and lighter areas hold 30 fps and heavier field areas run at about
+> 20–25 fps. Expect crashes and missing features.
 
 The Switch build keeps the Xbox 360 image and its own effects (bloom, depth of
 field, motion blur, shadows). The scene defaults to 540p in handheld mode and
@@ -79,6 +80,51 @@ any installed game, then pick Lost Odyssey Recomp. The port reserves a 4 GiB
 guest address space and backs it with console memory, which needs the full
 application memory pool and the process-memory system calls. Started from
 the Album applet it stops with a message that says so.
+
+### Clocks, sleep and the HOME menu
+
+- **Clocks.** The CPU stays at the system's 1020 MHz. In handheld mode the game
+  asks apm for configuration `0x92220008`, the official profile with the GPU at
+  460.8 MHz and the memory at 1331.2 MHz that commercial games use (the system's
+  default is GPU 307.2 MHz). It checks the clocks for 1.5 s and goes back to the
+  previous configuration if the memory clock moved. A game started docked asks
+  at the first undock. Docked, the system's clocks are not changed (GPU 768 MHz,
+  memory 1600 MHz). On quit the previous configuration is put back
+  (`exit.log`: `exit: apm handheld configuration ... restored`); apm also resets
+  it when the process ends. The game never raises the handheld memory clock:
+  that is left to sys-clk. The log's `[apm]` line shows what was applied.
+- **Sleep and dimming.** The screen dims and the console sleeps after the
+  system's own settings (System Settings → Sleep Mode) when nobody touches the
+  controls. The game keeps the screen on during start-up, map and battle loads,
+  the preparation screen, cutscene videos, in-engine cutscenes, and while a
+  debug-server client is connected (or was in the last 5 minutes): auto-sleep
+  is off, and the player counts as active every 15 s (idle:sys
+  `ReportUserIsActive`). Neither the media playback state nor auto-sleep off
+  stops the dimming on its own: on a console with handheld sleep plan 3 (10
+  minutes in libnx's list) and set to sleep while playing media, the screen dimmed about 30 s after the last
+  input with either one held, and media playback alone let it sleep during a
+  movie. Movies and cutscenes still set the media playback state. When a
+  reason ends, the idle time starts again, so the player gets the whole dimming
+  and sleep time after a long cutscene or load (with a test override of 20 s
+  dimming and 60 s sleep, 10 minutes after the last input: dimmed 21 s and
+  asleep about 90 s after the hold ended; held for 236 s it neither dimmed nor
+  slept). The log's `[applet] sleep settings:` line shows the console's
+  settings, and `[applet] screen kept on:` lines each change; the debug server's
+  `info` and `screen` show the state now. `LO_SWITCH_AUTO_SLEEP=0` keeps
+  auto-sleep off for the whole session, as before (`tools/switch/bench.py`
+  writes it: scripted presses are not input to the system).
+- **HOME menu.** The HOME menu and sleep mode suspend the game, as for every
+  game: no CPU, GPU or sound while it waits. Closing it from the HOME menu
+  still quits normally. The engine's tick delta is capped at 250 ms (issue
+  #17), so the game does not jump ahead after a long suspension, and the hang
+  watchdog does not count the suspended time. Sleep closes every socket: the
+  debug server and the network log listen again after the wake-up (log:
+  `listening again`). Checked on the console (handheld, deko3d): after the HOME
+  menu for about 9 s and sleep for 10 s the picture and sound came back and the
+  game ran at 30 FPS again; after sleeps of 47 and 91 minutes it ran at 30 FPS
+  again. `LO_SWITCH_HOME_SUSPEND=0` keeps the game running and
+  rendering behind the HOME menu, as before (benchmarks, debug server commands
+  while HOME is open). The log's `[applet] HOME menu:` line shows which applies.
 
 ## Graphics menu
 
@@ -184,6 +230,8 @@ mesa-switch (NVK). Nothing else is installed on the PC.
 The script applies the dependency patches, builds the host tools, dumps the
 Disc 1 image, recompiles the PowerPC code when `LostOdysseyRecompLib/ppc/` is
 empty, then cross-compiles and packages `out/switch/LostOdysseyRecomp.nro`.
+deko3d is compiled from `thirdparty/deko3d` with the rest, not taken from the
+image ("deko3d back end" below).
 Keep `out/switch/LostOdysseyRecomp.elf` with it: crash addresses resolve
 against it.
 
@@ -267,8 +315,12 @@ Switch-specific options and diagnostics:
 | `LO_GUEST_AFFINITY` | off | Set to `1` to map Xbox guest thread affinity onto the Switch's three cores |
 | `LO_THREAD_PLACEMENT` | off | Set to `1` to log every 30 s (`switch: placement`) each core's idle share and, per thread above 1% CPU, its priority, ideal core, allowed mask, and the cores it was seen on |
 | `LO_THREAD_CORES` | off | With `LO_THREAD_PLACEMENT=1`: `name=core:hexmask,...` sets the ideal core and allowed mask of a thread of that name once a report finds it above 50% CPU, for placement experiments |
+| `LO_DEKO3D_HEAP_STATS` | off | `1`: deko3d's heap blocks are counted. The memory lines (`info`, every 30 s in the log) add `deko3d heap <KiB> in <n> blocks, control chunks <made> made <freed> freed (self-check <a> then <b>), heap uordblks <bytes>`. A steady scene makes no control chunks. The self-check at device creation clears a 3-chunk list 99 times: `then 0` means `clear()` keeps the chunks (fixed), `then 198` means it loses them (stock deko3d) |
 | `LO_DEKO3D_BARRIER_TRACE` | off | Set to `<n>`: every barrier of one frame in n goes to the log (`barrier trace:`), with what it waits for, its textures and the caller's address relative to `Deko3DBarrierTrace` |
-| `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout. Button prompts on Auto show the Switch icons, picked by letter or, with `position`, by position |
+| `LO_SWITCH_BUTTONS` | letter layout | Set to `position` to use the physical positional A/B/X/Y layout |
+| `LO_SWITCH_AUTO_SLEEP` | `1` | `0`: auto-sleep stays off for the whole session, as before: the console never sleeps while the game runs, though the screen still dims (benchmarks; `bench.py` writes it). `1`: the system's settings, with the screen kept on during movies, cutscenes, loads and the preparation screen (see [Clocks, sleep and the HOME menu](#clocks-sleep-and-the-home-menu)) |
+| `LO_SWITCH_IDLE_SECONDS` | off | Test only: `<dim>,<sleep>` seconds replace the system's dimming and sleep times for this session (`0,0` keeps them); with either, debug-server clients do not keep the screen on, so idle behaviour can be measured through the debug server (`screen`) |
+| `LO_SWITCH_HOME_SUSPEND` | `1` | `0`: the game keeps running and rendering behind the HOME menu (benchmarks, debug server). `1`: the HOME menu and sleep mode suspend it |
 | `LO_ZPD_MODE` | host queries | Set to `xenia` for made-up occlusion query counts instead of host queries |
 | `LO_SKIP_NOOP_DRAWS` | `1` | Set to `0` to draw the draws that write no colour, depth or stencil |
 | `LO_SPARSE_CONSTANTS` | `1` | A draw's ALU constants go to the CPU-uncached upload ring only for the slots its shaders read (about 14 of 256 for a vertex shader, 10 for a pixel shader; all of them with relative addressing), and an earlier upload is extended in place when the slots both read hold the same values. Not while motion replay or the FSR alpha passes exist. The busiest street spot, same build: 22.42 to 22.63 FPS. `0`: the whole 4 KB banks |
@@ -296,6 +348,24 @@ Switch-specific options and diagnostics:
 
 The runtime log (`state/logs/runtime-*.log`) is buffered on the console and
 written at least once a second; warnings and errors are written at once.
+
+### Heap census
+
+Builds configured with `-DLO_SWITCH_HEAP_CENSUS=ON` route newlib's allocator (`_malloc_r`, `_free_r`, `_calloc_r`,
+`_realloc_r`, `_memalign_r`) through `os/switch/heap_census.cpp`; a default build has neither the wrappers nor the
+census. In such a build `LO_HEAP_CENSUS=1` in env.txt (or a sampling period in bytes, 32768 by default) counts every
+allocation and free by chunk size class (exact: the bytes are what `mallinfo().uordblks` adds up), and samples one
+allocation in about every period bytes allocated on a thread, with its call stack (any allocation of at least the
+period always). Every `LO_HEAP_CENSUS_SECONDS` (60 by default) the log gets `heap census:` NOTICE lines (uordblks, call
+counts, the five call sites holding the most) and `state/heap-census/<seconds>.txt` the full tables. On the PC:
+
+    tools/switch/lo_debug.py get state/heap-census/000600.txt out/a.txt
+    tools/switch/lo_debug.py get state/heap-census/003000.txt out/b.txt
+    python3 tools/switch/heap_census.py out/a.txt out/b.txt --elf out/build/switch-pgo-use/LostOdysseyRecomp/LostOdysseyRecomp.elf
+
+prints what grew between the two: uordblks, each size class, and the sites by their live estimate (each sampled
+allocation still held counts max(size, period) bytes), with the frames named. Sampling unwinds the stack
+(`_Unwind_Backtrace`), a few microseconds per sample.
 
 ### Live log over the network
 
@@ -327,7 +397,8 @@ The client is `tools/switch/lo_debug.py`. Give it the console's address with
 
 | Command | What it does |
 |---|---|
-| `info` | build, session, frame, map, docked/handheld, CPU/GPU/memory clocks, memory and threads, battery, program ID, address, the last `perf:` line |
+| `info` | build, session, frame, map, docked/handheld, CPU/GPU/memory clocks, memory and threads, battery, why the screen is kept on and whether it is dimmed, program ID, address, the last `perf:` line |
+| `raw screen [watch\|busy on\|off]` | why the screen is kept on and whether it is dimmed; `watch on` holds a test reason that counts as a movie, `busy on` one that counts as a load |
 | `log [--all] [--save F] [--grep RE] [--seconds N]` | the log and stderr as they are written; `--all` starts with what the console keeps (the session's last 1-2 MiB) |
 | `logtext [OUT]`, `lastlog [LOCAL] [--current]`, `logs` | the kept text; the previous session's `runtime-*.log` (`--current`: the running one's kept text, since its file is open); the list |
 | `shot [OUT.png] [--ppm]` | the next presented frame, through the same capture as `LO_SCREENSHOT_REQUEST`; a PNG made on the console, or the PPM as saved |
@@ -550,10 +621,19 @@ instructions per call, so it shifts little time.
 
 ## deko3d back end (experimental)
 
-`LO_SWITCH_BACKEND=deko3d` in `env.txt` renders through deko3d, the Switch's own GPU API, instead of Mesa NVK. It is
-built when devkitPro's deko3d library is installed (`dkp-pacman -S deko3d`; the CMake log says
-`LostOdysseyRecomp: deko3d back end`). NVK stays the default.
+`LO_SWITCH_BACKEND=deko3d` in `env.txt` renders through deko3d, the Switch's own GPU API, instead of Mesa NVK. NVK
+stays the default.
 
+- deko3d itself: built from `thirdparty/deko3d` (deko3d 0.5.0, devkitPro's, with the fixes in
+  `thirdparty/deko3d/PATCHES.md`), with upstream's release flags. The CMake log says
+  `LostOdysseyRecomp: deko3d back end (thirdparty/deko3d)`. devkitPro's `deko3d` package is not needed.
+  `-DLO_SWITCH_DEKO3D_SOURCE=OFF` links its `libdeko3d.a` instead (`dkp-pacman -S deko3d`), without the fixes.
+- Fix 1 (issue #3): stock `CmdBuf::clear()` keeps only the newest 1 KiB control memory chunk of a command buffer and
+  loses the older ones. Control memory holds GPFIFO entries, fences and compute commands, not draws. plume's lists take
+  their commands in 1 MiB blocks, so in this port a list fits in one chunk and the stock library lost none
+  (`LO_DEKO3D_HEAP_STATS=1`, 2026-11-11: no chunk made in 14,600 frames of the first battle or 16,800 frames in Uhra's
+  station square). A list with more of them (many fences or compute dispatches) loses all but one at every clear:
+  the start-up self-check's 3-chunk list made 198 chunks over 99 clears with the stock `clear()`, 0 with the fixed one.
 - Back end: `thirdparty/plume-deko3d`, plume's deko3d back end from sa2-nx/banjo-nx, with LostOdysseyRecomp's changes:
   shaders are taken as SPIR-V, descriptors live in two device-wide heaps, and texture handles come from the bound
   descriptor sets.
