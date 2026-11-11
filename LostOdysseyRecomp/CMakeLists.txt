@@ -197,6 +197,14 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     endif()
     # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
+    # os/switch/heap_census.cpp (LO_SWITCH_HEAP_CENSUS, cmake/LoSwitch.cmake): every allocation and free goes through
+    # newlib's _r entry points, which these wrap.
+    if(LO_SWITCH_HEAP_CENSUS)
+        # The two files that use it only: the rest of the runtime compiles as in a default build.
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/os/switch/heap_census.cpp ${LO_RUNTIME_ROOT}/main.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS LO_SWITCH_HEAP_CENSUS=1)
+        target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=_malloc_r,--wrap=_free_r,--wrap=_calloc_r,--wrap=_realloc_r,--wrap=_memalign_r")
+    endif()
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS

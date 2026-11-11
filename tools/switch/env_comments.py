@@ -49,6 +49,8 @@ DESCRIPTIONS = {
     "LO_LOAD_PROFILE": "1: log thread dumps during long loads",
     "LO_WAIT_PROFILE": "1: log guest waits of 1 ms or more every 10 seconds",
     "LO_THREAD_PLACEMENT": "1: log each core's idle share and the busy threads' placement every 30 s",
+    "LO_HEAP_CENSUS": "Heap census builds (-DLO_SWITCH_HEAP_CENSUS=ON): 1 (or a sampling period in bytes) counts allocations by size and call site",
+    "LO_HEAP_CENSUS_SECONDS": "Heap census: seconds between reports (state/heap-census/<seconds>.txt)",
     "LO_THREAD_CORES": "With LO_THREAD_PLACEMENT=1: name=core:hexmask,... moves busy threads, for placement experiments",
     "LO_DEKO3D_BARRIER_TRACE": "Log every barrier of one frame in N",
     # Threads and scheduling
