@@ -149,7 +149,7 @@ struct Setup
             {L"Output resolution", L"輸出解析度", L"出力解像度", L"출력 해상도", L"输出分辨率"},
             {L"Window mode", L"視窗模式", L"ウィンドウモード", L"창 모드", L"窗口模式"},
             {L"Anti-aliasing", L"抗鋸齒", L"アンチエイリアス", L"안티앨리어싱", L"抗锯齿"}};
-        for (int i = 0; i < 7; ++i) SetWindowTextW(labels[i], names[i][language]);
+        for (int i = 0; i < 7; ++i) SetWindowTextW(labels[i], names[i][language < 5 ? language : 0]);
         SetWindowTextW(browse, pick(L"Browse", L"瀏覽", L"参照", L"찾아보기", L"浏览"));
         SetWindowTextW(start, pick(L"Save and start", L"儲存並啟動", L"保存して開始",
             L"저장 후 시작", L"保存并启动"));

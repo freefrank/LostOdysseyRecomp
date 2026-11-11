@@ -175,7 +175,7 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         pendingWidth = pendingHeight = 0;
     const uint32_t language = GetConfig().uiLanguage;
     const bool keyboard = hid::UsesKeyboardPrompts();
-    const int prompts = keyboard ? 2 : hid::UsesPlayStationPrompts() ? 1 : 0;
+    const int prompts = hid::PromptFamily(); // redrawn when the icon family changes
     auto assets = menu_assets::Cached(FileSystem::GetGameRoot(), language);
     if (outputWidth != cachedWidth || outputHeight != cachedHeight || language != cachedLanguage ||
         prompts != cachedPrompts || assets != cachedAssets)
@@ -191,7 +191,9 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         MenuSnapshot snapshot;
         snapshot.titleHint = true;
         snapshot.language = language;
-        snapshot.playStationPrompts = prompts == 1;
+        snapshot.playStationPrompts = hid::UsesPlayStationPrompts();
+        snapshot.promptFamily = hid::PromptFamily();
+        snapshot.promptIcons = PromptIcons(snapshot.promptFamily);
         snapshot.assets = assets;
         // The menu's help line convention; keyboard players see the S key.
         snapshot.help = Translate(language, L"Y: Settings", L"Y：設定");

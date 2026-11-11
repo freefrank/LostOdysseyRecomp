@@ -668,6 +668,9 @@ namespace gpu::video
         bool g_available = false;
         bool g_initializing = false;
         std::atomic<int> g_selectedBackend{-1};
+        presentation_progress::Progress g_presentProgress;
+        using PresentStage = presentation_progress::Stage;
+        using PresentScope = presentation_progress::Progress::Scope;
 
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
         std::vector<uint32_t> g_pixels;   // last untiled frame, R8G8B8A8
@@ -748,6 +751,14 @@ namespace gpu::video
             std::unique_ptr<plume::RenderBuffer> upload;
             uint64_t revision = 0;
         } g_titleHint;
+        // The Settings menu over live game frames (DrawSettingsOverlay), and
+        // when a game frame last carried it.
+        struct SettingsOverlayResources {
+            std::unique_ptr<plume::RenderTexture> texture;
+            std::unique_ptr<plume::RenderBuffer> upload;
+            uint32_t width = 0, height = 0;
+        } g_settingsOverlay;
+        std::atomic<int64_t> g_settingsOverGameNs{0};
         // The achievement-unlocked toast (DrawAchievementToast).
         struct AchievementToastResources {
             std::unique_ptr<plume::RenderTexture> texture;
@@ -894,7 +905,9 @@ namespace gpu::video
             int32_t result = 0;
             bool submitted;
             {
+                PresentScope progress(g_presentProgress, PresentStage::SubmitQueueLock);
                 const std::scoped_lock lock(*queue->queue->mutex);
+                progress.Set(PresentStage::SubmitNative);
                 submitted = g_submissionState.SubmitBatch(
                     [&] {
                         if (g_probeSubmitFault) {
@@ -1075,21 +1088,34 @@ namespace gpu::video
             plume::RenderCommandSemaphore* const* signals, uint32_t signalCount,
             plume::RenderCommandFence* fence, uint64_t* serial, int32_t* rawResult)
         {
+            PresentScope progress(g_presentProgress, PresentStage::Submit);
+            uint64_t acceptedSerial = 0;
+            const auto submit = [&] {
 #if LO_PLATFORM_MACOS || defined(LO_SWITCH_DEKO3D)
-            if (PortablePlume())
-                return SubmitMetal(lists, count, waits, waitCount, signals, signalCount,
-                    fence, serial, rawResult);
+                if (PortablePlume()) {
+                    progress.Set(PresentStage::SubmitNative);
+                    return SubmitMetal(lists, count, waits, waitCount, signals, signalCount,
+                        fence, &acceptedSerial, rawResult);
+                }
 #endif
-            if (g_vulkan)
-                return SubmitVulkan(lists, count, waits, waitCount, signals, signalCount,
-                    fence, serial, rawResult);
+                if (g_vulkan)
+                    return SubmitVulkan(lists, count, waits, waitCount, signals, signalCount,
+                        fence, &acceptedSerial, rawResult);
 #ifdef _WIN32
-            return SubmitD3D12(lists, count, waits, waitCount, signals, signalCount,
-                fence, serial, rawResult, nullptr);
+                progress.Set(PresentStage::SubmitNative);
+                return SubmitD3D12(lists, count, waits, waitCount, signals, signalCount,
+                    fence, &acceptedSerial, rawResult, nullptr);
 #else
-            StopGpuWork(submission::VulkanState::InvalidState);
-            return false;
+                StopGpuWork(submission::VulkanState::InvalidState);
+                return false;
 #endif
+            };
+            const bool submitted = submit();
+            if (serial) *serial = acceptedSerial;
+            // Publish before QueuePresent, which may itself block. This is a
+            // host submission serial, independent of guest PM4 swap counts.
+            if (submitted) g_presentProgress.Submitted(acceptedSerial);
+            return submitted;
         }
 
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
@@ -1573,6 +1599,7 @@ namespace gpu::video
 
         void ReadPresentCapture(gpu::present_capture::Result *result, bool submitted, bool presented, uint64_t serial)
         {
+            PresentScope progress(g_presentProgress, PresentStage::Capture);
             if (!result)
             {
                 if (g_captureCopy.queued) RetainPresentCapture();
@@ -1844,12 +1871,15 @@ namespace gpu::video
         return result == VK_SUCCESS;
     }
     bool WaitForGpuFence(plume::RenderCommandFence* fence) {
+        PresentScope progress(g_presentProgress, fence == g_fence.get() ? PresentStage::Fence : PresentStage::RendererFence);
         auto* queueHolder = ActiveSubmissionQueue();
         if (!queueHolder || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
 #if LO_PLATFORM_MACOS || defined(LO_SWITCH_DEKO3D)
         if (PortablePlume()) {
             ConsumeMetalFenceSignals(queueHolder, fence);
-            return g_submissionState.WaitSubmitted([] { return submission::VulkanState::Success; });
+            const bool complete = g_submissionState.WaitSubmitted([] { return submission::VulkanState::Success; });
+            if (complete && fence == g_fence.get()) g_presentProgress.Completed();
+            return complete;
         }
 #endif
         if (!g_vulkan) {
@@ -1892,6 +1922,7 @@ namespace gpu::video
                 LOG_ERROR("video: D3D12 fence wait failed raw_hr={}; resources retained", g_submissionState.Failure());
                 StopGpuWork(g_submissionState.Failure());
             }
+            if (complete && fence == g_fence.get()) g_presentProgress.Completed();
             return complete;
 #else
             StopGpuWork(submission::VulkanState::InvalidState); return false;
@@ -1911,6 +1942,7 @@ namespace gpu::video
             LOG_ERROR("video: GPU fence wait failed raw_vk={}; resources retained", g_submissionState.Failure());
             StopGpuWork(g_submissionState.Failure());
         }
+        if (complete && fence == g_fence.get()) g_presentProgress.Completed();
         return complete;
     }
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
@@ -2031,6 +2063,7 @@ namespace gpu::video
     {
         if (resetStop) {
             g_submissionState = {}; g_stopReported = false;
+            g_presentProgress.ResetSubmissions();
             PublishClearedDeviceCapability();
         }
         g_probeSubmitFault = submitFault;
@@ -2417,6 +2450,7 @@ namespace gpu::video
 #endif
         g_device.reset(); g_interface.reset();
         g_submissionState = {}; g_stopReported = false;
+        g_presentProgress.ResetSubmissions();
         g_presentPending = false;
         g_temporalUpscaler.reset();
         g_dlssController.reset();
@@ -2949,6 +2983,7 @@ namespace gpu::video
                     g_swapChain && !g_swapChain->isEmpty());
 #endif
             if (!g_swapChain || g_swapChain->isEmpty()) return "window surface/swapchain initialization failed";
+            g_presentProgress.SwapchainChanged();
 #if defined(__ANDROID__)
             g_androidAppliedSurfaceChangeSerial = initialSurfaceSerial;
 #endif
@@ -3327,6 +3362,7 @@ namespace gpu::video
             return false;
         }
         g_androidAppliedSurfaceChangeSerial = surfaceSerial;
+        g_presentProgress.SwapchainChanged();
         g_androidSurfaceRebuildFailureLogged = false;
         if (g_androidPlannedWidth && g_androidPlannedHeight)
             g_androidResumePlanHold = {true, false, g_androidPlannedWidth, g_androidPlannedHeight, 0, 0,
@@ -4057,6 +4093,7 @@ namespace gpu::video
         auto createSwapchain = [&] {
             g_swapChain = g_queue->createSwapChain(
                 plume::RenderSwapChainDesc(g_nativeWindow, kSwapChainFormat, kSwapChainBuffers));
+            if (g_swapChain && !g_swapChain->isEmpty()) g_presentProgress.SwapchainChanged();
             return g_swapChain && !g_swapChain->isEmpty();
         };
         bool swapReady = createSwapchain();
@@ -4262,6 +4299,7 @@ namespace gpu::video
         // As after a frame generation swap chain replacement: re-apply the
         // display mode and vsync policy, and resize before the next acquire.
         g_presentationDisplay = {};
+        g_presentProgress.SwapchainChanged();
         g_forceSwapResize = true;
         g_hasPresentedImage = false;
         g_lastPresentedImage = 0;
@@ -4276,6 +4314,8 @@ namespace gpu::video
     // or rasterizing UI. The returned ticket belongs to these prepared operations.
     static bool PreparePresentation(uint64_t& displayTicket, uint32_t& width, uint32_t& height)
     {
+        PresentScope progress(g_presentProgress, PresentStage::Prepare);
+        g_presentProgress.Policy(loading::Active(), g_presentationDisplay.nativeVsyncRequested);
 #if LO_PLATFORM_SWITCH
         // LO_SWITCH_OUTPUT_HEIGHT's display scaling is for game frames. A host menu (settings, the debug menu) is drawn
         // at 1280x720 and would be shrunk to the smaller size, then scaled back up by the display: while one is open the
@@ -4327,20 +4367,23 @@ namespace gpu::video
             g_metalFxWidth = g_metalFxHeight = 0;
         }
 #endif
-        UpdateHdrOutput();
-        if (!ReconcileHdrSwapchain()) return false;
-        // Shared by real game frames and paused host overlays. Saving a new
-        // cap applies here before any swapchain acquire, even while paused.
-        gpu::SetFrameRateTarget(settings::GetConfig().frameRate);
+        {
+            PresentScope reconcile(g_presentProgress, PresentStage::Reconcile);
+            UpdateHdrOutput();
+            if (!ReconcileHdrSwapchain()) return false;
+            // Shared by real game frames and paused host overlays. Saving a new
+            // cap applies here before any swapchain acquire, even while paused.
+            gpu::SetFrameRateTarget(settings::GetConfig().frameRate);
 #if defined(_WIN32) && defined(LO_ENABLE_D3D12_FG)
-        if (!ReconcileD3D12FrameGeneration()) return false;
+            if (!ReconcileD3D12FrameGeneration()) return false;
 #endif
 #if defined(_WIN32) && (defined(LO_ENABLE_STREAMLINE_FG) || defined(LO_ENABLE_VULKAN_FSR_FG))
-        if (!ReconcileVulkanFrameGeneration()) return false;
+            if (!ReconcileVulkanFrameGeneration()) return false;
 #endif
 #if defined(__APPLE__) && defined(LO_ENABLE_METALFX_FG)
-        if (!ReconcileMetalFrameGeneration()) return false;
+            if (!ReconcileMetalFrameGeneration()) return false;
 #endif
+        }
         const auto nativeTarget = gpu::GetFrameRateTarget();
         auto& nativePolicy = g_presentationDisplay;
         if (!nativePolicy.nativeVsyncInitialized) {
@@ -4396,6 +4439,7 @@ namespace gpu::video
             nativePolicy.nativeVsyncRequested = nativeVsync;
             nativePolicy.nativeVsyncReportPending = true;
         }
+        g_presentProgress.Policy(loading::Active(), nativePolicy.nativeVsyncRequested);
         displayTicket = g_displayChanges.PresentationTicket();
         if (g_windowResizeRequested.exchange(false)) g_forceSwapResize = true;
         if (displayTicket && displayTicket != g_presentationDisplay.resizedTicket) {
@@ -4437,6 +4481,7 @@ namespace gpu::video
         const bool backendNeedsResize = g_swapChain->needsResize();
 #endif
         if (g_forceSwapResize || g_swapChain->isEmpty() || backendNeedsResize) {
+            PresentScope resize(g_presentProgress, PresentStage::ResizeDrain);
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
             if (g_d3dFg) g_d3dFg->Quiesce();
 #endif
@@ -4453,6 +4498,7 @@ namespace gpu::video
             if (g_metalFg) g_metalFg->SuspendAfterHostDrain();
 #endif
             // Resized images keep their texture addresses, maybe their size too.
+            resize.Set(PresentStage::Resize);
             if (g_presentation) g_presentation->ForgetTargets();
             if (!g_swapChain->resize()) {
                 // Zero extent is transient. Retain the pending transaction and
@@ -4464,6 +4510,7 @@ namespace gpu::video
                 return false;
             }
             g_forceSwapResize = false;
+            g_presentProgress.SwapchainChanged();
             g_hasPresentedImage = false;
             g_presentedSnapshot.reset();
             g_snapshotFormat = plume::RenderFormat::UNKNOWN;
@@ -4493,6 +4540,7 @@ namespace gpu::video
                 // Accept the backend's fallback instead of leaving a mismatched
                 // required/created mode that could rebuild on every frame.
                 g_swapChain->setVsyncEnabled(reportedVsync);
+                g_presentProgress.Policy(loading::Active(), reportedVsync);
             }
             nativePolicy.nativeVsyncReportPending = false;
         }
@@ -4715,6 +4763,61 @@ namespace gpu::video
                 hint->width, hint->height, outputWidth, outputHeight, opacity);
 #else
         (void)backBuffer;
+#endif
+    }
+
+    // The Settings menu over a live game frame, when settings::MenuOverGame:
+    // the retail Settings screen under it keeps its header (title, gold, time,
+    // location), so the menu's alpha is cleared above that header's bottom
+    // edge and in any band outside the 16:9 layout. The previous present has
+    // completed, so its texture and upload buffer can be rewritten.
+    static void DrawSettingsOverlay(plume::RenderTexture* backBuffer, const std::vector<uint32_t>& pixels,
+        uint32_t width, uint32_t height, uint64_t revision)
+    {
+#ifdef LO_GPU_PLUME
+        if (!g_presentation || !width || !height || pixels.size() != size_t(width) * height) return;
+        // The menu's motion (open cascade, tab fades, the swaying cursor)
+        // changes the pixels between revisions, so every frame is uploaded,
+        // as the replacing path does; texture and buffer are kept per size.
+        (void)revision;
+        {
+            const uint32_t rowPitch = (width * 4 + 255) & ~255u;
+            if (!g_settingsOverlay.texture || g_settingsOverlay.width != width || g_settingsOverlay.height != height) {
+                g_settingsOverlay.texture = g_device->createTexture(plume::RenderTextureDesc::Texture2D(width, height, 1,
+                    plume::RenderFormat::R8G8B8A8_UNORM));
+                g_settingsOverlay.upload = g_device->createBuffer(plume::RenderBufferDesc::UploadBuffer(uint64_t(rowPitch) * height));
+                g_settingsOverlay.width = width;
+                g_settingsOverlay.height = height;
+            }
+            auto* mapped = g_settingsOverlay.upload ? static_cast<uint8_t*>(g_settingsOverlay.upload->map()) : nullptr;
+            if (!g_settingsOverlay.texture || !mapped) { g_settingsOverlay = {}; return; }
+            const double scale = std::min(width / 1280.0, height / 720.0);
+            const double offsetX = (width - 1280 * scale) * 0.5, offsetY = (height - 720 * scale) * 0.5;
+            const uint32_t header = uint32_t(std::clamp(std::lround(offsetY + settings::MenuGameHeaderBottom * scale), 0l, long(height)));
+            const uint32_t left = uint32_t(std::clamp(std::lround(offsetX), 0l, long(width)));
+            const uint32_t right = uint32_t(std::clamp(std::lround(offsetX + 1280 * scale), 0l, long(width)));
+            const uint32_t bottom = uint32_t(std::clamp(std::lround(offsetY + 720 * scale), 0l, long(height)));
+            for (uint32_t y = 0; y < height; ++y) {
+                auto* row = reinterpret_cast<uint32_t*>(mapped + size_t(y) * rowPitch);
+                memcpy(row, &pixels[size_t(y) * width], size_t(width) * 4);
+                if (y < header || y >= bottom)
+                    for (uint32_t x = 0; x < width; ++x) row[x] &= 0x00FFFFFFu;
+                else {
+                    for (uint32_t x = 0; x < left; ++x) row[x] &= 0x00FFFFFFu;
+                    for (uint32_t x = right; x < width; ++x) row[x] &= 0x00FFFFFFu;
+                }
+            }
+            g_settingsOverlay.upload->unmap();
+            g_commandList->barriers(plume::RenderBarrierStage::COPY,
+                plume::RenderTextureBarrier(g_settingsOverlay.texture.get(), plume::RenderTextureLayout::COPY_DEST));
+            g_commandList->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(g_settingsOverlay.texture.get()),
+                plume::RenderTextureCopyLocation::PlacedFootprint(g_settingsOverlay.upload.get(), plume::RenderFormat::R8G8B8A8_UNORM,
+                    width, height, 1, rowPitch / 4), 0, 0, 0, nullptr);
+        }
+        g_presentation->DrawOverlay(g_commandList.get(), g_settingsOverlay.texture.get(), backBuffer, 0, 0,
+            width, height, g_swapChain->getWidth(), g_swapChain->getHeight(), 1.0f);
+#else
+        (void)backBuffer; (void)pixels; (void)width; (void)height; (void)revision;
 #endif
     }
 
@@ -4972,8 +5075,13 @@ namespace gpu::video
 
     static bool AcquirePresentTexture(uint32_t* index)
     {
-        if (!loading::Active() || !g_vulkan)
-            return g_swapChain->acquireTexture(g_acquireSemaphore.get(), index);
+        PresentScope progress(g_presentProgress, PresentStage::Acquire);
+        g_presentProgress.Image(presentation_progress::NoImage);
+        if (!loading::Active() || !g_vulkan) {
+            const bool acquired = g_swapChain->acquireTexture(g_acquireSemaphore.get(), index);
+            if (acquired) g_presentProgress.Image(*index);
+            return acquired;
+        }
         // Some WSI implementations require FIFO even with vsync disabled.
         // Never wait for their next refresh: no free image means drop this
         // host present. A failed acquire does not signal the binary semaphore.
@@ -4985,7 +5093,15 @@ namespace gpu::video
         const auto result = vkAcquireNextImageKHR(swap->commandQueue->device->vk, swap->vk,
             0, semaphore->vk, VK_NULL_HANDLE, index);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) swap->surfaceOutOfDate = true;
-        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+        const bool acquired = result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+        if (acquired) g_presentProgress.Image(*index);
+        return acquired;
+    }
+
+    static bool PresentSwapchainImage(uint32_t imageIndex, plume::RenderCommandSemaphore** waits, uint32_t waitCount)
+    {
+        PresentScope progress(g_presentProgress, PresentStage::QueuePresent);
+        return g_swapChain->present(imageIndex, waits, waitCount);
     }
 
     static bool UploadAndPresentPixels(const std::vector<uint32_t>& pixels, uint32_t width, uint32_t height,
@@ -4993,6 +5109,7 @@ namespace gpu::video
                                        const gpu::present_capture::Ticket *captureTicket, gpu::present_capture::Result *captureResult,
                                        bool cinematicBars)
     {
+        PresentScope progress(g_presentProgress, PresentStage::Record);
 #if defined(__ANDROID__)
         if (!EnsureAndroidSurfaceSwapChain()) return false;
 #endif
@@ -5165,7 +5282,7 @@ namespace gpu::video
             SceneCopySubmitted();
         }
         FgPresentStart();
-        const bool presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
+        const bool presented = PresentSwapchainImage(imageIndex, &signalSemaphore, 1);
         FgPresented(presented);
         if (presented) ++g_completedPresentCount;
         g_fgPresentSerial = submissionSerial;
@@ -5180,6 +5297,7 @@ namespace gpu::video
     } // namespace
 
     uint64_t CompletedPresentCount() { return g_completedPresentCount; }
+    presentation_progress::Snapshot PresentationProgress() { return g_presentProgress.Read(); }
     void SetCalibrationGameMenuOpen(bool open)
     {
 #if LO_PLATFORM_SWITCH
@@ -5250,6 +5368,7 @@ namespace gpu::video
     void PresentFrontbuffer(uint32_t physicalAddress, uint32_t width, uint32_t height, uint32_t copyDestInfo,
         const gpu::present_capture::Ticket *capture, gpu::present_capture::Result *captureResult, bool cinematicBars)
     {
+        PresentScope progress(g_presentProgress, PresentStage::Present);
         struct CaptureExit {
             const gpu::present_capture::Ticket *ticket;
             gpu::present_capture::Result *result;
@@ -5313,7 +5432,15 @@ namespace gpu::video
 
         const bool hasSettings = settings::DrawMenu(g_menuPixels, g_menuRevision, menuWidth, menuHeight);
         const bool hasDebug = debug_menu::IsOverlayVisible();
-        const bool menu = hasSettings || hasDebug;
+        // In a game, Settings goes over this frame (DrawSettingsOverlay), which
+        // keeps the retail header. Frame generation presents frames of its own,
+        // so with it the menu still replaces the frame.
+        const bool settingsOverGame = hasSettings && !hasDebug && settings::MenuOverGame() &&
+            !FrameGenerationInputCaptureEnabled();
+        if (settingsOverGame)
+            g_settingsOverGameNs.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_relaxed);
+        const bool menu = (hasSettings || hasDebug) && !settingsOverGame;
         std::vector<uint32_t> menuPresentBuffer;
         if (hasDebug) {
             static host_ui::PixelBuffer s_debugOverlayBuf;
@@ -5346,6 +5473,7 @@ namespace gpu::video
             return;
         if (g_available && !cpuPresent && !menu)
         {
+            progress.Set(PresentStage::Source);
             uint32_t rw = 0, rh = 0, rf = 0;
             frame_plan::FramePlan sourcePlan;
             frame_generation::ResolvedHandoff fgHandoff;
@@ -5484,6 +5612,7 @@ namespace gpu::video
                         id.owner, id.frame, id.historyEpoch, id.sourceAllocation, id.sourceGeneration, id.resolve,
                         id.allocation, id.generation, fgHandoff.packet->producer->producerSerial, fgHandoff.packet->resolveSerial);
                 }
+                progress.Set(PresentStage::Record);
                 if (!BeginGpuCommands(g_commandList.get())) return;
                 // Settings → Graphics → Performance overlay; Off costs this test.
                 const bool performanceOverlay = presentationConfig.performanceOverlay || g_performanceOverlay.active;
@@ -5578,6 +5707,8 @@ namespace gpu::video
                         g_presentation->DrawContentBars(g_commandList.get(), backBuffer, sourceWidth, sourceHeight,
                             g_swapChain->getWidth(), g_swapChain->getHeight());
                     DrawTitleHint(backBuffer);
+                    if (settingsOverGame)
+                        DrawSettingsOverlay(backBuffer, g_menuPixels, menuWidth, menuHeight, g_menuRevision);
                     DrawPreparationBar(backBuffer);
                     DrawAchievementToast(backBuffer);
                     if (performanceOverlay)
@@ -5620,7 +5751,7 @@ namespace gpu::video
                 // Switch LO_FRAMEGEN=1: a generated frame, then this one (gpu/lsfg_frame_gen.h).
                 bool presented = false;
                 if (!gpu::lsfg::Present(g_swapChain.get(), imageIndex, signalSemaphore, presented))
-                    presented = g_swapChain->present(imageIndex, &signalSemaphore, 1);
+                    presented = PresentSwapchainImage(imageIndex, &signalSemaphore, 1);
                 FgPresented(presented);
                 if (!presented) {
                     g_fgPresent.CancelAll(frame_generation::HandoffCancel::DisplayChange);
@@ -5638,7 +5769,7 @@ namespace gpu::video
                     const auto presentOriginal = [&]() -> bool {
                         if (!WaitForPresentGpu()) return false;
                         uint32_t realIndex = 0;
-                        if (!g_swapChain->acquireTexture(g_acquireSemaphore.get(), &realIndex)) return false;
+                        if (!AcquirePresentTexture(&realIndex)) return false;
                         auto* realBuffer = g_swapChain->getTexture(realIndex);
                         if (!BeginGpuCommands(g_commandList.get())) return false;
                         g_metalFg->RecordOriginal(g_commandList.get(), realBuffer);
@@ -5652,7 +5783,7 @@ namespace gpu::video
                         FgHostSubmitted(submittedReal, realSerial, realResult);
                         if (!submittedReal) return false;
                         g_fgPresentSerial = realSerial; g_presentPending = true;
-                        const bool accepted = g_swapChain->present(realIndex, &ready, 1);
+                        const bool accepted = PresentSwapchainImage(realIndex, &ready, 1);
                         if (accepted) ++g_completedPresentCount;
                         g_lastPresentedImage = realIndex; g_hasPresentedImage = accepted;
                         return accepted;
@@ -5685,8 +5816,10 @@ namespace gpu::video
         g_frameOnGpu = false;
 
 #ifdef LO_GPU_PLUME
-        if (menu)
+        // Without the GPU path the menu replaces the frame, as before.
+        if (menu || settingsOverGame)
         {
+            if (settingsOverGame) menuPresentBuffer = g_menuPixels;
             CacheCpuFrame(menuPresentBuffer, menuWidth, menuHeight);
             UploadAndPresentPixels(menuPresentBuffer, menuWidth, menuHeight, true, displayTicket, presentationOptions, capture, captureResult, false);
             return;
@@ -5726,9 +5859,18 @@ namespace gpu::video
 
     void PresentHostOverlay()
     {
+        PresentScope progress(g_presentProgress, PresentStage::Present);
 #ifdef LO_GPU_PLUME
         if (!IsHostOverlayActive())
             return;
+        // While game frames carry Settings over the live picture, an opaque
+        // menu presented between them would flicker over the retail header.
+        if (settings::MenuOverGame() && !debug_menu::IsOverlayVisible()) {
+            const int64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            if (now - g_settingsOverGameNs.load(std::memory_order_relaxed) < 100'000'000)
+                return;
+        }
         uint64_t displayTicket = 0;
         uint32_t menuWidth = 0, menuHeight = 0;
         if (!PreparePresentation(displayTicket, menuWidth, menuHeight))

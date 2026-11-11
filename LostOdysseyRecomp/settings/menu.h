@@ -189,20 +189,21 @@ enum class GraphicsRow : int
     DepthOfField = 22,
     Bloom = 23,
     MotionBlur = 24,
-    Culling = 25,
-    ScalingQuality = 26,
-    RgbRange = 27,
-    FrameRate = 28,
-    LoadingTransitions = 29,
-    VariableRefreshRate = 30,
-    PerformanceOverlay = 31,
-    Hdr = 32,
-    HdrPaperWhite = 33, // shown with HDR on
-    HdrPeak = 34, // shown with HDR on
-    HdrCalibration = 35, // opens the HDR peak page; shown with HDR on
-    Brightness = 36, // opens the brightness page
-    Save = 37,
-    Count = 38,
+    SceneFades = 25,
+    Culling = 26,
+    ScalingQuality = 27,
+    RgbRange = 28,
+    FrameRate = 29,
+    LoadingTransitions = 30,
+    VariableRefreshRate = 31,
+    PerformanceOverlay = 32,
+    Hdr = 33,
+    HdrPaperWhite = 34, // shown with HDR on
+    HdrPeak = 35, // shown with HDR on
+    HdrCalibration = 36, // opens the HDR peak page; shown with HDR on
+    Brightness = 37, // opens the brightness page
+    Save = 38,
+    Count = 39,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail
@@ -262,6 +263,11 @@ bool DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t w
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
 bool IsTitleQuitOpen();
+// The menu is drawn over the live game frame, which shows the retail header
+// above MenuGameHeaderBottom (layout pixels): presentation clears the menu's
+// alpha there. Otherwise the menu replaces the frame.
+bool MenuOverGame();
+inline constexpr int MenuGameHeaderBottom = 100;
 // Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
 // before a game is loaded. The title tick reports whether its menu is idle and
 // takes a fresh press made there, if any.

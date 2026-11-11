@@ -194,6 +194,8 @@ unsigned inputMapApplies = 0;
 }
 namespace hid {
 bool UsesPlayStationPrompts() { return false; }
+uint8_t PromptFamily() { return 0; }
+namespace glyphs { std::shared_ptr<const Atlas> FamilyAtlas(prompts::Family) { return {}; } }
 void SetVibrationStrength(uint32_t percent) { vibrationStrength = percent; }
 void SetPromptStyle(uint32_t style) { promptStyle = style; }
 void PreviewVibration() { ++vibrationPreviews; }
@@ -2621,11 +2623,17 @@ int main(int argc, char** argv)
             const unsigned beforeSaves = saves;
             promptStyle = 0;
             settings::pending = 8; Tick(base);
-            Require(rows[settings::ControlsPromptRow].choices.size() == 3 && rows[settings::ControlsPromptRow].selectedChoice == 1 &&
+            Require(rows[settings::ControlsPromptRow].choices.size() == 6 && rows[settings::ControlsPromptRow].selectedChoice == 1 &&
                     promptStyle == 1 && diskConfig.buttonPrompts == 1 && saves == beforeSaves + 1,
                     "Button prompts cycles to Xbox, applies live and saves");
             settings::pending = 8; Tick(base);
             Require(promptStyle == 2 && diskConfig.buttonPrompts == 2, "Button prompts cycles to PlayStation");
+            for (uint32_t style : {3u, 4u, 5u})
+            {
+                settings::pending = 8; Tick(base);
+                Require(promptStyle == style && diskConfig.buttonPrompts == style,
+                        "Button prompts cycles to Switch, Steam Deck and Keyboard");
+            }
             settings::pending = 8; Tick(base);
             Require(promptStyle == 0 && diskConfig.buttonPrompts == 0, "Button prompts wraps back to Auto");
             Require(settings::snapshot.help.find(L"Auto follows the controller") != std::wstring::npos, "Button prompts help");

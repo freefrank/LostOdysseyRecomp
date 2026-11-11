@@ -54,24 +54,26 @@ Raster DrawText(const menu_assets::Assets* assets, const std::string& utf8, doub
         for (const char32_t c : text) {
             if (c == U' ') { left += font->height * 0.3 * ratio; continue; }
             const auto& g = font->glyphs.at(uint32_t(c));
-            const auto& page = font->pages[g.page];
+            const auto& page = menu_assets::GlyphPage(*font, g, ratio);
+            // An HD page has `scale` pixels per glyph texel.
+            const uint32_t s = page.scale, gx = g.x * s, gy = g.y * s, gw = g.width * s, gh = g.height * s;
             const double w = g.width * ratio, h = g.height * ratio;
             const int x0 = std::max(0, int(left)), x1 = std::min(int(out.width), int(std::ceil(left + w)));
             const int y1 = std::min(int(out.height), int(std::ceil(1 + h)));
             for (int py = 1; py < y1; ++py)
                 for (int px = x0; px < x1; ++px) {
-                    const double u = std::clamp((px + .5 - left) * g.width / w - .5, 0.0, double(g.width - 1));
-                    const double v = std::clamp((py + .5 - 1) * g.height / h - .5, 0.0, double(g.height - 1));
-                    const int ux = int(u), vy = int(v), ux1 = std::min<int>(ux + 1, g.width - 1), vy1 = std::min<int>(vy + 1, g.height - 1);
+                    const double u = std::clamp((px + .5 - left) * gw / w - .5, 0.0, double(gw - 1));
+                    const double v = std::clamp((py + .5 - 1) * gh / h - .5, 0.0, double(gh - 1));
+                    const int ux = int(u), vy = int(v), ux1 = std::min<int>(ux + 1, gw - 1), vy1 = std::min<int>(vy + 1, gh - 1);
                     const double fx = u - ux, fy = v - vy;
-                    const uint32_t s[] = {page.pixels[size_t(g.y + vy) * page.width + g.x + ux], page.pixels[size_t(g.y + vy) * page.width + g.x + ux1],
-                                          page.pixels[size_t(g.y + vy1) * page.width + g.x + ux], page.pixels[size_t(g.y + vy1) * page.width + g.x + ux1]};
+                    const uint32_t samples[] = {page.pixels[size_t(gy + vy) * page.width + gx + ux], page.pixels[size_t(gy + vy) * page.width + gx + ux1],
+                                                page.pixels[size_t(gy + vy1) * page.width + gx + ux], page.pixels[size_t(gy + vy1) * page.width + gx + ux1]};
                     const double wt[] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
                     const size_t at = size_t(py) * out.width + px;
                     for (int i = 0; i < 4; ++i) {
-                        const double a = ((s[i] >> 24) & 255) * wt[i];
+                        const double a = ((samples[i] >> 24) & 255) * wt[i];
                         // The page's grey level blends the dark edge into the face colour.
-                        const double level = ((s[i] >> 16) & 255) / 255.0;
+                        const double level = ((samples[i] >> 16) & 255) / 255.0;
                         alpha[at] += a;
                         for (int k = 0; k < 3; ++k) {
                             const double ink = double((face >> (8 * k)) & 255);

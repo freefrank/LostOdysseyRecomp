@@ -67,6 +67,7 @@
 #include <settings/config.h>
 #include <hid/hid.h>
 #include <hid/controller_atlas_glyphs.h>
+#include <hid/glyph_atlases.h>
 #include <modding/texture_mod.h>
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
@@ -547,13 +548,17 @@ namespace gpu::renderer
             // A LO_DRAW_REUSE record holds this texture: erasing it from the cache bumps drawReuseEvictions.
             bool drawReuseHeld = false;
 
-            // The source remains BC3. Only a verified controller atlas owns an
-            // optional, single-mip RGBA PlayStation child; retirement of the
-            // source also retires its child after the GPU fence.
+            // The source remains BC3. Only a verified controller atlas owns
+            // optional, single-mip RGBA children, one per button icon family
+            // (hid::prompts::Family): the PlayStation repaint (state Ready once
+            // made) and the Switch, Steam Deck and keyboard atlases, each
+            // remade when its hid::glyphs image changes. Retirement of the
+            // source also retires its children after the GPU fence.
             enum class AtlasState : uint8_t { None, Pending, Ready, Failed };
             AtlasState atlasState = AtlasState::None;
             std::vector<uint8_t> atlasPendingRgba;
-            std::unique_ptr<HostTexture> atlasPlayStation;
+            std::array<std::unique_ptr<HostTexture>, hid::prompts::FamilyCount> atlasVariants;
+            std::array<std::shared_ptr<const hid::glyphs::Atlas>, hid::prompts::FamilyCount> atlasVariantImages;
             bool controllerAtlasRecognized = false;
             bool controllerAtlasPlayStationVariant = false;
             controller_atlas::Identity controllerAtlasIdentity = controller_atlas::Identity::Unknown;
@@ -986,7 +991,7 @@ namespace gpu::renderer
             uint32_t sceneTag = gpu::pipeline_cache::kNoScene, sceneSerial = 1;
             // The driver's own pipeline cache file; empty when disabled.
             std::filesystem::path driverCachePath;
-            std::atomic<size_t> driverCacheBytes{0}; // largest size loaded or written
+            std::atomic<size_t> driverCacheBytes{0}; // largest size loaded, written or skipped above the cap
             std::future<std::string> driverCacheWrite;
             // Draw-time pipeline creations (misses) of the current frame. A shader is
             // "seen" when an earlier recipe or created pipeline used it.
@@ -1711,6 +1716,9 @@ namespace gpu::renderer
             bool temporalForced=false,temporalForcedHistory=false,temporalForcedJitter=false,temporalForcedStable=false;
             bool temporalInitFailed=false;
             uint64_t temporalSupportedFrame=~0ull;
+            // Last frame whose scene had two camera views (split screen), and the
+            // first frame of that run, for the frame-start jitter policy and the log.
+            uint64_t temporalSplitViewFrame=~0ull,temporalSplitViewStart=~0ull;
             uint32_t temporalJitterDraws=0,temporalJitterMisses=0,temporalJitterUnknowns=0;
             uint64_t temporalEpoch=1,temporalFramesLogged=0,temporalSubmittedFrame=~0ull;
             temporal::JitterSample actualRasterJitter{}, frameRasterJitter{};
@@ -2076,7 +2084,7 @@ namespace gpu::renderer
             uint32_t textureModsEpoch = 0;
             std::unordered_map<uint64_t, ReadyReplacement> replacementsReady;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
-            bool controllerAtlasPlayStationFamily = false;
+            hid::prompts::Family controllerAtlasFamily = hid::prompts::Family::Xbox;
             uint64_t controllerAtlasTraceFrame = ~0ull;
             uint32_t controllerAtlasTraceCount = 0;
             struct ControllerAtlasTraceCandidate {
@@ -5616,6 +5624,16 @@ void main()
                         occlusionAdaptive.ZerosPerFrame(), occlusionAdaptive.Cooldown(), switches);
             }
 
+            // A map started loading (ProcessScenePrefetch, at a frame end):
+            // Policy::Adaptive starts over in Fast (AdaptiveMode::Reset).
+            void ResetOcclusionForMap(uint32_t tag)
+            {
+                if (!hostOcclusion || occlusionPolicy != gpu::occlusion::Policy::Adaptive) return;
+                const bool strict = occlusionAdaptive.Reset();
+                occlusion.SetMode(gpu::occlusion::Mode::Fast);
+                LOG_INFO("renderer: occlusion mode reset for map load f{} map={} was_strict={}", frame, tag & 0x0FFFFFFFu, strict);
+            }
+
             void LogOcclusionDraw(uint32_t index, bool pixelShader, const HostTexture* target)
             {
                 static uint32_t logged = 0;
@@ -6994,9 +7012,24 @@ void main()
                 // the exit save took 5 s. Once a cache file loaded or was written, keep it.
                 if (previous) return {};
 #endif
-                if (const size_t size = device->getPipelineCacheSize(); size && size <= previous) return {};
+                const size_t size = device->getPipelineCacheSize();
+                if (size && size <= previous) return {};
+                // Exporting allocates a second copy (and backend slack) before
+                // the file cap below can reject it. Skip known oversized caches
+                // before that allocation, especially on memory-limited devices.
+                if (size > dpc::kMaxBytes) {
+                    driverCacheBytes = size; // warn again only after it grows further
+                    return fmt::format("{} bytes exceed the {} MB cap; keeping the file", size, dpc::kMaxBytes >> 20);
+                }
                 std::vector<uint8_t> data;
-                if (!device->getPipelineCacheData(data) || data.size() <= previous) return {};
+                try {
+                    if (!device->getPipelineCacheData(data) || data.size() <= previous) return {};
+                } catch (const std::exception& e) {
+                    // The async caller polls future.get() on the render thread.
+                    // Release a partial blob before allocating the error text.
+                    std::vector<uint8_t>().swap(data);
+                    return fmt::format("driver cache export failed: {}", e.what());
+                }
                 if (!dpc::ShouldWrite(data.size(), previous)) {
                     driverCacheBytes = data.size(); // warn again only after it grows further
                     return fmt::format("{} bytes exceed the {} MB cap; keeping the file", data.size(), dpc::kMaxBytes >> 20);
@@ -7256,6 +7289,7 @@ void main()
             // Render thread, once a frame: queues the recipes of each scene that
             // started loading since the last frame. Shader modules the pack still has
             // to provide are made by the workers first (MSL compilation on Metal).
+            // A map load also starts adaptive occlusion over (ResetOcclusionForMap).
             void ProcessScenePrefetch()
             {
                 std::vector<uint32_t> tags;
@@ -7263,6 +7297,11 @@ void main()
                     std::lock_guard lock(g_scenePrefetchMutex);
                     tags.swap(g_scenePrefetchRequests);
                 }
+                for (const uint32_t tag : tags)
+                    if (tag >> 28 == gpu::pipeline_cache::kSceneMap) {
+                        ResetOcclusionForMap(tag);
+                        break;
+                    }
                 if (!scenePrefetchEnabled || !pipelineCacheEnabled) return;
                 for (const uint32_t tag : tags) {
                     const auto started = std::chrono::steady_clock::now();
@@ -9362,6 +9401,48 @@ void main()
                 output->parentExtent = output->hostExtent;
             }
 
+            // The family's atlas (hid/glyph_atlases.h) for this game atlas
+            // (Icon_Page_0 or the font's icon page, which share the grid),
+            // uploaded at its 4x size; texel offsets stay on the original
+            // 256x128 grid (guestWidth). Without one the source stays.
+            void SelectGlyphAtlas(HostTexture& source, hid::prompts::Family family)
+            {
+                const size_t index = size_t(family);
+                auto image = hid::glyphs::FamilyAtlas(family);
+                auto& slot = source.atlasVariants[index];
+                if (image == source.atlasVariantImages[index]) return;
+                if (slot) Gpu().retiredTextures.push_back(std::move(slot));
+                source.atlasVariantImages[index] = image;
+                if (!image) return;
+                auto variant = std::make_unique<HostTexture>();
+                variant->format = RenderFormat::R8G8B8A8_UNORM;
+                variant->width = variant->bindingWidth = image->width;
+                variant->height = variant->bindingHeight = image->height;
+                variant->guestWidth = controller_atlas::Width;
+                variant->guestHeight = controller_atlas::Height;
+                variant->controllerAtlasRecognized = true;
+                variant->controllerAtlasIdentity = source.controllerAtlasIdentity;
+                variant->texture = device->createTexture(RenderTextureDesc::Texture2D(
+                    variant->width, variant->height, 1, variant->format));
+                // Upload may Flush/Begin and change the current slot, list and
+                // ring. Do not retain references to any of them across it.
+                const uint64_t offset = variant->texture ? Upload(image->rgba.data(), image->rgba.size(), 512) : UINT64_MAX;
+                if (offset == UINT64_MAX) {
+                    source.atlasVariantImages[index].reset();
+                    if (!video::GpuWorkStopped())
+                        LOG_WARNING("renderer: controller atlas glyph upload unavailable; using original BC3");
+                    return;
+                }
+                Transition(*variant, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(variant->texture.get()),
+                    RenderTextureCopyLocation::PlacedFootprint(uploadRing, variant->format,
+                        variant->width, variant->height, 1, variant->width, offset));
+                Transition(*variant, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                slot = std::move(variant);
+                LOG_INFO("renderer: {} atlas for {} ({}x{})", hid::prompts::FamilyName(family),
+                    controller_atlas::Name(source.controllerAtlasIdentity), image->width, image->height);
+            }
+
             HostTexture* SelectControllerAtlas(HostTexture* source, binding::Texture* bindingInfo)
             {
                 if (!source) return nullptr;
@@ -9370,10 +9451,14 @@ void main()
                     return source;
                 }
                 if (controllerAtlasFamilyFrame != frame) {
-                    controllerAtlasPlayStationFamily = hid::UsesPlayStationPrompts();
+                    controllerAtlasFamily = hid::prompts::Family(hid::PromptFamily());
                     controllerAtlasFamilyFrame = frame;
                 }
-                if (controllerAtlasPlayStationFamily && source->atlasState == HostTexture::AtlasState::Pending) {
+                using Family = hid::prompts::Family;
+                if (controllerAtlasFamily != Family::Xbox && controllerAtlasFamily != Family::PlayStation)
+                    SelectGlyphAtlas(*source, controllerAtlasFamily);
+                const bool playStation = controllerAtlasFamily == Family::PlayStation;
+                if (playStation && source->atlasState == HostTexture::AtlasState::Pending) {
                     auto variant = std::make_unique<HostTexture>();
                     variant->format = RenderFormat::R8G8B8A8_UNORM;
                     variant->width = variant->bindingWidth = controller_atlas::Width;
@@ -9402,7 +9487,7 @@ void main()
                             RenderTextureCopyLocation::PlacedFootprint(uploadRing, variant->format,
                                 variant->width, variant->height, 1, variant->width, offset));
                         Transition(*variant, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                        source->atlasPlayStation = std::move(variant);
+                        source->atlasVariants[size_t(Family::PlayStation)] = std::move(variant);
                         source->atlasState = HostTexture::AtlasState::Ready;
                     } else {
                         source->atlasState = HostTexture::AtlasState::Failed;
@@ -9417,8 +9502,8 @@ void main()
                 // record against a stopped list. Keep source ownership intact;
                 // the caller's PlanSuppressed path stops this draw.
                 if (video::GpuWorkStopped()) return nullptr;
-                HostTexture* selected = controllerAtlasPlayStationFamily && source->atlasPlayStation
-                    ? source->atlasPlayStation.get() : source;
+                const auto& variant = source->atlasVariants[size_t(controllerAtlasFamily)];
+                HostTexture* selected = controllerAtlasFamily != Family::Xbox && variant ? variant.get() : source;
                 DescribeBindingTexture(bindingInfo, *selected, binding::TextureKind::GuestUpload);
                 return selected;
             }
@@ -10999,6 +11084,7 @@ void main()
                     frameStart.supportedFrame = temporalSupportedFrame;
                     frameStart.diagnosticJitter = taaDiagnosticJitter;
                     frameStart.diagnosticHistory = taaDiagnosticHistory;
+                    frameStart.previousSplitView = temporalSplitViewFrame != ~0ull && temporalSplitViewFrame + 1 == frame;
                     frameStart.motionSupportsDlss = motionOptions.Supports(upscaling::TemporalConsumer::DlssInputs) ||
                         (route.sr && activePlan.frameGeneration == upscaling::FrameGeneration::Off &&
                          temporal::SrHybridMotionEnabled());
@@ -11572,6 +11658,20 @@ void main()
                     unsigned common=masks[0]&masks[1];fullCopyReason=10;return std::popcount(masks[0])==3&&std::popcount(masks[1])==3&&
                         (masks[0]|masks[1])==15&&(common==9||common==6);
                 };
+                    // Scene fades off: the crossfade quad (PS 2ef7: the captured
+                    // previous scene, alpha c0.x) is skipped while partly
+                    // transparent, so the new scene appears at once.
+                    if (key.ps == 0x2ef725fa9031545bull && std::bit_cast<float>(psConstants[0]) < 0.999f &&
+                        !settings::GetConfig().sceneFades) {
+                        if (fullScreenQuad(key.ps, RenderBlend::SRC_ALPHA, RenderBlend::INV_SRC_ALPHA, 0)) {
+                            // One line per crossfade: its first skipped frame.
+                            static uint64_t lastSkippedFade = 0;
+                            if (frame != lastSkippedFade + 1)
+                                LOG_INFO("renderer: scene fade skipped from frame={} alpha={}", frame, std::bit_cast<float>(psConstants[0]));
+                            lastSkippedFade = frame;
+                            return;
+                        }
+                    }
                     fullSceneCopy = fullScreenQuad(0xcda578aef1724fdcull, RenderBlend::ONE, RenderBlend::ZERO, 3);
                     if (aoActive && key.ps == 0x234ee3faaf1ba953ull && temporalScene.Frame() == frame && temporalScene.Draws() &&
                         rasterViewport.width == temporalScene.Anchor().viewport.width && rasterViewport.height == temporalScene.Anchor().viewport.height &&
@@ -16770,6 +16870,27 @@ void main()
                 }
                 temporal::CommitTemporalFrameEnd(*owner, temporalEnd, now, r.temporalSupportedFrame, r.temporalEpoch, r.temporalFrameTime);
                 r.temporalJitterDraws=r.temporalJitterMisses=r.temporalJitterUnknowns=0;
+                // Split-screen shots (#702) draw a full scene per panel. No upscaler
+                // can take two cameras, so these frames are shown as rendered.
+                const bool splitView = r.temporalScene.Frame() == r.frame &&
+                    r.temporalScene.Reason() == temporal::SceneObservation::Rejection::AmbiguousCamera;
+                const bool splitRun = r.temporalSplitViewFrame != ~0ull && r.temporalSplitViewFrame + 1 == r.frame;
+                static uint32_t splitLogs = 0;
+                static bool splitLogged = false;
+                if (splitView) {
+                    if (!splitRun) {
+                        r.temporalSplitViewStart = r.frame;
+                        splitLogged = splitLogs < 64 && r.dlssSrRequested;
+                        if (splitLogged) {
+                            ++splitLogs;
+                            LOG_INFO("renderer: split-screen scene from frame={}; upscaling waits for one camera", r.frame);
+                        }
+                    }
+                    r.temporalSplitViewFrame = r.frame;
+                } else if (splitRun && splitLogged) {
+                    splitLogged = false;
+                    LOG_INFO("renderer: split-screen scene ended frame={} frames={}", r.frame, r.frame - r.temporalSplitViewStart);
+                }
                 }
             }
             if (g_renderer->evaluatePage && g_renderer->evaluatePage->frame == g_renderer->frame) {

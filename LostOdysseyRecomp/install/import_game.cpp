@@ -224,6 +224,20 @@ bool IsSymlinkOrReparse(const std::filesystem::path& path)
     if (path.has_root_path() && path.parent_path() == path.root_path() &&
         lstat(path.c_str(), &status) == 0 && S_ISLNK(status.st_mode) && status.st_uid == 0)
         return false;
+#elif LO_PLATFORM_LINUX && !LO_PLATFORM_ANDROID
+    // Fedora Atomic (including Bazzite) uses /home -> var/home. Treat only
+    // that root-owned system alias as a directory; user links still fail.
+    struct stat status{};
+    if (path == "/home" && lstat(path.c_str(), &status) == 0 &&
+        S_ISLNK(status.st_mode) && status.st_uid == 0)
+    {
+        const auto target = std::filesystem::read_symlink(path, ec);
+        if (!ec && (path.parent_path() / target).lexically_normal() == "/var/home")
+        {
+            const auto resolved = std::filesystem::canonical(path, ec);
+            if (!ec && resolved == "/var/home") return false;
+        }
+    }
 #endif
     if (std::filesystem::is_symlink(path, ec))
         return true;

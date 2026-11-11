@@ -2,7 +2,52 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.1.0 published — 2026-10-26
+
+[v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) was published at 2026-10-26T01:12:52Z by the workflow's own publish step. A GitHub API read on 2026-10-26 shows that it is not a draft or pre-release and is the GitHub Latest release. The release body equals the [Changelog, v1.1.0](../CHANGELOG.md#v110--2026-10-26) section. It was cut from tag `v1.1.0` at commit `fcfda131`, the PR [#729](https://github.com/freefrank/LostOdysseyRecomp/pull/729) fix on top of the release PR [#728](https://github.com/freefrank/LostOdysseyRecomp/pull/728) (`e4d111f8`). The previous release is v1.0.6, published 2026-10-19T04:32:05Z at `b11c884e`.
+
+The publish job now runs in the `release` environment (PR [#713](https://github.com/freefrank/LostOdysseyRecomp/pull/713)): it accepts `v*` tags only and requires maintainer approval. The maintainer account approved this run.
+
+The first release run for this version, [40250845608](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/40250845608), ran at `e4d111f8`. Its macOS job failed. `tools/package_macos.py` reused the loop variable `name` for the Steam artwork added in PR #663, so the DMG was written as `icon.png.dmg` and the upload step found no `LostOdysseyRecomp-macos-arm64-*.dmg`. Publish was skipped and the draft release had no assets. PR #729 renamed the loop variable. The unpublished tag was then deleted and recreated at `fcfda131`.
+
+The release run for the published tag is GitHub Actions run [40251890719](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/40251890719), `Release` on tag `v1.1.0`. Every job succeeded: the FSR Vulkan inputs, draft release, macOS, Android, Linux, Windows and publish jobs (publish after approval). The release has the same five packages as v1.0.6. The macOS image was built by the GitHub-hosted macOS Release job.
+
+Changes since v1.0.6 (the [Changelog, v1.1.0](../CHANGELOG.md#v110--2026-10-26) section is the release body):
+
+- PR #663: Add to Steam on Windows and Linux (including AppImage and Flatpak), with artwork generated from the player's game files and bundled artwork as a fallback.
+- PR #686: Bazzite `/home` link import fix ([#665](https://github.com/freefrank/LostOdysseyRecomp/issues/665)).
+- PR #676: Settings → Graphics → Scene fades switch (#666).
+- PR #695: presentation-progress diagnostics for scene-transition hangs (#692).
+- PR #681: settings overhaul (#667–#671): game prompt icons, HD and European fonts, Spanish, French, German and Italian, Switch, Steam Deck and keyboard prompt families, and the retail menu look in game.
+- PR #700: LoHidTest update for the prompt family API.
+- PR #713: the release environment described above.
+- PR #714: the Android CTRL menu follows the game language.
+- PRs #712, #707, #711 and #709 from external contributor Steprant, trimmed to runtime changes by the maintainer: XMA ring cursor wrap, driver cache export cap, Vulkan texture view failure propagation, and per-wait stage masks.
+- PR #715: no jitter on split-screen frames that skip the upscaler (#702).
+- PR #716: adaptive occlusion starts over on each map load (#694).
+- PR #729: the macOS DMG name fix described above.
+
+Docs-only PRs in the same range: #658 (v1.0.6 record) and #696 (internal hang-log changelog line dropped).
+
+Assets, as listed by the GitHub release API on 2026-10-26 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.1.0.zip` | 154,696,631 | `df82ac4e111f4c23ef925e6c044676e045bca421b657efbb4234591ddc6cb9ab` |
+| `LostOdysseyRecomp-linux-x64-v1.1.0.AppImage` | 89,672,184 | `2f123063a3829bd47d2bd95e5dd64762980ae653775b7b59380eebf3d66d4fb9` |
+| `LostOdysseyRecomp-linux-x64-v1.1.0.flatpak` | 56,953,896 | `6df547712b2d799ac4d3f42a5dc438379ca349edc9204c22872e834c7e519111` |
+| `LostOdysseyRecomp-android-arm64-v1.1.0.apk` | 47,583,951 | `41ec5d557cc78fdc72feb00754a48e7b2851730c27344eaa1619f6478850877a` |
+| `LostOdysseyRecomp-macos-arm64-v1.1.0.dmg` | 65,651,556 | `9172b4df54c2c523a6c7d2f743b9563986da1ce04fb5b4722173c90ca6c07409` |
+
+Validation: a local pre-release smoke test on Windows (RTX 5080) of main `5fd18ccc`, in D3D12 and Vulkan, passed: title, Settings tabs, languages, prompts, title quit, the in-game settings header, scene fades, the occlusion reset on the Residential Area → Main Street walk, and a clean quit with exit code 0. That commit is the code before the release PR. The tag adds the release PR's version and changelog changes and PR #729 (`tools/package_macos.py`), and no run of the five published packages is recorded.
+
+Limits: Add to Steam was not run against a real Steam install. Three cosmetic leftovers were seen in the smoke test: the `·` in the Achievements and Brightness/Gamma values falls back to the pixel font; "Log collection" is untranslated in German and Spanish; and the title legend lines are not aligned. No macOS or Android device run is recorded for this release; both test hosts are away.
+
+Acceptance: none. The maintainer has not accepted v1.1.0. Issues [#665](https://github.com/freefrank/LostOdysseyRecomp/issues/665), [#694](https://github.com/freefrank/LostOdysseyRecomp/issues/694) and [#702](https://github.com/freefrank/LostOdysseyRecomp/issues/702) carry release mentions. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.0.6 published — 2026-10-19
+
+Update, 2026-10-26: v1.0.6 is no longer the latest release; [v1.1.0](#v110-published--2026-10-26) was published at 2026-10-26T01:12:52Z. The v1.0.6 record below is unchanged.
 
 [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) was published at 2026-10-19T04:32:05Z by the workflow's own publish step. A GitHub API read on 2026-10-19 at about 04:35 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. It was cut from tag `v1.0.6` at squash commit `b11c884e`, the release PR [#657](https://github.com/freefrank/LostOdysseyRecomp/pull/657). The previous release is v1.0.5, published 2026-10-18T17:56:24Z at `ca5cb373`.
 

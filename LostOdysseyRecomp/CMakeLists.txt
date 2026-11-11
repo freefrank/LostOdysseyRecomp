@@ -849,6 +849,11 @@ add_executable(LoEngineDeltaLimitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools
 target_include_directories(LoEngineDeltaLimitTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoEngineDeltaLimitTest PRIVATE cxx_std_20)
 
+add_executable(LoPresentationProgressTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/presentation_progress_test.cpp)
+target_include_directories(LoPresentationProgressTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPresentationProgressTest PRIVATE cxx_std_20)
+target_link_libraries(LoPresentationProgressTest PRIVATE Threads::Threads)
+
 add_executable(LoHostUiCompositeTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/host_ui_composite_test.cpp)
 target_include_directories(LoHostUiCompositeTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoHostUiCompositeTest PRIVATE cxx_std_20)
@@ -913,7 +918,7 @@ if(WIN32)
     target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
-    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo xxHash::xxhash)
 
     add_executable(LoMenuFlowTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
@@ -923,7 +928,7 @@ if(WIN32)
     target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME LO_ENABLE_D3D12_FG FRAMEGEN_WITH_DLSS FRAMEGEN_WITH_FSR)
-    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt)
+    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt xxHash::xxhash)
 endif()
 
 if(LO_BUILD_GPU)
