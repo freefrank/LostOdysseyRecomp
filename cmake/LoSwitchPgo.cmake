@@ -36,8 +36,13 @@ if(NOT LO_SWITCH_PGO STREQUAL "OFF")
         endif()
         # -fprofile-use alone turns on unrolling, peeling and tail duplication, which grew SwitchWakerHD's hot code 29%.
         # The hot code here is already far larger than the A57's L2, so those stay off and cold blocks are moved out.
+        # -freorder-functions must stay on with -freorder-blocks-and-partition (#35). Without it GCC 15.2 puts a
+        # function's .cold part in the hot part's section and writes the cold part's exception table from the hot
+        # start: every landing pad and call site in it is off by the hot part's size. A C++ exception thrown through
+        # a .cold part then jumps to a wrong address (1,213 of 5,669 tables in v1.1.0). tools/switch/check_eh_tables.py
+        # checks the ELF.
         set(LO_SWITCH_PGO_FLAGS ${_lo_pgo_common} "-fprofile-use=${LO_SWITCH_PGO_DIR}" -fprofile-correction -fprofile-partial-training
-            -fno-reorder-functions -fno-profile-reorder-functions -Wno-missing-profile -Wno-coverage-mismatch
+            -freorder-functions -fno-profile-reorder-functions -Wno-missing-profile -Wno-coverage-mismatch
             -fno-tracer -fno-unroll-loops -fno-peel-loops -freorder-blocks-and-partition ${LO_SWITCH_PGO_USE_FLAGS})
     endif()
 endif()
