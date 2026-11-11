@@ -523,7 +523,11 @@ initializers. Nine switches are read there, so env.txt couldn't change them: `LO
 `LO_TRACE_FUNCS` (`g_memory`'s constructor) and `LO_TEST_ACHIEVEMENTS`. The list comes from the source and from the
 built program: every `getenv` call reachable from its 126 constructors.
 env.txt is now also applied by a constructor that runs before them (`os/switch/env_file.cpp`), and `stderr.log` names
-every switch read before env.txt's logged pass.
+every switch read before env.txt's logged pass. Checked on the console (2026-11-11, title screen, 60 s each, env.txt
+`LO_GPU_STATS=1 LO_VERBOSE=1 LO_DEBUG_LOG=1`): the build before printed 0 `frame N stats` and 0 `[verb]` lines (4,889
+info lines, so `LO_DEBUG_LOG` worked); the fixed build printed 67 and 7,257, and its stderr.log listed exactly the
+nine switches above (plus libstdc++'s `GLIBCXX_TUNABLES`) as read before the logged pass, none before the early one.
+With `LO_DEKO3D_DESCRIPTOR_CACHE=0` and `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH=0` plume logs both off.
 
 One result used them. The "less work per draw" A/B of 2026-11-04 (`ff013164`, busy street, 540 rows, two alternated
 pairs, `out/bench/pg-k0` to `pg-k3`): 24.73 to 25.62 FPS (+3.6%), median frame 40.3 to 38.9 ms. Its "off" runs set
