@@ -559,6 +559,12 @@ stays the default.
   `thirdparty/deko3d/PATCHES.md`), with upstream's release flags. The CMake log says
   `LostOdysseyRecomp: deko3d back end (thirdparty/deko3d)`. devkitPro's `deko3d` package is not needed.
   `-DLO_SWITCH_DEKO3D_SOURCE=OFF` links its `libdeko3d.a` instead (`dkp-pacman -S deko3d`), without the fixes.
+- Fix 1 (issue #3): stock `CmdBuf::clear()` keeps only the newest 1 KiB control memory chunk of a command buffer and
+  loses the older ones. Control memory holds GPFIFO entries, fences and compute commands, not draws. plume's lists take
+  their commands in 1 MiB blocks, so in this port a list fits in one chunk and the stock library lost none
+  (`LO_DEKO3D_HEAP_STATS=1`, 2026-11-11: no chunk made in 14,600 frames of the first battle or 16,800 frames in Uhra's
+  station square). A list with more of them (many fences or compute dispatches) loses all but one at every clear:
+  the start-up self-check's 3-chunk list made 198 chunks over 99 clears with the stock `clear()`, 0 with the fixed one.
 - Back end: `thirdparty/plume-deko3d`, plume's deko3d back end from sa2-nx/banjo-nx, with LostOdysseyRecomp's changes:
   shaders are taken as SPIR-V, descriptors live in two device-wide heaps, and texture handles come from the bound
   descriptor sets.

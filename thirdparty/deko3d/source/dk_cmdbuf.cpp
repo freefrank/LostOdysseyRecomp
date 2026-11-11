@@ -67,7 +67,12 @@ void CmdBuf::clear()
 	// Transfer all used chunks into the free list
 	if (m_ctrlChunkCur)
 	{
-		m_ctrlChunkCur->m_next = m_ctrlChunkFree;
+		// LostOdysseyRecomp patch 1 (SwitchWakerHD patch 2): the used chunks are a list, newest first, linked by
+		// m_next. Linking only the newest one to the free list dropped every older one (1 KiB each) on each clear.
+		CtrlMemChunk* last = m_ctrlChunkCur;
+		while (last->m_next)
+			last = last->m_next;
+		last->m_next = m_ctrlChunkFree;
 		m_ctrlChunkFree = m_ctrlChunkCur;
 		m_ctrlChunkCur = nullptr;
 	}

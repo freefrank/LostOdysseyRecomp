@@ -22,3 +22,12 @@ a `debian:bookworm-slim` container). Generated on 2026-11-11 from the tag: the s
 `runtime/third_party/deko3d/generated` (github.com/centollOS/SwitchWakerHD).
 
 Every change to upstream files is marked `LostOdysseyRecomp patch N`.
+
+1. **Control memory chunks lost on clear** (`source/dk_cmdbuf.cpp`, `CmdBuf::clear`; SwitchWakerHD's patch 2). A
+   command buffer's control memory comes in 1 KiB chunks (16 bytes of header and 1,008 of commands) in a used list,
+   newest first. `clear()` linked only the newest chunk to the free list, overwriting its link to the older ones, so
+   every list that needed more than one chunk lost the rest on every clear. plume's deko3d back end clears each
+   command list in `Deko3DCommandList::begin()`. The fix walks to the oldest used chunk before linking. Still
+   unfixed upstream at `373bfd4`. `LO_DEKO3D_HEAP_STATS=1` counts the chunks (docs/SWITCH.md). This port's lists
+   fit in one chunk, so the game lost none in battle or in a town; the start-up self-check's 3-chunk list lost 2
+   per clear before the fix and none after.
