@@ -679,16 +679,22 @@ def print_report(runs: list[dict]) -> None:
 
 def thread_summary(runs: list[dict]) -> str:
     names: dict[str, list[float]] = {}
+    # Names that more than one thread has in any of the runs: ranked in every run, so that a run whose
+    # line left out one of them (under 1%, or past the top 8) still adds to the same entries.
+    shared = set()
+    for run in runs:
+        seen = set()
+        for sample in run.get("thread_samples") or []:
+            (shared if sample["name"] in seen else seen).add(sample["name"])
     for run in runs:
         if isinstance(run.get("thread_samples"), list):
-            # Rank same-name threads by their load within each run, rather than
-            # pretending that their display-name/ordinal identifies a persistent TID.
+            # Threads that share a name are ranked by their load within each run: the line has no thread ID.
             grouped = {}
             for sample in run["thread_samples"]:
                 grouped.setdefault(sample["name"], []).append(sample["pct"])
             for name, values in grouped.items():
                 for rank, pct in enumerate(sorted(values, reverse=True), 1):
-                    label = name if len(values) == 1 else f"{name} (load rank {rank})"
+                    label = f"{name} (load rank {rank})" if name in shared else name
                     names.setdefault(label, []).append(pct)
         elif isinstance(run.get("threads"), dict):
             for name, pct in run["threads"].items():
