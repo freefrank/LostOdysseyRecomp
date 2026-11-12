@@ -106,7 +106,7 @@ Retrained on the final code, with the register write-backs removed and lean shad
 
 The profile is only read while compiling, and its gain is in the machine code of the NRO. Players need nothing extra, and the profile itself doesn't ship. It isn't in the repository either, so a default build doesn't get this gain: whoever makes the release retrains and builds it, about 30 minutes in all.
 
-1. **Freeze the code.** Commit everything first, and run `tools/switch/build-switch.sh`, which leaves `LostOdysseyRecompLib/ppc/` ready. The profile only fits the code it was trained on.
+1. **Freeze the code.** Set the release's number in `LO_SWITCH_RELEASE_VERSION` (`cmake/LoSwitch.cmake`; the tag is `vX.Y.Z_NX`). Commit everything first, and run `tools/switch/build-switch.sh`, which leaves `LostOdysseyRecompLib/ppc/` ready. The profile only fits the code it was trained on.
 2. **Build `GEN`,** about 9 minutes:
 
    ```bash
