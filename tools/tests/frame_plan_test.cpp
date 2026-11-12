@@ -118,7 +118,21 @@ int main()
     }
     auto v3 = words; v3[1] = 3;
     Require(Decode(v3) == full, "known v3 full packet still decodes");
-    auto malformed = words; malformed[1] = 5;
+    auto v4 = words; v4[1] = 4;
+    Require(Decode(v4) == full && !Decode(v4)->cinematicBars, "v4 packets keep cinematic bars disabled");
+    auto cinematic = full; cinematic.cinematicBars = true;
+    auto cinematicWords = wire::EncodePlan(cinematic);
+    Require(Decode(cinematicWords) == cinematic, "v5 cinematic bars roundtrip with the source frame");
+    for (uint32_t version : {2u, 3u, 4u}) {
+        auto older = cinematicWords; older[1] = version;
+        Require(!Decode(older), "older wire versions reject the cinematic flag");
+    }
+    Require(FullRequestSignature(cinematic, 0, {1114, 626}) == FullRequestSignature(full, 0, {1114, 626}),
+        "display bars do not change the sizing request signature");
+    tags.Store(0x2000, cinematic);
+    cinematic.cinematicBars = false;
+    Require(tags.Take(0x2000)->cinematicBars, "command tags retain the mask frozen at enqueue");
+    auto malformed = words; malformed[1] = wire::Version + 1;
     Require(!Decode(malformed), "unknown version rejected");
     // The two-bit provider field is full: 3 is MetalFX.
     malformed = words; malformed[22] = (malformed[22] & ~3u) | 3u;
@@ -128,7 +142,7 @@ int main()
     Require(!Decode(malformed), "v2 plans cannot carry MetalFX");
     malformed = words; malformed[22] |= (3u << 4) | (1u << 21);
     Require(!Decode(malformed), "unknown consumer rejected");
-    malformed = words; malformed[22] |= 1u << 26;
+    malformed = words; malformed[22] |= 1u << 27;
     Require(!Decode(malformed), "unknown flag rejected");
     malformed = words; malformed[22] |= (1u << 25) | 3u;
     Require(!Decode(malformed), "unknown provider 7 rejected");

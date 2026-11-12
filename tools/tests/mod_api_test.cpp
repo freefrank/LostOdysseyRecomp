@@ -326,12 +326,25 @@ void Languages(const fs::path& root) {
     Write(root / "pt/text/readme.txt", "x");
     Write(root / "bad/language.ini", "id=bad\nname=Bad\n");
     Write(root / "zz-copy/language.ini", "id=pt-br\nname=Copy\nbase=int\n");
+    Write(root / "ar/language.ini", "id=ar\nname=Arabic\nbase=jpn\ndirection=rtl\n");
+    Write(root / "zz-dir/language.ini", "id=dir\nname=Dir\nbase=int\ndirection=up\n");
     Reload();
-    const auto packs = LanguagePacks();
-    assert(packs.size() == 1 && packs[0].id == "pt-br" && packs[0].name == name && packs[0].base == "int");
+    auto packs = LanguagePacks();
+    // direction= is optional: left to right when left out, rtl for right-to-left text.
+    assert(packs.size() == 2 && packs[0].id == "ar" && packs[0].base == "jpn" && packs[0].rightToLeft);
+    // achievements.ini: heading and <id>.name/.unlocked/.locked; anything else is left out.
+    assert(AchievementTexts(packs[0]).empty());
+    Write(root / "ar/achievements.ini", "\xef\xbb\xbf# texts\r\nheading=Unlocked\r\n1.name=Survived\r\n1.unlocked=Done.\r\n"
+        "12.locked=Not yet.\r\n1.icon=x\r\nname=x\r\n.name=x\r\n123456.name=x\r\n2.name=\r\nno equals sign\r\n3.name=a\x01" "b\r\n");
+    const auto achievementTexts = AchievementTexts(packs[0]);
+    assert(achievementTexts.size() == 4 && achievementTexts.at("heading") == "Unlocked" &&
+           achievementTexts.at("1.name") == "Survived" && achievementTexts.at("1.unlocked") == "Done." &&
+           achievementTexts.at("12.locked") == "Not yet.");
+    packs.erase(packs.begin());
+    assert(packs[0].id == "pt-br" && packs[0].name == name && packs[0].base == "int" && !packs[0].rightToLeft);
     const auto diagnostics = Diagnostics();
     assert(std::count_if(diagnostics.begin(), diagnostics.end(),
-        [](const Diagnostic& d) { return d.manifest.filename() == "language.ini"; }) == 2);
+        [](const Diagnostic& d) { return d.manifest.filename() == "language.ini"; }) == 3);
     const auto texts = ListTexts(packs[0]);
     assert(texts.size() == 1 && texts[0].id.key == menu && texts[0].modId == "pt-br");
     assert(ListTexts().empty()); // A pack applies only when selected.
@@ -342,13 +355,13 @@ void Languages(const fs::path& root) {
     Write(root / "pt/fonts" / fonts / "notes.txt", "x");
     Write(root / "pt/fonts/Loose.lofont", "x");
     Reload();
-    const auto glyphs = ListFonts(LanguagePacks()[0]);
+    const auto glyphs = ListFonts(LanguagePacks()[1]);
     assert(glyphs.size() == 2 && glyphs[0].id.kind == AssetKind::Font && glyphs[0].id.key == fonts + "#Maru23" &&
            glyphs[1].id.key == "bin/xenon/loc/int/menu/rpfontstitle_int.xxx#Title" && glyphs[0].modId == "pt-br");
-    Env("LO_MODS_MODE", "overlay"); Reload(); assert(LanguagePacks().size() == 1);
+    Env("LO_MODS_MODE", "overlay"); Reload(); assert(LanguagePacks().size() == 2);
     Env("LO_MODS", "0"); Reload(); assert(LanguagePacks().empty() && ListTexts(packs[0]).empty() && ListFonts(packs[0]).empty());
     Env("LO_MODS", nullptr); Env("LO_MODS_MODE", nullptr);
-    for (const auto* dir : {"pt", "bad", "zz-copy"}) fs::remove_all(root / dir);
+    for (const auto* dir : {"pt", "ar", "bad", "zz-copy", "zz-dir"}) fs::remove_all(root / dir);
     Reload(); assert(LanguagePacks().empty());
 }
 std::string ReadAll(const fs::path& path) {

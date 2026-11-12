@@ -1,8 +1,15 @@
 #include <stdafx.h>
+#include <cpu/render_fence.h>
 #include "gpu/frame_plan.h"
+#include "gpu/cinematic_bars.h"
 #include "gpu/guest_writes.h"
 #include "gpu/dlss_status_log.h"
 #include "gpu/video.h"
+#include "gpu/dynamic_resolution.h"
+#include "gpu/gpu_busy.h"
+#include <debug/perf_stats.h>
+#include <chrono>
+#include <cstdlib>
 #include <string_view>
 #include "settings/config.h"
 #include "kernel/memory.h"
@@ -61,6 +68,7 @@ namespace gpu::frame_plan
         uint32_t readyDevice = 0;
         uint64_t streamGeneration = 0;
         uint64_t emittedSerial = 0, emittedEpoch = 0, emittedSignature = 0, emittedSizingRevision = 0, emittedGeneration = 0;
+        bool emittedCinematicBars = false;
         uint32_t LoadWord(uint32_t address)
         {
             return g_memory.base && address >= 0x10000
@@ -100,6 +108,52 @@ namespace gpu::frame_plan
         }
     }
 
+    namespace
+    {
+        // Dynamic resolution (gpu/dynamic_resolution.h): the render height follows the GPU's busy time. The Switch's
+        // Graphics menu turns it on and sets the lowest height (Dynamic / Minimum resolution; default 80% of the
+        // configured height); env.txt's LO_DYNAMIC_RESOLUTION and LO_DYNAMIC_RESOLUTION_MIN win over it, and
+        // LO_DYNAMIC_RESOLUTION_STEP=<rows> sets the step (a multiple of 9, default 36). Only without
+        // an upscaler, which sizes its own input.
+        uint32_t DynamicHeight(uint32_t configured, const settings::Config& config)
+        {
+            static const int environmentEnabled = dynamic_resolution::EnvironmentEnabled();
+            static const uint32_t environmentMinimum = dynamic_resolution::EnvironmentMinimum();
+            static const uint32_t step = dynamic_resolution::EnvironmentStep();
+            static dynamic_resolution::Controller controller;
+            static uint32_t announcedMinimum = 0, announcedBase = 0;
+            const bool enabled = environmentEnabled >= 0 ? environmentEnabled == 1 : config.dynamicResolution;
+            if (!enabled || config.upscaler != upscaling::Upscaler::Off || !dynamic_resolution::Supports(configured)) {
+                gpu_busy::g_dynamicResolution.store(false, std::memory_order_relaxed);
+                if (announcedBase) {
+                    // Turned off, or a height it does not take: on again, it starts from the full height.
+                    LOG_NOTICE("dynamic resolution: off, scene at {} rows", configured);
+                    controller = {};
+                    announcedMinimum = announcedBase = 0;
+                }
+                return configured;
+            }
+            gpu_busy::g_dynamicResolution.store(true, std::memory_order_relaxed);
+            const uint32_t minimumSetting = environmentMinimum ? environmentMinimum : settings::DynamicResolutionMinimum(config);
+            const uint32_t minimum = minimumSetting ? minimumSetting : dynamic_resolution::DefaultMinimum(configured);
+            const double budgetMs = 1000.0 / double(config.frameRate ? std::clamp(config.frameRate, 20u, 240u) : 30u);
+            const uint64_t now = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+            bool changed = false;
+            const uint32_t height = controller.Update(now, gpu_busy::Total(), configured, minimum, budgetMs, changed, step);
+            if (controller.minimum != announcedMinimum || configured != announcedBase) {
+                announcedMinimum = controller.minimum;
+                announcedBase = configured;
+                LOG_NOTICE("dynamic resolution: on, {} to {} rows in steps of {}, GPU budget {:.1f} ms per frame",
+                    controller.minimum, configured, controller.step, budgetMs);
+            }
+            if (changed)
+                LOG_INFO("dynamic resolution: scene at {} rows (GPU {:.1f} ms per frame, budget {:.1f} ms)", height,
+                    controller.lastBusyMs, budgetMs);
+            return height;
+        }
+    }
+
     upscaling::OutputRegion PlannedOutputRegion(resolution::Size drawableSize, const settings::Config& config)
     {
         const auto output = upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio);
@@ -118,6 +172,7 @@ namespace gpu::frame_plan
         const auto output = readback ? upscaling::ResolveOutputRegion(drawableSize, config.aspectRatio) :
             PlannedOutputRegion(drawableSize, config);
         config.internalResolution = int(PlannedInternalResolution(config));
+        config.internalResolution = int(DynamicHeight(uint32_t(config.internalResolution), config));
         narrowTallView.store(aspect_ratio::NarrowsView(config.aspectRatio), std::memory_order_relaxed);
         const auto device = video::BackendDeviceState();
         std::optional<upscaling::OutputSizing> sizing;
@@ -128,6 +183,7 @@ namespace gpu::frame_plan
             config.upscaler, config.dlssQuality, output, device, sizing ? &*sizing : nullptr,
             readback, dlssInputProbe,
             config.fsrQuality});
+        perf_stats::SceneSize(cpuPlan.width, cpuPlan.height);
         const auto identity = StatusIdentityOf(cpuPlan);
         const bool planChanged = identity != loggedStatusPlan;
         loggedStatusPlan = identity;
@@ -160,7 +216,11 @@ namespace gpu::frame_plan
     std::optional<FramePlan> CurrentProducerPlan()
     {
         if (renderPlan && renderPlan->cpuSerial) return renderPlan;
-        if (cpuPlan.cpuSerial) return cpuPlan;
+        if (cpuPlan.cpuSerial) {
+            auto plan = cpuPlan;
+            plan.cinematicBars = cinematic_bars::Active();
+            return plan;
+        }
         return std::nullopt;
     }
     void ReportFailedEpoch(uint64_t geometryEpoch, uint32_t fallbackHeight)
@@ -224,8 +284,8 @@ namespace gpu::frame_plan
     void ResetSizing(uint64_t deviceEpoch) { sizingCache.ResetSizing(deviceEpoch); }
     void TagReservedCommand(uint32_t ring, uint32_t commandAddress)
     {
-        const auto plan = CurrentProducerPlan();
-        if (ring == 0x8336A7A4 && commandAddress && plan) tags.Store(commandAddress, *plan);
+        if (ring != 0x8336A7A4 || !commandAddress) return;
+        if (const auto plan = CurrentProducerPlan()) tags.Store(commandAddress, *plan);
     }
     bool BeginRenderCommand(uint32_t commandAddress)
     {
@@ -262,6 +322,11 @@ namespace gpu::frame_plan
         const auto plan = CurrentProducerPlan();
         PPCContext* current = GetPPCContext();
         if (!plan || !current) return;
+        // The plan is almost always the one already queued: check before copying the whole context.
+        { std::lock_guard lock(deviceMutex);
+            if (device != readyDevice || (emittedSerial == plan->cpuSerial && emittedEpoch == plan->geometryEpoch &&
+                 emittedSignature == plan->requestSignature && emittedSizingRevision == plan->sizingRevision &&
+                 emittedGeneration == streamGeneration && emittedCinematicBars == plan->cinematicBars)) return; }
         PPCContext context = *current;
         if (currentStack) context.r1.u32 = currentStack;
         QueuePlanOnDevice(context, device, *plan);
@@ -271,7 +336,8 @@ namespace gpu::frame_plan
         { std::lock_guard lock(deviceMutex);
             if (device != readyDevice || !LoadWord(device + 0x30) || !LoadWord(device + 0x34) ||
                 (emittedSerial == plan.cpuSerial && emittedEpoch == plan.geometryEpoch &&
-                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision && emittedGeneration == streamGeneration)) return false; }
+                 emittedSignature == plan.requestSignature && emittedSizingRevision == plan.sizingRevision &&
+                 emittedGeneration == streamGeneration && emittedCinematicBars == plan.cinematicBars)) return false; }
         const auto words = wire::EncodePlan(plan);
         if (!gpu::frame_plan::EmitPrivatePacket(device, wire::PlanBase, words)) return false;
         // The display target exists before the world target table is populated;
@@ -279,7 +345,8 @@ namespace gpu::frame_plan
         // allocate a stale native mapping.
         QueueMainDisplayCatalog(context, device);
         { std::lock_guard lock(deviceMutex); emittedSerial = plan.cpuSerial; emittedEpoch = plan.geometryEpoch;
-            emittedSignature = plan.requestSignature; emittedSizingRevision = plan.sizingRevision; emittedGeneration = streamGeneration; }
+            emittedSignature = plan.requestSignature; emittedSizingRevision = plan.sizingRevision; emittedGeneration = streamGeneration;
+            emittedCinematicBars = plan.cinematicBars; }
         return true;
     }
     bool QueueCatalogOnDevice(PPCContext& context, uint32_t device, SurfaceRole role, uint32_t surfaceInfo, uint32_t colorInfo)
@@ -413,11 +480,13 @@ PPC_FUNC(sub_823BC138)
 // stack anchor at the execution site before a rollover-capable PM4 append.
 void FramePlanBeforeExecute(PPCRegister& r1, PPCRegister& r31)
 {
+    render_fence::CommandBegin(r31.u32);
     gpu::frame_plan::BeginTaggedRenderCommand(r31.u32, r1.u32);
 }
 void FramePlanAfterExecute()
 {
     gpu::frame_plan::EndRenderCommand();
+    render_fence::CommandEnd();
 }
 void FramePlanDirectCanvas(PPCRegister& r1, PPCRegister& device)
 {

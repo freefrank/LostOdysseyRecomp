@@ -175,4 +175,35 @@ public class GpuDriverStoreTest {
         assertFalse(GpuDriverStore.isArm64(new String[] { "armeabi-v7a" }));
         assertFalse(GpuDriverStore.isArm64(null));
     }
+
+    @Test
+    public void enablesAdreno650OrderingWorkaroundForReportedTurnipPackages() throws Exception {
+        GpuDriverStore.Metadata r8 = GpuDriverStore.Metadata.parse(META.replace("Turnip R8",
+            "Mesa Turnip driver v26.0.0 - R8"));
+        GpuDriverStore.Metadata t30 = GpuDriverStore.Metadata.parse(META.replace("Turnip R8",
+            "Turnip Adreno Driver T30 (@Mr_Purple_666)").replace("\"vendor\":\"Mesa\"", "\"vendor\":\"\""));
+        for (String model : new String[] { "Adreno650", "Adreno650v3", "Adreno 650", " adreno650V2 " }) {
+            assertTrue(model, GpuDriverStore.needsAdreno650SyncDraw(model, r8));
+            assertTrue(model, GpuDriverStore.needsAdreno650SyncDraw(model, t30));
+        }
+        assertTrue(GpuDriverStore.needsAdreno650SyncDraw("Adreno650v3",
+            GpuDriverStore.Metadata.parse(META.replace("Turnip R8", "TURNIP R8"))));
+    }
+
+    @Test
+    public void leavesOtherGpusAndDriverPackagesUnchanged() throws Exception {
+        GpuDriverStore.Metadata turnip = GpuDriverStore.Metadata.parse(META);
+        for (String model : new String[] { null, "", "Adreno6500", "Adreno640v2", "Adreno750v2",
+                "Adreno650v", "Other Adreno650", "Adreno650 extra" }) {
+            assertFalse(String.valueOf(model), GpuDriverStore.needsAdreno650SyncDraw(model, turnip));
+        }
+        assertFalse(GpuDriverStore.needsAdreno650SyncDraw("Adreno650v3", null));
+        for (String name : new String[] { "Qualcomm driver", "NotTurnip R8", "Turnipish",
+                "Mesa Turnip driver v26.0.0 - R8 SYSMEM", "Turnip (sysmem)", "PanVK Turnip compatibility" }) {
+            assertFalse(name, GpuDriverStore.needsAdreno650SyncDraw("Adreno650v3",
+                GpuDriverStore.Metadata.parse(META.replace("Turnip R8", name))));
+        }
+        assertFalse(GpuDriverStore.needsAdreno650SyncDraw("Adreno650v3",
+            GpuDriverStore.Metadata.parse(PANVK_META.replace("PanVK Kbase G615", "Turnip compatibility"))));
+    }
 }

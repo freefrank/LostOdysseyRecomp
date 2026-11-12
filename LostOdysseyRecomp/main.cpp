@@ -1,4 +1,8 @@
 #include <os/log_collection.h>
+#if !defined(__SWITCH__)
+#include <os/steam_shortcut.h>
+#endif
+#include <discord/presence.h>
 #include <stdafx.h>
 #include <cpu/guest_thread.h>
 #include <kernel/function.h>
@@ -12,6 +16,7 @@
 #include <gpu/renderer.h>
 #include <gpu/video.h>
 #include <gpu/pipeline_prepare_progress.h>
+#include <gpu/rtl_text.h>
 #include <apu/audio.h>
 #include <apu/xma.h>
 #include <hid/hid.h>
@@ -21,6 +26,7 @@
 #include <os/detach_thread.h>
 #if LO_PLATFORM_SWITCH
 #include <os/switch_cpu_profiler.h>
+#include <os/heap_census.h>
 #endif
 #include <os/user_paths.h>
 #include <os/shader_log.h>
@@ -32,6 +38,9 @@
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#if LO_PLATFORM_SWITCH
+#include "settings/graphics_menu.h"
+#endif
 #include "settings/game_path.h"
 #include "settings/restart.h"
 #include "updater/update.h"
@@ -42,6 +51,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
 #include "modding/text_overlay.h"
@@ -184,9 +194,14 @@ static int CompactGameDataCommand(const std::filesystem::path& gameRoot)
             }
         });
         const auto after = std::filesystem::space(gameRoot, ec).available;
-        LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
-                   "{} archive bytes stored once in all, {} not shared",
-                   result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
+        if (!result.replaced && result.sharedBytes > 0)
+            LOG_NOTICE("compact game data: Already done: these files are stored once (about {:.1f} GB saved); "
+                       "{} copies replaced, {} archive bytes stored once in all, {} not shared",
+                       double(result.sharedBytes) / 1'000'000'000.0, result.replaced, result.sharedBytes, result.failed);
+        else
+            LOG_NOTICE("compact game data: freed {} bytes (free space grew by {} bytes); {} copies replaced, "
+                       "{} archive bytes stored once in all, {} not shared",
+                       result.freedBytes, after > before ? after - before : 0, result.replaced, result.sharedBytes, result.failed);
         return 0;
     }
     catch (const std::exception& error)
@@ -220,6 +235,7 @@ static int RunGuest(uint32_t entry)
 
 #if LO_PLATFORM_SWITCH
     os::switch_platform::SetLoadingBoost(false);
+    os::switch_platform::SetScreenAwake(os::switch_platform::AwakeStartup, 0);
     os::switch_platform::StartHandheldGpuBoost();
     {
         std::error_code ec;
@@ -229,6 +245,7 @@ static int RunGuest(uint32_t entry)
         os::switch_cpu_profiler::Start(sampler);
         LOG_INFO("switch: CPU profiler sampler {}", sampler ? "on" : "off");
     }
+    os::heap_census::Start(); // LO_SWITCH_HEAP_CENSUS builds: LO_HEAP_CENSUS=1
     LOG_INFO("switch: {} mode, guest memory committed {} MiB, {}", os::switch_platform::IsDocked() ? "docked" : "handheld",
              GuestAddressSpace::CommittedBytes() >> 20, os::switch_platform::MemorySummary());
     // Opt-in game file reads every 10 s (LO_IO_PROFILE=1) distinguish slow SD
@@ -278,12 +295,29 @@ static int RunGuest(uint32_t entry)
             os::switch_cpu_profiler::AppendThreadCpuUsage(cpu);
             LOG_INFO("switch: {}, guest committed {} MiB; CPU {}", os::switch_platform::MemorySummary(),
                      GuestAddressSpace::CommittedBytes() >> 20, cpu);
+            std::string placement;
+            os::switch_cpu_profiler::AppendThreadPlacement(placement);
+            // Asked for (LO_THREAD_PLACEMENT=1), so above the log's default level.
+            if (!placement.empty())
+                LOG_NOTICE("switch: placement {}", placement);
         }
     }));
 #endif
+    discord_rpc::SetEnabled(settings::GetConfig().discordStatus);
+    discord_rpc::Initialize([](const char* message) { LOG_NOTICE("discord: {}", message); });
+
     LOG_INFO("starting guest at {:#x}", entry);
     os::SetCurrentThreadName("Guest Main");
     os::scheduling::PreferPerformanceCores(true);
+#if LO_PLATFORM_SWITCH
+    // LO_MAIN_CORE=<core> keeps the busiest thread on one core: 2% more frames in the first battle, but it can't leave
+    // a core where a higher-priority thread spins, and the XAudio workers stalled the game 114 s that way. Off by default.
+    {
+        const char* mainCore = getenv("LO_MAIN_CORE");
+        const int core = mainCore ? atoi(mainCore) : -1;
+        if (core >= 0) os::switch_platform::PinCurrentThread(core);
+    }
+#endif
     GuestThread::Start({ entry, 0, 0 });
 
     LOG_INFO("guest main thread returned");
@@ -296,7 +330,7 @@ static int RunGuest(uint32_t entry)
     // already stopped, still avoid global teardown while guest threads survive.
     os::shaderlog::CloseForExit();
     std::fflush(nullptr);
-    std::_Exit(EXIT_SUCCESS);
+    (discord_rpc::Shutdown(), std::_Exit(EXIT_SUCCESS));
 }
 
 #if LO_PLATFORM_ANDROID
@@ -408,6 +442,35 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
+#if !LO_PLATFORM_SWITCH
+    // This host-only command reads original artwork from available game data,
+    // then exits without an SDL window or GPU (bundled art remains a fallback).
+    for (int i = 1; i < argc; ++i)
+        if (strcmp(argv[i], "--add-to-steam") == 0)
+        {
+            const auto result = steam_shortcut::AddToSteam(FindGameRoot(executableDirectory, explicitGamePath).root);
+            const char* message = nullptr;
+            switch (result.status)
+            {
+            case steam_shortcut::Status::Added:
+                message = "Added to Steam. Restart Steam to see it."; break;
+            case steam_shortcut::Status::AddedFromFlatpak:
+                message = "Restart Steam to see it; if Steam was open, close it and add again."; break;
+            case steam_shortcut::Status::SteamRunning:
+                message = "Close Steam, then try again."; break;
+            case steam_shortcut::Status::SteamNotFound:
+                message = "Steam was not found. Install and open Steam first."; break;
+            case steam_shortcut::Status::UserNotFound:
+                message = "No Steam user found. Sign in to Steam, close it, then try again."; break;
+            default:
+                message = "Could not add to Steam."; break;
+            }
+            FILE* output = result.ok() ? stdout : stderr;
+            std::fprintf(output, "%s\n", message);
+            if (!result.detail.empty()) std::fprintf(output, "%s\n", result.detail.c_str());
+            return result.ok() ? 0 : 1;
+        }
+#endif
     // --export-assets copies game files for mod authors, then exits. It runs
     // before the working-directory change (relative output folders), logs,
     // update check, mods, installer, window and GPU device.
@@ -449,6 +512,13 @@ int main(int argc, char* argv[])
         {
             if (!logOverride)
             {
+#if LO_PLATFORM_SWITCH
+                // The previous session's stderr, crash, hang and exit reports go next to its runtime log, so the
+                // app folder holds this session's and logs/ keeps them paired with the session they belong to.
+                const std::filesystem::path dataRoot(LO_SWITCH_DATA_ROOT);
+                os::logger::ArchiveSessionFiles(logPath, {{dataRoot / "stderr.previous.log", "stderr"},
+                    {dataRoot / "crash.log", "crash"}, {dataRoot / "hang.log", "hang"}, {dataRoot / "exit.log", "exit"}});
+#endif
                 os::logger::PruneDefaultLogs(logPath);
                 sessionLog = logPath;
             }
@@ -686,8 +756,21 @@ int main(int argc, char* argv[])
                    int(c.upscaler), int(c.dlssQuality), c.dlssModel ? 'L' : 'M', int(c.fsrQuality), c.frameRate, c.vsync,
                    c.variableRefreshRate, int(c.frameGenerationProvider),
                    c.frameGenerationMultiplier, c.hdr, c.ambientOcclusion, c.shadowResolution, c.debugLog);
+#if LO_PLATFORM_SWITCH
+        // The Switch's Graphics rows as the run uses them (env.txt's LO_SWITCH_UPSCALER and LO_DYNAMIC_RESOLUTION win),
+        // so a log says whether FSR and dynamic resolution were on.
+        LOG_NOTICE("settings: switch preset={} fsr={} fsr_sharpness={} dynamic_resolution={} maximum_height={}/{} "
+                   "minimum_height={}/{} bloom={} motion_blur={} depth_of_field={} dynamic_shadows={} scaling_quality={}",
+                   uint32_t(settings::graphics_menu::PresetOf(c)), settings::graphics_menu::FsrOn(c), c.fsrSharpnessPercent,
+                   settings::graphics_menu::DynamicResolutionOn(c), c.maximumHeight[0], c.maximumHeight[1],
+                   c.minimumHeight[0], c.minimumHeight[1], c.bloom, c.motionBlur, c.depthOfFieldPercent, c.dynamicShadows,
+                   c.scalingQuality);
+#endif
         const auto pack = settings::GameLanguagePack();
         modding::text_overlay::SelectLanguagePack(pack);
+        for (const auto& languagePack : modding::LanguagePacks())
+            if (languagePack.id == pack)
+                rtl_text::SetEnabled(languagePack.rightToLeft);
         modding::text_overlay::EnablePrebuild();
         if (!pack.empty())
             LOG_NOTICE("settings: game language {} with language pack {}", settings::GameLanguage(), pack);
@@ -748,6 +831,9 @@ int main(int argc, char* argv[])
 
     LOG_INFO("game root: {}", FileSystem::PathUtf8(gameRoot));
 
+    // The startup offer and compaction finish before any disc archive opens.
+    if (!prepareShadersOnly)
+        install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
     XamInit();
 
@@ -779,7 +865,7 @@ int main(int argc, char* argv[])
         const bool prepared = gpu::video::Init() && !getenv("LO_NO_RENDERER");
         LOG_INFO("shader preparation only: {}, guest not started", prepared ? "complete" : "failed");
         fflush(stdout);
-        (os::shaderlog::CloseForExit(), std::_Exit(prepared ? 0 : 1));
+        (os::shaderlog::CloseForExit(), discord_rpc::Shutdown(), std::_Exit(prepared ? 0 : 1));
     }
 
     // macOS: AppKit accepts window work only on the process main thread, so the

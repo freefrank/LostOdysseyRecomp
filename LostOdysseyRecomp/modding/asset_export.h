@@ -1,7 +1,10 @@
 #pragma once
 #include <filesystem>
 #include <optional>
+#include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 // `--export-assets <dir> [--export-kinds textures,fingerprints,movies,text,models,animations,fonts]
 //  [--export-model-textures] [--export-filter <text>] [--export-select <file>]
@@ -27,6 +30,17 @@
 // device, installer, logs or guest code.
 namespace modding::asset_export
 {
+// CPU-only access to the same original-disc texture decoder used by the
+// exporter. Pixels use straight RGBA, independently of the stored GPU format.
+// A missing package/object or malformed game data throws std::runtime_error.
+struct TextureImage
+{
+    uint32_t width = 0, height = 0;
+    std::vector<uint8_t> rgba;
+};
+TextureImage ReadTexture(const std::filesystem::path &gameRoot, std::string_view packagePath, std::string_view objectName);
+std::vector<uint8_t> EncodeTexturePng(const TextureImage &image);
+
 struct Request
 {
     std::filesystem::path output;

@@ -1,8 +1,9 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstdint>
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <utility>
 #include <vector>
 
@@ -71,9 +72,6 @@ namespace gpu::occlusion
         void BeginFrame()
         {
             ++frame_;
-            if (frame_ % 64 == 0)
-                for (auto it = pending_.begin(); it != pending_.end();)
-                    it = frame_ - it->second.frame > kPendingFrames ? pending_.erase(it) : std::next(it);
             if (frame_ % 600 == 0)
                 for (auto& map : entries_)
                     for (auto it = map.begin(); it != map.end();)
@@ -114,9 +112,13 @@ namespace gpu::occlusion
                 if (!samples) ++stats_.zero;
                 return samples;
             }
-            auto& pending = pending_[issued->second.owner];
+            Pending& pending = PendingFor(issued->second.owner);
+            if (pending.owner != issued->second.owner) {
+                Release(pending);
+                pending.owner = issued->second.owner;
+            }
             pending.frame = issue;
-            pending.keys.emplace_back(kind, key);
+            AddKey(pending, kind, key);
             if (entry.issue == kNone) { ++stats_.unknown; return kVisible; }
             if (frame_ - entry.issue > kMaxAge + 1) { ++stats_.stale; return kVisible; }
             if (entry.issue < cutFrame_) { ++stats_.cut; return kVisible; }
@@ -133,14 +135,20 @@ namespace gpu::occlusion
         // The host measured `samples` for the query of `owner`.
         void Completed(uint64_t owner, uint32_t samples)
         {
-            const auto pending = pending_.find(owner);
-            if (pending == pending_.end()) return;
-            for (const auto& [kind, key] : pending->second.keys)
-                Store(entries_[size_t(kind)][key], pending->second.frame, samples);
-            pending_.erase(pending);
+            Pending& pending = PendingFor(owner);
+            if (pending.owner != owner) return;
+            if (frame_ - pending.frame <= kPendingFrames) {
+                for (uint32_t i = 0; i < pending.count && i < pending.keys.size(); ++i)
+                    Store(entries_[size_t(pending.keys[i].first)][pending.keys[i].second], pending.frame, samples);
+                for (uint32_t i = pending.more; i != kNone; i = overflow_[i].next)
+                    Store(entries_[size_t(overflow_[i].kind)][overflow_[i].key], pending.frame, samples);
+            }
+            Release(pending);
         }
 
         const Stats& GetStats() const { return stats_; }
+        // Keys after a read's first two, held for all pending reads together (the pool never shrinks).
+        size_t OverflowCapacity() const { return overflow_.size(); }
 
     private:
         static constexpr uint32_t kNone = ~0u;
@@ -153,7 +161,62 @@ namespace gpu::occlusion
             uint32_t lastRead = kNone;    // frame of the last read
         };
         struct Issued { uint64_t owner = 0; uint32_t frame = 0; bool main = false; };
-        struct Pending { uint32_t frame = 0; std::vector<std::pair<Kind, uint64_t>> keys; };
+        // Reads waiting for their query's count, in a ring by the issue serial in the owner (Issue): an owner is
+        // never 0, and one kPendingSlots issues later takes the slot over. The map and vector this replaces allocated
+        // and freed for about 700 reads a frame in the busy street, under newlib's malloc lock, on the game's
+        // rendering thread.
+        //
+        // A query read for more than two objects keeps the others in overflow_, one pool for every slot, as a list
+        // (`more`, newest first) that goes back to the pool's free list when the count arrives or the slot is taken
+        // over. The pool holds the keys pending now. A vector per slot instead (until 2026-11-11) kept the largest
+        // capacity it ever reached: in the first battle that grew the heap by about 2.8 KB/s at the start, 1.3 KB/s
+        // after 25 minutes, towards 32,768 slots times the biggest overflow each had seen (the heap census, LO_HEAP_CENSUS).
+        static constexpr uint32_t kPendingSlots = 1u << 15;
+        struct Pending
+        {
+            uint64_t owner = 0;
+            uint32_t frame = 0, count = 0;
+            std::array<std::pair<Kind, uint64_t>, 2> keys{};
+            uint32_t more = kNone; // overflow_ index of the newest key after the first two
+        };
+        struct Overflow
+        {
+            uint64_t key = 0;
+            uint32_t next = kNone; // the pending read's next key, or the free list's next entry
+            Kind kind = Kind::Primitive;
+        };
+        Pending& PendingFor(uint64_t owner) { return pending_[uint32_t(owner) & (kPendingSlots - 1)]; }
+
+        void AddKey(Pending& pending, Kind kind, uint64_t key)
+        {
+            if (pending.count < pending.keys.size()) {
+                pending.keys[pending.count++] = {kind, key};
+                return;
+            }
+            uint32_t i = overflowFree_;
+            if (i != kNone) overflowFree_ = overflow_[i].next;
+            else {
+                i = uint32_t(overflow_.size());
+                overflow_.emplace_back();
+            }
+            overflow_[i] = {key, pending.more, kind};
+            pending.more = i;
+            ++pending.count;
+        }
+
+        // The slot's keys back to the pool; the slot is free.
+        void Release(Pending& pending)
+        {
+            for (uint32_t i = pending.more; i != kNone;) {
+                const uint32_t next = overflow_[i].next;
+                overflow_[i].next = overflowFree_;
+                overflowFree_ = i;
+                i = next;
+            }
+            pending.owner = 0;
+            pending.count = 0;
+            pending.more = kNone;
+        }
 
         static void Store(Entry& entry, uint32_t issue, uint32_t samples)
         {
@@ -168,9 +231,12 @@ namespace gpu::occlusion
         uint32_t frame_ = 0;
         uint32_t cutFrame_ = 0;
         uint32_t serial_ = 1;
-        std::unordered_map<uint64_t, Entry> entries_[2];
-        std::unordered_map<uint32_t, Issued> queries_;
-        std::unordered_map<uint64_t, Pending> pending_;
+        // Flat tables: the lookups run for every deferred read and issue on the game's rendering thread.
+        ankerl::unordered_dense::map<uint64_t, Entry> entries_[2];
+        ankerl::unordered_dense::map<uint32_t, Issued> queries_;
+        std::vector<Pending> pending_ = std::vector<Pending>(kPendingSlots);
+        std::vector<Overflow> overflow_;
+        uint32_t overflowFree_ = kNone;
         Stats stats_;
     };
 }

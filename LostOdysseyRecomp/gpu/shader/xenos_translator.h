@@ -38,6 +38,9 @@ namespace xenos
         // path and register reuse. Unknown when relative addressing reaches it.
         std::array<uint64_t, 4> positionConstantSlots{};
         bool positionConstantsKnown = false;
+        // Every ALU constant slot the shader reads (XeConst(N) in hlsl); unknown with relative addressing.
+        std::array<uint64_t, 4> constantSlots{};
+        bool constantSlotsKnown = false;
     };
 
     // dwords: microcode in *host* byte order (already swapped from big-endian).

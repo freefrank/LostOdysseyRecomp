@@ -18,6 +18,7 @@
 #include "issue121_sky_ge1_jitter_capture.h"
 #include "issue203_sky_jitter_capture.h"
 #include "issue212_light_jitter_capture.h"
+#include "issue604_light_jitter_capture.h"
 #include "tour_cutscene_20261004_capture.h"
 #include "issue307_boat_capture.h"
 #include "f12139_sky_jitter_capture.h"
@@ -1849,17 +1850,15 @@ static Float4 LocalForClip(Clip clip, const Constants& bank, double ndcX, double
     }
     return local;
 }
-// Old Sorceress' Mansion battle (#212), from the player's v0.8.15 log: per-light
-// floor passes e810/c44e and 9bde/d122 over the 4053 floor draw (slot 7,
-// TireMaterialFf9 chain), same world and camera, no depth write, GEQUAL test.
-// 9bde HLSL 440-454 is the E810Clip chain and copies the clip to o4; both PS
-// sample tex0 (light attenuation) at i4.xy/w through c0 as E810Tex0 does. Draw 3,
-// e810/a800, lit the floor around an enemy in a local Entrance Hall battle.
-static void CapturedIssue212Light()
+// Captured GEQUAL light passes over a slot-7 floor with matching world/camera.
+// The reviewed light shaders use E810Clip/E810Tex0, while their depth
+// companions use TireMaterialFf9. Vertex positions remain synthetic.
+template<class Draw, size_t N>
+static void CapturedScreenLights(const Draw (&draws)[N], const char* label)
 {
     double oldSeparation=0,maxPixelError=0;
     const auto startChecks=checks;
-    for (const auto& draw:issue212_light::draws)
+    for (const auto& draw:draws)
     {
         Constants original{},originalDepth{},originalPs{};
         std::copy(draw.vertex.begin(),draw.vertex.end(),original.begin());
@@ -1869,17 +1868,26 @@ static void CapturedIssue212Light()
         std::copy(draw.pixel.begin(),draw.pixel.end(),originalPs.begin());
         std::array<uint32_t,16> vp{};
         std::copy_n(original.begin()+7*4,16,vp.begin());
-        Check(draw.depthVs==0x4053f2a21dbb92ddull && draw.slot==7 &&
+        Check((draw.depthVs==0x4053f2a21dbb92ddull || draw.depthVs==0xff9da3984ce8d094ull) && draw.slot==7 &&
             std::equal(original.begin(),original.begin()+16,originalDepth.begin()) &&
             std::equal(vp.begin(),vp.end(),originalDepth.begin()+7*4),
-            "#212 light pass and 4053 floor share captured world and slot-7 camera");
+            "captured light pass and floor share world and slot-7 camera");
         Check(IsScreenLightPair(draw.vs,draw.ps) && PositionVPSlot(draw.vs)==-1 &&
             DrawPositionVPSlot(draw.vs,draw.ps)==7 && PositionVPSlot(draw.depthVs)==7 &&
             !RequiresEarlierSceneAnchor(draw.vs,draw.ps) && !RetainsMotionFallback(draw.vs,draw.ps),
-            "#212 exact light pair maps to slot 7 with the ordinary anchor and motion policy");
-        Check(DrawPositionVPSlot(draw.vs,0x0123456789abcdefull,true)==-1 &&
-            DrawPositionVPSlot(0x9bdef27080ca3ab4ull,0xc44ebbbc0207b5a9ull)==-1,
-            "#212 other PS partners of the light VS stay held");
+            "captured exact light pair maps to slot 7 with the ordinary anchor and motion policy");
+        Check(DrawPositionVPSlot(draw.vs,0x0123456789abcdefull,true)==-1,
+            "captured light VS stays held with an unknown PS even for constant tex0");
+        {
+            const Viewport extent{0,0,2560,1440};
+            const SceneAnchor anchor{vp,extent,21};
+            auto rejected=original,rejectedPs=originalPs;
+            const auto failure=ApplyDrawJitter(draw.vs,0x0123456789abcdefull,0,true,true,
+                &anchor,21,extent,rejected.data(),rejectedPs.data());
+            Check(!failure.applied && failure.rejection==JitterRejection::UnknownShader &&
+                rejected==original && rejectedPs==originalPs,
+                "unknown light PS rejects without changing either constant bank");
+        }
         std::array<Float4,3> locals{};
         const double placement[3][3]{{-.6,-.4,8},{.1,.3,40},{.7,-.2,300}};
         for (unsigned i=0;i<3;++i)
@@ -1890,20 +1898,20 @@ static void CapturedIssue212Light()
                 const SceneAnchor anchor{vp,extent,21};
                 auto depth=originalDepth,layer=original,ps=originalPs,depthPs=originalPs;
                 Check(ApplyDrawJitter(draw.depthVs,0,phase,true,true,&anchor,21,extent,
-                    depth.data(),depthPs.data()).applied,"#212 4053 floor accepts jitter");
+                    depth.data(),depthPs.data()).applied,"captured floor accepts jitter");
                 const auto result=ApplyDrawJitter(draw.vs,draw.ps,phase,true,true,&anchor,21,extent,
                     layer.data(),ps.data());
                 Check(result.applied && result.slot==7 && !result.shadowCompensated && ps==originalPs,
-                    "#212 light pass jitters slot 7 without changing PS constants");
+                    "captured light pass jitters slot 7 without changing PS constants");
                 for (unsigned i=0;i<layer.size();++i)
                     if (i<7*4 || i>=11*4 || i%4>=2)
-                        Check(layer[i]==original[i],"#212 world, light and clip ZW constants stay exact");
+                        Check(layer[i]==original[i],"captured world, light and clip ZW constants stay exact");
                 for (const auto& local:locals)
                 {
                     const auto floor=TireMaterialFf9(depth,local);
                     const auto current=E810Clip(layer,local),old=E810Clip(original,local);
-                    Check(std::isfinite(floor[3]) && floor[3]>1,"#212 synthetic point has nondegenerate clip W");
-                    Check(current[2]==old[2] && current[3]==old[3],"#212 light pass keeps clip Z and W");
+                    Check(std::isfinite(floor[3]) && floor[3]>1,"captured synthetic point has nondegenerate clip W");
+                    Check(current[2]==old[2] && current[3]==old[3],"captured light pass keeps clip Z and W");
                     const auto sample=E810Tex0(ps,current),oldSample=E810Tex0(originalPs,old);
                     for (unsigned axis=0;axis<2;++axis)
                     {
@@ -1913,8 +1921,8 @@ static void CapturedIssue212Light()
                         const double samplePixels=(double(sample[axis])-oldSample[axis])*size;
                         maxPixelError=std::max(maxPixelError,std::abs(toFloor));
                         oldSeparation=std::max(oldSeparation,std::abs(pixels));
-                        Check(std::abs(toFloor)<.003,"#212 light pass clip and its o4 copy align with the jittered floor");
-                        Check(std::abs(samplePixels-pixels)<.003,"#212 tex0 lookup follows the same screen pixel shift");
+                        Check(std::abs(toFloor)<.003,"captured light pass clip and its o4 copy align with the jittered floor");
+                        Check(std::abs(samplePixels-pixels)<.003,"captured tex0 lookup follows the same screen pixel shift");
                     }
                 }
                 for (unsigned mutation=0;mutation<2;++mutation)
@@ -1926,13 +1934,28 @@ static void CapturedIssue212Light()
                         mutation?22:21,extent,rejected.data(),rejectedPs.data());
                     Check(!failure.applied && rejected==before && rejectedPs==originalPs &&
                         failure.rejection==(mutation?JitterRejection::DepthMismatch:JitterRejection::CameraMismatch),
-                        "#212 camera or depth mismatch rejects without changing constants");
+                        "captured camera or depth mismatch rejects without changing constants");
                 }
             }
     }
-    Check(oldSeparation>.3,"#212 unmapped light pass separates from its jittered floor by a visible phase");
-    std::printf("Captured #212 light passes: %u checks, three draws, 32 phases, 626p/1440p/4K; old separation %.6f px, max floor error %.6f px\n",
-        checks-startChecks,oldSeparation,maxPixelError);
+    Check(oldSeparation>.3,"unmapped light pass separates from its jittered floor by a visible phase");
+    std::printf("Captured %s light passes: %u checks, %zu draws, 32 phases, 626p/1440p/4K; old separation %.6f px, max floor error %.6f px\n",
+        label,checks-startChecks,N,oldSeparation,maxPixelError);
+}
+// #212: e810/c44e and 9bde/d122 in the player's Old Sorceress' Mansion battle,
+// plus e810/a800 around an enemy in a local Entrance Hall battle.
+static void CapturedIssue212Light()
+{
+    Check(DrawPositionVPSlot(0x9bdef27080ca3ab4ull,0xc44ebbbc0207b5a9ull)==-1,
+        "#212 other PS partners of the light VS stay held");
+    CapturedScreenLights(issue212_light::draws,"#212");
+}
+// #604: Square of Eternity e810/2f66 and Baballoon battle 227 e810/2994.
+// Source-reviewed companions ff9/4053 share the TireMaterialFf9 chain; both
+// light PS use E810Tex0's clip-copy lookup. Only constants are captured here.
+static void CapturedIssue604Light()
+{
+    CapturedScreenLights(issue604_light::draws,"#604");
 }
 // Reviewed exact pairs with their first logged banks. Each maps to the slot the
 // runtime found the camera in, jitters only the x/y of that matrix's rows,
@@ -2389,6 +2412,7 @@ static const NamedCase namedCases[]{
     {"--captured-tour-8d66",CapturedTour8d66,true},
     {"--captured-issue203-sky",CapturedIssue203Sky,true},
     {"--captured-issue212-light",CapturedIssue212Light,true},
+    {"--captured-issue604-light",CapturedIssue604Light,true},
     {"--captured-cutscene-tour",CapturedCutsceneTour,true},
     {"--captured-issue307-boat",CapturedIssue307Boat,true},
     {"--captured-battle-depth",CapturedBattleDepthWriters,true},

@@ -10,6 +10,7 @@
 #include <cstdio>
 #if LO_PLATFORM_SWITCH
 #include <os/switch_platform.h>
+#include <os/switch_cpu_profiler.h>
 #endif
 #include "ppc_context.h"
 
@@ -37,7 +38,11 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
     // Thread blocks are large (1 MiB stack each) so they come from the guest
     // virtual page allocator rather than the host object heap.
     uint32_t guestBlock = g_pageAllocator.Alloc(g_pageAllocator.virtualRegion, TOTAL_SIZE, 0x1000);
-    assert(guestBlock != 0 && "out of guest memory for thread block");
+    if (guestBlock == 0)
+    {
+        LOG_ERROR("out of guest memory for a thread block of {} bytes", TOTAL_SIZE);
+        std::abort();
+    }
     thread = (uint8_t*)g_memory.Translate(guestBlock);
     memset(thread, 0, TOTAL_SIZE);
 
@@ -54,6 +59,17 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
 
     assert(GetPPCContext() == nullptr);
     SetPPCContext(ppcContext);
+#if LO_PLATFORM_SWITCH
+    // For the CPU profiler's guest call chains (LO_CPU_PROFILE_SAMPLES).
+    const uint32_t stackLow = g_memory.MapVirtual(thread + PCR_SIZE + TLS_SIZE + TEB_SIZE);
+#ifdef PPC_CONFIG_SKIP_LR
+    constexpr uint32_t lrOffset = UINT32_MAX;
+#else
+    constexpr uint32_t lrOffset = offsetof(PPCContext, lr);
+#endif
+    os::switch_cpu_profiler::SetCurrentThreadGuestStack(reinterpret_cast<void* const*>(&g_ppcContext),
+        offsetof(PPCContext, r1), lrOffset, g_memory.base, stackLow, stackLow + STACK_SIZE);
+#endif
 }
 
 void GuestThreadContext::SetCpuNumber(uint32_t cpuNumber)
@@ -63,6 +79,9 @@ void GuestThreadContext::SetCpuNumber(uint32_t cpuNumber)
 
 GuestThreadContext::~GuestThreadContext()
 {
+#if LO_PLATFORM_SWITCH
+    os::switch_cpu_profiler::ClearCurrentThreadGuestStack();
+#endif
     g_pageAllocator.Free(g_pageAllocator.virtualRegion, g_memory.MapVirtual(thread));
 }
 

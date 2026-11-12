@@ -13,6 +13,10 @@ namespace gpu
 {
 enum class Antialiasing : uint32_t { Off, FXAA, SMAA, TAA };
 enum class ScalingFilter : uint32_t { Bilinear, Bicubic };
+// FSR 1 at the final pass of an upscale (gpu/fsr1_shaders.h). Off keeps scalingFilter. Easu: EASU alone, one
+// pass. Fsr: EASU into an intermediate of the output's size, then RCAS (AMD's FSR 1). Rcas: RCAS at the
+// source's size, then scalingFilter's upscale.
+enum class SpatialUpscaler : uint32_t { Off, Easu, Fsr, Rcas };
 struct PresentationOptions
 {
     Antialiasing antialiasing = Antialiasing::Off;
@@ -57,6 +61,11 @@ struct PresentationOptions
     // shader as a compute pass (Vulkan, RGBA8 swap chains). The target
     // finishes in GENERAL instead of COLOR_WRITE.
     bool storageTarget = false;
+    // FSR 1 for an upscale into an SDR swap chain without a calibration view (the Switch's
+    // LO_SWITCH_UPSCALER); any other draw keeps scalingFilter. rcasStops: RCAS sharpness in stops
+    // (0 is the sharpest, each stop halves it; AMD's default is 0.2).
+    SpatialUpscaler spatialUpscaler = SpatialUpscaler::Off;
+    float rcasStops = 0.25f;
 };
 // Owned by the presentation thread. Resources stay alive until the present fence.
 class Presentation
@@ -79,6 +88,12 @@ class Presentation
     // instance pending, before targets are replaced without a size change (swap
     // chain resize or recreation).
     void ForgetTargets();
+    // Black out the margins of the presented source's centred 16:9 safe area.
+    // Call after final scene processing and before host overlays. Works after
+    // both graphics and storage/compute presentation; target ends COLOR_WRITE.
+    void DrawContentBars(plume::RenderCommandList *commands, plume::RenderTexture *target,
+                         uint32_t sourceWidth, uint32_t sourceHeight,
+                         uint32_t outputWidth, uint32_t outputHeight);
     // Process an opaque, display-encoded pre-UI scene at its actual resolution.
     // Source: sampleable RGBA8 UNORM, at least width x height (top-left crop).
     // Target: distinct, caller-owned RGBA8 UNORM render target, exactly width x
@@ -96,6 +111,15 @@ class Presentation
     bool ProcessSceneColor(plume::RenderCommandList *commands, plume::RenderTexture *source,
                            plume::RenderTexture *target, uint32_t width, uint32_t height,
                            Antialiasing antialiasing, bool hdr = false);
+    // Upscale an opaque, display-encoded SDR scene (source: sampleable, at least sourceWidth x sourceHeight,
+    // top-left crop) to width x height with upscaler: FSR 1 as in Draw, Off a bilinear filter. No output
+    // conversion. Returns this instance's own RGBA8 UNORM image of exactly width x height in SHADER_READ (source
+    // also ends SHADER_READ), valid until the next call, or nullptr when nothing was recorded. The renderer's
+    // LO_SWITCH_UI_NATIVE scene copy samples it. Same contract as ProcessSceneColor: prior commands of this
+    // instance must complete before another call, and the caller restores its own state afterwards.
+    plume::RenderTexture *UpscaleSceneColor(plume::RenderCommandList *commands, plume::RenderTexture *source,
+                                            uint32_t sourceWidth, uint32_t sourceHeight, uint32_t width,
+                                            uint32_t height, SpatialUpscaler upscaler, float rcasStops);
     // Synthesize an extended-gamma FP16 frame from the final SDR frame (any
     // upscaler, UI included) and the pre-upscale FP16 scene: per channel
     // gain = max(hdr, 1) sampled bilinearly, weighted by the pixel's own

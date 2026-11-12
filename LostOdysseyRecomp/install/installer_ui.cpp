@@ -229,7 +229,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
         if (auto* pad = SDL_OpenGamepad(gamepadIds[i]))
         {
             controllers.push_back(pad);
-            promptController.Connected(SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)), SDL_GetGamepadType(pad));
+            promptController.Connected(SDL_GetJoystickID(SDL_GetGamepadJoystick(pad)),
+                hid::prompts::FamilyOf(SDL_GetGamepadType(pad), SDL_GetGamepadVendor(pad), SDL_GetGamepadProduct(pad)));
         }
     }
     SDL_free(gamepadIds);
@@ -963,7 +964,8 @@ InstallerResult ShowInstallerUI(const std::filesystem::path& executableDirectory
                 if (!opened)
                     if (auto* pad = SDL_OpenGamepad(id)) {
                         controllers.push_back(pad);
-                        promptController.Connected(id, SDL_GetGamepadType(pad));
+                        promptController.Connected(id, hid::prompts::FamilyOf(SDL_GetGamepadType(pad), SDL_GetGamepadVendor(pad),
+                            SDL_GetGamepadProduct(pad)));
                     }
                 break;
             }

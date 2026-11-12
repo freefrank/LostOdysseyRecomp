@@ -11,6 +11,9 @@ struct MapInfo {
 // Update on the guest game thread; UI receives an owned snapshot only.
 void UpdateMapInfo(uint8_t* base);
 MapInfo GetMapInfo();
+// Same snapshot, without waiting for a UI reader. False only when contended;
+// an expired/unavailable map is a successful empty snapshot.
+bool TryGetMapInfo(MapInfo& out);
 
 // Scenes as gpu::pipeline_cache scene tags (map definition ID or battle ID).
 // Engine tick, after UpdateMapInfo: watches the loader's map and battle requests.
@@ -22,6 +25,8 @@ uint32_t CurrentSceneTag();
 // is current or the battle has started): its name and start on the steady
 // clock in ms. False when none. Any thread.
 bool CurrentLoad(std::string& what, uint64_t& startMs);
+// The same without the name: no lock, no copy. Any thread.
+bool LoadInProgress();
 // Switch-only opt-in slow-load thread dumps (LO_LOAD_PROFILE=1).
 bool LoadProfileEnabled();
 // Called on the game thread when a map or battle starts loading.

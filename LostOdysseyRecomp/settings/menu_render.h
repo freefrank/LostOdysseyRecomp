@@ -8,9 +8,23 @@
 namespace settings
 {
 namespace menu_assets { struct Assets; struct Image; }
-// Visible list slots: rows start at y=150 with height 43 and clip at y=640,
-// so (640 - 150) / 43 == 11 rows fit without scrolling.
+// Rows start at y=150 and clip at y=640. System shows 12 rows at 39 pixels;
+// other tabs and list pages use 11 at 43. Longer tabs scroll in this window.
 inline constexpr int kMenuVisibleRows = 11;
+inline constexpr int kMenuSystemVisibleRows = 12;
+inline constexpr int VisibleRowCount(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? kMenuSystemVisibleRows : kMenuVisibleRows;
+}
+inline constexpr int MenuRowHeight(int tab, bool listPage = false)
+{
+    return tab == 3 && !listPage ? 39 : 43;
+}
+// The game's prompt icons for inputs whose labels are words (stick clicks,
+// D-pad directions): MenuRow::nameIcon / valueIcon. Other button names become
+// icons by name in text (menu_render.cpp).
+inline constexpr wchar_t ButtonIconLeftThumb = 0xE11A, ButtonIconRightThumb = 0xE11B, ButtonIconDpadUp = 0xE11D,
+                         ButtonIconDpadDown = 0xE11E, ButtonIconDpadLeft = 0xE11F, ButtonIconDpadRight = 0xE120;
 struct MenuRow
 {
     std::wstring name, value;
@@ -48,16 +62,22 @@ struct MenuRow
     // starts after it. Without an image, iconGlyph is drawn on a dark square.
     std::shared_ptr<const menu_assets::Image> icon;
     std::wstring iconGlyph;
+    // With the game's prompt icons loaded, drawn in place of the name / value.
+    wchar_t nameIcon = 0, valueIcon = 0;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot
 {
     int tab = 0, row = 0;
     // First visible slot when rows overflow the list area. Publish keeps the
-    // focused row inside [scroll, scroll + kMenuVisibleRows).
+    // focused row inside [scroll, scroll + VisibleRowCount(tab, listPage)).
     int scroll = 0;
     uint32_t language = 0;
     bool playStationPrompts = false;
+    // hid::prompts::Family of the button icons, and for Switch, Steam Deck and
+    // keyboard their atlas (hid/glyph_atlases.h) in the raster's byte order.
+    int promptFamily = 0;
+    std::shared_ptr<const menu_assets::Image> promptIcons;
     // B confirms and A goes back (the game's swapped button setting).
     bool confirmB = false;
     std::vector<MenuRow> rows;
@@ -67,6 +87,9 @@ struct MenuSnapshot
     std::wstring dialogTitle, dialogMessage;
     std::vector<std::wstring> dialogChoices;
     int dialogSelection = 0;
+    // The shared confirmation over the game, without the Settings page.
+    // Output is straight alpha: a dim backdrop and the opaque dialog.
+    bool dialogOnly = false;
     uint64_t revision = 0;
     HdrCalibration calibration;
     BrightnessCalibration brightness;
@@ -85,10 +108,12 @@ struct MenuSnapshot
     // Only the panels, without title, tabs, rows or help: what the content
     // fades in over when the menu opens.
     bool backdropOnly = false;
-    // Only help, a key then its label, at the title menu's lower right as
-    // straight alpha: the Settings legend (title_entry.cpp). The raster is
-    // just TitleHintBounds of the output.
+    // Title footer as straight alpha: the free-port credit at lower left and
+    // help (a key then its label) and the optional quit shortcut at lower right
+    // (title_entry.cpp). The raster
+    // is just TitleHintBounds of the output.
     bool titleHint = false;
+    std::wstring titleQuitKey, titleQuitLabel;
 };
 // How a single line of explanatory text fits its box: scale 1 when it is drawn
 // at its normal size, below 1 when the renderer shrinks it to fit the width.
@@ -111,6 +136,11 @@ HelpFit MeasureHelp(const MenuSnapshot &snapshot);
 // The text with its isolated A/B/X/Y (and LB/RB, LT/RT) button labels swapped for
 // the PlayStation faces when playStation is set; any other text is unchanged.
 std::wstring PromptGlyphs(const std::wstring &value, bool playStation);
+// Arabic text (as a language pack names itself or its achievements) in drawing order: joined
+// presentation forms, the line reversed when it starts with an Arabic letter. Other text unchanged.
+std::wstring ArabicDrawOrder(const std::wstring &value);
+// An Arabic presentation form or tatweel: drawn touching its neighbours, without a gap.
+bool ArabicJoinedForm(wchar_t c);
 // The list cursor arrow, top-left corner in the 1280x720 layout.
 struct MenuArrow
 {
@@ -120,6 +150,9 @@ struct MenuArrow
 // Render glyphs at output resolution, fitting the existing 1280x720 logical layout.
 // With arrow set, the list arrow is left out and reported there, for presentation
 // to move it; under a prompt it stays in the raster, dimmed with the page.
+// The Switch, Steam Deck or keyboard icon atlas for menu text, or null (Xbox
+// and PlayStation use the game's atlas). Presentation thread (menu.cpp).
+std::shared_ptr<const menu_assets::Image> PromptIcons(int family);
 bool RasterizeMenu(const MenuSnapshot &snapshot, uint32_t width, uint32_t height,
                    std::vector<uint32_t> &pixels, MenuArrow *arrow = nullptr);
 struct MenuRect
@@ -127,8 +160,9 @@ struct MenuRect
     size_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 };
 // The list arrow at a layout position, and the output pixels it can cover.
-void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
-// The output pixels of the title menu's Settings legend: with titleHint,
+void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y,
+                   const menu_assets::Assets *assets = nullptr);
+// The output pixels of the title menu's credit and shortcut legends: with titleHint,
 // RasterizeMenu returns only this rectangle, row by row.
 MenuRect TitleHintBounds(uint32_t width, uint32_t height);
 MenuRect MenuArrowBounds(uint32_t width, uint32_t height, int x, int y);
@@ -174,7 +208,7 @@ struct MenuCascade
     size_t split = 0;
     std::vector<std::pair<size_t, size_t>> bands;
 };
-MenuCascade MenuOpenCascade(uint32_t width, uint32_t height);
+MenuCascade MenuOpenCascade(uint32_t width, uint32_t height, int tab = 0, bool listPage = false);
 
 class MenuTransition
 {

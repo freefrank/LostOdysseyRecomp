@@ -54,6 +54,23 @@ int main()
         os::user_paths::Initialize(root / "portable");
         Check(os::user_paths::SettingsPath() == "settings.ini", "portable settings must retain working-directory contract");
         Check(!fs::exists(os::user_paths::SettingsPath()), "missing portable settings trigger initial setup");
+        Check(updater::StartupPreferences{}.debugLog &&
+              updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog,
+              "startup diagnostic log defaults on without a settings file");
+        for (const auto* contents : {"", "debug_log=0\n", "debug_log=1\n", "diagnostic_log=2\n",
+                                     "diagnostic_log=-1\n", "diagnostic_log=invalid\n"})
+        {
+            WriteSettings(root / "launch/settings.ini", contents);
+            Check(updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog,
+                  "startup ignores legacy and invalid diagnostic values");
+        }
+        for (const bool enabled : {false, true})
+        {
+            WriteSettings(root / "launch/settings.ini", enabled
+                ? "diagnostic_log=1\ndebug_log=0\n" : "diagnostic_log=0\ndebug_log=1\n");
+            Check(updater::ReadStartupPreferences(os::user_paths::SettingsPath()).debugLog == enabled,
+                  "startup diagnostic_log respects opt-out and overrides the legacy key");
+        }
         WriteSettings(root / "launch/settings.ini", "automatic_updates=0\nui_language=2\n");
         Check(fs::exists(os::user_paths::SettingsPath()), "saved portable settings bypass initial setup");
         auto preferences = updater::ReadStartupPreferences(os::user_paths::SettingsPath());

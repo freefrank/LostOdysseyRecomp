@@ -2,6 +2,7 @@
 #include "text_raster.h"
 #include <host_ui/unifont.h>
 #include <settings/menu_assets.h>
+#include <settings/menu_render.h>
 
 #include <algorithm>
 #include <cmath>
@@ -10,17 +11,21 @@ namespace ui::text_raster {
 namespace {
 namespace menu_assets = settings::menu_assets;
 
+// The text's characters in drawing order: Arabic (from a language pack) joined and right to left.
 std::u32string Codepoints(const std::string& text) {
     std::u32string out;
     for (size_t at = 0; at < text.size();)
         if (const uint32_t cp = host_ui::font::DecodeUtf8(text, at)) out += char32_t(cp);
-    return out;
+    if (std::any_of(out.begin(), out.end(), [](char32_t c) { return c > 0xFFFF; })) return out;
+    const std::wstring ordered = settings::ArabicDrawOrder(std::wstring(out.begin(), out.end()));
+    return std::u32string(ordered.begin(), ordered.end());
 }
 }
 
 uint32_t UiLanguageFor(uint32_t game) {
     switch (game) {
     case 2: return 2; // Japanese
+    case 5: return 5; // Spanish: the disc's accented menu fonts
     case 7: return 3; // Korean
     case 8: return 1; // Traditional Chinese
     case 9: return 4; // Simplified Chinese
@@ -49,24 +54,26 @@ Raster DrawText(const menu_assets::Assets* assets, const std::string& utf8, doub
         for (const char32_t c : text) {
             if (c == U' ') { left += font->height * 0.3 * ratio; continue; }
             const auto& g = font->glyphs.at(uint32_t(c));
-            const auto& page = font->pages[g.page];
+            const auto& page = menu_assets::GlyphPage(*font, g, ratio);
+            // An HD page has `scale` pixels per glyph texel.
+            const uint32_t s = page.scale, gx = g.x * s, gy = g.y * s, gw = g.width * s, gh = g.height * s;
             const double w = g.width * ratio, h = g.height * ratio;
             const int x0 = std::max(0, int(left)), x1 = std::min(int(out.width), int(std::ceil(left + w)));
             const int y1 = std::min(int(out.height), int(std::ceil(1 + h)));
             for (int py = 1; py < y1; ++py)
                 for (int px = x0; px < x1; ++px) {
-                    const double u = std::clamp((px + .5 - left) * g.width / w - .5, 0.0, double(g.width - 1));
-                    const double v = std::clamp((py + .5 - 1) * g.height / h - .5, 0.0, double(g.height - 1));
-                    const int ux = int(u), vy = int(v), ux1 = std::min<int>(ux + 1, g.width - 1), vy1 = std::min<int>(vy + 1, g.height - 1);
+                    const double u = std::clamp((px + .5 - left) * gw / w - .5, 0.0, double(gw - 1));
+                    const double v = std::clamp((py + .5 - 1) * gh / h - .5, 0.0, double(gh - 1));
+                    const int ux = int(u), vy = int(v), ux1 = std::min<int>(ux + 1, gw - 1), vy1 = std::min<int>(vy + 1, gh - 1);
                     const double fx = u - ux, fy = v - vy;
-                    const uint32_t s[] = {page.pixels[size_t(g.y + vy) * page.width + g.x + ux], page.pixels[size_t(g.y + vy) * page.width + g.x + ux1],
-                                          page.pixels[size_t(g.y + vy1) * page.width + g.x + ux], page.pixels[size_t(g.y + vy1) * page.width + g.x + ux1]};
+                    const uint32_t samples[] = {page.pixels[size_t(gy + vy) * page.width + gx + ux], page.pixels[size_t(gy + vy) * page.width + gx + ux1],
+                                                page.pixels[size_t(gy + vy1) * page.width + gx + ux], page.pixels[size_t(gy + vy1) * page.width + gx + ux1]};
                     const double wt[] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
                     const size_t at = size_t(py) * out.width + px;
                     for (int i = 0; i < 4; ++i) {
-                        const double a = ((s[i] >> 24) & 255) * wt[i];
+                        const double a = ((samples[i] >> 24) & 255) * wt[i];
                         // The page's grey level blends the dark edge into the face colour.
-                        const double level = ((s[i] >> 16) & 255) / 255.0;
+                        const double level = ((samples[i] >> 16) & 255) / 255.0;
                         alpha[at] += a;
                         for (int k = 0; k < 3; ++k) {
                             const double ink = double((face >> (8 * k)) & 255);
@@ -89,7 +96,9 @@ Raster DrawText(const menu_assets::Assets* assets, const std::string& utf8, doub
     // Unifont: 16 px bitmaps scaled to the height, with a one-pixel dark shadow.
     const double scale = height / 16.0;
     double advance = 0;
-    for (const char32_t c : text) advance += (host_ui::font::GetGlyph(uint32_t(c)).width + 1) * scale;
+    // Joined Arabic forms touch; other glyphs keep a one-pixel gap.
+    const auto step = [](char32_t c) { return host_ui::font::GetGlyph(uint32_t(c)).width + (settings::ArabicJoinedForm(wchar_t(c)) ? 0 : 1); };
+    for (const char32_t c : text) advance += step(c) * scale;
     out.advance = advance;
     out.width = uint32_t(std::ceil(advance)) + 2;
     out.height = uint32_t(std::ceil(height)) + 2;
@@ -107,7 +116,7 @@ Raster DrawText(const menu_assets::Assets* assets, const std::string& utf8, doub
                     const uint16_t row = g.width == 8 ? uint16_t(g.bitmap[gy]) << 8 : uint16_t(g.bitmap[gy * 2] << 8 | g.bitmap[gy * 2 + 1]);
                     if (row & (0x8000 >> gx)) out.pixels[size_t(py + shift) * out.width + px + shift] = ink;
                 }
-            left += (g.width + 1) * scale;
+            left += step(c) * scale;
         }
     }
     return out;

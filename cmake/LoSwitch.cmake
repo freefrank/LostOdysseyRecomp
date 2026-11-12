@@ -32,10 +32,29 @@ if(NOT LO_SWITCH_CHECK_ONLY)
     message(STATUS "LostOdysseyRecomp: NVK ${LO_SWITCH_NVK_LIBRARY} (+ ${LO_SWITCH_NVK_EXTRA_LIBS})")
 endif()
 
+# Switch releases (LostOdysseyNX, tags vX.Y.Z_NX) are numbered apart from the PC
+# project version (project() in CMakeLists.txt, which follows upstream). It is
+# the NRO version below and the source version in the logs and crash.log.
+set(LO_SWITCH_RELEASE_VERSION "1.2.0")
+set(LO_SOURCE_VERSION "${LO_SWITCH_RELEASE_VERSION}")
+if(LO_VERSION_SUFFIX)
+    string(APPEND LO_SOURCE_VERSION "-${LO_VERSION_SUFFIX}")
+endif()
+
 # NRO metadata shown in the Homebrew Menu.
 set(LO_SWITCH_APP_TITLE "Lost Odyssey Recomp" CACHE STRING "NRO title")
 set(LO_SWITCH_APP_AUTHOR "LostOdysseyRecomp contributors" CACHE STRING "NRO author")
-set(LO_SWITCH_APP_VERSION "${LO_SOURCE_VERSION}" CACHE STRING "NRO version")
+# The NRO version follows the project version (CMakeLists.txt project()) on
+# every configure. It used to be a cache entry, which kept the value of the
+# first configure (0.9.0) after main moved on. LO_SWITCH_APP_VERSION_OVERRIDE
+# replaces it when set.
+set(LO_SWITCH_APP_VERSION_OVERRIDE "" CACHE STRING "NRO version (empty: the project version)")
+unset(LO_SWITCH_APP_VERSION CACHE)
+if(LO_SWITCH_APP_VERSION_OVERRIDE)
+    set(LO_SWITCH_APP_VERSION "${LO_SWITCH_APP_VERSION_OVERRIDE}")
+else()
+    set(LO_SWITCH_APP_VERSION "${LO_SOURCE_VERSION}")
+endif()
 set(LO_SWITCH_APP_ICON "${CMAKE_SOURCE_DIR}/packaging/switch/icon.jpg" CACHE FILEPATH "256x256 JPEG NRO icon")
 
 # Game data and user files on the SD card. The game folder holds disc1..disc4
@@ -50,12 +69,21 @@ set(LO_SWITCH_DXC_IDENTITY "dxc-1.8" CACHE STRING "DXC identity of PC-made Vulka
 
 # Code generation options (same experiments as UnleashedRecomp-NX).
 option(LO_SWITCH_RECOMP_O2 "Compile the recompiled game code with -O2 instead of -O3" OFF)
+option(LO_SWITCH_FP_CONTRACT_OFF "Compile the recompiled game code with -ffp-contract=on instead of fast (A/B tests, #4)" OFF)
+# Diagnostics build (os/switch/heap_census.cpp): newlib's allocator goes through the census wrappers, which
+# LO_HEAP_CENSUS=1 in env.txt starts. Off: the default build has neither the wrappers nor the census code.
+option(LO_SWITCH_HEAP_CENSUS "Link the heap census (allocation counts by size and call site, LO_HEAP_CENSUS)" OFF)
 option(LO_SWITCH_LTO "Link-time optimisation (needs a lot of RAM on the build machine)" OFF)
 set(LO_SWITCH_LTO_JOBS "2" CACHE STRING "Parallel LTRANS jobs for the LTO link")
 if(LO_SWITCH_LTO)
     add_compile_options(-flto -fno-fat-lto-objects)
     add_link_options(-flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
 endif()
+# Link-time optimisation of the per-draw code only (LostOdysseyRecomp/CMakeLists.txt): the renderer, the command
+# processor and plume-deko3d, whose calls into each other are the GPU CmdProc thread's draw path.
+option(LO_SWITCH_LTO_GPU "Link-time optimisation of the renderer, command processor and plume-deko3d" OFF)
+
+include(cmake/LoSwitchPgo.cmake)
 
 # Development check build (tools/switch/check-toolchain.cmake): compiles with a
 # stock aarch64 Linux GCC and the libnx headers, links nothing.

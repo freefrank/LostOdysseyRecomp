@@ -24,6 +24,7 @@ if defined LO_XESS_SDK_ROOT set LO_EXTRA_CMAKE_ARGS=%LO_EXTRA_CMAKE_ARGS% "-DLO_
 rem The build then checks the pack against this runtime and the private image before staging it.
 if defined LO_PORTABLE_SHADER_PACK set LO_EXTRA_CMAKE_ARGS=%LO_EXTRA_CMAKE_ARGS% "-DLO_PORTABLE_SHADER_PACK=%LO_PORTABLE_SHADER_PACK%"
 git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-lostodyssey.patch >nul 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-lostodyssey.patch || exit /b 1
+git -C tools/XenonRecomp apply --reverse --check ../patches/XenonRecomp-nonargument-locals.patch >nul 2>&1 || git -C tools/XenonRecomp apply ../patches/XenonRecomp-nonargument-locals.patch || exit /b 1
 git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-lostodyssey.patch >nul 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-lostodyssey.patch || exit /b 1
 git -C thirdparty/plume apply --reverse --check ../../tools/patches/plume-sdl3.patch >nul 2>&1 || git -C thirdparty/plume apply ../../tools/patches/plume-sdl3.patch || exit /b 1
 cmake -S . -B out/build/release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl %LO_EXTRA_CMAKE_ARGS% || exit /b 1

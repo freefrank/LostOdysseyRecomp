@@ -89,7 +89,8 @@ namespace gpu
         // interrupts, swaps, memory waits, resolve readback. A guest write to
         // memory the GPU already read is only ordered against later draws across
         // such a point. Occlusion queries are not one: the guest polls their
-        // records but never makes the command stream wait for them.
+        // records but never makes the command stream wait for them. Nor is a
+        // MEM_WRITE the GPU at once waits on itself (SelfWaitsEnabled).
         uint64_t SyncEpoch() const { return m_syncEpoch.load(std::memory_order_relaxed); }
         // What ended each sync period; counted only with LO_RENDER_TIMING.
         enum class SyncSource : uint32_t {
@@ -187,6 +188,7 @@ namespace gpu
             uint32_t x = 0, y = 0, width = 0, height = 0, session = 0, timeLow = 0, timeHigh = 0;
         } m_movieReplace;
         gpu::frame_plan::wire::PlanStage m_framePlan;
+        bool m_cinematicBars = false; // Last fully committed plan, not the staged packet.
         gpu::frame_plan::wire::CatalogStage m_catalog;
         uint32_t m_primaryBufferPhysical = 0;
         uint32_t m_primaryBufferSize = 0;
@@ -195,6 +197,10 @@ namespace gpu
         std::atomic<uint32_t> m_writePtrIndex{ 0xBAADF00D };
         std::mutex m_writePtrMutex;
         std::condition_variable m_writePtrChanged;
+        // Threads asleep on m_writePtrChanged / m_waitProgress, counted under each
+        // one's mutex: on the Switch the per-WPTR and per-interrupt notifies skip
+        // the kernel call it makes for every notify when nobody waits (#14).
+        std::atomic<uint32_t> m_writePtrWaiters{ 0 };
         std::atomic<bool> m_wake{ false }; // Wake(): end the current idle or WAIT_REG_MEM wait early
         std::atomic<uint32_t> m_counter{ 0 };
         // The command thread updates these on every constant run and sync point.
@@ -208,6 +214,11 @@ namespace gpu
         std::atomic<uint64_t> m_syncEpoch{1};
         alignas(64) std::atomic<bool> m_running{ false };
         bool m_countSyncSources = false;
+        // One-word MEM_WRITEs whose sync point waits for the packets after them (SelfWaitsEnabled in
+        // command_processor.cpp): a WAIT_REG_MEM for the value one wrote, matched at once, makes the pair no sync point.
+        static constexpr uint32_t kPendingMemWrites = 4;
+        uint32_t m_pendingMemWrites = 0;
+        uint32_t m_pendingMemWriteAddress[kPendingMemWrites]{}, m_pendingMemWriteValue[kPendingMemWrites]{};
         std::atomic<uint64_t> m_syncSources[uint32_t(SyncSource::Count)]{};
 
         IndirectBufferGuard m_indirectGuard;
@@ -219,6 +230,7 @@ namespace gpu
         std::atomic<uint64_t> m_interruptsCompleted{ 0 };
         std::mutex m_waitProgressMutex;
         std::condition_variable m_waitProgress;
+        std::atomic<uint32_t> m_waitProgressWaiters{ 0 };
         std::vector<std::pair<uint32_t, uint32_t>> m_pendingInterrupts; // (source, cpu)
         uint64_t m_binMask = 0xFFFFFFFFFFFFFFFFull;
         uint64_t m_binSelect = 0xFFFFFFFFFFFFFFFFull;

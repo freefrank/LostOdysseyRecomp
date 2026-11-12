@@ -1,20 +1,125 @@
 #include <settings/menu_render.h>
 #include <settings/menu.h>
 #include <settings/menu_assets.h>
+#include <settings/translations.h>
+#include <host_ui/rasterizer.h>
 #include <hid/controller_glyphs.h>
 #include <lzokay.hpp>
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <filesystem>
 #include <cstdlib>
 #include <memory>
 static void Require(bool ok, const char *message) { if (!ok) { std::fprintf(stderr, "%s\n", message); std::exit(1); } }
+static std::vector<std::pair<std::wstring, bool>> *capturedText = nullptr;
 void LoMenuRenderTrace(const std::wstring &value, bool original)
 {
+    if (capturedText)
+    {
+        capturedText->emplace_back(value, original);
+        return;
+    }
     std::printf("font=%s text=", original ? "original" : "fallback");
     for (const auto c : value) std::printf("%04x ", unsigned(c));
     std::putchar('\n');
+}
+static void TestTitleShortcuts(const char *output, const char *gameRoot)
+{
+    const wchar_t *quitLabels[] = {L"Quit game", L"退出遊戲", L"ゲームを終了", L"게임 종료", L"退出游戏"};
+    const wchar_t *quitQuestions[] = {L"Quit the game?", L"退出遊戲嗎？", L"ゲームを終了しますか？", L"게임을 종료할까요?", L"退出游戏吗？"};
+    const wchar_t *settingsLabels[] = {L"Y: Settings", L"Y：設定", L"Y：設定", L"Y: 설정", L"Y：设置"};
+    std::vector<std::pair<std::wstring, bool>> trace;
+    capturedText = &trace;
+    for (uint32_t language = 0; language < 5; ++language)
+    {
+        settings::MenuSnapshot hint;
+        hint.titleHint = true;
+        hint.language = language;
+        hint.titleQuitLabel = settings::Translate(language, L"Quit game", L"退出遊戲");
+        Require(hint.titleQuitLabel == quitLabels[language], "quit legend translation mismatch");
+        Require(std::wstring(settings::Translate(language, L"Quit the game?", L"退出遊戲嗎？")) == quitQuestions[language],
+                "quit confirmation translation mismatch");
+        const std::wstring settingsLabel = settings::Translate(language, L"Y: Settings", L"Y：設定");
+        Require(settingsLabel == settingsLabels[language], "existing Settings legend translation changed");
+        if (gameRoot)
+        {
+            hint.assets = settings::menu_assets::Cached(gameRoot, language);
+            Require(bool(hint.assets), "title legend native font assets did not load");
+        }
+        for (int prompts = 0; prompts < 3; ++prompts)
+        {
+            hint.playStationPrompts = prompts == 1;
+            hint.help = settingsLabel;
+            if (prompts == 2) hint.help[0] = L'S';
+            for (const auto [w, h] : {std::pair{1024u, 768u}, {1280u, 720u}, {2560u, 1080u}})
+            {
+                std::vector<uint32_t> baseline, pixels;
+                hint.titleQuitKey.clear();
+                Require(settings::RasterizeMenu(hint, w, h, baseline), "Settings-only title raster failed");
+                hint.titleQuitKey = prompts == 2 ? L"Backspace" : L"Back";
+                trace.clear();
+                Require(settings::RasterizeMenu(hint, w, h, pixels), "two-shortcut title raster failed");
+                const auto bounds = settings::TitleHintBounds(w, h);
+                const size_t rw = bounds.x1 - bounds.x0, rh = bounds.y1 - bounds.y0;
+                Require(pixels.size() == rw * rh && pixels.size() == baseline.size(), "title legend bounds do not match raster");
+                const double scale = std::min(w / 1280.0, h / 720.0);
+                const double ox = (w - 1280 * scale) / 2, oy = (h - 720 * scale) / 2;
+                const int footerOffset = int(std::floor(oy / scale));
+                const auto rect = [&](int x, int y, int width, int height) {
+                    return std::array<int, 4>{int(std::lround(ox + x * scale)) - int(bounds.x0),
+                                              int(std::lround(oy + (y + footerOffset) * scale)) - int(bounds.y0),
+                                              int(std::lround(ox + (x + width) * scale)) - int(bounds.x0),
+                                              int(std::lround(oy + (y + height + footerOffset) * scale)) - int(bounds.y0)};
+                };
+                const auto settingsBox = rect(1034, 644, 184, 32), quitBox = rect(932, 674, 286, 32);
+                size_t settingsInk = 0, quitInk = 0, newInk = 0;
+                for (size_t y = 0; y < rh; ++y)
+                    for (size_t x = 0; x < rw; ++x)
+                    {
+                        const size_t i = y * rw + x;
+                        const auto inside = [&](const std::array<int, 4> &r) {
+                            return int(x) >= r[0] && int(x) < r[2] && int(y) >= r[1] && int(y) < r[3];
+                        };
+                        if (inside(settingsBox)) settingsInk += (pixels[i] >> 24) > 0;
+                        if (inside(quitBox)) quitInk += (pixels[i] >> 24) > 0;
+                        if (pixels[i] != baseline[i])
+                        {
+                            ++newInk;
+                            Require(inside(quitBox), "quit legend changed the credit or Settings row");
+                        }
+                        if (!x || !y || x + 1 == rw || y + 1 == rh)
+                            Require((pixels[i] >> 24) == 0, "title legend clips against its raster bounds");
+                    }
+                Require(settingsInk > 20 && quitInk > 20 && newInk > 20, "title legend is missing a shortcut");
+                const std::wstring label = L": " + hint.titleQuitLabel;
+                Require(std::any_of(trace.begin(), trace.end(), [&](const auto &t) { return t.first == label; }),
+                        "translated quit label was not drawn separately from the key");
+                if (gameRoot)
+                    Require(std::any_of(trace.begin(), trace.end(), [&](const auto &t) { return t.first == label && t.second; }),
+                            "title quit label lost the native menu font");
+                const bool backText = std::any_of(trace.begin(), trace.end(), [](const auto &t) { return t.first == L"Back"; });
+                Require(backText == (prompts == 0), "PlayStation Back did not use its Share/Create glyph");
+                if (output && w == 1280)
+                {
+                    std::filesystem::create_directories(output);
+                    std::ofstream image(std::filesystem::path(output) /
+                        ("title-shortcuts-" + std::to_string(language) + "-" + std::to_string(prompts) + ".ppm"), std::ios::binary);
+                    image << "P6\n" << rw << " " << rh << "\n255\n";
+                    for (const auto p : pixels)
+                    {
+                        const uint32_t composed = host_ui::ColorBlend(0xff504030, p);
+                        const char rgb[] = {char(composed), char(composed >> 8), char(composed >> 16)};
+                        image.write(rgb, 3);
+                    }
+                }
+            }
+        }
+    }
+    capturedText = nullptr;
+    std::puts("title shortcuts: all five languages, Xbox/PlayStation/keyboard and 4:3/16:9/ultrawide passed");
 }
 int main(int argc, char **argv)
 {
@@ -316,6 +421,75 @@ int main(int argc, char **argv)
     }
     std::puts("restart dialog: restart now/later/cancel surface passed");
 
+    // Title quit uses this exact prompt, over the game instead of a Settings
+    // page. The dim covers the whole output, including aspect-fit margins.
+    {
+        settings::MenuSnapshot quit = snapshot;
+        quit.dialogTitle = L"Quit game";
+        quit.dialogMessage = L"Quit the game?";
+        quit.dialogChoices = {L"Yes", L"No"};
+        quit.dialogSelection = 1;
+        for (const auto [w, h] : {std::pair{1024u, 768u}, {1280u, 720u}, {2560u, 1080u}})
+        {
+            std::vector<uint32_t> regular, standalone, clean;
+            quit.dialogOnly = false;
+            Require(settings::RasterizeMenu(quit, w, h, regular), "Settings confirmation raster failed");
+            quit.dialogOnly = true;
+            settings::MenuArrow arrow;
+            arrow.visible = true;
+            Require(settings::RasterizeMenu(quit, w, h, standalone, &arrow) && !arrow.visible,
+                    "standalone confirmation exposed a menu arrow layer");
+            Require(standalone.size() == size_t(w) * h && standalone.front() == 0x3d000000u && standalone.back() == 0x3d000000u,
+                    "standalone confirmation does not dim the full output with straight alpha");
+            // The raster is an overlay, never the replacement frame. Different
+            // live title pixels must remain different after the same dim.
+            const uint32_t brightTitle = host_ui::PackRgba(240, 180, 120, 255);
+            const uint32_t darkTitle = host_ui::PackRgba(80, 40, 20, 255);
+            const uint32_t brightDim = host_ui::ColorBlend(brightTitle, standalone.front());
+            const uint32_t darkDim = host_ui::ColorBlend(darkTitle, standalone.front());
+            Require(brightDim != darkDim && (brightDim & 255) > 170 && (brightDim & 255) < 190 &&
+                    (darkDim & 255) > 50 && (brightDim >> 24) == 255,
+                    "title dim replaced or obscured the live straight-alpha background");
+            const double scale = std::min(w / 1280.0, h / 720.0);
+            const double ox = (w - 1280 * scale) / 2, oy = (h - 720 * scale) / 2;
+            // The native panel atlas has translucent texels: over Settings
+            // and over the game's dim layer its panel RGB legitimately differs.
+            // The selected No cell is drawn with an opaque atlas copy, so its
+            // entire surface, label and focus must match in both presentations.
+            // The procedural fallback panel is opaque throughout.
+            const bool nativePanel = quit.assets && !quit.assets->menu.pixels.empty();
+            const int left = nativePanel ? 392 : 282, right = nativePanel ? 888 : 997;
+            const int top = nativePanel ? 405 : 210, bottom = nativePanel ? 437 : 511;
+            for (int y = int(std::ceil(oy + top * scale)); y < int(std::floor(oy + bottom * scale)); ++y)
+                for (int x = int(std::ceil(ox + left * scale)); x < int(std::floor(ox + right * scale)); ++x)
+                    Require(standalone[size_t(y) * w + x] == regular[size_t(y) * w + x],
+                            "standalone confirmation differs from the shared opaque dialog surface");
+            auto withoutPage = quit;
+            withoutPage.rows.clear();
+            withoutPage.help.clear();
+            withoutPage.notice.clear();
+            withoutPage.tab = 3;
+            Require(settings::RasterizeMenu(withoutPage, w, h, clean) && clean == standalone,
+                    "Settings page content leaked into the standalone confirmation");
+            quit.dialogSelection = 0;
+            Require(settings::RasterizeMenu(quit, w, h, clean) && clean != standalone,
+                    "standalone confirmation selection did not change");
+            quit.dialogSelection = 1;
+            if (argc > 1 && w == 1280)
+            {
+                std::ofstream image(std::filesystem::path(argv[1]) / "title-quit-confirmation.ppm", std::ios::binary);
+                image << "P6\n" << w << " " << h << "\n255\n";
+                for (const auto p : standalone)
+                {
+                    const uint32_t composed = host_ui::ColorBlend(0xff504030, p);
+                    const char rgb[] = {char(composed), char(composed >> 8), char(composed >> 16)};
+                    image.write(rgb, 3);
+                }
+            }
+        }
+        std::puts("title quit confirmation: shared dialog, Yes/No selection and full-output straight alpha passed");
+    }
+
     snapshot.tab = 3;
     snapshot.row = 0;
     snapshot.dialogTitle.clear();
@@ -325,6 +499,7 @@ int main(int argc, char **argv)
         {L"設定界面語言", L"한국어", true, {L"English", L"繁體中文", L"日本語", L"한국어", L"简体中文"}, 3},
         {L"遊戲語言", L"한국어", true, {L"English", L"日本語", L"한국어", L"繁體中文", L"简体中文"}, 2},
         {L"自動更新", L"開", true, {L"開", L"關"}, 0},
+        {L"Discord 狀態", L"開", true, {L"開", L"關"}, 0},
         {L"儲存設定", L"儲存", true, {L"儲存"}, 0}};
     snapshot.help = L"設定界面語言立即生效。";
     Require(settings::RasterizeMenu(snapshot, 1280, 720, pixels), "language tab rasterization failed");
@@ -632,6 +807,35 @@ int main(int argc, char **argv)
         std::puts("DLSS 5 neural rendering page: transparent preview, no-scene panel, opaque controls in en/zh-Hant/zh-Hans");
     }
 
+    // System alone uses compact rows and scrolls its last action into view,
+    // while Graphics and list pages retain their established viewport.
+    {
+        Require(settings::VisibleRowCount(3) == 12 && settings::MenuRowHeight(3) == 39 &&
+                settings::VisibleRowCount(2) == 11 && settings::MenuRowHeight(2) == 43 &&
+                settings::VisibleRowCount(3, true) == 11 && settings::MenuRowHeight(3, true) == 43,
+                "only the System tab uses compact rows");
+        settings::MenuSnapshot system;
+        system.tab = 3;
+        system.row = settings::SystemSaveRow;
+        system.scroll = settings::SystemRowCount - settings::VisibleRowCount(3);
+        for (int i = 0; i < settings::SystemRowCount; ++i)
+            system.rows.push_back({L"Option " + std::to_wstring(i), L"On", true, {L"On", L"Off"}, 0});
+        settings::MenuArrow lastArrow;
+        Require(settings::RasterizeMenu(system, 1280, 720, pixels, &lastArrow) && lastArrow.visible &&
+                lastArrow.y == 150 + (settings::SystemSaveRow - system.scroll) * 39 + 10,
+                "System renders its last row after scrolling");
+        const auto systemCascade = settings::MenuOpenCascade(1280, 720, 3);
+        Require(systemCascade.bands.size() == 12 && systemCascade.bands.back().second == 618 &&
+                settings::MenuOpenCascade(1280, 720, 2).bands.size() == 11 &&
+                settings::MenuOpenCascade(1280, 720, 3, true).bands.size() == 11,
+                "System opening cascade follows the compact row positions");
+        if (argc > 1) {
+            std::ofstream f(std::filesystem::path(argv[1]) / "system-compact.ppm", std::ios::binary);
+            f << "P6\n1280 720\n255\n";
+            for (auto p : pixels) { const char rgb[] = {char(p), char(p >> 8), char(p >> 16)}; f.write(rgb, 3); }
+        }
+        std::puts("System compact rows: twelfth action, list-page isolation and opening cascade passed");
+    }
     // Synthetic overflowing menu (>11 visible rows) to verify scroll clipping, hidden rows and overflow indicators.
     {
         // Reference snapshot: exactly 11 rows (the visible window), representing Option 3 through Option 13.
@@ -690,5 +894,6 @@ int main(int argc, char **argv)
 
         std::puts("Synthetic overflow (>11 rows) pixel comparison and overflow indicators passed");
     }
+    TestTitleShortcuts(argc > 1 ? argv[1] : nullptr, argc > 2 ? argv[2] : nullptr);
     return 0;
 }

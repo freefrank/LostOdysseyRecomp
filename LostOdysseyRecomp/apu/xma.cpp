@@ -4,6 +4,7 @@
 #include "xma_loop.h"
 #include "xma_decode_reporting.h"
 #include <kernel/memory.h>
+#include <kernel/guest_address_space.h>
 #include <os/logger.h>
 #include <os/thread_name.h>
 #include <cmath>
@@ -182,6 +183,18 @@ namespace apu::xma
 
         uint32_t g_arrayGuest = 0;                  // virtual address of the context array
         Context g_contexts[kContextCount];
+        // Contexts kicked since the worker last looked, one bit each. The worker scans these ten words instead of
+        // the 320 contexts' flags, which sit on 320 different pages (a context is over 6 KB): that scan, every 2 ms,
+        // was a third of the decoder thread's time in the busy street.
+        std::atomic<uint32_t> g_kicked[kContextCount / 32]{};
+        static_assert(kContextCount % 32 == 0);
+
+        // LO_XMA_ERROR_CAPTURE_DIR, read once (getenv scans the whole environment under newlib's lock).
+        const char* ErrorCaptureDir()
+        {
+            static const char* const directory = getenv("LO_XMA_ERROR_CAPTURE_DIR");
+            return directory;
+        }
         std::mutex g_mutex;
         std::thread g_worker;
         std::atomic<bool> g_running{ false };
@@ -204,6 +217,37 @@ namespace apu::xma
         uint8_t* Physical(uint32_t physicalAddress)
         {
             return static_cast<uint8_t*>(g_memory.Translate(0xA0000000u + (physicalAddress & 0x1FFFFFFF)));
+        }
+
+        // Physical() for a range the decoder is about to touch. On the Switch,
+        // guest memory is only backed where the game allocated it; a context
+        // can still point at a buffer in a chunk that was never allocated
+        // (seen entering Uhra). The PC maps the whole space, so such reads
+        // return zeros there; back the chunk the same way instead of faulting.
+        // Returns nullptr if the range cannot be backed.
+        uint8_t* PhysicalBacked(uint32_t physicalAddress, uint32_t size)
+        {
+#if LO_PLATFORM_SWITCH
+            using GuestAddressSpace::Backing;
+            const uint32_t address = 0xA0000000u + (physicalAddress & 0x1FFFFFFF);
+            const Backing backing = GuestAddressSpace::EnsureBacked(address, size);
+            if (backing == Backing::Repaired)
+                GuestAddressSpace::LogRepair("xma");
+            else if (backing != Backing::AlreadyBacked)
+            {
+                static std::atomic<unsigned> reports{0};
+                if (reports.fetch_add(1, std::memory_order_relaxed) < 8)
+                    LOG_WARNING("guest memory: xma buffer {:#x} (+{:#x}) is in unallocated memory: {}", address, size,
+                        backing == Backing::Failed ? "cannot back it, skipping" : "backed it");
+                if (backing == Backing::Failed)
+                {
+                    if (GuestAddressSpace::LastRepair().count != 0)
+                        GuestAddressSpace::LogRepair("xma (failed repair)");
+                    return nullptr;
+                }
+            }
+#endif
+            return Physical(physicalAddress);
         }
 
         // Output ring bookkeeping with Xenia's RingBuffer conventions:
@@ -324,7 +368,14 @@ namespace apu::xma
                     data.setInputReadOffset((packetIndex + skip) * kBitsPerPacket);
                     continue;
                 }
-                const auto* packet = Physical(data.currentBuffer() ? data.input1Ptr() : data.input0Ptr()) + packetIndex * kBytesPerPacket;
+                const uint32_t packetAddress = (data.currentBuffer() ? data.input1Ptr() : data.input0Ptr()) + packetIndex * kBytesPerPacket;
+                const auto* packet = PhysicalBacked(packetAddress, kBytesPerPacket);
+                if (!packet)
+                {
+                    if (data.currentBuffer()) data.setInput1Valid(false);
+                    else data.setInput0Valid(false);
+                    return;
+                }
                 uint32_t offset = data.inputReadOffset() % kBitsPerPacket;
                 if (offset < kBitsPerPacketHeader)
                 {
@@ -410,7 +461,7 @@ namespace apu::xma
                     {
                         // Exact decoder input, not a later guest-buffer snapshot.
                         // Opt-in and bounded; these private samples stay local.
-                        if (const char* directory = getenv("LO_XMA_ERROR_CAPTURE_DIR"))
+                        if (const char* directory = ErrorCaptureDir())
                         {
                             std::error_code error;
                             std::filesystem::create_directories(directory, error);
@@ -506,7 +557,7 @@ namespace apu::xma
             const ContextData original = data;
             if (g_audioDiagnostics && ctx.diagnosticStart == std::chrono::steady_clock::time_point{})
                 ctx.diagnosticStart = ctx.diagnosticReport = std::chrono::steady_clock::now();
-            if (getenv("LO_XMA_ERROR_CAPTURE_DIR"))
+            if (ErrorCaptureDir())
                 ctx.workHistory[ctx.workHistoryCount++ % 8] = { data, ctx.packetsSkip, ctx.copiedBits };
             // The guest may select the stream's first packet when submitting
             // a new block. A pending skip is relative to our published cursor;
@@ -524,6 +575,12 @@ namespace apu::xma
                 LOG_WARNING("xma: context {} has an output ring of {} bytes", id, ring.capacity);
                 return;
             }
+            // Match RingBuffer cursor setters: both guest offsets wrap within
+            // the configured ring before free-space accounting or any write.
+            ring.read %= ring.capacity;
+            ring.write %= ring.capacity;
+            if (!PhysicalBacked(data.outputPtr(), ring.capacity))
+                return;
             ctx.freeBlocks = int32_t(ring.WriteCount() / kOutputBytesPerBlock);
             const int32_t minimumBlocks = data.isStereo() ? 2 : 1;
             if (minimumBlocks > ctx.freeBlocks)
@@ -571,14 +628,27 @@ namespace apu::xma
             while (g_running)
             {
                 bool didWork = false;
-                for (uint32_t id = 0; id < kContextCount; ++id)
-                {
-                    if (!g_contexts[id].enabled.load()) continue;
-                    std::lock_guard lock(g_mutex);
-                    Work(id);
-                    didWork = true;
-                }
-                std::this_thread::sleep_for(std::chrono::microseconds(didWork ? 250 : 1000));
+                for (uint32_t word = 0; word < kContextCount / 32; ++word)
+                    for (uint32_t bits = g_kicked[word].load(); bits; bits &= bits - 1)
+                    {
+                        const uint32_t bit = uint32_t(std::countr_zero(bits));
+                        // Cleared before the flag is read: a kick after this sets both again, so none is lost.
+                        g_kicked[word].fetch_and(~(1u << bit));
+                        const uint32_t id = word * 32 + bit;
+                        if (!g_contexts[id].enabled.load()) continue;
+                        std::lock_guard lock(g_mutex);
+                        Work(id);
+                        didWork = true;
+                    }
+                // An enabled context counts as work, so on the Switch the short sleep would be a thousand wakeups a
+                // second taken from the busy threads; a decoded frame lasts over 5 ms.
+                // LO_XMA_PERIOD_US: the Switch's pause between passes (default 2000).
+                static const int switchPeriod = [] {
+                    const char* value = getenv("LO_XMA_PERIOD_US");
+                    const int us = value ? atoi(value) : 0;
+                    return us > 0 ? us : 2000;
+                }();
+                std::this_thread::sleep_for(std::chrono::microseconds(LO_PLATFORM_SWITCH ? switchPeriod : (didWork ? 250 : 1000)));
             }
         }
     }
@@ -602,7 +672,10 @@ namespace apu::xma
         for (uint32_t bits = value; bits; bits &= bits - 1)
         {
             const uint32_t id = (reg - first) * 32 + std::countr_zero(bits);
-            if (first == kRegKick0) g_contexts[id].enabled = true;
+            if (first == kRegKick0) {
+                g_contexts[id].enabled = true;
+                g_kicked[id / 32].fetch_or(1u << (id % 32));
+            }
             else if (first == kRegLock0) g_contexts[id].enabled = false;
             else ClearContext(id);
             if (g_trace) LOG_INFO("xma command: register={:#x} context={}", reg, id);

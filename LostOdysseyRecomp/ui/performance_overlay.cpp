@@ -1,7 +1,9 @@
 #include <stdafx.h>
 #include "performance_overlay.h"
 #include "text_raster.h"
+#include <debug/perf_stats.h>
 #include <gpu/gpu_busy.h>
+#include <os/platform.h>
 #include <kernel/io/file_system.h>
 #include <settings/config.h>
 #include <settings/menu_assets.h>
@@ -14,6 +16,10 @@
 #ifndef _WIN32
 #include <sys/resource.h>
 #include <unistd.h>
+#endif
+#if LO_PLATFORM_SWITCH
+#include <cstring>
+#include <os/switch_cpu_profiler.h>
 #endif
 
 namespace ui::performance_overlay {
@@ -39,6 +45,29 @@ constexpr uint32_t kGraph = Rgb(120, 225, 90);
 constexpr uint32_t kBackground = 0x99000000u; // black at 60%
 constexpr uint32_t kDivider = 0xC0707070u;
 
+// The Switch's two threads that limit a frame, as kernel CPU ticks (0: not read).
+struct ThreadCpu {
+    uint64_t tick = 0, main = 0, render = 0;
+};
+
+#if LO_PLATFORM_SWITCH
+// One process-wide share across three cores hides the thread a scene waits for: the game's main thread and the
+// render thread (the GPU command processor) are read on their own. Leaves them unread while the sampler holds the
+// thread list.
+ThreadCpu ReadThreadCpu() {
+    static os::switch_cpu_profiler::ThreadTime threads[256];
+    ThreadCpu result;
+    uint64_t tick = 0;
+    const size_t count = os::switch_cpu_profiler::SampleThreadTicks(threads, std::size(threads), tick, false);
+    for (size_t i = 0; i < count; ++i) {
+        if (std::strcmp(threads[i].name, "Guest Main") == 0) result.main = threads[i].ticks;
+        else if (std::strcmp(threads[i].name, "GPU CmdProc") == 0) result.render = threads[i].ticks;
+    }
+    if (result.main && result.render) result.tick = tick;
+    return result;
+}
+#endif
+
 // Process CPU time, every thread, user plus kernel, in nanoseconds.
 uint64_t ProcessCpuNs() {
 #ifdef _WIN32
@@ -58,6 +87,7 @@ uint64_t ProcessCpuNs() {
 #endif
 }
 
+
 // Like Task Manager: a share of all logical processors.
 uint32_t LogicalProcessors() {
 #ifdef _WIN32
@@ -68,11 +98,14 @@ uint32_t LogicalProcessors() {
     return count;
 }
 
+
 struct Window {
     Clock::time_point start{};
     uint32_t frames = 0;
     uint64_t cpu = 0, gpu = 0, presented = 0;
     bool frameGeneration = false;
+    ThreadCpu threads;
+    uint64_t draws = 0;
 };
 
 struct State {
@@ -209,6 +242,8 @@ struct Values {
     double fps = 0, frameMs = 0;
     int cpu = -1, gpu = -1;  // percent; -1 unknown
     double fgFps = -1;       // -1 while frame generation is off
+    int mainCpu = -1, renderCpu = -1; // Switch: percent of one core; -1 unknown
+    double draws = -1;       // Switch: draws per frame; -1 unknown
 };
 
 // One row of fields separated by dividers. Labels sit on the values' baseline;
@@ -285,6 +320,11 @@ void Draw(const Values& values, const Sources& sources) {
         image.pixels.assign(size_t(image.width) * image.height, kBackground);
         Canvas canvas(image, s);
         Row row(canvas, int(image.height));
+        if (sources.fsr) {
+            row.Label("FSR", kUpscalerLabel);
+            row.Value(Ascii(sources.fsr), kWhite, true);
+            row.Divider();
+        }
         row.Label(sources.upscaler, kUpscalerLabel);
         row.Value(Size(sources.renderWidth, sources.renderHeight), kWhite, true);
         if (sources.outputWidth) {
@@ -312,13 +352,33 @@ void Draw(const Values& values, const Sources& sources) {
             row.Unit("FPS");
         }
         row.Divider();
+#if LO_PLATFORM_SWITCH
+        row.Label("MAIN", kLoadLabel);
+        row.Value(Percent(values.mainCpu));
+        row.Unit("%");
+        row.Label("RENDER", kLoadLabel);
+        row.Value(Percent(values.renderCpu));
+        row.Unit("%");
+#else
         row.Label("CPU", kLoadLabel);
         row.Value(Percent(values.cpu));
         row.Unit("%");
+#endif
         row.Divider();
         row.Label("GPU", kLoadLabel);
         row.Value(Percent(values.gpu));
         row.Unit("%");
+#if LO_PLATFORM_SWITCH
+        if (const uint32_t mhz = perf_stats::GpuClockMhz()) {
+            row.Value(Ascii(std::to_string(mhz)), kWhite, true);
+            row.Unit("MHz");
+        }
+        if (values.draws >= 0) {
+            row.Divider();
+            row.Label("DRAWS", kLoadLabel);
+            row.Value(Number(values.draws, 0));
+        }
+#endif
     } else {
         // The frame rate alone in a block at the top-left corner.
         const auto fps = Number(values.fps, 0), ms = Number(values.frameMs, 1);
@@ -330,6 +390,15 @@ void Draw(const Values& values, const Sources& sources) {
         row.Unit("FPS");
         row.Value(ms);
         row.Unit("ms");
+        if (sources.fsr) {
+            // The Switch: FSR ON 540p FIXED.
+            row.Divider();
+            row.Label("FSR", kUpscalerLabel);
+            row.Value(Ascii(sources.fsr), kWhite, true);
+            row.Divider();
+            row.Value(Ascii(std::to_string(sources.renderHeight)), kWhite, true);
+            row.Unit(sources.dynamicResolution ? "p DYN" : "p FIXED");
+        }
         const uint32_t used = std::min<uint32_t>(image.width, uint32_t(std::lround(row.X() + 4 * s)));
         // Background behind the text only, then crop to it.
         std::vector<uint32_t> block(size_t(used) * image.height, kBackground);
@@ -377,6 +446,12 @@ void Refresh(const Sources& sources) {
     const auto now = g.lastFrame;
     const bool detailed = g.mode == Detailed;
     const uint64_t cpu = detailed ? ProcessCpuNs() : 0;
+#if LO_PLATFORM_SWITCH
+    const ThreadCpu threads = detailed ? ReadThreadCpu() : ThreadCpu{};
+#else
+    const ThreadCpu threads{};
+#endif
+    const uint64_t draws = detailed ? perf_stats::TotalDraws() : 0;
     if (!g.baseline) {
         const double seconds = std::chrono::duration<double>(now - g.window.start).count();
         Values values;
@@ -390,10 +465,22 @@ void Refresh(const Sources& sources) {
         // No presents counted in the window (the count query failed): no FG value.
         if (detailed && sources.frameGeneration && g.window.frameGeneration && sources.presentedFrames > g.window.presented)
             values.fgFps = (sources.presentedFrames - g.window.presented) / seconds;
+#if LO_PLATFORM_SWITCH
+        if (detailed && threads.tick && g.window.threads.tick && threads.tick > g.window.threads.tick) {
+            const double ticks = double(threads.tick - g.window.threads.tick);
+            const auto share = [ticks](uint64_t now, uint64_t before) {
+                return now >= before ? int(std::lround(std::min(100.0, double(now - before) / ticks * 100.0))) : -1;
+            };
+            values.mainCpu = share(threads.main, g.window.threads.main);
+            values.renderCpu = share(threads.render, g.window.threads.render);
+        }
+        if (detailed && g.window.frames)
+            values.draws = double(draws - g.window.draws) / g.window.frames;
+#endif
         Draw(values, sources);
     }
     g.baseline = false;
-    g.window = {now, 0, cpu, sources.gpuBusy, sources.presentedFrames, sources.frameGeneration};
+    g.window = {now, 0, cpu, sources.gpuBusy, sources.presentedFrames, sources.frameGeneration, threads, draws};
 }
 
 const Image& Current() { return g.image; }

@@ -20,6 +20,11 @@
 #   BUILD_TYPE=...     Release (default) or RelWithDebInfo
 #   NVK_LIBRARY=path   libvulkan.a from mesa-switch (default: searched under $DEVKITPRO)
 #   CLEAN=1            delete the Switch build folder first
+#   PGO=GEN            build the training NRO in out/build/switch-pgo-gen
+#   PGO=USE            build the optimised NRO in out/build/switch-pgo-use, from the
+#                      profile in PGO_DIR (default out/pgo). See docs/SWITCH-PGO.md
+#   LTO_GPU=ON         link-time optimisation of the renderer, command processor and
+#                      plume-deko3d (LO_SWITCH_LTO_GPU)
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -28,7 +33,14 @@ cd "$root"
 export DEVKITPRO
 JOBS="${JOBS:-$(nproc)}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
-build="$root/out/build/switch"
+PGO="${PGO:-OFF}"
+PGO_DIR="${PGO_DIR:-$root/out/pgo}"
+case "$PGO" in
+    OFF) build="$root/out/build/switch" ;;
+    GEN) build="$root/out/build/switch-pgo-gen" ;;
+    USE) build="$root/out/build/switch-pgo-use" ;;
+    *) printf 'error: PGO must be OFF, GEN or USE, not %s\n' "$PGO" >&2; exit 1 ;;
+esac
 hostbuild="$root/out/build/switch-host-tools"
 private="$root/LostOdysseyRecompLib/private"
 
@@ -78,7 +90,7 @@ apply_chain() { # <dir> <patch>...
 }
 P="$root/tools/patches"
 log "Patches"
-apply_chain tools/XenonRecomp "$P/XenonRecomp-lostodyssey.patch" "$P/XenonRecomp-switch.patch"
+apply_chain tools/XenonRecomp "$P/XenonRecomp-lostodyssey.patch" "$P/XenonRecomp-switch.patch" "$P/XenonRecomp-nonargument-locals.patch"
 apply_chain thirdparty/plume "$P/plume-lostodyssey.patch" "$P/plume-sdl3.patch" "$P/plume-switch.patch" "$P/plume-switch-perf.patch"
 apply_chain thirdparty/plume/contrib/volk "$P/volk-switch.patch"
 apply_chain thirdparty/SDL-switch "$P/sdl-switch-no-egl.patch" "$P/sdl-switch-audio-priority.patch"
@@ -102,28 +114,38 @@ fi
 if [ ! -f "$root/LostOdysseyRecompLib/ppc/ppc_func_mapping.cpp" ]; then
     log "Recompiling PowerPC code"
     python3 -B tools/ppc_codegen.py generate --executable "$hostbuild/XenonRecomp/XenonRecomp/XenonRecomp"
+    # Removes the register write-backs nothing needs: about half of them, +2.7% FPS in the first battle.
+    python3 -B tools/switch/ppc_elide.py --in LostOdysseyRecompLib/ppc --out LostOdysseyRecompLib/ppc \
+        --runtime LostOdysseyRecomp --toml LostOdysseyRecompLib/config/LostOdysseyRecomp.toml
 fi
 # The generated ppc_context.h must carry the Switch (GCC) shims.
 cp tools/XenonRecomp/XenonUtils/ppc_context.h LostOdysseyRecompLib/ppc/ppc_context.h
 
 # ---------------------------------------------------------------- build
+if [ "$PGO" = USE ] && ! find "$PGO_DIR" -name '*.gcda' -print -quit 2>/dev/null | grep -q .; then
+    die "no profile in $PGO_DIR (see docs/SWITCH-PGO.md)"
+fi
 if [ "${CLEAN:-0}" = 1 ]; then rm -rf "$build"; fi
-log "Configure ($BUILD_TYPE)"
+log "Configure ($BUILD_TYPE, PGO $PGO)"
 cmake -S . -B "$build" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$root/cmake/toolchains/switch-devkitA64.cmake" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_CXX_SCAN_FOR_MODULES=OFF \
     -DDEVKITPRO="$DEVKITPRO" \
-    -DLO_SWITCH_NVK_LIBRARY="$NVK_LIBRARY"
+    -DLO_SWITCH_NVK_LIBRARY="$NVK_LIBRARY" \
+    -DLO_SWITCH_PGO="$PGO" \
+    -DLO_SWITCH_LTO_GPU="${LTO_GPU:-OFF}" \
+    -DLO_SWITCH_PGO_DIR="$PGO_DIR"
 
 log "Build ($JOBS jobs)"
 # -k 0: keep going after a failure so one run reports every failing file.
 cmake --build "$build" --target LostOdysseyRecomp -j "$JOBS" -- -k 0
 
 out="$root/out/switch"
+[ "$PGO" = OFF ] || out="$out/pgo-$PGO"
 mkdir -p "$out"
 cp "$build/LostOdysseyRecomp/LostOdysseyRecomp.nro" "$out/"
 cp "$build/LostOdysseyRecomp/LostOdysseyRecomp.elf" "$out/"
 log "Done"
-echo "NRO: out/switch/LostOdysseyRecomp.nro  (copy to sdmc:/switch/LostOdysseyRecomp/)"
-echo "ELF: out/switch/LostOdysseyRecomp.elf  (keep it: crash.log addresses resolve against it)"
+echo "NRO: ${out#"$root"/}/LostOdysseyRecomp.nro  (copy to sdmc:/switch/LostOdysseyRecomp/)"
+echo "ELF: ${out#"$root"/}/LostOdysseyRecomp.elf  (keep it: crash.log addresses resolve against it)"

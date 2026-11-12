@@ -23,10 +23,13 @@ function(lo_add_header_test name source)
 endfunction()
 if(NOT ANDROID AND NOT LO_TARGET_PLATFORM STREQUAL "switch")
 lo_add_header_test(LoPollWaitTest ${CMAKE_SOURCE_DIR}/tools/tests/poll_wait_test.cpp)
+lo_add_header_test(LoMenuAnimationsTest ${CMAKE_SOURCE_DIR}/tools/tests/menu_animations_test.cpp)
 lo_add_header_test(LoHdrOutputTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_output_test.cpp)
 lo_add_header_test(LoShadowResolutionTest ${CMAKE_SOURCE_DIR}/tools/tests/shadow_resolution_test.cpp)
 lo_add_header_test(LoHdrSceneShaderTest ${CMAKE_SOURCE_DIR}/tools/tests/hdr_scene_shader_test.cpp)
 lo_add_header_test(LoTimeFieldsTest ${CMAKE_SOURCE_DIR}/tools/tests/time_fields_test.cpp)
+lo_add_header_test(LoLoadingStateTest ${CMAKE_SOURCE_DIR}/tools/tests/loading_state_test.cpp)
+lo_add_header_test(LoSoftResetTest ${CMAKE_SOURCE_DIR}/tools/tests/soft_reset_test.cpp)
 lo_add_header_test(LoGuestClockOriginTest ${CMAKE_SOURCE_DIR}/tools/tests/guest_clock_origin_test.cpp)
 lo_add_header_test(LoAsfDemuxTest ${CMAKE_SOURCE_DIR}/tools/tests/asf_demux_test.cpp)
 target_sources(LoAsfDemuxTest PRIVATE ${LO_RUNTIME_ROOT}/movie/asf_demux.cpp)
@@ -38,6 +41,7 @@ lo_add_header_test(LoFsrQueuePlanTest ${CMAKE_SOURCE_DIR}/tools/tests/streamline
 lo_add_header_test(LoFrameGenerationSettingsTest ${CMAKE_SOURCE_DIR}/tools/tests/frame_generation_settings_test.cpp)
 target_compile_definitions(LoFrameGenerationSettingsTest PRIVATE LO_ENABLE_D3D12_FG=1 FRAMEGEN_WITH_DLSS=1 FRAMEGEN_WITH_FSR=1)
 lo_add_header_test(LoShaderPrebuildIoTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_prebuild_io_test.cpp)
+lo_add_header_test(LoShaderPreparationRequestTest ${CMAKE_SOURCE_DIR}/tools/tests/shader_preparation_request_test.cpp)
 lo_add_header_test(LoPlumeLogTest ${CMAKE_SOURCE_DIR}/tools/tests/plume_log_test.cpp)
 target_include_directories(LoPlumeLogTest PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume)
 lo_add_header_test(LoParticleMaterialCompatTest ${CMAKE_SOURCE_DIR}/tools/tests/particle_material_compat_test.cpp)
@@ -57,6 +61,10 @@ if(MSVC)
     target_compile_options(LoExternalUpdateNoticeTest PRIVATE /utf-8)
 endif()
 lo_add_header_test(LoImportGameTest ${CMAKE_SOURCE_DIR}/tools/tests/import_game_test.cpp)
+lo_add_header_test(LoCompactionPromptTest ${CMAKE_SOURCE_DIR}/tools/tests/compaction_prompt_test.cpp)
+if(MSVC)
+    target_compile_options(LoCompactionPromptTest PRIVATE /utf-8)
+endif()
 lo_add_header_test(LoImportIsoLocatorTest ${CMAKE_SOURCE_DIR}/tools/tests/import_iso_locator_test.cpp)
 target_sources(LoImportIsoLocatorTest PRIVATE ${LO_RUNTIME_ROOT}/install/import_image.cpp)
 lo_add_header_test(LoInstallerControllerTest ${CMAKE_SOURCE_DIR}/tools/tests/installer_controller_test.cpp)
@@ -124,6 +132,14 @@ file(GLOB_RECURSE LO_RUNTIME_SOURCES CONFIGURE_DEPENDS
     "${LO_RUNTIME_ROOT}/*.cpp"
     "${LO_RUNTIME_ROOT}/*.h")
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "imports_stubs\\.cpp$")
+# Discord Rich Presence is a desktop host service.
+if(ANDROID OR LO_TARGET_PLATFORM STREQUAL "switch")
+    list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "/discord/")
+endif()
+# So is Add to Steam: the Switch has no Steam library to add the game to.
+if(LO_TARGET_PLATFORM STREQUAL "switch")
+    list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "/os/steam_(shortcut|artwork)\\.cpp$")
+endif()
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "updater/posix_ui\\.cpp$")
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "gpu/shader/portable_shader_pack\\.cpp$")
 
@@ -160,8 +176,37 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
     # (Horizon's file system does not), wired in with --wrap=rename.
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
         ${LO_RUNTIME_ROOT}/os/switch/nvk_switch_stubs.c
-        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c)
+        ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
+        ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # os/switch/env_file.cpp: names the LO_* switches read before env.txt was applied (stderr.log).
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=getenv")
+    # thirdparty/plume-deko3d: LO_DEKO3D_PRESENT_THREAD hands deko3d's buffer-queue calls to a worker.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=nwindowQueueBuffer,--wrap=nwindowDequeueBuffer")
+    # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.
+    lo_switch_pgo_target(LostOdysseyRecomp)
+    lo_switch_pgo_target(lo_plume_deko3d)
+    # LO_SWITCH_LTO_GPU (cmake/LoSwitch.cmake). Fat objects: the plume archive keeps a symbol index made by plain ar.
+    if(LO_SWITCH_LTO_GPU AND NOT LO_SWITCH_LTO)
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/gpu/renderer.cpp ${LO_RUNTIME_ROOT}/gpu/command_processor.cpp
+            APPEND PROPERTY COMPILE_OPTIONS -flto -ffat-lto-objects)
+        target_compile_options(lo_plume_deko3d PRIVATE -flto -ffat-lto-objects)
+        target_link_options(LostOdysseyRecomp PRIVATE -flto=${LO_SWITCH_LTO_JOBS} -flto-partition=balanced)
+    endif()
+    if(LO_SWITCH_PGO STREQUAL "GEN")
+        target_compile_definitions(LostOdysseyRecomp PRIVATE LO_SWITCH_PGO_GEN=1)
+        target_link_options(LostOdysseyRecomp PRIVATE -fprofile-generate)
+    endif()
+    # os/switch/rwlock_switch.c: no kernel call on an unlock with nobody waiting.
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=pthread_rwlock_init,--wrap=pthread_rwlock_destroy,--wrap=pthread_rwlock_rdlock,--wrap=pthread_rwlock_wrlock,--wrap=pthread_rwlock_unlock")
+    # os/switch/heap_census.cpp (LO_SWITCH_HEAP_CENSUS, cmake/LoSwitch.cmake): every allocation and free goes through
+    # newlib's _r entry points, which these wrap.
+    if(LO_SWITCH_HEAP_CENSUS)
+        # The two files that use it only: the rest of the runtime compiles as in a default build.
+        set_property(SOURCE ${LO_RUNTIME_ROOT}/os/switch/heap_census.cpp ${LO_RUNTIME_ROOT}/main.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS LO_SWITCH_HEAP_CENSUS=1)
+        target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=_malloc_r,--wrap=_free_r,--wrap=_calloc_r,--wrap=_realloc_r,--wrap=_memalign_r")
+    endif()
     # These include libnx's <switch.h>, whose Mutex/Event typedefs collide with
     # the runtime's precompiled header (stdafx.h, mutex.h).
     file(GLOB LO_SWITCH_NATIVE_SOURCES CONFIGURE_DEPENDS
@@ -192,6 +237,10 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
 else()
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
     lo_stage_portable_shader_pack(LostOdysseyRecomp)
+    add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets/steam" "$<TARGET_FILE_DIR:LostOdysseyRecomp>/assets/steam"
+        COMMENT "Staging Steam library artwork" VERBATIM)
 endif()
 set(LO_BUILD_REVISION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/lo_build_revision.h")
 add_custom_target(LoBuildRevision
@@ -277,6 +326,13 @@ if(LO_BUILD_GPU)
     target_include_directories(LostOdysseyRecomp PRIVATE
         ${CMAKE_SOURCE_DIR}/thirdparty/plume)
     target_compile_definitions(LostOdysseyRecomp PRIVATE LO_GPU_PLUME=1)
+    if(TARGET lo_plume_deko3d)
+        target_link_libraries(LostOdysseyRecomp PRIVATE lo_plume_deko3d)
+        target_compile_definitions(LostOdysseyRecomp PRIVATE LO_SWITCH_DEKO3D=1)
+    endif()
+    if(TARGET lo_lsfg)
+        target_link_libraries(LostOdysseyRecomp PRIVATE lo_lsfg)
+    endif()
     if(APPLE)
         target_include_directories(LostOdysseyRecomp PRIVATE ${CMAKE_SOURCE_DIR}/thirdparty/plume/contrib/metal-cpp)
     endif()
@@ -309,7 +365,7 @@ endif()
 
 if(NOT ANDROID)
 if(WIN32)
-    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore bcrypt winhttp ole32 shell32)
+    target_link_libraries(LostOdysseyRecomp PRIVATE winmm onecore bcrypt winhttp ole32 shell32 advapi32)
 
     lo_add_header_test(LoUpdaterApplyArgumentsTest ${CMAKE_SOURCE_DIR}/tools/tests/updater_apply_arguments_test.cpp)
     target_link_libraries(LoUpdaterApplyArgumentsTest PRIVATE shell32)
@@ -799,6 +855,15 @@ add_executable(LoFramePacerTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests
 target_include_directories(LoFramePacerTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoFramePacerTest PRIVATE cxx_std_20)
 
+add_executable(LoEngineDeltaLimitTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/engine_delta_limit_test.cpp)
+target_include_directories(LoEngineDeltaLimitTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoEngineDeltaLimitTest PRIVATE cxx_std_20)
+
+add_executable(LoPresentationProgressTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/presentation_progress_test.cpp)
+target_include_directories(LoPresentationProgressTest PRIVATE ${LO_RUNTIME_ROOT})
+target_compile_features(LoPresentationProgressTest PRIVATE cxx_std_20)
+target_link_libraries(LoPresentationProgressTest PRIVATE Threads::Threads)
+
 add_executable(LoHostUiCompositeTest EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/tests/host_ui_composite_test.cpp)
 target_include_directories(LoHostUiCompositeTest PRIVATE ${LO_RUNTIME_ROOT})
 target_compile_features(LoHostUiCompositeTest PRIVATE cxx_std_20)
@@ -832,6 +897,14 @@ if(WIN32)
     endif()
 endif()
 
+add_executable(LoSaveWorkerRequestTest EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tools/tests/save_worker_request_test.cpp)
+target_include_directories(LoSaveWorkerRequestTest PRIVATE $<TARGET_PROPERTY:LostOdysseyRecomp,INCLUDE_DIRECTORIES>)
+target_compile_features(LoSaveWorkerRequestTest PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(LoSaveWorkerRequestTest PRIVATE /utf-8)
+endif()
+
 add_executable(LoQuitTextHookTest EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tools/tests/quit_text_hook_test.cpp)
 target_include_directories(LoQuitTextHookTest PRIVATE ${LO_RUNTIME_ROOT})
@@ -855,7 +928,7 @@ if(WIN32)
     target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
-    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo xxHash::xxhash)
 
     add_executable(LoMenuFlowTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
@@ -865,7 +938,7 @@ if(WIN32)
     target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME LO_ENABLE_D3D12_FG FRAMEGEN_WITH_DLSS FRAMEGEN_WITH_FSR)
-    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt)
+    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt xxHash::xxhash)
 endif()
 
 if(LO_BUILD_GPU)
@@ -973,6 +1046,15 @@ if(WIN32 AND LO_BUILD_GPU)
 endif()
 
 if(APPLE AND LO_BUILD_GPU)
+    add_executable(LoMetalTextureCopyTest EXCLUDE_FROM_ALL
+        ${CMAKE_SOURCE_DIR}/tools/tests/metal_texture_copy_test.mm)
+    set_target_properties(LoMetalTextureCopyTest PROPERTIES OBJCXX_STANDARD 20)
+    target_compile_options(LoMetalTextureCopyTest PRIVATE -fobjc-arc)
+    target_link_libraries(LoMetalTextureCopyTest PRIVATE plume
+        "-framework AppKit" "-framework QuartzCore" "-framework Metal" "-framework IOKit")
+    add_test(NAME metal_texture_copy COMMAND LoMetalTextureCopyTest)
+    set_tests_properties(metal_texture_copy PROPERTIES TIMEOUT 30 LABELS "gpu;macos")
+
     # The same HDR readback fixture runs on a Mac with a Metal device.
     add_executable(LoPresentationTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/presentation_test.cpp

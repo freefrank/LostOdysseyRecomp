@@ -1,5 +1,6 @@
 // Injectable guest-call contract. No game data or SDL event loop required.
 #include <settings/quit_action_hook.h>
+#include <settings/title_input_gate.h>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -71,6 +72,32 @@ void CheckGeneratedGuestCallers()
 
 int main()
 {
+    {
+        using namespace settings::title_entry;
+        std::array<uint32_t, 400> input{};
+        for (uint32_t i = 0; i < input.size(); ++i) input[i] = i + 1;
+        const auto originalInput = input;
+        int ticks = 0;
+        const auto read = [&](uint32_t address) { return input.at((address - 4) / 4); };
+        const auto write = [&](uint32_t address, uint32_t mask) { input.at((address - 4) / 4) = mask; };
+        const auto drawTitle = [&] {
+            ++ticks;
+            for (const auto action : MenuActions)
+                Check(read(4 + MenuActionMasks + action * 4) == 0, "latched title menu actions must be muted while drawing");
+            Check(input[338 + 3] == originalInput[338 + 3], "unrelated guest inputs remain untouched");
+        };
+        TickWithMenuInputMuted(true, 4, read, write, drawTitle);
+        TickWithMenuInputMuted(true, 4, read, write, drawTitle); // No's dismissal tick still draws.
+        Check(ticks == 2 && input == originalInput, "modal and dismissal ticks draw and restore their masks");
+        TickWithMenuInputMuted(false, 4, read, write, [&] {
+            ++ticks;
+            Check(input == originalInput, "normal title tick retains its input");
+        });
+        try {
+            TickWithMenuInputMuted(true, 4, read, write, [&] { drawTitle(); throw std::runtime_error("guest unwind"); });
+        } catch (const std::runtime_error&) {}
+        Check(ticks == 4 && input == originalInput, "guest unwind restores title action masks");
+    }
     using namespace settings::quit_action;
     CheckGeneratedGuestCallers();
     Context ctx{};

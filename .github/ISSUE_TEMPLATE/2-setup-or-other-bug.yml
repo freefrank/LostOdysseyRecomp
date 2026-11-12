@@ -1,0 +1,78 @@
+name: Setup, start or other bug
+description: The build or install fails, the game doesn't start, or a problem outside of playing (SD card layout, disc import, shaders, updating).
+labels: ["bug", "setup"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! For problems **while playing**, please use the "In-game bug" form instead (it asks where in the game it happened).
+
+        The [installation guide's troubleshooting table](https://github.com/Ad0ky/LostOdysseyRecomp/blob/LostOdysseyNX/docs/INSTALL-SWITCH.md#troubleshooting) covers the most common start problems.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead. Screenshots or a short video help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, step by step, and the exact error message (screenshot or text).
+      placeholder: |
+        1. Go to ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release (e.g. v1.1.0_NX), or the commit if you built it yourself (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it fails
+      options:
+        - Extracting the discs with the PC importer
+        - Copying to the SD card / updating
+        - Starting the game on the Switch
+        - Building on the computer
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Game edition
+      options:
+        - Asian multilingual
+        - USA/Europe
+        - Not sure
+        - Not relevant
+  - type: input
+    id: setup
+    attributes:
+      label: Console and computer
+      description: Console model, firmware and Atmosphère version; for import or build problems also the computer's OS.
+      placeholder: "e.g. Switch v2, 19.0.1, Atmosphère 1.8.0; Windows 11"
+    validations:
+      required: true
+  - type: dropdown
+    id: start
+    attributes:
+      label: How you start the game
+      options:
+        - Homebrew Menu through title takeover (holding R on a game)
+        - Homebrew Menu from the Album
+        - Other (forwarder, ...)
+        - Not relevant
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        From `sdmc:/switch/LostOdysseyRecomp/`: the newest `state/logs/runtime-*.log`, `stderr.log`, and `crash.log`, `hang.log` or `exit.log` if they exist. For import or build problems, the terminal output or the importer's message. Drag the files in here.

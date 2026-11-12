@@ -16,8 +16,10 @@
 //   sub_82CE9248 / sub_82CE9FD8(pl)  pause / resume
 //   sub_82CF8140(pl)       the player's video pump thread (player vtable +144,
 //                          thread player+268): runs the guest WMV decoder
-// Set LO_NATIVE_MOVIES=1 to opt into this experimental decoder.
+// On by default on the Switch, where the guest decoder freezes cutscenes
+// (LO_NATIVE_MOVIES=0 turns it off); elsewhere LO_NATIVE_MOVIES=1 opts in.
 #include <stdafx.h>
+#include "movie_player.h"
 
 #if LO_HAS_WMV3_DECODER
 
@@ -58,7 +60,9 @@ bool Enabled()
 {
     static const bool enabled = [] {
         const char* value = std::getenv("LO_NATIVE_MOVIES");
-        return value && std::strcmp(value, "1") == 0;
+        if (!value || !value[0])
+            return bool(LO_PLATFORM_SWITCH);
+        return std::strcmp(value, "1") == 0;
     }();
     return enabled;
 }
@@ -413,10 +417,15 @@ PPC_FUNC(sub_82CE9FD8)
 }
 
 // The guest video pump keeps decoding (about one core) although its frames
-// are replaced; at the lowest application priority it only gets CPU time the
-// audio, the game and the host decoder leave over. Nothing waits for it. The
-// audio pump (vtable +140) is a separate thread and keeps its priority.
-// LO_MOVIE_GUEST_VIDEO_PRIORITY=0 keeps the game's priority (hex value: use it).
+// are replaced. LO_MOVIE_GUEST_VIDEO_PRIORITY=<hex 2C-3F> runs it at a lower
+// priority, so it only gets CPU time the audio, the game and the host decoder
+// leave over. Off by default (2026-11-10): the pump is not idle work. It feeds
+// the player's reader, so the movie's audio stops when it is starved, and
+// closing the movie waits for it to stop. When it is lowered, closing or
+// releasing the movie gives it back the game's priority first
+// (RestoreGuestVideoPriority). The black screen after the Gongora coronation
+// video was the pump stuck in the read callback during the close, at any
+// priority; see sub_82813948 in gpu/movie_replace.cpp.
 PPC_FUNC(sub_82CF8140)
 {
     bool lower = false;
@@ -427,7 +436,7 @@ PPC_FUNC(sub_82CF8140)
 #if LO_PLATFORM_SWITCH
     static const int priority = [] {
         const char* value = std::getenv("LO_MOVIE_GUEST_VIDEO_PRIORITY");
-        return value && *value ? int(std::strtol(value, nullptr, 16)) : 0x3F;
+        return value && *value ? int(std::strtol(value, nullptr, 16)) : 0;
     }();
     if (lower && priority >= 0x2C && priority <= 0x3F)
     {
@@ -448,6 +457,37 @@ PPC_FUNC(sub_82CF8140)
     (void)lower;
 #endif
     __imp__sub_82CF8140(ctx, base);
+}
+
+bool movie::NativeMoviesEnabled()
+{
+    return Enabled();
+}
+
+void movie::RestoreGuestVideoPriority(uint32_t player)
+{
+#if LO_PLATFORM_SWITCH
+    std::lock_guard lock(g_mutex);
+    if (!player || !g_movie || g_movie->player != player || !g_movie->guestVideoThread || g_movie->guestVideoPriority < 0)
+        return;
+    os::switch_platform::SetThreadPriority(g_movie->guestVideoThread, g_movie->guestVideoPriority);
+    LOG_NOTICE("native movie: {} closing, guest video decoder thread back at priority {:#x}", g_movie->name,
+               g_movie->guestVideoPriority);
+    g_movie->guestVideoPriority = -1;
+#else
+    (void)player;
+#endif
+}
+
+#else
+
+bool movie::NativeMoviesEnabled()
+{
+    return false;
+}
+
+void movie::RestoreGuestVideoPriority(uint32_t)
+{
 }
 
 #endif

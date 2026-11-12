@@ -2,7 +2,8 @@ package io.github.freefrank.lostodyssey;
 
 /**
  * Auto-hide state of the on-screen CTRL button: after a few idle seconds it
- * slides to the nearest screen edge and leaves a small tab there. Plain Java
+ * slides to the nearest screen edge and leaves a small tab there. Hide-all mode
+ * removes the tab too, with a temporary reveal using the same delay. Plain Java
  * (times in milliseconds, positions in pixels) so the JVM tests cover it.
  */
 final class TouchCtrlHandle {
@@ -14,7 +15,7 @@ final class TouchCtrlHandle {
     static final float TAB_OPACITY = .5f;
     static final float TAB_LABEL_SCALE = .7f;
 
-    private boolean enabled = true, pinned, retracted;
+    private boolean enabled = true, pinned, retracted, hideAll, revealed;
     private long lastActivity, slideStart;
     private float slideFrom, slideTo;
 
@@ -24,16 +25,18 @@ final class TouchCtrlHandle {
     float hitLeft, hitTop, hitRight, hitBottom, clipTop;
     private float topInset;
 
-    /** Full button, timer restarted (game start, return from another page). */
+    /** Restart the timer; hide-all mode waits for an explicit reveal. */
     void reset(long now) {
+        revealed = false;
         lastActivity = now;
         retracted = false;
         slideFrom = slideTo = 0f;
         slideStart = now - SLIDE_MS;
     }
 
-    /** The player touched the button or its tab: bring it back and restart the timer. */
+    /** A button/tab touch, system bars or Back: bring CTRL back and restart the timer. */
     void activity(long now) {
+        revealed = true;
         lastActivity = now;
         slideTo(false, now);
     }
@@ -55,11 +58,25 @@ final class TouchCtrlHandle {
 
     boolean enabled() { return enabled; }
 
+    void setHideAll(boolean value, long now) {
+        if (hideAll == value) return;
+        hideAll = value;
+        reset(now);
+    }
+
+    boolean hideAll() { return hideAll; }
+
+    /** Hidden mode has no tab; only a system-bar/Back reveal or a pinned UI shows CTRL. */
+    boolean visible(long now) {
+        return !hideAll || pinned || (revealed && now - lastActivity < HIDE_DELAY_MS);
+    }
+
     /** True once the button retracts (including while it is still sliding out). */
     boolean retracted() { return retracted; }
 
     /** 0 = full button, 1 = retracted tab; starts the slide when the timer expires. */
     float progress(long now) {
+        if (hideAll) return 0f;
         if (enabled && !pinned && !retracted && now - lastActivity >= HIDE_DELAY_MS)
             slideTo(true, now);
         return value(now);
@@ -67,6 +84,9 @@ final class TouchCtrlHandle {
 
     /** 0 = redraw next frame (sliding), positive = wait this long, -1 = nothing pending. */
     long nextWakeMs(long now) {
+        if (hideAll) {
+            return !pinned && visible(now) ? Math.max(1, lastActivity + HIDE_DELAY_MS - now) : -1;
+        }
         if (now - slideStart < SLIDE_MS && slideFrom != slideTo) return 0;
         if (enabled && !pinned && !retracted)
             return Math.max(1, lastActivity + HIDE_DELAY_MS - now);

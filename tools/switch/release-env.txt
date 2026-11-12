@@ -1,0 +1,13 @@
+# Render with deko3d, the Switch's own graphics API (faster than NVK).
+# Delete this line to use the Mesa NVK driver instead.
+LO_SWITCH_BACKEND=deko3d
+# deko3d's GPU savings: depth compression, depth culling, fewer GPU waits, leaner vertex shaders
+LO_DEKO3D_GPU_FAST=1
+# Leaner game shaders, about 4 ms less GPU time in battle. Needs shaders/deko3d_shaders_lean3.lodk.
+LO_DEKO3D_LEAN_SHADERS=3
+# Use the native cutscene video decoder (faster, smoother cutscenes)
+LO_NATIVE_MOVIES=1
+# Spread the game's threads across the Switch's three CPU cores
+LO_GUEST_AFFINITY=1
+# Prepare every known graphics state in the background at start
+LO_PIPELINE_PREBUILD=all

@@ -49,7 +49,7 @@ PPC_FUNC(sub_826E1860)
 // half), so it changes nothing.
 PPC_FUNC(sub_823D5E50)
 {
-    if (!Logged(shadowState, settings::GetConfig().dynamicShadows, "dynamic shadows"))
+    if (!Logged(shadowState, settings::GetConfig().dynamicShadows != 0, "dynamic shadows"))
         return;
     __imp__sub_823D5E50(ctx, base);
 }

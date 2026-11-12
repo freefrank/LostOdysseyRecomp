@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "install/import_game.h"
+#include "os/user_paths.h"
 #include "gpu/shader/resource_cpx_index_sha256.h"
 
 #ifndef _WIN32
@@ -246,6 +247,136 @@ void WriteDiscFiles(const std::filesystem::path& dir, uint32_t disc, bool includ
         out.write(dummy.data(), dummy.size());
     }
 }
+
+#if defined(__linux__) && !defined(__ANDROID__)
+// A complete synthetic disc, including a resource above the 4 GiB boundary.
+// Sparse padding exercises 64-bit ISO reads without real game data or a large copy.
+void WriteLinuxTestIso(const std::filesystem::path& path)
+{
+    constexpr uint64_t sector = 2048;
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> files{
+        {"default.xex", MakeXex()},
+    };
+    for (const char* name : {"lo.fpd", "lo.fpi", "xenon_battle.fpd", "xenon_chr.fpd", "xenon_event.fpd",
+             "xenon_field.fpd", "xenon_loc.fpd", "xenon_mov.fpd", "xenon_obj.fpd", "xenon_scr.fpd",
+             "xenon_snd.fpd", "xenon_sys.fpd", "xenon_vfx.fpd", "xenon_world.fpd"})
+        files.push_back({name, {'p', 'a', 'y', 'l', 'o', 'a', 'd'}});
+    auto le32 = [](uint8_t* p, uint32_t n) {
+        for (unsigned i = 0; i < 4; ++i) p[i] = static_cast<uint8_t>(n >> (8 * i));
+    };
+    std::array<uint8_t, sector> descriptor{}, directory{};
+    constexpr const char* magic = "MICROSOFT*XBOX*MEDIA";
+    std::memcpy(descriptor.data(), magic, 20);
+    std::memcpy(descriptor.data() + 0x7ec, magic, 20);
+    le32(descriptor.data() + 20, 33);
+    le32(descriptor.data() + 24, sector);
+    std::ofstream out(path, std::ios::binary);
+    out.seekp(0x10000);
+    out.write(reinterpret_cast<const char*>(descriptor.data()), descriptor.size());
+    size_t offset = 0;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        const auto& [name, data] = files[i];
+        const size_t next = (offset + 14 + name.size() + 3) & ~size_t{3};
+        if (i + 1 < files.size())
+        {
+            directory[offset + 2] = static_cast<uint8_t>(next / 4);
+            directory[offset + 3] = static_cast<uint8_t>((next / 4) >> 8);
+        }
+        const uint32_t fileSector = i + 1 == files.size() ? 4ULL * 1024 * 1024 * 1024 / sector + 1 : 34 + i;
+        le32(directory.data() + offset + 4, fileSector);
+        le32(directory.data() + offset + 8, data.size());
+        directory[offset + 13] = static_cast<uint8_t>(name.size());
+        std::memcpy(directory.data() + offset + 14, name.data(), name.size());
+        out.seekp(static_cast<uint64_t>(fileSector) * sector);
+        out.write(reinterpret_cast<const char*>(data.data()), data.size());
+        offset = next;
+    }
+    out.seekp(33 * sector);
+    out.write(reinterpret_cast<const char*>(directory.data()), directory.size());
+    out.close();
+    Require(static_cast<bool>(out), "could not write synthetic ISO");
+}
+
+// Run only inside an isolated Linux root with /home -> /var/home, e.g. bwrap.
+// The ordinary test suite never changes the machine's /home layout.
+void RunLinuxHomeTest()
+{
+    namespace fs = std::filesystem;
+    Require(fs::is_symlink("/home") && fs::canonical("/home") == "/var/home",
+            "--linux-home requires an isolated /home -> /var/home root");
+    const auto root = fs::path("/home/x") / ("lo-linux-import-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        fs::path path;
+        ~Cleanup() { std::error_code ec; fs::remove_all(path, ec); }
+    } cleanup{root};
+    fs::create_directories(root / "source");
+    const auto iso = root / "source" / "disc1.iso";
+    WriteLinuxTestIso(iso);
+    const auto scan = install::ScanContent(iso);
+    Require(scan.discs.size() == 1, "synthetic ISO under /home did not scan");
+    const auto canonicalRoot = fs::canonical(root);
+    Require(install::InstallContent(scan, canonicalRoot / "canonical-game").discs == std::vector<int>{1},
+            "canonical /var/home import failed");
+    std::cout << "[PASS] canonical destination and sparse ISO reads above 4 GiB" << std::endl;
+    os::user_paths::g_usePortableLayout = false;
+    const auto destination = install::DefaultGameDirectory("/app/bin");
+    Require(destination.string().starts_with("/home/x/"), "default HOME alias was not retained");
+    Require(install::InstallContent(scan, destination).discs == std::vector<int>{1},
+            "default destination under system /home alias failed");
+    Require(ReadBytes(destination / "disc1" / "xenon_world.fpd") ==
+            std::vector<uint8_t>({'p', 'a', 'y', 'l', 'o', 'a', 'd'}), "large-offset payload changed");
+    Require(install::ReimportContent(scan, destination).discs == std::vector<int>{1},
+            "reimport under system /home alias failed");
+    std::cout << "[PASS] HOME alias default destination, ISO extraction and reimport" << std::endl;
+    auto rejected = [&](const fs::path& dest, std::string_view expected) {
+        bool failed = false;
+        try { install::InstallContent(scan, dest); }
+        catch (const install::Error& error) { failed = std::string(error.what()).find(expected) != std::string::npos; }
+        Require(failed, "path protection did not reject " + dest.string());
+    };
+    rejected(canonicalRoot / "source", "Source and destination must be separate folders");
+    const auto canonicalScan = install::ScanContent(canonicalRoot / "source" / "disc1.iso");
+    bool overlap = false;
+    try { install::InstallContent(canonicalScan, root / "source"); }
+    catch (const install::Error& error) { overlap = std::string(error.what()).find("Source and destination must be separate folders") != std::string::npos; }
+    Require(overlap, "source/destination overlap through /home alias was accepted");
+    fs::create_directory_symlink(canonicalRoot, root / "user-link");
+    rejected(root / "user-link" / "game", "Destination ancestors must not contain links or junctions");
+    fs::create_directory_symlink(canonicalRoot, root / "linked-game");
+    rejected(root / "linked-game", "Destination ancestors must not contain links or junctions");
+    fs::create_directories(root / "linked-slot");
+    fs::create_directory_symlink(canonicalRoot / "canonical-game" / "disc1", root / "linked-slot" / "disc1");
+    bool slotRejected = false;
+    try { install::ReimportContent(scan, root / "linked-slot"); }
+    catch (const install::Error& error) { slotRejected = std::string(error.what()).find("Import target is a link") != std::string::npos; }
+    Require(slotRejected, "linked disc slot was accepted");
+    std::cout << "[PASS] arbitrary links, linked slots and canonical/alias overlap remain rejected" << std::endl;
+    fs::create_directories("/run/user/1000/doc/test-id");
+    WriteLinuxTestIso("/run/user/1000/doc/test-id/disc1.iso");
+    const auto portalScan = install::ScanContent("/run/user/1000/doc/test-id/disc1.iso");
+    Require(portalScan.discs.size() == 1 &&
+            install::InstallContent(portalScan, canonicalRoot / "portal-game").discs == std::vector<int>{1},
+            "single ISO at a portal-shaped path failed");
+    std::cout << "[PASS] portal-shaped path imports one disc without neighboring discs (ordinary filesystem)" << std::endl;
+}
+
+void RunLinuxOtherHomeTest()
+{
+    namespace fs = std::filesystem;
+    const auto source = fs::path("/var/home/x/source");
+    WriteDiscFiles(source, 1);
+    const auto scan = install::ScanContent(source);
+    bool rejected = false;
+    try { install::InstallContent(scan, "/home/x/game"); }
+    catch (const install::Error& error) {
+        rejected = std::string(error.what()) == "Destination ancestors must not contain links or junctions";
+    }
+    Require(rejected, "an unsupported /home link was accepted");
+    std::cout << "[PASS] unsupported /home links remain rejected" << std::endl;
+}
+#endif
 
 void RunDiscIoTest(const std::filesystem::path& source, const std::filesystem::path& root)
 {
@@ -493,6 +624,107 @@ std::string ReadText(const std::filesystem::path& path)
     return {bytes.begin(), bytes.end()};
 }
 
+void RunCompactionEstimateTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-compaction-estimate-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    for (uint32_t n = 1; n <= 4; ++n)
+    {
+        const auto disc = root / ("disc" + std::to_string(n));
+        std::filesystem::create_directories(disc);
+        std::ofstream(disc / "same.fpd", std::ios::binary) << "same";
+        std::ofstream(disc / "ignored.bin", std::ios::binary) << "not an archive";
+        std::ofstream(disc / "different-size.fpd", std::ios::binary) << std::string(n, 'x');
+    }
+    Require(install::EstimateCompactGameDataBytes(root) == 12,
+            "estimate did not count three duplicate archive copies or counted other sizes/files");
+    Require(install::EstimateCompactGameDataBytes(root / "disc1") == 12,
+            "estimate did not accept a disc folder");
+
+    std::filesystem::remove(root / "disc4" / "same.fpd");
+    std::filesystem::create_hard_link(root / "disc3" / "same.fpd", root / "disc4" / "same.fpd");
+    Require(install::EstimateCompactGameDataBytes(root) == 8,
+            "estimate counted a mixed group's linked copies as separate storage");
+    std::filesystem::create_hard_link(root / "disc2" / "same.fpd", root / "outside.fpd");
+    Require(install::EstimateCompactGameDataBytes(root) == 4,
+            "estimate counted storage retained by an external hard link");
+    std::filesystem::remove(root / "outside.fpd");
+    for (uint32_t n = 2; n <= 4; ++n)
+    {
+        const auto path = root / ("disc" + std::to_string(n)) / "same.fpd";
+        std::filesystem::remove(path);
+        std::filesystem::create_hard_link(root / "disc1" / "same.fpd", path);
+    }
+    Require(install::EstimateCompactGameDataBytes(root) == 0,
+            "estimate counted already linked archives");
+
+    std::filesystem::remove_all(root / "disc2");
+    std::filesystem::remove_all(root / "disc3");
+    std::filesystem::remove(root / "disc4" / "same.fpd");
+    std::ofstream(root / "disc4" / "same.fpd", std::ios::binary) << "same";
+    Require(install::EstimateCompactGameDataBytes(root) == 4,
+            "missing middle discs prevented detection on retained discs");
+    std::filesystem::remove_all(root / "disc4");
+    Require(install::EstimateCompactGameDataBytes(root) == 0 &&
+            install::EstimateCompactGameDataBytes(root / "missing") == 0,
+            "missing discs or installation contributed to the estimate");
+    Require(!std::filesystem::exists(root / ".import.lock"), "read-only estimate created an import lock");
+    std::cout << "[PASS] compaction estimate: copies, mixed/all hard links, external links, sizes, missing discs" << std::endl;
+}
+
+void RunGameDataSharingProbeTest()
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("lo-sharing-probe-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { install::SetTestShareFailure({}); std::error_code ec; std::filesystem::remove_all(path, ec); }
+    } cleanup{root};
+    for (const auto disc : {"disc1", "disc4"})
+    {
+        std::filesystem::create_directories(root / disc);
+        std::ofstream(root / disc / "same.fpd", std::ios::binary) << "same";
+    }
+    const auto estimate = install::EstimateCompactGameDataBytes(root);
+    Require(estimate == 4, "probe fixture did not contain a duplicate archive");
+    const auto checkUnchanged = [&] {
+        size_t entries = 0;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+        {
+            ++entries;
+            Require(entry.path().filename() == "disc1" || entry.path().filename() == "disc4" ||
+                    entry.path().filename() == "same.fpd", "sharing probe left a temporary file or directory");
+        }
+        Require(entries == 4 && ReadText(root / "disc1/same.fpd") == "same" &&
+                ReadText(root / "disc4/same.fpd") == "same", "sharing probe changed an archive");
+        Require(install::EstimateCompactGameDataBytes(root) == estimate &&
+                !SameFile(root / "disc1/same.fpd", root / "disc4/same.fpd"),
+                "sharing probe compacted archives or changed their estimate");
+    };
+    install::SetTestShareFailure("no-clone");
+    Require(install::CanShareGameData(root), "hard-link-capable storage failed the sharing probe");
+    checkUnchanged();
+    Require(install::CanShareGameData(root / "disc4"), "sharing probe did not accept a disc folder");
+    checkUnchanged();
+    install::SetTestShareFailure("link");
+    Require(!install::CanShareGameData(root), "unsupported sharing passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure("rename");
+    Require(!install::CanShareGameData(root), "interrupted replacement passed the probe");
+    checkUnchanged();
+    install::SetTestShareFailure({});
+    Require(!install::CanShareGameData(root / "missing"), "missing installation passed the sharing probe");
+    std::filesystem::remove_all(root / "disc1");
+    std::filesystem::remove_all(root / "disc4");
+    Require(!install::CanShareGameData(root) && std::filesystem::is_empty(root),
+            "sharing probe created missing disc directories");
+    std::cout << "[PASS] sharing probe: hard links, unsupported sharing, interrupted replacement, cleanup, missing discs" << std::endl;
+}
+
 // Archives identical on several discs are stored once, by import or by compaction;
 // different archives, indexes and failed or interrupted links keep plain copies.
 void RunSharedArchiveTest()
@@ -600,6 +832,18 @@ void RunSharedArchiveTest()
 
 int main(int argc, char** argv)
 {
+#if defined(__linux__) && !defined(__ANDROID__)
+    if (argc > 1 && std::string(argv[1]) == "--linux-home")
+    {
+        try { RunLinuxHomeTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
+    if (argc > 1 && std::string(argv[1]) == "--linux-other-home")
+    {
+        try { RunLinuxOtherHomeTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
+#endif
     if (argc > 1 && std::string(argv[1]) == "--reimport")
     {
         try { RunReimportTest(); return 0; }
@@ -612,11 +856,13 @@ int main(int argc, char** argv)
     }
     if (argc > 1 && std::string(argv[1]) == "--shared")
     {
-        try { RunSharedArchiveTest(); return 0; }
+        try { RunCompactionEstimateTest(); RunGameDataSharingProbeTest(); RunSharedArchiveTest(); return 0; }
         catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
     }
     std::cout << "Starting LoImportGameTest..." << std::endl;
     RunDlcIoTest();
+    RunCompactionEstimateTest();
+    RunGameDataSharingProbeTest();
     RunSharedArchiveTest();
 
     const auto uniqueId = std::chrono::steady_clock::now().time_since_epoch().count();

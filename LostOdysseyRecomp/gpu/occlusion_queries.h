@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <utility>
 #include <vector>
 
@@ -87,8 +88,10 @@ namespace gpu::occlusion
     enum class Policy { Adaptive, Fast, Strict, History };
 
     // History on Android, where Adaptive's switch to Strict stalls tiled GPUs
-    // for tens of milliseconds per frame; Adaptive elsewhere.
-#ifdef __ANDROID__
+    // for tens of milliseconds per frame, and on Switch, where the command
+    // processor is the limit and the guest must not wait for it mid-frame
+    // (deko3d; LO_DEKO3D_OCCLUSION=0 goes back to fake counts); Adaptive elsewhere.
+#if defined(__ANDROID__) || defined(__SWITCH__)
     inline constexpr Policy kDefaultPolicy = Policy::History;
 #else
     inline constexpr Policy kDefaultPolicy = Policy::Adaptive;
@@ -331,13 +334,19 @@ namespace gpu::occlusion
         std::vector<Write> Collect()
         {
             std::vector<Write> writes;
-            for (auto it = pending_.begin(); it != pending_.end();) {
+            size_t kept = 0;
+            for (size_t i = 0; i < pending_.size(); ++i) {
+                Query* it = &pending_[i];
                 bool done = it->failed;
                 if (!done) {
                     done = true;
                     for (const auto& part : it->parts) done &= part.batch == 0;
                 }
-                if (!done) { ++it; continue; }
+                if (!done) {
+                    if (kept != i) pending_[kept] = std::move(*it);
+                    ++kept;
+                    continue;
+                }
                 const uint32_t samples = it->failed ? kUnmeasuredSamples : GuestSamples(it->samples);
                 if (!it->failed) {
                     if (!it->history) last_[it->owner] = samples;
@@ -350,8 +359,8 @@ namespace gpu::occlusion
                 }
                 if (!it->written) --unwritten_;
                 Keep(it->parts);
-                it = pending_.erase(it);
             }
+            pending_.resize(kept);
             return writes;
         }
 
@@ -368,14 +377,17 @@ namespace gpu::occlusion
         uint32_t counter_ = 0;
         size_t unwritten_ = 0; // pending queries whose END record waits for host results
         std::optional<Query> active_;
-        std::deque<Query> pending_;
+        // In issue order. A vector compacted by Collect: a deque allocated and freed a block every few queries on
+        // GPU CmdProc, under newlib's malloc lock that the game's threads take too.
+        std::vector<Query> pending_;
         // Queries wait in pending_ for their batch (a frame or more in Mode::History
         // and Strict), so a frame's worth of lists must fit here or every Begin past
         // the bound allocates again. Never more than the queries once in flight.
         static constexpr size_t kSparePartLists = 8192;
         std::vector<std::vector<Part>> spareParts_; // cleared part lists of finished queries
-        std::unordered_map<uint32_t, uint32_t> generations_;
-        std::unordered_map<uint64_t, uint32_t> last_; // last measured count per owner
+        // Flat maps: GPU CmdProc reads both at every query BEGIN and END (about 700 a frame in the busy street).
+        ankerl::unordered_dense::map<uint32_t, uint32_t> generations_;
+        ankerl::unordered_dense::map<uint64_t, uint32_t> last_; // last measured count per owner
         static constexpr size_t kMaxCompleted = size_t(1) << 18; // nobody draining: stop growing
         std::vector<std::pair<uint64_t, uint32_t>> completed_;   // Mode::History counts for TakeCompleted
     };
@@ -396,6 +408,12 @@ namespace gpu::occlusion
     // transition frames. After leaving, Fast holds for a cooldown that doubles
     // each time Strict lasted only briefly, so a view on the edge settles in
     // Fast instead of switching back and forth.
+    //
+    // A map load starts over in Fast (Reset). Strict's own zero share cannot
+    // tell a street from a room: Uhra's main street reads about 35% in Fast
+    // and 20-35% in Strict, between the two thresholds, so Strict carried out
+    // of the Residential Area (57%) stayed on the street until a view below
+    // 20% came along, about a minute later (#694).
     class AdaptiveMode
     {
     public:
@@ -453,6 +471,15 @@ namespace gpu::occlusion
             cooldown_ = hold_;
             hold_ = std::min(hold_ * 2, kMaxCooldownFrames);
             return true;
+        }
+
+        // A new map: Fast, no windows, votes, cooldown or backoff from the
+        // previous one. Returns true when it leaves Strict.
+        bool Reset()
+        {
+            const bool strict = mode_ == Mode::Strict;
+            *this = AdaptiveMode{};
+            return strict;
         }
 
     private:

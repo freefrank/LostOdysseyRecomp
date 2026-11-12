@@ -2,6 +2,8 @@
 
 #include <SDL3/SDL.h>
 #include "controller_glyphs.h"
+#include "prompt_family.h"
+#include <os/platform.h>
 #include <algorithm>
 #include <cstdint>
 #include <vector>
@@ -14,6 +16,29 @@ inline bool IsPlayStation(SDL_GamepadType type)
            type == SDL_GAMEPAD_TYPE_PS5;
 }
 
+// The family Auto shows before a pad is seen. On the Switch every pad is the console's own.
+#if LO_PLATFORM_SWITCH
+inline constexpr Family DefaultFamily = Family::Switch;
+#else
+inline constexpr Family DefaultFamily = Family::Xbox;
+#endif
+
+inline Family FamilyOf(SDL_GamepadType type, uint16_t vendor, uint16_t product)
+{
+#if LO_PLATFORM_SWITCH
+    // devkitPro's SDL names every pad "Switch Controller" and builds its GUID from that name, so the type is not a
+    // Nintendo one and vendor and product are 0: the checks below would give Xbox icons.
+    (void)type, (void)vendor, (void)product;
+    return Family::Switch;
+#endif
+    if (IsPlayStation(type)) return Family::PlayStation;
+    if (type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO || type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT ||
+        type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT || type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR)
+        return Family::Switch;
+    if (vendor == 0x28DE && product == 0x1205) return Family::SteamDeck; // Valve Steam Deck
+    return Family::Xbox;
+}
+
 // Owned by the caller's input lock/event loop. Multiple pads can drive guest
 // input at once, but prompts follow the last newly active physical controller.
 class ActiveController
@@ -21,7 +46,8 @@ class ActiveController
     struct Device
     {
         SDL_JoystickID id;
-        SDL_GamepadType type;
+        Family family;
+        bool positional = false; // Steam Input keeps Xbox positions (face_buttons.h)
         uint32_t buttons = 0;
         bool stick = false;
     };
@@ -29,11 +55,11 @@ class ActiveController
     SDL_JoystickID active_ = 0;
 
 public:
-    void Connected(SDL_JoystickID id, SDL_GamepadType type)
+    void Connected(SDL_JoystickID id, Family family, bool positional = false)
     {
         if (std::none_of(devices_.begin(), devices_.end(), [=](const Device &d) { return d.id == id; }))
         {
-            devices_.push_back({id, type});
+            devices_.push_back({id, family, positional});
             if (active_ == 0) active_ = id;
         }
     }
@@ -54,10 +80,18 @@ public:
                 break;
             }
     }
-    bool PlayStation() const
+    Family ActiveFamily() const
+    {
+        if (active_ == UINT32_MAX) return Family::Keyboard;
+        for (const auto &device : devices_)
+            if (device.id == active_) return device.family;
+        return DefaultFamily;
+    }
+    bool PlayStation() const { return ActiveFamily() == Family::PlayStation; }
+    bool ActivePositional() const
     {
         for (const auto &device : devices_)
-            if (device.id == active_) return IsPlayStation(device.type);
+            if (device.id == active_) return device.positional;
         return false;
     }
     bool KeyboardActive() const { return active_ == UINT32_MAX; }

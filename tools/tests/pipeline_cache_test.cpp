@@ -192,8 +192,10 @@ int main(int argc, char** argv)
         Check(loaded.status == cache::Status::Loaded && Keys(loaded.records) == std::vector<cache::Key>{ key, second }, "key round trip");
         Check(cache::Write(path, records, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
             "deterministic replacement");
-        Check(cache::KeyHash{}(key) == static_cast<size_t>(cache::detail::Hash(cache::detail::Encode(key))),
-            "stable key hash");
+        auto copy = key;
+        Check(cache::KeyHash{}(copy) == cache::KeyHash{}(key), "equal keys hash equal");
+        copy.slopeBias ^= 1;
+        Check(cache::KeyHash{}(copy) != cache::KeyHash{}(key), "a changed field changes the hash");
         auto distinct = key;
         distinct.slopeBias ^= 0x80000000;
         Check(distinct != key && cache::detail::Encode(distinct) != cache::detail::Encode(key), "exact slope sign equality");

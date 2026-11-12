@@ -57,12 +57,12 @@ Release workflow design: the Linux job compiles once, creates a persistent
 AppImage AppDir, and exports the stable Flatpak by reusing that AppDir's
 `usr` tree. It does not perform a second source compilation for Flatpak.
 The workflow exports a stable Flatpak directly as a CI artifact next to the
-Windows ZIP and AppImage. Since 2026-10-01 the workflow runs on Gitea
-(`.gitea/workflows/release.yml`, see [Pull request checks and releases on
-Gitea](../../docs/notes/ci-gitea.md)): after both platform jobs succeed, the
-publication job uploads the Gitea artifacts to the GitHub release (the Windows
-ZIP, AppImage and Flatpak, and from v0.8.5 the Android APK from a third build
-job), then checks that the release holds those packages and at most one more
+Windows ZIP and AppImage. The workflow runs on GitHub-hosted runners
+(`.github/workflows/release.yml`, see [GitHub Actions checks and
+releases](../../docs/notes/ci.md)): after all package jobs succeed, the
+publication job downloads their GitHub Actions v4 artifacts and uploads missing
+assets to the GitHub draft (Windows ZIP, AppImage, Flatpak and Android APK),
+then checks that the release holds those packages and at most one more
 asset, `LostOdysseyRecomp-macos-arm64-<tag>.dmg`, which is built on a Mac and
 uploaded by hand ([macOS releases](../../docs/MACOS_RELEASE.md#disk-image-v085)), and
 that every asset is uploaded and nonempty. Any other asset fails the check; the

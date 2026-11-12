@@ -1,5 +1,7 @@
 # 合并 render pass 阶段 0：平板实测
 
+[English](render-pass-merging-phase0-2026-10-10.md)
+
 - 日期：2026-10-10，设备时间 17:24–17:53（约 29 分钟，25 次启动）。
 - 设备：Lenovo TB321FU（Adreno 750），Turnip `v26.0.0 R8`（KIMCHI 构建，Vulkan 1.4.335），adrenotools 加载。没有碰维护者的手机。
 - 代码：v0.9.22（apk-v100 树）加诊断补丁 `apply_diag_q.py`，APK `lo-0.9.22-dev-v100-diagq.apk`。

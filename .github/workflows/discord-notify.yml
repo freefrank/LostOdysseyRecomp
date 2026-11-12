@@ -23,6 +23,12 @@ on:
 permissions:
   contents: read
 
+# Serialize both entry points for a release so the bot's existing-message
+# lookup also prevents duplicate posts when publication and dispatch overlap.
+concurrency:
+  group: discord-notify-${{ github.event.release.tag_name || inputs.release_tag || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   notify:
     runs-on: ubuntu-latest

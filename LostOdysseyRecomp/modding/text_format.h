@@ -22,6 +22,8 @@ enum class Format : uint8_t
     Subtitle,   // event/subtitle/<l>/[<voice>/]*.sub: cutscene subtitles
     StaffRoll,  // loc/<l>/staffroll/roll_<l>.bin: credits script
     Coalesced,  // rpgame/localization/coalesced.<l>: UE3 localized INI files
+    XmlBin,     // loc/<l>/field/name_data.xmb: place, shop, action and treasure names
+    Dream,      // event/1000/<l>/*_<l>.xxx: Thousand Years of Dreams pages (UE3 packages)
 };
 
 // path: the member path as the FPI names it, lower case with '/'

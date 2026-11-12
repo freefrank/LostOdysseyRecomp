@@ -213,6 +213,10 @@ inline constexpr ScreenLightPair ScreenLightPairs[]{
     {0x9bdef27080ca3ab4ull, 0xd122f0139a58bdacull},
     // The same floor light in a battle entered from the Entrance Hall.
     {0xe810cfacc107fd3cull, 0xa800980dfc9e4efeull},
+    // Temple of Enlightenment (#604): the Square of Eternity light and the
+    // Baballoon battle light, over matching slot-7 scene geometry.
+    {0xe810cfacc107fd3cull, 0x2f66f27857bd2833ull},
+    {0xe810cfacc107fd3cull, 0x2994b6e356a385ceull},
     // Cutscene tour 2026-10-04: the other e810 partners, each the same i4
     // attenuation fetch multiplied into the light (a5c3/dba6 add a spot cone).
     {0xe810cfacc107fd3cull, 0x3b45f8f248182356ull}, {0xe810cfacc107fd3cull, 0x5b11f88a8bb293dfull},

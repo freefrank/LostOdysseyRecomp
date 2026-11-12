@@ -84,6 +84,8 @@ namespace gpu::renderer
     // Policy::History (gpu/occlusion_history.h) is on: the guest hooks set the
     // game's deferred-occlusion flag and answer its reads.
     bool OcclusionHistoryEnabled();
+    // No host occlusion queries (deko3d): every count the game reads is the command processor's made-up one.
+    bool OcclusionCountsFake();
     // Policy::History: the (owner, guest samples) measured since the last call.
     // Guest thread.
     void TakeOcclusionCompletions(std::vector<std::pair<uint64_t, uint32_t>>& out);

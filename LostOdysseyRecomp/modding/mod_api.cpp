@@ -625,12 +625,17 @@ void LoadLanguagePack(Snapshot& snapshot, const std::filesystem::path& file, std
         if (text.empty() || text.front() == '#' || text.front() == ';') continue;
         const auto equal = text.find('=');
         const auto key = equal == text.npos ? std::string_view{} : Trim(text.substr(0, equal));
-        if ((key != "id" && key != "name" && key != "base") ||
+        if ((key != "id" && key != "name" && key != "base" && key != "direction") ||
             !values.emplace(std::string(key), std::string(Trim(text.substr(equal + 1)))).second) {
-            Diagnose(snapshot, file, lineNo, "expected one each of id=, name= and base="); return;
+            Diagnose(snapshot, file, lineNo, "expected one each of id=, name=, base= and an optional direction="); return;
         }
     }
-    LanguagePack pack{values["id"], values["name"], values["base"], file.parent_path()};
+    const auto direction = values.find("direction");
+    if (direction != values.end() && direction->second != "ltr" && direction->second != "rtl") {
+        Diagnose(snapshot, file, 0, "language.ini direction must be ltr or rtl"); return;
+    }
+    LanguagePack pack{values["id"], values["name"], values["base"], file.parent_path(),
+                      direction != values.end() && direction->second == "rtl"};
     for (auto* value : {&pack.id, &pack.base})
         for (char& c : *value) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
     const bool base = pack.base.size() == 3 &&
@@ -963,6 +968,36 @@ std::vector<ResolvedAsset> ListFonts(const LanguagePack& pack) {
     std::vector<ResolvedAsset> result;
     for (auto& [key, asset] : found) result.push_back(std::move(asset));
     return result;
+}
+std::map<std::string, std::string> AchievementTexts(const LanguagePack& pack) {
+    const auto snapshot = Current();
+    const auto file = pack.folder / "achievements.ini";
+    std::map<std::string, std::string> values;
+    if (!snapshot->enabled || !ContainedFile(snapshot->root, pack.folder / "language.ini") ||
+        !ContainedFile(snapshot->root, file))
+        return values;
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(file, ec);
+    if (ec || size > 65536) return values;
+    std::ifstream input(file, std::ios::binary);
+    std::string line;
+    for (size_t lineNo = 1; std::getline(input, line); ++lineNo) {
+        if (lineNo == 1 && line.compare(0, 3, "\xef\xbb\xbf") == 0) line.erase(0, 3);
+        const auto text = Trim(line);
+        const auto equal = text.find('=');
+        if (text.empty() || text.front() == '#' || text.front() == ';' || equal == text.npos) continue;
+        const std::string key(Trim(text.substr(0, equal)));
+        const std::string value(Trim(text.substr(equal + 1)));
+        // heading, or <achievement id>.name / .unlocked / .locked
+        const auto dot = key.find('.');
+        const bool keyValid = key == "heading" ||
+            (dot > 0 && dot <= 5 && dot != key.npos &&
+             std::all_of(key.begin(), key.begin() + dot, [](char c) { return c >= '0' && c <= '9'; }) &&
+             (key.compare(dot, key.npos, ".name") == 0 || key.compare(dot, key.npos, ".unlocked") == 0 ||
+              key.compare(dot, key.npos, ".locked") == 0));
+        if (keyValid && !value.empty() && value.size() <= 512 && SafeText(value)) values.emplace(key, value);
+    }
+    return values;
 }
 std::optional<ResolvedAsset> Resolve(const AssetRequest& request) {
     if (!KindValid(request.id.kind)) return {};

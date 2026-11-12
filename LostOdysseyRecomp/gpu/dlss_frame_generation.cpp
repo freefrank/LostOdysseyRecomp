@@ -1,4 +1,5 @@
 #include "dlss_frame_generation.h"
+#include "loading_pacing.h"
 #if defined(LO_ENABLE_STREAMLINE_FG) && defined(_WIN32)
 #include "dlss_fg_constants.h"
 #include "frame_generation_settings.h"
@@ -97,6 +98,12 @@ bool Session::Prepare(const std::shared_ptr<frame_generation::ProducerSnapshot>&
     ObserveCreationFailure(); // A worker-thread error may arrive after GetState.
     token_ = nullptr;
     if (!Requested()) { Disable(); return false; }
+    if (loading::Active()) {
+        // Loading presents do not generate frames or wait on Reflex's limiter.
+        // Keep the preceding input drain: skipping pacing cannot retire images
+        // which the previous SDK frame might still be reading.
+        Disable(); ObserveInputs(false, false, Interruption::NoInputs); return false;
+    }
     ++frame_;
     if (!Check(runtime_.NewFrameToken(token_, &frame_), "frame token") || !token_) {
         Disable(); ObserveInputs(false, false, Interruption::SdkFailure); return false;

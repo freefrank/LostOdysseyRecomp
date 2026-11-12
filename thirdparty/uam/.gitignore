@@ -1,0 +1,13 @@
+.*/
+build/
+*~
+*.exe
+*.bak
+*.bat
+*.bin
+*.glsl
+*.tgsi
+*.dksh
+*.txt
+# SwitchWakerHD: the CMake build of uamlib
+!CMakeLists.txt

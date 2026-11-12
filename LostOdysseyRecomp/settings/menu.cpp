@@ -1,4 +1,7 @@
 #include <os/log_collection.h>
+#if !defined(__SWITCH__)
+#include <os/steam_shortcut.h>
+#endif
 #include "menu.h"
 #include "menu_render.h"
 #include "menu_assets.h"
@@ -10,11 +13,13 @@
 #include "translations.h"
 #include "achievements_page.h"
 #include "mods_page.h"
+#include "quit_action_hook.h"
 #include <patches/mod_hot_reload.h>
 #include <gpu/video.h>
 #include <gpu/display_choice.h>
 #include <gpu/frame_plan.h>
 #include <gpu/frame_generation_settings.h>
+#include <gpu/shader_preparation_request.h>
 #include <kernel/io/file_system.h>
 #include <os/logger.h>
 #include <stdafx.h>
@@ -22,6 +27,16 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#if LO_PLATFORM_SWITCH
+#include <debug/debug_options.h>
+#endif
+#include <hid/glyph_atlases.h>
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+#include <discord/presence.h>
+#endif
+#if LO_PLATFORM_ANDROID
+#include <SDL3/SDL_system.h>
+#endif
 extern "C" PPC_FUNC(__imp__sub_822F19B0);
 extern "C" PPC_FUNC(__imp__sub_82481BE8);
 extern "C" PPC_FUNC(__imp__sub_82870E38);
@@ -42,6 +57,8 @@ std::atomic<bool> releaseToParent{false};
 // Title menu entry: the title tick reports an idle menu, input polling records
 // a fresh Y there, and the opened task hides what a game would replace.
 std::atomic<bool> titleMenuIdle{false}, titleShortcut{false}, titleEntry{false};
+std::atomic<bool> titleQuitShortcut{false}, titleQuitOpen{false}, titleQuitEscape{false};
+int titleQuitChoice = 1; // No until the player explicitly chooses Yes.
 // With no game loaded, the retail options (Gameplay, and Voice language, Music and
 // Sound effects on Audio) and their Restore would be replaced by the next save or by
 // New Game's defaults (828710A0), and there is no game to quit.
@@ -101,11 +118,12 @@ uint64_t displayMovesBefore = 0;
 std::chrono::steady_clock::time_point displayConfirmDeadline;
 std::atomic<bool> displayConfirmOpen{false}, displayConfirmEscape{false};
 std::chrono::steady_clock::duration menuClockOffset{}; // Tests advance the menu clock.
+std::optional<std::chrono::steady_clock::time_point> menuClockFixed; // Tests hold exact animation frames.
 // Saved display choice the menu last saw; the window thread changes it when the
 // player moves the window (Win+Shift+arrow).
 std::string syncedDisplayName;
 uint32_t syncedDisplayIndex = 0;
-std::chrono::steady_clock::time_point MenuNow() { return std::chrono::steady_clock::now() + menuClockOffset; }
+std::chrono::steady_clock::time_point MenuNow() { return menuClockFixed.value_or(std::chrono::steady_clock::now()) + menuClockOffset; }
 bool collectionPrompt = false;
 int collectionChoice = 1;
 bool restartPrompt = false, savedRestartPrompt = false, restartSaveFailed = false;
@@ -119,6 +137,8 @@ int importChoice = 1;
 bool importLaunchPending = false;
 bool shaderBundlePrompt = false;
 int shaderBundleChoice = 1;
+bool shaderPreparationPrompt = false;
+int shaderPreparationChoice = 1;
 // Mods page (System → Mods). The mods are listed when it opens; the order and
 // switches stay unsaved until Save. modsSaved is the order saved in this run,
 // applied at the next start; reopening the page shows it.
@@ -137,6 +157,10 @@ std::vector<achievements_page::Item> achievementItems;
 std::vector<std::shared_ptr<const menu_assets::Image>> achievementIcons;
 int achievementsFocus = 0;
 std::wstring achievementSummary;
+// Debug page (System → Debug, the Switch only). Every row applies and saves at
+// once and is logged with its frame (debug/debug_options.h).
+std::atomic<bool> debugOpen{false};
+int debugFocus = DebugOverlayRow;
 // Controls page (Gameplay → Controls). The layouts stay unsaved until Save;
 // Button prompts and Vibration save at once, as they did on the tab. The page
 // navigates with the default layouts (FilterInput), so a layout that leaves a
@@ -380,6 +404,28 @@ const wchar_t *Tr(const wchar_t *en, const wchar_t *zh)
 {
     return Translate(edit.uiLanguage, en, zh);
 }
+#if !LO_PLATFORM_SWITCH
+const wchar_t *SteamShortcutMessage(steam_shortcut::Status result)
+{
+    switch (result)
+    {
+    case steam_shortcut::Status::Added:
+        return Tr(L"Added to Steam. Restart Steam to see it.", L"已加入 Steam。請重新啟動 Steam 以查看。");
+    case steam_shortcut::Status::AddedFromFlatpak:
+        return Tr(L"Restart Steam to see it; if Steam was open, close it and add again.",
+                  L"請重新啟動 Steam 以查看；若 Steam 當時開啟，請關閉後再次加入。");
+    case steam_shortcut::Status::SteamRunning:
+        return Tr(L"Close Steam, then try again.", L"請關閉 Steam 後再試。");
+    case steam_shortcut::Status::SteamNotFound:
+        return Tr(L"Steam was not found. Install and open Steam first.", L"找不到 Steam。請先安裝並開啟 Steam。");
+    case steam_shortcut::Status::UserNotFound:
+        return Tr(L"No Steam user found. Sign in to Steam, close it, then try again.",
+                  L"找不到 Steam 使用者。請登入 Steam，關閉後再試。");
+    default:
+        return Tr(L"Could not add to Steam. Check the log for details.", L"無法加入 Steam。詳情請查看日誌。");
+    }
+}
+#endif
 // Adapter and display names arrive as UTF-8.
 std::wstring Widen(std::string_view text)
 {
@@ -478,6 +524,114 @@ void CycleAchievementNotifications(int delta)
     saved.achievementSound = edit.achievementSound;
     if (!SaveConfig(saved)) status = Tr(L"Could not save settings.", L"無法儲存設定。");
 }
+#if LO_PLATFORM_SWITCH
+bool DebugTitle(int r) { return r == DebugLiveTitle || r == DebugNextStartTitle; }
+// The deko3d option a Debug page row switches, or Count.
+debug_options::Deko3d DebugDeko3d(int r)
+{
+    using Deko3d = debug_options::Deko3d;
+    switch (r)
+    {
+    case DebugMergeBarriersRow: return Deko3d::MergeBarriers;
+    case DebugLeanBarriersRow: return Deko3d::LeanBarriers;
+    case DebugZcullRow: return Deko3d::Zcull;
+    case DebugDepthCompressionRow: return Deko3d::DepthCompression;
+    case DebugColorCompressionRow: return Deko3d::ColorCompression;
+    case DebugVsOutputsRow: return Deko3d::VsOutputs;
+    default: return Deko3d::Count;
+    }
+}
+void OpenDebugPage()
+{
+    debugFocus = DebugOverlayRow;
+    status.clear();
+    debugOpen = true;
+    LOG_INFO("settings: debug page opened");
+}
+void CloseDebugPage()
+{
+    debugOpen = false;
+    status.clear();
+}
+// A, Left or Right on a Debug page row: applied, saved and logged at once,
+// without unsaved edits from the tabs.
+void ChangeDebugOption(int delta)
+{
+    bool saved = true;
+    if (debugFocus == DebugOverlayRow)
+    {
+        const uint32_t mode = uint32_t((int(std::min(edit.performanceOverlay, 2u)) + 3 + delta) % 3);
+        Config config = GetConfig();
+        config.performanceOverlay = mode;
+        saved = SaveConfig(config);
+        if (saved)
+        {
+            edit.performanceOverlay = mode;
+            debug_options::LogPerformanceOverlay(mode);
+        }
+    }
+    else if (debugFocus == DebugServerRow)
+        saved = debug_options::SetDebugServer(!GetConfig().debug.debugServer);
+    else if (const auto option = DebugDeko3d(debugFocus);
+             option != debug_options::Deko3d::Count && debug_options::Deko3dActive())
+        saved = debug_options::Set(option, !debug_options::Saved(option));
+    if (!saved) status = Tr(L"Could not save settings.", L"無法儲存設定。");
+}
+// Help for the focused Debug page row (line 1); line 2 says what the GPU runs
+// with now, and whether env.txt set it.
+std::pair<std::wstring, std::wstring> DebugHelp()
+{
+    std::wstring help;
+    switch (debugFocus)
+    {
+    case DebugOverlayRow:
+        help = Tr(L"Shows FPS, or detailed load, over the game. Applies and saves at once.",
+                  L"在遊戲畫面上顯示 FPS 或詳細負載。立即套用並儲存。");
+        break;
+    case DebugMergeBarriersRow:
+        help = Tr(L"Back-to-back GPU barriers become one. Applies from the next frame.",
+                  L"連續的 GPU 屏障合併為一個。從下一個影格起生效。");
+        break;
+    case DebugLeanBarriersRow:
+        help = Tr(L"Barriers before a write keep the texture cache. Applies from the next frame.",
+                  L"寫入前的屏障保留紋理快取。從下一個影格起生效。");
+        break;
+    case DebugZcullRow:
+        help = Tr(L"Hierarchical depth culling. It can drop decals. Applies at the next start.",
+                  L"階層式深度剔除，可能遺漏貼花。下次啟動時生效。");
+        break;
+    case DebugDepthCompressionRow:
+        help = Tr(L"Hardware compression for depth buffers. Applies at the next start.",
+                  L"深度緩衝區使用硬體壓縮。下次啟動時生效。");
+        break;
+    case DebugColorCompressionRow:
+        help = Tr(L"Hardware compression for colour render targets, on by default. Applies at the next start.",
+                  L"色彩渲染目標使用硬體壓縮，預設開啟。下次啟動時生效。");
+        break;
+    case DebugVsOutputsRow:
+        help = Tr(L"Vertex shaders write only what the pixel shader reads. Applies at the next start.",
+                  L"頂點著色器只輸出像素著色器讀取的值。下次啟動時生效。");
+        break;
+    case DebugServerRow:
+        help = debug_options::DebugServerFromEnvironment()
+            ? Tr(L"env.txt's LO_DEBUG_SERVER decides at start; this choice is saved for when it is gone.",
+                 L"啟動時由 env.txt 的 LO_DEBUG_SERVER 決定；此選項會保存，供移除後使用。")
+            : Tr(L"Log, screenshots and input for tools/switch/lo_debug.py on the local network. Applies at the next start.",
+                 L"在區域網路中提供日誌、截圖與輸入給 tools/switch/lo_debug.py。下次啟動時生效。");
+        break;
+    }
+    const auto option = DebugDeko3d(debugFocus);
+    if (option == debug_options::Deko3d::Count)
+        return {help, Tr(L"Each change is logged with the frame it took effect at.", L"每次變更都會連同生效的影格編號寫入日誌。")};
+    if (!debug_options::Deko3dActive())
+        return {help, Tr(L"Only with the deko3d back end (LO_SWITCH_BACKEND=deko3d in env.txt).",
+                         L"僅適用於 deko3d 後端（env.txt 中的 LO_SWITCH_BACKEND=deko3d）。")};
+    std::wstring running = std::wstring(Tr(L"Running now:", L"目前執行：")) + L" " +
+                           (debug_options::Running(option) ? Tr(L"On", L"開") : Tr(L"Off", L"關"));
+    if (const char *env = debug_options::ForcedBy(option)) running += L"   (env.txt: " + Widen(env) + L")";
+    return {help, running};
+}
+#endif
 // An achievement entry: icon, name, one line of text, then gamerscore and, once
 // earned, the date. A locked secret shows neither its name, text nor icon.
 Row AchievementRow(const achievements_page::Item &item, std::shared_ptr<const menu_assets::Image> icon)
@@ -634,6 +788,27 @@ std::wstring InputLabel(int input)
     case input_map::StickRight: return Tr(L"Left stick right", L"左搖桿右");
     }
     return L"?";
+}
+// The game's prompt icon for an input whose label is words, 0 otherwise.
+wchar_t InputIcon(int input)
+{
+    switch (input)
+    {
+    case input_map::LeftThumb: return ButtonIconLeftThumb;
+    case input_map::RightThumb: return ButtonIconRightThumb;
+    case input_map::DpadUp: return ButtonIconDpadUp;
+    case input_map::DpadDown: return ButtonIconDpadDown;
+    case input_map::DpadLeft: return ButtonIconDpadLeft;
+    case input_map::DpadRight: return ButtonIconDpadRight;
+    }
+    return 0;
+}
+// InputIcon of a controller source's default input.
+wchar_t SourceIcon(input_map::Source source)
+{
+    for (int i = 0; i < input_map::ControllerInputCount; ++i)
+        if (input_map::DefaultController[i] == source) return InputIcon(i);
+    return 0;
 }
 // A controller source by the Xbox 360 name of its default input; the extra
 // buttons some controllers have by their own names.
@@ -1109,29 +1284,73 @@ std::wstring DlssNotice()
         AppendSentence(text, BackendPendingSentence(running.device.backend));
     return text;
 }
+bool SystemRowHidden(int r)
+{
+#if LO_PLATFORM_SWITCH
+    // No updater, network download, log upload or disc importer on the console (docs/SWITCH.md): the discs and
+    // the shader pack are copied to the SD card. Shader preparation: the release env.txt's LO_PIPELINE_PREBUILD=all
+    // already builds every known pipeline at start, in the background.
+    if (r == SystemUpdatesRow || r == SystemCollectionRow || r == SystemImportRow || r == SystemShaderBundleRow ||
+        r == SystemShaderPreparationRow)
+        return true;
+#else
+    if (r == SystemDebugRow) return true;
+#endif
+#if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+    return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
+#else
+    return false;
+#endif
+}
+#if LO_PLATFORM_SWITCH
+// A Graphics row env.txt sets (graphics_menu.h): its help names the variable.
+void SwitchEnvironmentHelp(std::wstring &help, bool fromEnvironment, const wchar_t *variable)
+{
+    if (!fromEnvironment) return;
+    AppendSentence(help, std::wstring(Tr(L"Set by env.txt:", L"由 env.txt 設定：")) + L" " + variable);
+}
+// The Graphics tab's status line: which operation mode's heights the resolution rows show, and whether env.txt
+// holds some rows. The PC's upscaler status does not apply.
+std::wstring SwitchNotice()
+{
+    std::wstring text = Docked() ? Tr(L"Docked: the resolution rows set the docked heights.", L"TV 模式：解析度選項設定 TV 模式的高度。")
+                                 : Tr(L"Handheld: the resolution rows set the handheld heights.", L"手提模式：解析度選項設定手提模式的高度。");
+    if (graphics_menu::MaximumHeightFromEnvironment() || graphics_menu::DynamicResolutionFromEnvironment() ||
+        graphics_menu::MinimumHeightFromEnvironment() || graphics_menu::FsrSharpnessFromEnvironment())
+        AppendSentence(text, Tr(L"Greyed-out rows are set by env.txt.", L"灰色選項由 env.txt 設定。"));
+    return text;
+}
+#endif
 bool GraphicsRowHidden(int r)
 {
     // A page entry row shows with the setting it belongs to.
     if (r == int(GraphicsRow::NeuralRenderingTuning)) r = int(GraphicsRow::DlssNeuralRendering);
     if (r == int(GraphicsRow::HdrCalibration)) r = int(GraphicsRow::HdrPeak);
 #if LO_PLATFORM_SWITCH
-    // The console owns the display and output size, and settings::Validate pins
-    // the Xbox 360 image (720p scene, no host AA, AO, filtering, upscaling, HDR).
+    // The console owns the display and output size, and settings::Validate pins the Xbox 360 image (retail shadow
+    // maps, no host AA, AO, filtering, HDR or PC upscalers). The rows that do something here, and the Switch's own:
+    // the scene height (Render / Maximum, Dynamic and Minimum resolution) and FSR 1 with its sharpness.
+    // Frame rate is pinned at 30 (Validate). Scene fades Off skips the crossfade's full-screen quad.
     switch (GraphicsRow(r))
     {
-    case GraphicsRow::Backend: case GraphicsRow::Gpu: case GraphicsRow::DisplayMode:
-    case GraphicsRow::Display: case GraphicsRow::AspectRatio: case GraphicsRow::OutputResolution:
-    case GraphicsRow::RenderResolution: case GraphicsRow::ShadowResolution: case GraphicsRow::AntiAliasing:
-    case GraphicsRow::DlssQuality: case GraphicsRow::FsrSharpness: case GraphicsRow::DlssNeuralRendering:
-    case GraphicsRow::FrameGeneration: case GraphicsRow::FrameGenerationMultiplier:
-    case GraphicsRow::AmbientOcclusion: case GraphicsRow::AnisotropicFiltering:
-    case GraphicsRow::VariableRefreshRate: case GraphicsRow::Hdr: case GraphicsRow::HdrPaperWhite:
-    case GraphicsRow::HdrPeak:
-        return true;
-    default:
+    case GraphicsRow::Preset: case GraphicsRow::RenderResolution: case GraphicsRow::DynamicResolution:
+    case GraphicsRow::DynamicShadows: case GraphicsRow::AntiAliasing: case GraphicsRow::DepthOfField:
+    case GraphicsRow::Bloom: case GraphicsRow::MotionBlur: case GraphicsRow::SceneFades: case GraphicsRow::Culling:
+    case GraphicsRow::ScalingQuality:
+    case GraphicsRow::LoadingTransitions: case GraphicsRow::PerformanceOverlay:
+    case GraphicsRow::Brightness: case GraphicsRow::Save:
         return false;
+    case GraphicsRow::MinimumResolution:
+        return !graphics_menu::DynamicResolutionOn(edit);
+    case GraphicsRow::FsrSharpness:
+        return !graphics_menu::FsrOn(edit);
+    default:
+        return true;
     }
 #endif
+    // The Switch's own rows.
+    if (r == int(GraphicsRow::DynamicResolution) || r == int(GraphicsRow::MinimumResolution))
+        return true;
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
@@ -1207,8 +1426,8 @@ std::wstring FgNotice()
     return text;
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
-// Only Graphics scrolls; the other tabs fit the visible rows (menu.h layout rules).
-static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows && SystemRowCount <= kMenuVisibleRows);
+// Gameplay and Audio fit their visible rows; Graphics and System can scroll.
+static_assert(GameRowCount <= kMenuVisibleRows && AudioRowCount <= kMenuVisibleRows);
 // Moves graphics focus off a hidden row to the next visible one.
 void SkipHiddenGraphicsRow()
 {
@@ -1218,7 +1437,7 @@ void SkipHiddenGraphicsRow()
 }
 void Publish(uint8_t *base, uint32_t config)
 {
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_ANDROID || LO_PLATFORM_SWITCH
     // The first graphics ids are hidden; enter the tab on a visible row.
     SkipHiddenGraphicsRow();
 #endif
@@ -1236,7 +1455,8 @@ void Publish(uint8_t *base, uint32_t config)
     apu::SetTestSignal(speakerTest);
     Snapshot next;
     next.tab = tab;
-    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus : row;
+    next.row = modsOpen ? modsFocus : controlsOpen ? controlsFocus : achievementsOpen ? achievementsFocus
+             : debugOpen ? debugFocus : row;
     next.speakerLayout = speakerTest;
     next.speakerRear = int(edit.audioMatrixRear);
     next.language = edit.uiLanguage;
@@ -1313,6 +1533,37 @@ void Publish(uint8_t *base, uint32_t config)
         for (size_t i = 0; i < achievementItems.size(); ++i)
             next.rows[size_t(AchievementsFirstRow) + i] = AchievementRow(achievementItems[i], achievementIcons[i]);
     }
+#if LO_PLATFORM_SWITCH
+    else if (debugOpen)
+    {
+        next.pageTitle = Tr(L"Debug", L"除錯");
+        next.keyLegend = (flags & 0x02000000)
+            ? Tr(L"B / Left / Right: change     A: back", L"B / 左 / 右：變更     A：返回")
+            : Tr(L"A / Left / Right: change     B: back", L"A / 左 / 右：變更     B：返回");
+        next.rows.resize(size_t(DebugRowCount));
+        auto title = [&](const wchar_t *en, const wchar_t *zh) {
+            Row header{Tr(en, zh), {}, false, {}, 0};
+            header.header = true;
+            return header;
+        };
+        next.rows[DebugLiveTitle] = title(L"Applies at once", L"立即生效");
+        next.rows[DebugOverlayRow] = makeChoices(L"Performance overlay", L"效能資訊",
+            {Tr(L"Off", L"關"), L"FPS", Tr(L"Detailed", L"詳細")}, std::min(edit.performanceOverlay, 2u));
+        // The saved values; the help line says what runs now. Off the deko3d back end they do nothing.
+        const bool deko3d = debug_options::Deko3dActive();
+        auto deko3dRow = [&](int r, const wchar_t *en, const wchar_t *zh) {
+            next.rows[size_t(r)] = makeChoices(en, zh, onOff(), debug_options::Saved(DebugDeko3d(r)) ? 0 : 1, deko3d);
+        };
+        deko3dRow(DebugMergeBarriersRow, L"deko3d: merge barriers", L"deko3d：合併屏障");
+        deko3dRow(DebugLeanBarriersRow, L"deko3d: lean barriers", L"deko3d：精簡屏障");
+        next.rows[DebugNextStartTitle] = title(L"Applies at the next start", L"下次啟動時生效");
+        deko3dRow(DebugZcullRow, L"deko3d: Zcull", L"deko3d：Zcull");
+        deko3dRow(DebugDepthCompressionRow, L"deko3d: depth compression", L"deko3d：深度壓縮");
+        deko3dRow(DebugColorCompressionRow, L"deko3d: colour compression", L"deko3d：色彩壓縮");
+        deko3dRow(DebugVsOutputsRow, L"deko3d: vertex output trimming", L"deko3d：頂點輸出精簡");
+        next.rows[DebugServerRow] = makeChoices(L"Debug server", L"除錯伺服器", onOff(), GetConfig().debug.debugServer ? 0 : 1);
+    }
+#endif
     else if (controlsOpen)
     {
         next.pageTitle = Tr(L"Controls", L"按鍵設定");
@@ -1321,7 +1572,8 @@ void Publish(uint8_t *base, uint32_t config)
             : Tr(L"A: change     Start: save     B: back", L"A：變更     Start：儲存     B：返回");
         next.rows.resize(size_t(ControlsRowCount));
         next.rows[ControlsPromptRow] = makeChoices(L"Button prompts", L"按鍵提示",
-            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"}, std::min(edit.buttonPrompts, 2u));
+            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation", L"Switch", L"Steam Deck", Tr(L"Keyboard", L"鍵盤")},
+            std::min(edit.buttonPrompts, 5u));
         next.rows[ControlsVibrationRow] = {Tr(L"Vibration", L"震動"), std::to_wstring(edit.vibrationPercent) + L"%", true, {}, 0,
                                            int(std::min(edit.vibrationPercent, 100u))};
         auto title = [&](const wchar_t *en, const wchar_t *zh) {
@@ -1334,7 +1586,7 @@ void Publish(uint8_t *base, uint32_t config)
         // The row being captured counts down in place of its binding.
         const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(captureDeadline - MenuNow()).count();
         const auto seconds = std::to_wstring(std::max<long long>(0, (left + 999) / 1000));
-        auto binding = [&](int r, std::wstring value, bool literal) {
+        auto binding = [&](int r, std::wstring value, bool literal, wchar_t valueIcon = 0) {
             bool keyboard = false;
             const int input = ControlsInput(r, keyboard);
             if (r == captureRow)
@@ -1345,10 +1597,13 @@ void Publish(uint8_t *base, uint32_t config)
             }
             Row mapping{InputLabel(input), value, true, {value}, 0};
             mapping.literal = literal;
+            mapping.nameIcon = InputIcon(input);
+            if (r != captureRow) mapping.valueIcon = valueIcon;
             next.rows[size_t(r)] = std::move(mapping);
         };
         for (int i = 0; i < input_map::ControllerInputCount; ++i)
-            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false);
+            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false,
+                    SourceIcon(controlsController[size_t(i)]));
         for (int i = 0; i < input_map::KeyboardInputCount; ++i)
             binding(ControlsKeyboardFirst + i, KeyLabel(controlsKeyboard[size_t(i)]),
                     controlsKeyboard[size_t(i)] != input_map::NoKey);
@@ -1450,9 +1705,16 @@ void Publish(uint8_t *base, uint32_t config)
             if (edit.width == resolutions[i][0] && edit.height == resolutions[i][1]) outputChoice = i;
         }
         placeGraphics(GraphicsRow::OutputResolution, makeChoices(L"Output resolution", L"輸出解析度", std::move(outputChoices), outputChoice));
+#if LO_PLATFORM_SWITCH
+        placeGraphics(GraphicsRow::Preset, makeChoices(L"Graphics preset", L"畫質預設",
+                   {Tr(L"Quality", L"品質"), Tr(L"Balanced (recommended)", L"平衡（建議）"), Tr(L"Performance", L"效能"),
+                    Tr(L"Custom", L"自訂")},
+                   uint32_t(graphics_menu::PresetOf(edit))));
+#else
         placeGraphics(GraphicsRow::Preset, makeChoices(L"Graphics preset", L"畫質預設",
                    {Tr(L"Original", L"原版"), Tr(L"Low-end", L"低配置"), Tr(L"Custom", L"自訂")},
                    uint32_t(graphics_menu::PresetOf(edit))));
+#endif
         std::vector<std::wstring> renderChoices;
         for (const int height : graphics_menu::RenderResolutions)
             renderChoices.push_back(height == 0 ? Tr(L"Follow output", L"跟隨輸出") :
@@ -1460,9 +1722,14 @@ void Publish(uint8_t *base, uint32_t config)
                 std::to_wstring(height) + L"p");
         placeGraphics(GraphicsRow::RenderResolution, makeChoices(L"Render resolution", L"渲染解析度",
                    std::move(renderChoices), graphics_menu::RenderResolutionChoice(edit)));
+        // The Switch's rows (filled in below there); hidden elsewhere.
+        placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                   edit.dynamicResolution ? 0 : 1));
+        placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度", {}, 0));
         placeGraphics(GraphicsRow::ShadowResolution, makeChoices(L"Shadow resolution", L"陰影解析度",
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
-        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影", onOff(), edit.dynamicShadows ? 0 : 1));
+        placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
+                   {Tr(L"On", L"開"), Tr(L"Low", L"低"), Tr(L"Off", L"關")}, graphics_menu::DynamicShadowsChoice(edit)));
 #if LO_PLATFORM_MACOS
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
@@ -1500,6 +1767,62 @@ void Publish(uint8_t *base, uint32_t config)
                                         std::min(edit.fsrSharpnessPercent, 100u));
         fsrSharpness.hidden = GraphicsRowHidden(int(GraphicsRow::FsrSharpness));
         placeGraphics(GraphicsRow::FsrSharpness, std::move(fsrSharpness));
+#if LO_PLATFORM_SWITCH
+        {
+            // The scene height rows for the current operation mode, and FSR 1 in the Anti-aliasing row's place
+            // (graphics_menu.h). A row env.txt sets shows that value, greyed out, and does not change.
+            const bool docked = Docked();
+            const bool dynamic = graphics_menu::DynamicResolutionOn(edit);
+            const auto rows = [](uint32_t height) { return std::to_wstring(height) + L"p"; };
+            const auto automatic = [&](uint32_t height) { return std::wstring(Tr(L"Auto", L"自動")) + L" (" + rows(height) + L")"; };
+            const auto fixed = [&](const wchar_t *en, const wchar_t *zh, std::wstring value) {
+                return makeChoices(en, zh, {std::move(value)}, 0, false);
+            };
+            const wchar_t *maximumEn = dynamic ? L"Maximum resolution" : L"Render resolution";
+            const wchar_t *maximumZh = dynamic ? L"最高解析度" : L"渲染解析度";
+            if (graphics_menu::MaximumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::RenderResolution, fixed(maximumEn, maximumZh, rows(RenderHeightOverride())));
+            else
+            {
+                std::vector<std::wstring> choices{automatic(SwitchAutomaticHeight(docked))};
+                for (const uint32_t height : SwitchSceneHeights) choices.push_back(rows(height));
+                placeGraphics(GraphicsRow::RenderResolution, makeChoices(maximumEn, maximumZh, std::move(choices),
+                    graphics_menu::SwitchHeightChoice(edit.maximumHeight[docked ? 1 : 0])));
+            }
+            placeGraphics(GraphicsRow::DynamicResolution, makeChoices(L"Dynamic resolution", L"動態解析度", onOff(),
+                dynamic ? 0 : 1, !graphics_menu::DynamicResolutionFromEnvironment()));
+            if (graphics_menu::MinimumHeightFromEnvironment())
+                placeGraphics(GraphicsRow::MinimumResolution, fixed(L"Minimum resolution", L"最低解析度",
+                    rows(gpu::dynamic_resolution::EnvironmentMinimum())));
+            else
+            {
+                Config automaticMinimum = edit;
+                automaticMinimum.minimumHeight[docked ? 1 : 0] = 0;
+                std::vector<std::wstring> choices{automatic(SwitchMinimumHeight(automaticMinimum, docked))};
+                for (uint32_t i = 1; i < graphics_menu::MinimumHeightChoiceCount(edit, docked); ++i)
+                    choices.push_back(rows(graphics_menu::SwitchHeightAt(i)));
+                placeGraphics(GraphicsRow::MinimumResolution, makeChoices(L"Minimum resolution", L"最低解析度",
+                    std::move(choices), graphics_menu::SwitchHeightChoice(edit.minimumHeight[docked ? 1 : 0])));
+            }
+            if (graphics_menu::FsrFromEnvironment())
+            {
+                using gpu::SpatialUpscaler;
+                const auto mode = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).mode;
+                placeGraphics(GraphicsRow::AntiAliasing, fixed(L"FSR", L"FSR", mode == SpatialUpscaler::Off ? Tr(L"Off", L"關") :
+                    mode == SpatialUpscaler::Easu ? L"EASU" : mode == SpatialUpscaler::Rcas ? L"RCAS" : Tr(L"On", L"開")));
+            }
+            else
+                placeGraphics(GraphicsRow::AntiAliasing, makeChoices(L"FSR", L"FSR", onOff(), edit.switchFsr ? 0 : 1));
+            if (graphics_menu::FsrSharpnessFromEnvironment())
+            {
+                // RCAS's stops as the row's percent (gpu/switch_upscaler.h FromSettings).
+                const float stops = gpu::switch_upscaler::Resolve(edit.switchFsr, edit.fsrSharpnessPercent).rcasStops;
+                const int percent = std::clamp(int(std::lround((2.0f - stops) * 50.0f)), 0, 100);
+                placeGraphics(GraphicsRow::FsrSharpness, fixed(L"FSR sharpness", L"FSR 銳化",
+                    percent ? std::to_wstring(percent) + L"%" : std::wstring(Tr(L"Off", L"關"))));
+            }
+        }
+#endif
         auto neuralRendering = makeChoices(L"DLSS 5 neural rendering", L"DLSS 5 神經渲染",
                    {Tr(L"Off", L"關"), L"1×", L"2×", L"3×", L"4×"},
                    std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses));
@@ -1519,6 +1842,7 @@ void Publish(uint8_t *base, uint32_t config)
                    (std::min(edit.depthOfFieldPercent, 100u) + 5) / 10));
         placeGraphics(GraphicsRow::Bloom, makeChoices(L"Bloom", L"光暈", onOff(), edit.bloom ? 0 : 1));
         placeGraphics(GraphicsRow::MotionBlur, makeChoices(L"Motion blur", L"動態模糊", onOff(), edit.motionBlur ? 0 : 1));
+        placeGraphics(GraphicsRow::SceneFades, makeChoices(L"Scene fades", L"場景淡入淡出", onOff(), edit.sceneFades ? 0 : 1));
         std::vector<std::wstring> cullingChoices;
         for (uint32_t percent = 0; percent <= 200; percent += 10)
             cullingChoices.push_back(std::to_wstring(percent) + L"%");
@@ -1540,6 +1864,8 @@ void Publish(uint8_t *base, uint32_t config)
             frameRates.push_back(std::to_wstring(fps) + L" FPS");
         placeGraphics(GraphicsRow::FrameRate, makeChoices(L"Frame rate", L"影格率",
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
+        placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading speed", L"載入速度",
+                   {Tr(L"Original", L"原版"), Tr(L"Fast", L"快速")}, edit.loadingTransitions == 0 ? 0 : 1));
 #if LO_PLATFORM_MACOS
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
             L"自適應同步（ProMotion）", onOff(), edit.variableRefreshRate ? 0 : 1));
@@ -1605,7 +1931,12 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Game language", L"遊戲語言", std::move(gameLanguages),
                    GameLanguageChoiceIndex(gameLanguageChoices, edit.gameLanguage, edit.gameLanguagePack));
         addChoices(L"Automatic updates", L"自動更新", onOff(), edit.automaticUpdates ? 0 : 1);
+        addChoices(L"Discord status", L"Discord 狀態", onOff(), edit.discordStatus ? 0 : 1);
+        next.rows.back().hidden = SystemRowHidden(SystemDiscordStatusRow);
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
+        addAction(L"Debug", L"除錯", Tr(L"Open", L"開啟"));
+        next.rows.back().pageEntry = true;
+        next.rows.back().hidden = SystemRowHidden(SystemDebugRow);
         if (achievementSummary.empty()) RefreshAchievementSummary();
         addAction(L"Achievements", L"成就", achievementSummary.c_str());
         next.rows.back().pageEntry = true;
@@ -1616,14 +1947,19 @@ void Publish(uint8_t *base, uint32_t config)
         addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
         next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
+        addAction(L"Add to Steam", L"加入 Steam", Tr(L"Add", L"加入"));
+        next.rows.back().hidden = SystemRowHidden(SystemAddToSteamRow);
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
+        addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
+        for (int i = 0; i < SystemRowCount && i < int(next.rows.size()); ++i)
+            if (SystemRowHidden(i)) next.rows[i].hidden = true;
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
     // so returning to a long list restores its position.
     if (tab >= 0 && tab < MenuTabCount)
     {
-        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0;
+        static int scrollByTab[MenuTabCount] = {}, modsScroll = 0, controlsScroll = 0, achievementsScroll = 0, debugScroll = 0;
         int visibleCount = 0, visibleFocus = 0;
         for (size_t i = 0; i < next.rows.size(); ++i)
         {
@@ -1631,10 +1967,12 @@ void Publish(uint8_t *base, uint32_t config)
             if (int(i) <= next.row) visibleFocus = visibleCount;
             ++visibleCount;
         }
-        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll : scrollByTab[tab];
-        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - kMenuVisibleRows));
+        int &scroll = modsOpen ? modsScroll : controlsOpen ? controlsScroll : achievementsOpen ? achievementsScroll
+                    : debugOpen ? debugScroll : scrollByTab[tab];
+        const int visibleRows = VisibleRowCount(tab, !next.pageTitle.empty());
+        scroll = std::clamp(scroll, 0, std::max(0, visibleCount - visibleRows));
         if (visibleFocus < scroll) scroll = visibleFocus;
-        if (visibleFocus >= scroll + kMenuVisibleRows) scroll = visibleFocus - kMenuVisibleRows + 1;
+        if (visibleFocus >= scroll + visibleRows) scroll = visibleFocus - visibleRows + 1;
         next.scroll = scroll;
     }
     next.help = status.empty() ? Tr(L"LB / RB: category     D-pad: select / change     A: confirm     B: back",
@@ -1652,9 +1990,22 @@ void Publish(uint8_t *base, uint32_t config)
                  L"來自 mods 資料夾的語言包。語音等其餘內容沿用其基礎語言。重新啟動後生效。")
             : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                  L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
+    if (tab == 3 && row == SystemDiscordStatusRow)
+        next.help = Tr(L"Shows your location and activity on Discord. Applies and saves immediately.",
+                       L"在 Discord 顯示目前地點與活動。立即套用並儲存。");
     if (tab == 3 && row == SystemDebugLogRow)
-        next.help = Tr(L"Writes every message to the log in logs/. Turn it on when you report a problem. Applies when saved.",
-                       L"把所有訊息寫入 logs/ 中的日誌。回報問題時請開啟。儲存後生效。");
+#if LO_PLATFORM_SWITCH
+        next.help = Tr(L"Writes detailed logs in state/logs/ to help diagnose problems. On by default. Applies when saved.",
+                       L"在 state/logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
+#else
+        next.help = Tr(L"Writes detailed logs in logs/ to help diagnose problems. On by default. Applies when saved.",
+                       L"在 logs/ 寫入詳細日誌，協助診斷問題。預設開啟，儲存後生效。");
+#endif
+#if LO_PLATFORM_SWITCH
+    if (tab == 3 && row == SystemDebugRow)
+        next.help = Tr(L"A/B switches for benchmark runs. Each change is logged with its frame number.",
+                       L"效能測試用的 A/B 開關。每次變更都會連同影格編號寫入日誌。");
+#endif
     if (tab == 3 && row == SystemAchievementsRow)
         next.help = Tr(L"Your achievements, and whether a notification shows when you unlock one.",
                        L"查看你的成就，並設定解鎖時是否顯示通知。");
@@ -1664,9 +2015,15 @@ void Publish(uint8_t *base, uint32_t config)
     if (tab == 3 && row == SystemImportRow)
         next.help = Tr(L"Close the game to import selected discs or DLC again. Other content and saves stay intact.",
                        L"關閉遊戲並重新匯入所選光碟或 DLC；其他內容與存檔保留。");
+    if (tab == 3 && row == SystemAddToSteamRow && status.empty())
+        next.help = Tr(L"Adds the game to your Steam library with artwork. Close Steam first. Add it again if you move the game.",
+                       L"將遊戲與圖片加入 Steam 收藏庫。請先關閉 Steam。移動遊戲後請再次加入。");
     if (tab == 3 && row == SystemShaderBundleRow)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
+    if (tab == 3 && row == SystemShaderPreparationRow)
+        next.help = Tr(L"Prepares shaders before play at the next start. Reuses the bundle and cache.",
+                       L"下次啟動時在遊玩前準備著色器，並重用著色器包與快取。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
         next.help = Tr(L"Cutscene dialogue volume. Voices in battle follow Sound effects. Applies from the next scene.",
                        L"過場動畫中的對白音量。戰鬥中的語音跟隨音效音量。從下一個場景起套用。");
@@ -1726,10 +2083,25 @@ void Publish(uint8_t *base, uint32_t config)
                            L"設定輸出尺寸；全螢幕使用桌面尺寸。");
             break;
         case GraphicsRow::Preset:
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"All use FSR at 30 FPS. Quality: fixed 540p, every effect. Balanced: dynamic 360-540p, depth of field 50%, no bloom. "
+                           L"Performance: also no dynamic shadows, motion blur or depth of field.",
+                           L"皆使用 FSR、30 FPS。品質：固定 540p，所有效果。平衡：動態 360-540p，景深 50%，無光暈。效能：另關閉動態陰影、動態模糊與景深。");
+#else
             next.help = Tr(L"Both use 720p at 30 FPS. Low-end turns off dynamic shadows, motion blur, depth of field and bloom and uses the standard scaling filter.",
                            L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
+#endif
             break;
         case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+            next.help = graphics_menu::DynamicResolutionOn(edit)
+                ? Tr(L"The highest scene height dynamic resolution uses. Auto: 540p.",
+                     L"動態解析度使用的最高場景高度。自動：540p。")
+                : Tr(L"Scene height, scaled to the 720p screen. Auto: 540p.",
+                     L"場景高度，縮放至 720p 畫面。自動：540p。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::MaximumHeightFromEnvironment(), L"LO_SWITCH_RENDER_HEIGHT");
+            break;
+#endif
 #if LO_PLATFORM_MACOS
             next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
                            L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
@@ -1740,16 +2112,34 @@ void Publish(uint8_t *base, uint32_t config)
             next.help += Tr(L" An upscaler supersamples above it.",
                             L"開啟縮放器時，高於輸出即為超取樣。");
             break;
+        case GraphicsRow::DynamicResolution:
+            next.help = Tr(L"Lowers the scene height in steps while the GPU runs over the frame time, and raises it again with room to spare.",
+                           L"GPU 超出影格時間時逐步降低場景高度，有餘裕時再提高。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::DynamicResolutionFromEnvironment(), L"LO_DYNAMIC_RESOLUTION");
+#endif
+            break;
+        case GraphicsRow::MinimumResolution:
+            next.help = Tr(L"The lowest scene height dynamic resolution steps down to. Auto: 80% of the maximum.",
+                           L"動態解析度降低時的最低場景高度。自動：最高解析度的 80%。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::MinimumHeightFromEnvironment(), L"LO_DYNAMIC_RESOLUTION_MIN");
+#endif
+            break;
         case GraphicsRow::ShadowResolution:
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",
                            L"陰影貼圖解析度倍數。較高倍數需要更多 GPU 記憶體與渲染時間。儲存後套用。");
             break;
         case GraphicsRow::DynamicShadows:
-            next.help = Tr(L"Real-time shadows cast by characters and objects. Off removes them and can raise the frame rate. Applies immediately after saving.",
-                           L"角色與物件投射的即時陰影。關閉後陰影消失，可提升影格率。儲存後立即套用。");
+            next.help = Tr(L"Character and object shadows. Low keeps only the largest few; Off removes them. Both can raise the frame rate. Applies after saving.",
+                           L"角色與物件的陰影。「低」只保留畫面上最大的幾個，關閉則沒有陰影；兩者都可提升影格率。儲存後套用。");
             break;
         case GraphicsRow::AntiAliasing:
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+            next.help = Tr(L"AMD FSR 1 scales a scene below 720p to the screen with sharper edges. Costs some GPU time.",
+                           L"AMD FSR 1 將低於 720p 的場景放大至畫面，邊緣更銳利。會使用少許 GPU 時間。");
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrFromEnvironment(), L"LO_SWITCH_UPSCALER");
+#elif LO_PLATFORM_ANDROID
             if (graphics_menu::AndroidFsrAvailable && edit.upscaler == gpu::upscaling::Upscaler::Fsr)
                 next.help = Tr(L"FSR 3.1 needs D3D12 or Vulkan and an FSR-enabled build. Unsupported scenes use normal rendering.",
                               L"FSR 3.1 需要 D3D12 或 Vulkan 與包含 FSR 的版本。不支援的場景使用常規渲染。");
@@ -1790,6 +2180,10 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
                            L"FSR 銳化：關閉會停用 RCAS；1-100% 調整銳化強度。");
+#if LO_PLATFORM_SWITCH
+            SwitchEnvironmentHelp(next.help, graphics_menu::FsrSharpnessFromEnvironment(),
+                graphics_menu::FsrFromEnvironment() ? L"LO_SWITCH_UPSCALER" : L"LO_SWITCH_RCAS_STOPS");
+#endif
             break;
         case GraphicsRow::DlssNeuralRendering:
         {
@@ -1828,6 +2222,10 @@ void Publish(uint8_t *base, uint32_t config)
             next.help = Tr(L"The game's blur during fast camera and character movement. Off keeps moving scenes sharp. Applies immediately after saving.",
                            L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
             break;
+        case GraphicsRow::SceneFades:
+            next.help = Tr(L"The game's full-screen fades between scenes. Off cuts straight to the next scene. Applies immediately after saving.",
+                           L"遊戲在場景之間的全螢幕淡入淡出。關閉後直接切換到下一個場景。儲存後立即套用。");
+            break;
         case GraphicsRow::Culling:
             next.help = Tr(L"How soon characters and objects at screen edges stop being drawn. 100% is original; lower costs frame rate, higher hides them sooner.",
                            L"畫面邊緣的角色與物件何時停止繪製。100% 為原版；越低越耗影格率，越高越早隱藏。");
@@ -1851,6 +2249,10 @@ void Publish(uint8_t *base, uint32_t config)
                      L"90/120 FPS 渲染真實遊戲影格，無需額外開關。請確認遊戲速度、音訊與戰鬥時序。")
                 : Tr(L"Native game-frame target, independent of frame generation. Applies after saving.",
                      L"原生遊戲影格率，獨立於影格生成。儲存後套用。");
+            break;
+        case GraphicsRow::LoadingTransitions:
+            next.help = Tr(L"Original keeps the Xbox 360 loading pace. Fast loads at a higher frame rate. Effects play at normal speed either way.",
+                           L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。");
             break;
         case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
@@ -1951,6 +2353,13 @@ void Publish(uint8_t *base, uint32_t config)
     }
     else if (achievementsOpen)
         next.help = AchievementsHelp();
+#if LO_PLATFORM_SWITCH
+    else if (debugOpen)
+    {
+        pageHelp = DebugHelp();
+        next.help = pageHelp.first;
+    }
+#endif
     if (!status.empty()) next.help = status;
     if (restartPrompt)
     {
@@ -2018,6 +2427,14 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogChoices = {Tr(L"Download again", L"重新下載"), Tr(L"Cancel", L"取消")};
         next.dialogSelection = shaderBundleChoice;
     }
+    if (shaderPreparationPrompt)
+    {
+        next.dialogTitle = Tr(L"Prepare shaders again", L"重新準備著色器");
+        next.dialogMessage = Tr(L"Run shader preparation before playing at the next start?",
+                                L"下次啟動時在遊玩前執行著色器準備嗎？");
+        next.dialogChoices = {Tr(L"Prepare again", L"重新準備"), Tr(L"Cancel", L"取消")};
+        next.dialogSelection = shaderPreparationChoice;
+    }
     if (modsDiscardPrompt || controlsDiscardPrompt)
     {
         next.dialogTitle = Tr(L"Unsaved changes", L"尚未儲存的變更");
@@ -2038,7 +2455,9 @@ void Publish(uint8_t *base, uint32_t config)
                               std::wstring(Tr(L"Revert", L"還原")) + L" (" + std::to_wstring(seconds) + L")"};
         next.dialogSelection = displayConfirmChoice;
     }
-#if LO_PLATFORM_ANDROID
+#if LO_PLATFORM_SWITCH
+    next.notice = tab == 2 ? SwitchNotice() : std::wstring{};
+#elif LO_PLATFORM_ANDROID
     next.notice = tab == 2 && graphics_menu::AndroidFsrAvailable &&
         edit.upscaler == gpu::upscaling::Upscaler::Fsr ? DlssNotice() : std::wstring{};
 #else
@@ -2056,7 +2475,7 @@ void Publish(uint8_t *base, uint32_t config)
         : tab == 2 ? (row == int(GraphicsRow::FrameGeneration) ||
         row == int(GraphicsRow::FrameGenerationMultiplier) ? FgNotice() : DlssNotice()) : std::wstring{};
 #endif
-    if (modsOpen || controlsOpen) next.notice = std::move(pageHelp.second);
+    if (modsOpen || controlsOpen || debugOpen) next.notice = std::move(pageHelp.second);
     std::lock_guard lock(snapshotMutex);
     // Presentation may have published availability while this snapshot was built.
     next.calibration.sceneAvailable = calibrationSceneAvailable.load(std::memory_order_relaxed);
@@ -2150,6 +2569,11 @@ HdrCalibration GetHdrCalibration()
 }
 bool CalibrationKey(uint32_t key)
 {
+    if (key == 27 && titleQuitOpen.load())
+    {
+        titleQuitEscape = true;
+        return true;
+    }
     // Escape has no controller mapping; it answers Revert on the display prompt.
     if (key == 27 && displayConfirmOpen.load())
     {
@@ -2159,7 +2583,7 @@ bool CalibrationKey(uint32_t key)
     // Escape also leaves the Mods page; Enter stays Start there (jump to Save).
     // On the Controls page Enter confirms like A, so it starts a capture.
     const bool brightnessKey = ((brightnessOpen.load() || nrOpen.load() || controlsOpen.load()) && (key == 13 || key == 27)) ||
-                               ((modsOpen.load() || achievementsOpen.load()) && key == 27);
+                               ((modsOpen.load() || achievementsOpen.load() || debugOpen.load()) && key == 27);
     if (!brightnessKey && (!calibrationOpen.load() || !(key == 8 || key == 13 || key == 27 || (key >= '0' && key <= '9'))))
         return false;
     std::lock_guard lock(calibrationKeyMutex);
@@ -2230,19 +2654,21 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
         return false;
     }
     {
-        // Y pressed on the idle title menu. A button already held when the
+        // Shortcuts pressed on the idle title menu. A button already held when the
         // menu became idle is not a press.
         static uint16_t titlePrevious = 0xFFFF;
         if (titleMenuIdle.load())
         {
             if ((buttons & TitleSettingsButton) && !(titlePrevious & TitleSettingsButton))
                 titleShortcut = true;
+            if ((buttons & TitleQuitButton) && !(titlePrevious & TitleQuitButton))
+                titleQuitShortcut = true;
             titlePrevious = buttons;
         }
         else
             titlePrevious = 0xFFFF;
     }
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return false;
     // The Controls page runs on the default layouts. Switching between the
     // two waits for a release, so a held button is not a fresh press.
@@ -2290,7 +2716,7 @@ bool FilterInput(uint16_t &buttons, int16_t x, int16_t y, uint16_t defaultButton
 }
 void PointerClick(float x, float y, bool reverse)
 {
-    if (!active.load())
+    if (!active.load() && !titleQuitOpen.load())
         return;
     std::lock_guard lock(snapshotMutex);
     if (snapshot.neuralRendering.open)
@@ -2353,11 +2779,12 @@ void PointerClick(float x, float y, bool reverse)
         if (!listPage) mouseTab = int(x - 386) / MenuTabWidth;
         return;
     }
-    constexpr int height = 43;
+    const int height = MenuRowHeight(snapshot.tab, listPage);
     constexpr int top = 150;
     const int slot = int(y - top) / height;
     const int right = snapshot.reorder ? ModsMoveLeft + 2 * ModsMoveWidth + ModsMoveGap : 1026;
-    if (x < 38 || x >= right || y < top || slot < 0 || slot >= kMenuVisibleRows || (top + (slot + 1) * height) > 640)
+    if (x < 38 || x >= right || y < top || slot < 0 || slot >= VisibleRowCount(snapshot.tab, listPage) ||
+        (top + (slot + 1) * height) > 640)
         return;
     // Translate the clicked slot through hidden rows and the scroll window
     // back to a logical row index.
@@ -2544,6 +2971,7 @@ PPC_FUNC(sub_822F19B0)
         importPrompt = false;
         importLaunchPending = false;
         shaderBundlePrompt = false;
+        shaderPreparationPrompt = false;
         modsOpen = false;
         modsDiscardPrompt = false;
         restartForMods = false;
@@ -2552,6 +2980,7 @@ PPC_FUNC(sub_822F19B0)
         achievementItems.clear();
         achievementIcons.clear();
         RefreshAchievementSummary();
+        debugOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -2597,6 +3026,7 @@ PPC_FUNC(sub_822F19B0)
     {
         if (modsOpen) modsFocus = selected;
         else if (achievementsOpen) achievementsFocus = selected;
+        else if (debugOpen) debugFocus = selected;
         else if (controlsOpen)
         {
             // A capture keeps its row; a section title is never focused.
@@ -2622,6 +3052,7 @@ PPC_FUNC(sub_822F19B0)
         nrOpen = false;
         modsOpen = false;
         achievementsOpen = false;
+        debugOpen = false;
         controlsOpen = false;
         controlsDiscardPrompt = false;
         EndCapture();
@@ -2825,6 +3256,25 @@ PPC_FUNC(sub_822F19B0)
 #endif
                 }
             }
+        }
+        Publish(base, config);
+        return;
+    }
+    if (shaderPreparationPrompt)
+    {
+        if (int selected = mouseDialog.exchange(-1); selected >= 0)
+            shaderPreparationChoice = std::min(selected, 1);
+        if (input & 3) shaderPreparationChoice = 1 - shaderPreparationChoice;
+        if (input & 0x2000) shaderPreparationChoice = 1;
+        if (input & 0x3000)
+        {
+            shaderPreparationPrompt = false;
+            if (shaderPreparationChoice == 0)
+                status = gpu::shader_preparation::RequestNextStart()
+                    ? Tr(L"Full shader preparation will run at the next start.",
+                         L"下次啟動時會完整準備著色器。")
+                    : Tr(L"Could not schedule preparation. Check the settings folder.",
+                         L"無法安排著色器準備。請確認設定目錄可寫入。");
         }
         Publish(base, config);
         return;
@@ -3284,6 +3734,29 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_SWITCH
+    if (debugOpen.load())
+    {
+        std::vector<uint32_t> keys;
+        {
+            std::lock_guard lock(calibrationKeyMutex);
+            keys.swap(calibrationKeys);
+        }
+        // B, Back (keyboard Backspace) and Escape leave the page.
+        const bool back = (input & 0x2020) != 0 || std::find(keys.begin(), keys.end(), 27u) != keys.end();
+        if (input & 0x331f) status.clear();
+        // The titles are never focused.
+        if (input & 1)
+            do { debugFocus = (debugFocus + DebugRowCount - 1) % DebugRowCount; } while (DebugTitle(debugFocus));
+        if (input & 2)
+            do { debugFocus = (debugFocus + 1) % DebugRowCount; } while (DebugTitle(debugFocus));
+        if (back) CloseDebugPage();
+        else if (!DebugTitle(debugFocus) && (input & 0x100c))
+            ChangeDebugOption((input & 4) ? -1 : 1);
+        Publish(base, config);
+        return;
+    }
+#endif
     if (controlsOpen.load())
     {
         std::vector<uint32_t> keys;
@@ -3384,7 +3857,7 @@ PPC_FUNC(sub_822F19B0)
         else if (delta && controlsFocus == ControlsPromptRow)
         {
             // Host setting: applied and saved at once, like Vibration.
-            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 2u)) + 3 + delta) % 3);
+            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 5u)) + 6 + delta) % 6);
             edit.buttonPrompts = style;
             Config saved = GetConfig();
             saved.buttonPrompts = style;
@@ -3455,7 +3928,7 @@ PPC_FUNC(sub_822F19B0)
     // when unavailable. Keyboard Enter reaches the menu as GAMEPAD_START
     // (hid.cpp), so one branch covers gamepad Start and Enter.
     auto rowHidden = [&](int r) {
-        return (tab == 2 && GraphicsRowHidden(r)) || TitleModeHidden(tab, r);
+        return (tab == 2 && GraphicsRowHidden(r)) || (tab == 3 && SystemRowHidden(r)) || TitleModeHidden(tab, r);
     };
     if (input & 1)
         do { row = (row + count - 1) % count; } while (rowHidden(row));
@@ -3626,7 +4099,8 @@ PPC_FUNC(sub_822F19B0)
             }
             case GraphicsRow::Preset:
             {
-                // Original and Low-end; from Custom, Right picks Original and Left Low-end.
+                // The presets in order (Original and Low-end; the Switch's Quality, Balanced and Performance);
+                // from Custom, Right picks the first and Left the last.
                 const auto current = graphics_menu::PresetOf(edit);
                 const uint32_t index = current == graphics_menu::Preset::Custom ? (delta > 0 ? graphics_menu::PresetChoiceCount - 1 : 0)
                                                                                 : uint32_t(current);
@@ -3634,18 +4108,48 @@ PPC_FUNC(sub_822F19B0)
                 break;
             }
             case GraphicsRow::RenderResolution:
+#if LO_PLATFORM_SWITCH
+                // The current operation mode's maximum; a lower one takes the minimum down with it.
+                if (!graphics_menu::MaximumHeightFromEnvironment())
+                    graphics_menu::SelectMaximumHeight(edit, Docked(), cycle(
+                        graphics_menu::SwitchHeightChoice(edit.maximumHeight[Docked() ? 1 : 0]), graphics_menu::SwitchHeightChoiceCount));
+#else
                 edit.internalResolution = graphics_menu::RenderResolutions[
                     cycle(graphics_menu::RenderResolutionChoice(edit), uint32_t(std::size(graphics_menu::RenderResolutions)))];
+#endif
+                break;
+            case GraphicsRow::DynamicResolution:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::DynamicResolutionFromEnvironment())
+                    edit.dynamicResolution = !edit.dynamicResolution;
+#endif
+                break;
+            case GraphicsRow::MinimumResolution:
+#if LO_PLATFORM_SWITCH
+                // Automatic, then the heights up to the maximum.
+                if (!graphics_menu::MinimumHeightFromEnvironment())
+                {
+                    const uint32_t mode = Docked() ? 1 : 0;
+                    edit.minimumHeight[mode] = graphics_menu::SwitchHeightAt(cycle(
+                        graphics_menu::SwitchHeightChoice(edit.minimumHeight[mode]), graphics_menu::MinimumHeightChoiceCount(edit, mode == 1)));
+                }
+#endif
                 break;
             case GraphicsRow::ShadowResolution:
                 edit.shadowResolution = graphics_menu::ShadowResolutions[
                     cycle(graphics_menu::ShadowResolutionChoice(edit), uint32_t(std::size(graphics_menu::ShadowResolutions)))];
                 break;
             case GraphicsRow::DynamicShadows:
-                edit.dynamicShadows = !edit.dynamicShadows;
+                edit.dynamicShadows = graphics_menu::DynamicShadowsValues[
+                    cycle(graphics_menu::DynamicShadowsChoice(edit), uint32_t(std::size(graphics_menu::DynamicShadowsValues)))];
                 break;
             case GraphicsRow::AntiAliasing:
+#if LO_PLATFORM_SWITCH
+                if (!graphics_menu::FsrFromEnvironment())
+                    edit.switchFsr = !edit.switchFsr;
+#else
                 graphics_menu::SelectAa(edit, cycle(graphics_menu::AaChoice(edit), graphics_menu::AaChoiceCount));
+#endif
                 break;
             case GraphicsRow::AmbientOcclusion:
                 edit.ambientOcclusion = cycle(std::min(edit.ambientOcclusion, 2u), 3);
@@ -3661,6 +4165,10 @@ PPC_FUNC(sub_822F19B0)
                 edit.dlssModel = cycle(std::min(edit.dlssModel, 1u), 2);
                 break;
             case GraphicsRow::FsrSharpness:
+#if LO_PLATFORM_SWITCH
+                if (graphics_menu::FsrSharpnessFromEnvironment())
+                    break;
+#endif
                 edit.fsrSharpnessPercent = uint32_t(std::clamp(int(edit.fsrSharpnessPercent) + delta, 0, 100));
                 break;
             case GraphicsRow::DlssNeuralRendering:
@@ -3684,6 +4192,9 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::MotionBlur:
                 edit.motionBlur = !edit.motionBlur;
                 break;
+            case GraphicsRow::SceneFades:
+                edit.sceneFades = !edit.sceneFades;
+                break;
             case GraphicsRow::Culling:
                 edit.cullingPercent = uint32_t(std::clamp(int(std::min(edit.cullingPercent, 200u) + 5) / 10 * 10 + delta * 10, 0, 200));
                 break;
@@ -3703,6 +4214,9 @@ PPC_FUNC(sub_822F19B0)
                 edit.frameRate = gpu::frame_rate::FromMenuIndex(cycle(index, gpu::frame_rate::kCount));
                 break;
             }
+            case GraphicsRow::LoadingTransitions:
+                edit.loadingTransitions = edit.loadingTransitions == 0 ? 2 : 0;
+                break;
             case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
                 edit.variableRefreshRate = !edit.variableRefreshRate;
@@ -3764,7 +4278,7 @@ PPC_FUNC(sub_822F19B0)
         else
         {
             if (row == SystemUiLanguageRow)
-                edit.uiLanguage = cycle(edit.uiLanguage, 5);
+                edit.uiLanguage = cycle(edit.uiLanguage, uint32_t(std::size(UiLanguageNames)));
             if (row == SystemGameLanguageRow)
             {
                 const auto choices = GameLanguageChoices();
@@ -3775,6 +4289,19 @@ PPC_FUNC(sub_822F19B0)
             }
             if (row == SystemUpdatesRow)
                 edit.automaticUpdates = !edit.automaticUpdates;
+#if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
+            if (row == SystemDiscordStatusRow)
+            {
+                Config saved = GetConfig();
+                saved.discordStatus = !edit.discordStatus;
+                if (SaveConfig(saved))
+                {
+                    edit.discordStatus = saved.discordStatus;
+                    discord_rpc::SetEnabled(edit.discordStatus);
+                }
+                else status = Tr(L"Could not save settings.", L"無法儲存設定。");
+            }
+#endif
             if (row == SystemDebugLogRow)
                 edit.debugLog = !edit.debugLog;
         }
@@ -3807,14 +4334,43 @@ PPC_FUNC(sub_822F19B0)
     }
     if ((input & 0x1000) && tab == 3 && row == SystemImportRow)
     {
+#if LO_PLATFORM_ANDROID
+        // RuntimeActivity handles this on the UI thread and keeps the game
+        // alive until the player confirms an import in GameFolderActivity.
+        // 0x8000 is RuntimeActivity.COMMAND_OPEN_GAME_FOLDER.
+        if (!SDL_SendAndroidMessage(0x8000, 0))
+        {
+            importLaunchPending = true;
+            restart::ReportLaunchFailure();
+        }
+#else
         importPrompt = true;
         importChoice = 1;
+#endif
         status.clear();
     }
+#if !LO_PLATFORM_SWITCH
+    if ((input & 0x1000) && tab == 3 && row == SystemAddToSteamRow && !SystemRowHidden(row))
+    {
+        const auto result = steam_shortcut::AddToSteam(FileSystem::GetGameRoot());
+        status = SteamShortcutMessage(result.status);
+        if (!result.detail.empty())
+        {
+            if (result.ok()) LOG_NOTICE("Add to Steam: {}", result.detail);
+            else LOG_WARNING("Add to Steam: {}", result.detail);
+        }
+    }
+#endif
     if ((input & 0x1000) && tab == 3 && row == SystemShaderBundleRow)
     {
         shaderBundlePrompt = true;
         shaderBundleChoice = 1;
+        status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemShaderPreparationRow)
+    {
+        shaderPreparationPrompt = true;
+        shaderPreparationChoice = 1;
         status.clear();
     }
     if ((input & 0x1000) && tab == 2 &&
@@ -3848,10 +4404,16 @@ PPC_FUNC(sub_822F19B0)
         else
         {
             graphics = GetConfig();
+#if LO_PLATFORM_SWITCH
+            // The Debug page's overlay row, saved from here: logged the same way.
+            if (graphics.performanceOverlay != previousDisplay.performanceOverlay)
+                debug_options::LogPerformanceOverlay(graphics.performanceOverlay);
+#endif
             graphics.uiLanguage = edit.uiLanguage;
             graphics.gameLanguage = edit.gameLanguage;
             graphics.gameLanguagePack = edit.gameLanguagePack;
             graphics.automaticUpdates = edit.automaticUpdates;
+            graphics.discordStatus = edit.discordStatus;
             graphics.debugLog = edit.debugLog;
             edit = graphics;
             if (edit.width != previousDisplay.width || edit.height != previousDisplay.height ||
@@ -3874,6 +4436,7 @@ PPC_FUNC(sub_822F19B0)
         languages.gameLanguage = edit.gameLanguage;
         languages.gameLanguagePack = edit.gameLanguagePack;
         languages.automaticUpdates = edit.automaticUpdates;
+        languages.discordStatus = edit.discordStatus;
         languages.debugLog = edit.debugLog;
         const Config before = GetConfig();
         if (restart::Required(before, languages))
@@ -3900,6 +4463,14 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
+#if LO_PLATFORM_SWITCH
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemDebugRow)
+    {
+        OpenDebugPage();
+        Publish(base, config);
+        return;
+    }
+#endif
     if ((input & 0x1000) && !(input & 0x2000) && tab == 3 && row == SystemAchievementsRow)
     {
         OpenAchievementsPage();
@@ -3942,7 +4513,108 @@ PPC_FUNC(sub_822F19B0)
 
 bool settings::IsOpen()
 {
-    return active.load();
+    return active.load() || titleQuitOpen.load();
+}
+
+bool settings::IsTitleQuitOpen()
+{
+    return titleQuitOpen.load();
+}
+
+bool settings::MenuOverGame()
+{
+    // Opened in a game, the retail Settings screen keeps drawing its header
+    // (title, gold, time, location) under the menu. Not from the title menu,
+    // and not on the pages that preview the scene.
+    return active.load() && !titleQuitOpen.load() && !titleEntry.load() && !calibrationOpen.load() &&
+           !brightnessOpen.load() && !nrOpen.load();
+}
+
+bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
+{
+    const auto close = [] {
+        titleQuitOpen = false;
+        titleQuitShortcut = titleShortcut = false;
+        titleQuitEscape = false;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        // The release poll is consumed too: B must never cancel the title
+        // menu after dismissing this dialog, nor Back immediately reopen it.
+        releaseToParent = true;
+    };
+    if (!idle || active.load())
+    {
+        titleQuitShortcut = false;
+        if (titleQuitOpen.load())
+        {
+            close();
+            LOG_INFO("settings: title Quit confirmation closed outside the idle menu");
+        }
+        return false;
+    }
+    const bool opening = !titleQuitOpen.load();
+    if (opening)
+    {
+        if (!titleQuitShortcut.exchange(false))
+            return false;
+        titleQuitChoice = 1;
+        pending = 0;
+        mouseDialog = -1;
+        mouseAction = 0;
+        titleQuitEscape = false;
+        waitForRelease = true;
+        const auto config = ConfigAddress(base);
+        swapConfirm = config && (PPC_LOAD_U32(config + 4) & 0x02000000) != 0;
+    }
+    else
+    {
+        uint16_t input = pending.exchange(0) | mouseAction.exchange(0);
+        if (const int selected = mouseDialog.exchange(-1); selected >= 0)
+            titleQuitChoice = std::min(selected, 1);
+        if (input & 3)
+            titleQuitChoice = 1 - titleQuitChoice;
+        const bool cancel = titleQuitEscape.exchange(false) || (input & (0x2000 | TitleQuitButton));
+        if (cancel || (input & 0x1010)) // A or keyboard Enter / Start answers.
+        {
+            if (cancel || titleQuitChoice == 1)
+                LOG_INFO("settings: title Quit confirmation No; returning to title menu");
+            else
+            {
+                LOG_INFO("settings: title Quit confirmation Yes");
+                // Exactly the native System Quit path. A rejected SDL event
+                // leaves the title running and another fresh press can retry.
+                if (!quit_action::PushQuit())
+                    LOG_WARNING("settings: title Quit failed; staying on title menu");
+            }
+            close();
+            return true;
+        }
+    }
+    MenuSnapshot next;
+    next.dialogOnly = true;
+    next.language = GetConfig().uiLanguage;
+    next.confirmB = swapConfirm.load();
+    next.dialogTitle = Translate(next.language, L"Quit game", L"退出遊戲");
+    next.dialogMessage = Translate(next.language, L"Quit the game?", L"退出遊戲嗎？");
+    next.dialogChoices = {Translate(next.language, L"Yes", L"是"), Translate(next.language, L"No", L"否")};
+    next.dialogSelection = titleQuitChoice;
+    {
+        std::lock_guard lock(snapshotMutex);
+        if (!snapshot.dialogOnly || next.language != snapshot.language || next.dialogSelection != snapshot.dialogSelection ||
+            next.confirmB != snapshot.confirmB)
+        {
+            next.revision = snapshot.revision + 1;
+            snapshot = std::move(next);
+        }
+    }
+    // Presentation and input see an open dialog only after its full snapshot.
+    if (opening)
+    {
+        titleQuitOpen = true;
+        LOG_INFO("settings: title Quit confirmation opened (No selected)");
+    }
+    return true;
 }
 
 bool settings::ConsumeTitleShortcut(bool idle)
@@ -3961,12 +4633,132 @@ void settings::MarkTitleEntry()
     titleEntry = true;
 }
 
+std::shared_ptr<const settings::menu_assets::Image> settings::PromptIcons(int family)
+{
+    static std::shared_ptr<const hid::glyphs::Atlas> sources[hid::prompts::FamilyCount];
+    static std::shared_ptr<const menu_assets::Image> images[hid::prompts::FamilyCount];
+    if (family < 0 || family >= hid::prompts::FamilyCount) return {};
+    auto source = hid::glyphs::FamilyAtlas(hid::prompts::Family(family));
+    if (!source) return {};
+    if (source != sources[family])
+    {
+        // RGBA bytes are the raster's order (host_ui::PackRgba) on this little-endian host.
+        auto image = std::make_shared<menu_assets::Image>();
+        image->width = source->width;
+        image->height = source->height;
+        image->scale = source->width / 256;
+        image->pixels.resize(size_t(source->width) * source->height);
+        std::memcpy(image->pixels.data(), source->rgba.data(), image->pixels.size() * 4);
+        images[family] = std::move(image);
+        sources[family] = std::move(source);
+    }
+    return images[family];
+}
+
+bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
+{
+    // This overlay has its own cache and motion. DrawMenu is a full-screen
+    // replacement for the retail Settings task; the title must stay underneath.
+    static uint64_t cachedRevision = ~uint64_t{}, outputRevision = 0;
+    static uint32_t cachedWidth = 0, cachedHeight = 0;
+    static int cachedPromptFamily = -1;
+    static bool shown = false, closing = false;
+    static std::shared_ptr<const menu_assets::Assets> cachedAssets;
+    static MenuTransition motion;
+    static std::vector<uint32_t> raster;
+    static MenuTransition::Clock::time_point lastFrame{};
+    const auto advance = [&](MenuTransition::Clock::time_point now) {
+        if (motion.Running() && now != lastFrame)
+        {
+            motion.Advance(pixels, now);
+            ++outputRevision; // Includes the final frame, when Advance returns false.
+        }
+        lastFrame = now;
+        revision = outputRevision;
+    };
+    const auto reset = [&] {
+        shown = closing = false;
+        cachedAssets.reset();
+        motion.Reset();
+        std::vector<uint32_t>().swap(raster);
+    };
+    const bool compatible = cachedWidth == width && cachedHeight == height &&
+                            pixels.size() == size_t(width) * height && !pixels.empty();
+    if (!titleQuitOpen.load())
+    {
+        if (!shown)
+            return false;
+        if (!compatible)
+        {
+            reset();
+            return false;
+        }
+        const auto now = MenuNow();
+        if (!closing)
+        {
+            advance(now);
+            raster = pixels;
+            // Preserve straight RGB: fading RGB as well as alpha would darken
+            // the dialog twice when the overlay is composited over the title.
+            for (auto &pixel : raster)
+                pixel &= 0x00ffffffu;
+            closing = motion.Start(pixels, raster, width, now, menu_motion::DialogFade);
+        }
+        advance(now);
+        if (closing && motion.Running())
+            return true;
+        reset();
+        return false;
+    }
+    MenuSnapshot current;
+    {
+        std::lock_guard lock(snapshotMutex);
+        current = snapshot;
+    }
+    current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
+    current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
+    const bool opened = !shown;
+    if (opened || closing || !compatible || cachedRevision != current.revision ||
+        cachedPromptFamily != current.promptFamily || cachedAssets != current.assets)
+    {
+        if (!RasterizeMenu(current, width, height, raster))
+            return false;
+        const auto now = MenuNow();
+        if (opened || !compatible)
+        {
+            pixels = raster;
+            for (auto &pixel : pixels)
+                pixel &= 0x00ffffffu;
+        }
+        else
+            advance(now);
+        if (!motion.Start(pixels, raster, width, now, menu_motion::DialogFade))
+            return false;
+        lastFrame = now;
+        shown = true;
+        closing = false;
+        cachedRevision = current.revision;
+        cachedWidth = width;
+        cachedHeight = height;
+        cachedPromptFamily = current.promptFamily;
+        cachedAssets = current.assets;
+        revision = ++outputRevision;
+        return true;
+    }
+    // A stable snapshot still needs a new fade frame on the presentation thread.
+    advance(MenuNow());
+    return true;
+}
+
 bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
     // This cache belongs to the sole presentation thread. Dimensions must be
     // checked independently: portrait and landscape buffers can have equal area.
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
+    static int cachedPromptFamily = -1;
+    static bool cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
     static int cachedTab = -1;
     static std::wstring cachedPage;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
@@ -4006,9 +4798,18 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         const double phase = seconds(now - openTime) / seconds(menu_motion::ArrowSwayPeriod);
         const int x = arrow.x + int(std::lround(menu_motion::ArrowSway * (0.5 - 0.5 * std::cos(6.283185307179586 * phase))));
         const int y = int(std::lround(arrowY));
-        DrawMenuArrow(pixels, width, height, x, y);
+        DrawMenuArrow(pixels, width, height, x, y, cachedAssets.get());
         arrowDrawn = MenuArrowBounds(width, height, x, y);
     };
+    if (titleQuitOpen.load())
+    {
+        // A title confirmation is a translucent overlay, never a replacement
+        // menu frame. DrawTitleQuit owns its raster and fade independently.
+        shown = closing = arrowPlaced = false;
+        arrowDrawn = markerDrawn = {};
+        motion.Reset();
+        return false;
+    }
     if (!active.load())
     {
         // Closing: the content fades off the panels before the game's own exit
@@ -4058,9 +4859,11 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
     const bool opened = !shown;
     if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
-        cachedPlayStation == current.playStationPrompts && !pixels.empty())
+        cachedPromptFamily == current.promptFamily && !pixels.empty())
     {
         const auto now = MenuNow();
         motion.Advance(pixels, now);
@@ -4089,10 +4892,10 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         panels.assets = current.assets;
         panels.backdropOnly = true;
         eased = RasterizeMenu(panels, width, height, pixels) &&
-                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height));
+                motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height, current.tab, !current.pageTitle.empty()));
     }
     else if (!opened && cachedWidth == width && cachedHeight == height &&
-             cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
+             cachedPromptFamily == current.promptFamily && !previewPage && !cachedPreviewPage)
     {
         // Settle this frame's image first. The arrow goes into the outgoing
         // image only when the new raster draws it itself (under a prompt).
@@ -4127,7 +4930,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     shown = true;
     cachedWidth = width;
     cachedHeight = height;
-    cachedPlayStation = current.playStationPrompts;
+    cachedPromptFamily = current.promptFamily;
     cachedPreviewPage = previewPage;
     cachedDialog = dialog;
     cachedTab = current.tab;

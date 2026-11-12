@@ -22,6 +22,7 @@ Each directory configures on its own, without game data or the full dependency t
 | Directory | Covers | Configure |
 |---|---|---|
 | `review_regressions/` | Sanitizer fixtures from the 2026-09-30 project review, updater and packaging scripts | see below |
+| `cinematic_bars/` | Native cutscene, fade-tail and game-pause signals against guest-call stubs; also included in review regressions | `cmake -S tools/tests/cinematic_bars -B out/cinematic-tests` |
 | `settings_menu/` | Settings menu interaction and raster contracts | `cmake -S tools/tests/settings_menu -B out/menu` |
 | `streamline_fg/` | GPU-free frame generation, selection and SR input contracts (plus `settings_menu/`) | `cmake -S tools/tests/streamline_fg -B out/fg-contracts` |
 | `frame_generation/` | Reusable frame generation core | `cmake -S tools/tests/frame_generation -B out/fg-core` |
@@ -47,6 +48,13 @@ ctest --test-dir out/review-regressions --output-on-failure --parallel 2
 
 ASan/UBSan are on by default (`-DLO_REVIEW_SANITIZE=OFF` disables them). `-DLO_REVIEW_SDL_TESTS=OFF` omits the SDL fixtures. The suite also runs `updater_appimage_cleanup_test.py`, `package_appimage_test.py` and `package_flatpak_test.py`; each also runs directly with `python3`. Packaging tests use stand-ins for linuxdeploy and flatpak, so the release workflow remains the real check.
 
+The suite includes `LoImportGameTest`, `LoImportIsoLocatorTest` and `LoImportReimportTest`, which use synthetic disc data. On Linux, `LoImportLinuxHomeTest` checks imports beneath the Fedora Atomic `/home` → `/var/home` system link and rejects other symlinks. It needs `bubblewrap` (`bwrap`) and unprivileged user/mount namespaces; it exits 77 (CTest skip) if either is unavailable. The fixture creates an isolated root and does not alter the host's `/home`. To run it directly after configuring the suite:
+
+```bash
+cmake --build out/review-regressions --target LoImportGameTest
+bash tools/tests/import_linux_home_test.sh out/review-regressions/LoImportGameTest
+```
+
 ## Selected native targets
 
 Examples of fixtures that stay out of the default build. Build only what the change needs.
@@ -56,7 +64,7 @@ Examples of fixtures that stay out of the default build. Build only what the cha
 | `LoStorageTest`, `LoGuestDispatchTest`, `LoGuestPrintfTest` | Guest file I/O, dispatch tables, string formatting |
 | `LoHidTest`, `LoQuitActionHookTest`, `LoQuitTextHookTest` | Input mapping, quit routing and text overrides |
 | `LoSaveAnywhereConfigTest`, `LoDebugMenuInteractionTest` | Debug settings persistence and menu behavior |
-| `LoFramePlanTest`, `LoFramePacerTest`, `LoRenderTimingTest` | Frame planning and pacing |
+| `LoFramePlanTest`, `LoFramePacerTest`, `LoRenderTimingTest`, `LoEngineDeltaLimitTest` | Frame planning, pacing and the engine tick's delta limit |
 | `LoPortableShaderPackTest`, `LoPortableShaderPackIntegrationTest`, `LoPortableShaderContractTest` | Shader pack format and runtime contract |
 | `LoImportGameTest`, `LoInstallerControllerTest` | Importer and installer state machines |
 | `LoVertexCacheTest`, `LoTextureKeyTest`, `LoTextureDescriptorCacheTest`, `LoRegisterSnapshotTest` | Render caches and register/constant snapshots |
@@ -100,4 +108,4 @@ Same approach for instruction semantics (carry, masks, shifts, Rc forms, memory 
 
 ## CI
 
-Pull request checks run on Gitea Actions: `fg-cpu-contracts.yml` (FG contracts and the reusable FG core), `fg-game-integration.yml` and `review-regressions.yml` (see [ci-gitea.md](../../docs/notes/ci-gitea.md)). The macOS arm64 workflow on GitHub builds and runs the targets that need no game data. A passing check is not gameplay or visual acceptance.
+CI runs on GitHub-hosted runners: `fg-cpu-contracts.yml` (FG contracts and the reusable FG core), `fg-game-integration.yml`, `review-regressions.yml` and `android-apk.yml` (see [CI guide](../../docs/notes/ci.md) for push, pull request and dispatch triggers). The macOS arm64 workflow on GitHub builds and runs the targets that need no game data. A passing check is not gameplay or visual acceptance.
