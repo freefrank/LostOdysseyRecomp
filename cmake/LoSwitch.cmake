@@ -32,6 +32,15 @@ if(NOT LO_SWITCH_CHECK_ONLY)
     message(STATUS "LostOdysseyRecomp: NVK ${LO_SWITCH_NVK_LIBRARY} (+ ${LO_SWITCH_NVK_EXTRA_LIBS})")
 endif()
 
+# Switch releases (LostOdysseyNX, tags vX.Y.Z_NX) are numbered apart from the PC
+# project version (project() in CMakeLists.txt, which follows upstream). It is
+# the NRO version below and the source version in the logs and crash.log.
+set(LO_SWITCH_RELEASE_VERSION "1.2.0")
+set(LO_SOURCE_VERSION "${LO_SWITCH_RELEASE_VERSION}")
+if(LO_VERSION_SUFFIX)
+    string(APPEND LO_SOURCE_VERSION "-${LO_VERSION_SUFFIX}")
+endif()
+
 # NRO metadata shown in the Homebrew Menu.
 set(LO_SWITCH_APP_TITLE "Lost Odyssey Recomp" CACHE STRING "NRO title")
 set(LO_SWITCH_APP_AUTHOR "LostOdysseyRecomp contributors" CACHE STRING "NRO author")
