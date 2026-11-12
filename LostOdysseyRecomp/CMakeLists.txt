@@ -179,6 +179,8 @@ elseif(LO_TARGET_PLATFORM STREQUAL "switch")
         ${LO_RUNTIME_ROOT}/os/switch/rename_switch.c
         ${LO_RUNTIME_ROOT}/os/switch/rwlock_switch.c)
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=rename")
+    # os/switch/env_file.cpp: names the LO_* switches read before env.txt was applied (stderr.log).
+    target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=getenv")
     # thirdparty/plume-deko3d: LO_DEKO3D_PRESENT_THREAD hands deko3d's buffer-queue calls to a worker.
     target_link_options(LostOdysseyRecomp PRIVATE "-Wl,--wrap=nwindowQueueBuffer,--wrap=nwindowDequeueBuffer")
     # Profile-guided build (cmake/LoSwitchPgo.cmake): the runtime is half of what it gains.

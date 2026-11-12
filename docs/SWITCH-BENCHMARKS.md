@@ -568,3 +568,26 @@ clocks, 540 rows, the release env.txt.
 No change: +0.01 FPS, inside the 0.26 FPS spread of either build. Block 3's first try lost the console: on the game's
 restart the system's `vi` service aborted (Atmosphere report at 23:37:22) and the game with it; the same pair is in
 the reports from 21:25, with the original NRO. The rerun of blocks 3 and 4 had no trouble.
+
+## Switches env.txt didn't reach (until 2026-11-11)
+
+Before 2026-11-11 the console applied env.txt in `switch_platform::Initialize`, from `main`, after the static
+initializers. Nine switches are read there, so env.txt couldn't change them: `LO_CP_FUSED_PLAIN_RUN`, `LO_GPU_STATS`,
+`LO_GPU_TRACE` and `LO_SHADER_DUMP_DIR` (`gpu/command_processor.cpp`), `LO_DEKO3D_DESCRIPTOR_CACHE` and
+`LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH` (`plume_deko3d.cpp`), `LO_VERBOSE` (`os/logger.h`, in 84 files' initializers),
+`LO_TRACE_FUNCS` (`g_memory`'s constructor) and `LO_TEST_ACHIEVEMENTS`. The list comes from the source and from the
+built program: every `getenv` call reachable from its 126 constructors.
+env.txt is now also applied by a constructor that runs before them (`os/switch/env_file.cpp`), and `stderr.log` names
+every switch read before env.txt's logged pass. Checked on the console (2026-11-11, title screen, 60 s each, env.txt
+`LO_GPU_STATS=1 LO_VERBOSE=1 LO_DEBUG_LOG=1`): the build before printed 0 `frame N stats` and 0 `[verb]` lines (4,889
+info lines, so `LO_DEBUG_LOG` worked); the fixed build printed 67 and 7,257, and its stderr.log listed exactly the
+nine switches above (plus libstdc++'s `GLIBCXX_TUNABLES`) as read before the logged pass, none before the early one.
+With `LO_DEKO3D_DESCRIPTOR_CACHE=0` and `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH=0` plume logs both off.
+
+One result used them. The "less work per draw" A/B of 2026-11-04 (`ff013164`, busy street, 540 rows, two alternated
+pairs, `out/bench/pg-k0` to `pg-k3`): 24.73 to 25.62 FPS (+3.6%), median frame 40.3 to 38.9 ms. Its "off" runs set
+seven switches to 0, but `LO_CP_FUSED_PLAIN_RUN`, `LO_DEKO3D_DESCRIPTOR_CACHE` and `LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH`
+stayed on in both modes. The +3.6% is `LO_CP_WPTR_LOCKFREE`, `LO_HOST_INPUT_REUSE`, `LO_UPLOAD_VECTOR_COPY` and
+`LO_DEKO3D_FB_DEDUPE` alone; the other three haven't been measured. Results that compare builds, such as the
+milestones, are unaffected: each build ran with its own defaults. (The six `LO_DEKO3D_<NAME>` lines had a different
+bug, fixed in #34: each one fell back to the Debug page's value.)

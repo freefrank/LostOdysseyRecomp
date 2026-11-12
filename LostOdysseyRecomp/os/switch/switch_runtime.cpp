@@ -42,6 +42,9 @@ extern "C"
 extern "C" char* fake_heap_start;
 extern "C" char* fake_heap_end;
 
+// os/switch/env_file.cpp: applies env.txt again and logs it.
+namespace os::switch_platform { void ApplyEnvFile(const char* path); }
+
 // os/log_file.h (not included: this file sees libnx headers, not the PCH).
 namespace os::logger { void DrainForExit() noexcept; }
 
@@ -643,27 +646,9 @@ void Initialize(const std::filesystem::path& dataRoot)
     devoptab_list[STD_ERR] = &g_stderrDevice;
     std::setvbuf(stderr, nullptr, _IOLBF, 1024);
 
-    // The console has no environment: <dataRoot>/env.txt supplies the LO_*
-    // switches the PC build reads from it (one KEY=VALUE per line, # comments).
-    if (FILE* env = std::fopen((dataRoot / "env.txt").c_str(), "r"))
-    {
-        char line[512];
-        while (std::fgets(line, sizeof(line), env))
-        {
-            char* text = line;
-            while (*text == ' ' || *text == '\t') ++text;
-            size_t length = std::strlen(text);
-            while (length && (text[length - 1] == '\n' || text[length - 1] == '\r' || text[length - 1] == ' '))
-                text[--length] = 0;
-            char* equals = std::strchr(text, '=');
-            if (!*text || *text == '#' || !equals || equals == text)
-                continue;
-            *equals = 0;
-            setenv(text, equals + 1, 1);
-            std::fprintf(stderr, "env.txt: %s=%s\n", text, equals + 1);
-        }
-        std::fclose(env);
-    }
+    // env.txt: the LO_* switches the PC build reads from its environment. A constructor already applied it before
+    // the static initializers (os/switch/env_file.cpp); this pass logs each line and the switches read before it.
+    os::switch_platform::ApplyEnvFile((dataRoot / "env.txt").c_str());
     // The network log (LO_NETLOG) and the debug server (LO_DEBUG_SERVER, settings.ini debug_server) share one
     // socket service setup; both stay off, and cost nothing, unless turned on.
     os::debug_server::StartNetwork(dataRoot.string().c_str());

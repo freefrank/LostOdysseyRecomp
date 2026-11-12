@@ -1120,6 +1120,9 @@ namespace plume {
         capabilities.occlusionQueries = envFlag("LO_DEKO3D_OCCLUSION");
         capabilities.occlusionQueryPrecise = true;
         logf("device: occlusion queries %s (LO_DEKO3D_OCCLUSION)", capabilities.occlusionQueries ? "on" : "off");
+        // LostOdysseyRecomp (2026-11-11): read at static initialization, so only env.txt's early pass reaches them.
+        logf("device: descriptor cache %s (LO_DEKO3D_DESCRIPTOR_CACHE), relaxed descriptor epoch %s "
+             "(LO_DEKO3D_RELAXED_DESCRIPTOR_EPOCH)", g_descriptorCache ? "on" : "off", g_relaxedDescriptorEpoch ? "on" : "off");
         capabilities.resolveRegion = false;
         description.name = "deko3d (Tegra X1, Maxwell GM20B)";
         description.type = RenderDeviceType::INTEGRATED;
