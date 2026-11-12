@@ -472,8 +472,14 @@ def parse_fields(text: str) -> dict:
         if sep:
             fields[key] = value(val)
     if isinstance(fields.get("threads"), str) and fields["threads"] != "-":
-        fields["threads"] = {name: float(pct) for name, _, pct in
-                             (entry.rpartition(":") for entry in fields["threads"].split(","))}
+        # Display names are not unique (e.g. several Guest_82beca90 threads).
+        # Preserve every sample; an ordinal is not an OS thread ID.
+        fields["thread_samples"] = [
+            {"name": name, "ordinal": i, "pct": float(pct)}
+            for i, (name, _, pct) in enumerate(
+                entry.rpartition(":") for entry in fields["threads"].split(","))]
+        # Keep the old field for readers of existing JSON, without using it for ranking.
+        fields["threads"] = {item["name"]: item["pct"] for item in fields["thread_samples"]}
     return fields
 
 
@@ -673,8 +679,24 @@ def print_report(runs: list[dict]) -> None:
 
 def thread_summary(runs: list[dict]) -> str:
     names: dict[str, list[float]] = {}
+    # Names that more than one thread has in any of the runs: ranked in every run, so that a run whose
+    # line left out one of them (under 1%, or past the top 8) still adds to the same entries.
+    shared = set()
     for run in runs:
-        if isinstance(run.get("threads"), dict):
+        seen = set()
+        for sample in run.get("thread_samples") or []:
+            (shared if sample["name"] in seen else seen).add(sample["name"])
+    for run in runs:
+        if isinstance(run.get("thread_samples"), list):
+            # Threads that share a name are ranked by their load within each run: the line has no thread ID.
+            grouped = {}
+            for sample in run["thread_samples"]:
+                grouped.setdefault(sample["name"], []).append(sample["pct"])
+            for name, values in grouped.items():
+                for rank, pct in enumerate(sorted(values, reverse=True), 1):
+                    label = f"{name} (load rank {rank})" if name in shared else name
+                    names.setdefault(label, []).append(pct)
+        elif isinstance(run.get("threads"), dict):
             for name, pct in run["threads"].items():
                 names.setdefault(name, []).append(pct)
     ranked = sorted(names.items(), key=lambda item: -statistics.median(item[1]))[:5]
