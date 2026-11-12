@@ -513,6 +513,15 @@ namespace plume {
         void applyBarrier(DkBarrier mode, uint32_t invalidate, bool merge, const char *trace);
         void invalidateZcullAfterCopy(const Deko3DTexture *dst);
         uint64_t currentEpoch() const;
+        // LostOdysseyRecomp (2026-11-10, issue #26, LO_DEKO3D_ZCULL_STATS=1): the four Zcull counters reported at
+        // begin(), at each change of depth target and at end(), in the list's transient memory; the next begin() adds
+        // the differences up per depth target size (key: width << 16 | height, 0 without depth).
+        static constexpr uint32_t ZcullSnapMax = 48;
+        const volatile uint32_t *zcullSnap[ZcullSnapMax] = {};
+        uint32_t zcullSnapKey[ZcullSnapMax] = {};
+        uint32_t zcullSnapCount = 0;
+        void zcullSnapshot(uint32_t key);
+        void zcullCollect();
 
         // LostOdysseyRecomp (2026-11-03, LO_DEKO3D_RECORD_THREAD): the ring this list's calls go to while the record
         // thread is on (null: deko3d is written on the calling thread, as before). Every field above belongs to the

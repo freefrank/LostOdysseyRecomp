@@ -53,6 +53,7 @@ DESCRIPTIONS = {
     "LO_HEAP_CENSUS_SECONDS": "Heap census: seconds between reports (state/heap-census/<seconds>.txt)",
     "LO_THREAD_CORES": "With LO_THREAD_PLACEMENT=1: name=core:hexmask,... moves busy threads, for placement experiments",
     "LO_DEKO3D_BARRIER_TRACE": "Log every barrier of one frame in N",
+    "LO_DEKO3D_ZCULL_STATS": "deko3d: log the Zcull counters per depth target (1); needs diagnostic_log=1",
     # Threads and scheduling
     "LO_MAIN_CORE": "Core Guest Main stays on; -1 leaves it free to move",
     "LO_XAUDIO_WORKER_PRIORITY": "Hex priority of the XAudio workers (0x2D); 0 keeps the default 0x3B",
