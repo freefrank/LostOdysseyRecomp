@@ -7721,8 +7721,18 @@ void main()
                     framebuffers.clear();
                     lastFramebuffer = nullptr;
                     renderTargets.clear();
-                    resolved.clear();
-                    resolvedBases.reset();
+                    // Resolves stand in for guest memory: the GPU-only path
+                    // never writes their pixels back to RAM. A paused scene
+                    // can keep sampling them after a settings change, before
+                    // the guest resolves again (including k_24_8_FLOAT depth).
+                    // Keep those pixels and their original scale; the next
+                    // resolve replaces an allocation when its size changes.
+                    // Only the old frame-plan/FG lineage becomes invalid.
+                    for (auto& [base, surfaces] : resolved)
+                        for (auto& surface : surfaces) {
+                            InvalidateFgResolve(surface);
+                            surface.sourcePlanValid = false;
+                        }
                     tileOwner.clear();
                     if (temporalHistory) temporalHistory->Reset();
                     temporalScene.Reset(frame);

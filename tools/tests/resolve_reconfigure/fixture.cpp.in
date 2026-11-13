@@ -1,0 +1,151 @@
+// Only host resources and unrelated temporal services are stand-ins. The
+// reconfiguration, address/format lookup and FG invalidation bodies are production.
+#include <gpu/render_resolution.h>
+#include <array>
+#include <atomic>
+#include <bitset>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#define LOG_INFO(...) ((void)0)
+namespace frame_generation { enum class HandoffCancel { Superseded }; }
+namespace frame_plan {
+enum class FailureReason { InvalidInput };
+struct FramePlan { uint32_t width=2403, height=1080; uint64_t geometryEpoch=1, cpuSerial=1; };
+}
+namespace video {
+bool stopped=false, presentReady=true;
+bool GpuWorkStopped() { return stopped; }
+bool WaitForPresentGpu() { return presentReady; }
+}
+namespace settings {
+struct Config { uint32_t shadowResolution=1; } config;
+const Config& GetConfig() { return config; }
+}
+static std::atomic<uint64_t> framePlanGeneration{0};
+static std::mutex framePlanMutex;
+static frame_plan::FramePlan committedPlan;
+namespace gpu::renderer {
+struct Counter {
+    unsigned calls=0;
+    void Reset() { ++calls; }
+    void Reset(uint64_t) { ++calls; }
+    void clear() { ++calls; }
+    void ReleaseDepthBindingsAfterGpuDrain() { ++calls; }
+};
+struct Upscaler {
+    bool live=false;
+    bool HasFeatureState() const { return live; }
+    void ReleaseFeatureAfterGpuDrain() { live=false; }
+};
+struct Packet {
+    bool selected=false, canceled=false;
+    void Cancel(frame_generation::HandoffCancel) { canceled=true; }
+};
+struct HostTexture {
+    uint32_t width=2403, height=1080;
+    resolution::Size resolutionSize{2403,1080};
+    std::array<uint32_t,4> pixels{0x3f000001,0x3f700002,0x3f600003,0x3f500004};
+};
+struct Renderer {
+    struct ResolvedSurface {
+        uint32_t destFormat=0;
+        std::unique_ptr<HostTexture> tex, hdrTex;
+        std::unordered_map<uint64_t,std::unique_ptr<HostTexture>> fetchViews;
+        bool sourcePlanValid=true;
+        uint64_t fgOwner=1, fgEpoch=2, fgSourceAllocation=3, fgSourceGeneration=4;
+        std::weak_ptr<Packet> fgPacket,fgComposite;
+    };
+    std::unordered_map<uint32_t,std::vector<ResolvedSurface>> resolved;
+    std::bitset<4096> resolvedBases;
+    static size_t ResolvedBaseBit(uint32_t base) { return size_t((base*0x9E3779B1u)>>20); }
+    static constexpr uint32_t kDepthResolveTag=0x1000;
+    uint64_t activePlanGeneration=0, appliedPlanEpoch=1, frame=10, shadowConfigFrame=~0ull;
+    uint64_t srReconfigureFrame=~0ull, temporalSupportedFrame=0, sceneAAAppliedFrame=0, sceneAAConfigFrame=0, temporalEpoch=0;
+    bool activePlanFailed=false, resolveReadback=false;
+    uint32_t shadowConfigValue=1, shadowResolution=1;
+    resolution::ShadowResolutionState shadowState;
+    resolution::Size requestedInternalSize{2403,1080}, internalSize{2403,1080};
+    frame_plan::FramePlan activePlan;
+    std::unordered_set<uint64_t> failedPlanEpochs;
+    std::unique_ptr<Upscaler> temporalUpscaler;
+    std::unique_ptr<Counter> motionReplay,temporalHistory;
+    Counter promotionPool,framebuffers,renderTargets,tileOwner,temporalScene;
+    int sceneCopyPromotion=0,restoreDebt=0;
+    void* lastFramebuffer=nullptr;
+    unsigned flushes=0,waits=0;
+    bool flushReady=true, gpuReady=true;
+    bool Flush() { ++flushes; return flushReady; }
+    bool WaitForGpu() { ++waits; return gpuReady; }
+    void FailCurrentPlan(frame_plan::FailureReason) { activePlanFailed=true; }
+    /* ApplyInternalResolution */
+    /* ResolveFormatMatches */
+    /* FindResolved */
+    /* ResolvedSlot */
+    /* InvalidateFgResolve */
+};
+}
+static unsigned checks=0;
+static void Check(bool ok,const char* why) {
+    ++checks;
+    if(!ok) throw std::runtime_error(why);
+}
+int main() {
+    using namespace gpu::renderer;
+    Renderer r;
+    auto& depth=r.ResolvedSlot(0x9c00000,0x1006);
+    depth.tex=std::make_unique<HostTexture>();
+    depth.fetchViews[7]=std::make_unique<HostTexture>();
+    auto* original=depth.tex.get();
+    const auto pixels=original->pixels;
+    auto pending=std::make_shared<Packet>();
+    depth.fgPacket=pending; depth.fgComposite=pending;
+    for(unsigned fmt:{6u,32u}) {
+        auto& color=r.ResolvedSlot(0x9fa0000,fmt);
+        color.tex=std::make_unique<HostTexture>();
+        color.hdrTex=std::make_unique<HostTexture>();
+    }
+    Check(r.FindResolved(0x9c00000,23)->tex.get()==original,"initial depth lookup");
+    Check(r.ApplyInternalResolution(),"unchanged settings must succeed");
+    Check(!pending->canceled && depth.sourcePlanValid,"no change must retain current lineage");
+    settings::config.shadowResolution=2;
+    ++r.frame;
+    Check(r.ApplyInternalResolution(),"shadow reconfiguration");
+    auto* retained=r.FindResolved(0x9c00000,23);
+    Check(retained && retained->tex.get()==original,"shadow setting discarded GPU-only depth pixels");
+    Check(original->pixels==pixels && retained->fetchViews.contains(7),"resolve contents/views changed");
+    Check(pending->canceled && retained->fgPacket.expired() && retained->fgOwner==0,
+          "obsolete FG lineage must be canceled");
+    Check(!retained->sourcePlanValid,"old frame plan must not be advertised as current");
+    Check(r.FindResolved(0x9c00000,22)==retained,"both depth fetch formats retain the same resolve");
+    Check(!r.FindResolved(0x9c00000,6),"depth must not match an unrelated color fetch");
+    Check(r.FindResolved(0x9fa0000,6) && r.FindResolved(0x9fa0000,32),"both color interpretations survive");
+    Check(r.FindResolved(0x9fa0000,32)->hdrTex!=nullptr,"HDR companion must survive");
+    Check(r.renderTargets.calls==1 && r.framebuffers.calls==1 && r.waits==1,
+          "attachments still rebuilt only after the GPU drain");
+    // A resolution change cannot reinterpret retained pixels at the new scale.
+    committedPlan.width=1602; committedPlan.height=720; ++committedPlan.geometryEpoch;
+    ++framePlanGeneration; ++r.frame;
+    Check(r.ApplyInternalResolution(),"internal resolution change");
+    Check(r.internalSize==gpu::resolution::Size{1602,720},"new attachments use the new size");
+    Check(original->resolutionSize==gpu::resolution::Size{2403,1080} && original->width==2403,
+          "retained resolve was assigned a fabricated new extent");
+    Check(r.FindResolved(0x9c00000,23)->tex->pixels==pixels,"resolution change lost depth contents");
+    // A subsequent guest resolve can replace the very same address/format slot.
+    auto& rewritten=r.ResolvedSlot(0x9c00000,0x1006);
+    rewritten.tex=std::make_unique<HostTexture>();
+    rewritten.tex->width=1602; rewritten.tex->height=720;
+    rewritten.tex->resolutionSize={1602,720};
+    Check(r.FindResolved(0x9c00000,23)->tex->width==1602,"new resolve is hidden by retained data");
+    const auto flushes=r.flushes;
+    Check(r.ApplyInternalResolution() && r.flushes==flushes,"unchanged frame added a GPU wait");
+    r.gpuReady=false; settings::config.shadowResolution=4; ++r.frame;
+    Check(!r.ApplyInternalResolution(),"failed drain must fail reconfiguration");
+    Check(r.FindResolved(0x9c00000,23)->tex->width==1602,"failed drain destroyed guest contents");
+    std::printf("PASS: %u production reconfiguration/resolve checks\n",checks);
+}

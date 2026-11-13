@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Changing internal or shadow resolution preserves the paused scene's textures until the game draws them again.
+
+### 简体中文
+
+- 调整内部或阴影分辨率时，保留暂停场景仍在读取的纹理，直到游戏重新绘制。
+
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
 ### English
