@@ -1,2 +1,3 @@
 # address size   -- manual function boundaries merged by tools/gen_function_bounds.py
 827C39F8 18      # small stub that otherwise flows into pdata function 827C3A10 and steals its switch table
+82F80F48 108     # seven-way comparison switch, table at 82F80FF0, shared return through 82F81048

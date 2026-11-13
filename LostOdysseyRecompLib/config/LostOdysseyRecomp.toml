@@ -141,6 +141,8 @@ functions = [
     { address = 0x82E1005C, size = 0x4 },
     { address = 0x82EF8D68, size = 0x1B0 },
     { address = 0x82EF8F18, size = 0x1F0 },
+    # Keep the seven-way comparison switch and its shared return in one body.
+    { address = 0x82F80F48, size = 0x108 },
     { address = 0x82F81038, size = 0xC },
     { address = 0x82F81044, size = 0xC },
     { address = 0x82FAC238, size = 0x80 },
