@@ -15,6 +15,9 @@
 #include "kernel/memory.h"
 #include <movie/movie_player.h>
 #include <os/logger.h>
+#if defined(__ANDROID__)
+#include <diagnostics/android_tester.h>
+#endif
 
 #include <bit>
 #include <cstdlib>
@@ -128,6 +131,9 @@ PPC_FUNC(sub_82815248)
     if (Trace())
         LOG_INFO("movie trace: start M={:08x} '{}' lr={:08x}", movie, path, uint32_t(ctx.lr));
     __imp__sub_82815248(ctx, base);
+#if defined(__ANDROID__)
+    ::diagnostics::android_tester::g_recorder.SetMovieActive(true);
+#endif
     movie::StartReplacement(movie, Stem(path));
 }
 
@@ -145,9 +151,17 @@ PPC_FUNC(sub_823F0038)
         ctx.r3.u64 = 0; // as when the guest has no new frame yet
         return;
     }
+#if defined(__ANDROID__)
+    auto& tester = ::diagnostics::android_tester::g_recorder;
+    const bool measureMovie = tester.recording.load(std::memory_order_relaxed);
+    const uint64_t movieStart = measureMovie ? ::diagnostics::android_tester::NowNs() : 0;
+#endif
     __imp__sub_823F0038(ctx, base);
     const bool shown = (ctx.r3.u32 & 0xFF) != 0;
     const uint64_t pts = Dword(Word(movie + 20) + 288);
+#if defined(__ANDROID__)
+    if (measureMovie) tester.SetMovieUpdate(shown, pts, ::diagnostics::android_tester::NowNs() - movieStart);
+#endif
     if (session && shown)
         movie::GuestFrameShown(session, double(pts), movie::NowMs());
     if (Trace())
@@ -187,5 +201,8 @@ PPC_FUNC(sub_82815640)
     if (Trace())
         LOG_INFO("movie trace: close M={:08x} r4={:08x} lr={:08x}", movie, ctx.r4.u32, uint32_t(ctx.lr));
     __imp__sub_82815640(ctx, base);
+#if defined(__ANDROID__)
+    ::diagnostics::android_tester::g_recorder.SetMovieActive(false);
+#endif
     movie::StopReplacement(movie);
 }

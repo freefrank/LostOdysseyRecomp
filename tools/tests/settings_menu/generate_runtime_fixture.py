@@ -41,6 +41,11 @@ PREAMBLE = r'''
 #include <gpu/display_change.h>
 #include <gpu/display_choice.h>
 #include <gpu/aspect_ratio.h>
+#if LO_PLATFORM_ANDROID
+#include <diagnostics/android_tester.h>
+int androidMessage = 0;
+bool SDL_SendAndroidMessage(int command, int) { androidMessage = command; return true; }
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -178,6 +183,44 @@ int main(int argc, char** argv) {
         sub_822F19B0(ctx,base);Check(ctx.r3.u32==Menu && ctx.cookie==1234,"guest helper calls preserve context");};
     tick();Check(settings::active,"menu opens");
     uint16_t neutral=0;settings::FilterInput(neutral,0,0,neutral);
+#if LO_PLATFORM_ANDROID
+    // This fixture exercises the real settings input hook with Android services
+    // stubbed. It does not start SDL, a device, or the separate debug overlay.
+    settings::tab=0;settings::row=0;tick(0x100);
+    Check(settings::tab==3,"LB reaches the System category");
+    settings::row=settings::SystemShaderPreparationRow;tick(2);
+    Check(settings::row==settings::SystemAndroidDiagnosticsRow,"Android diagnostics follows shader preparation");
+    tick(0x1000);
+    Check(settings::testerOpen && settings::snapshot.pageTitle==L"Android diagnostics","confirm opens diagnostics page");
+    settings::edit.uiLanguage=8;tick();
+    Check(settings::snapshot.pageTitle==L"Diagnostica Android" && settings::snapshot.rows[0].name==L"Modalità Tester", "Italian page is translated");
+    settings::edit.uiLanguage=0;
+    PPC_STORE_U32(ConfigData+4, 0x02000000);tick();
+    Check(settings::snapshot.confirmB && settings::snapshot.keyLegend.find(L"B: confirm")!=std::wstring::npos,"swapped confirm legend");
+    PPC_STORE_U32(ConfigData+4, 0);tick();
+    auto& d=diagnostics::android_tester::g_recorder;
+    Check(!d.enabled && !d.recording,"tester defaults off");
+    tick(0x1000);Check(d.enabled,"confirm enables tester");
+    tick(2);tick(8);Check(d.profile==1,"right selects advanced profile");
+    tick(0x200);Check(settings::testerOpen && settings::tab==3,"RB does not change tabs inside the page");
+    settings::testerFocus=settings::TesterRecording;tick(0x1000);
+    Check(d.recording && androidMessage==0x8001,"record starts the Android collector");
+    settings::testerFocus=settings::TesterProfile;tick(8);Check(d.profile==1,"profile remains fixed during recording");
+    settings::testerFocus=settings::TesterRecording;tick(0x1000);
+    Check(!d.recording && androidMessage==0x8002,"stop stops recording");
+    d.collectorIdle=true;
+    settings::testerFocus=settings::TesterExport;tick(0x1000);
+    Check(androidMessage==0x8003,"export requests the Android document picker");
+    tick(0x2000);Check(!settings::testerOpen && settings::tab==3,"back returns to System");
+    tick(0x200);Check(settings::tab==0,"RB changes category after leaving the page");
+    printf("PASS: %u Android settings hook/input checks (synthetic services, no game)\n",checks);
+#ifdef _WIN32
+    VirtualFree(base,0,MEM_RELEASE);
+#else
+    munmap(base,size);
+#endif
+    return 0;
+#endif
     // A must not cycle ANY ordinary setting, not just the new graphics choice.
     for(int tab=0;tab<4;++tab){
         settings::tab=tab;

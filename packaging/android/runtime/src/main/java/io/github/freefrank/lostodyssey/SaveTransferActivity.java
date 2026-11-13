@@ -37,6 +37,7 @@ import java.util.Locale;
  */
 public final class SaveTransferActivity extends Activity {
     static final String EXTRA_FROM_GAME = "from_game";
+    static final String EXTRA_START_TESTER_EXPORT = "start_tester_export";
     private static final String EXTRA_START_IMPORT = "start_import";
     private static final int REQUEST_EXPORT = 1;
     private static final int REQUEST_IMPORT = 2;
@@ -44,6 +45,7 @@ public final class SaveTransferActivity extends Activity {
 
     private boolean fromGame;
     private boolean busy;
+    private boolean testerExport;
     private LinearLayout page;
     private Context strings;
 
@@ -51,6 +53,7 @@ public final class SaveTransferActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         PlayerLogs.installCrashHandler(this);
         super.onCreate(savedInstanceState);
+        if (savedInstanceState != null) testerExport = savedInstanceState.getBoolean("tester_export", false);
         fromGame = getIntent().getBooleanExtra(EXTRA_FROM_GAME, false);
         page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -72,6 +75,12 @@ public final class SaveTransferActivity extends Activity {
     }
 
     @Override
+    protected void onSaveInstanceState(Bundle state) {
+        state.putBoolean("tester_export", testerExport);
+        super.onSaveInstanceState(state);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         strings = SaveLocationStrings.context(this);
@@ -79,6 +88,11 @@ public final class SaveTransferActivity extends Activity {
         if (getIntent().getBooleanExtra(EXTRA_START_IMPORT, false)) {
             getIntent().removeExtra(EXTRA_START_IMPORT);
             startImport();
+        }
+        if (getIntent().getBooleanExtra(EXTRA_START_TESTER_EXPORT, false)) {
+            getIntent().removeExtra(EXTRA_START_TESTER_EXPORT);
+            testerExport = true;
+            startLogExport();
         }
     }
 
@@ -270,7 +284,7 @@ public final class SaveTransferActivity extends Activity {
     // Logs --------------------------------------------------------------------
 
     private void startLogExport() {
-        String name = "LostOdyssey-logs-"
+        String name = (testerExport ? "LostOdyssey-diagnostics-" : "LostOdyssey-logs-")
             + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".zip";
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
@@ -292,9 +306,13 @@ public final class SaveTransferActivity extends Activity {
         runInBackground(() -> {
             try (OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
                 if (output == null) throw new IOException("cannot open the file");
-                PlayerLogs.exportZip(files, device, output);
+                if (testerExport) AndroidTester.get(this).export(output);
+                else PlayerLogs.exportZip(files, device, output);
             }
-            return () -> Toast.makeText(this, "Exported " + files.size() + " log files", Toast.LENGTH_LONG).show();
+            return () -> {
+                Toast.makeText(this, testerExport ? "Diagnostics exported" : "Exported " + files.size() + " log files", Toast.LENGTH_LONG).show();
+                if (testerExport) finish();
+            };
         }, "Export failed");
     }
 
@@ -406,7 +424,10 @@ public final class SaveTransferActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            if (testerExport && requestCode == REQUEST_EXPORT_LOGS) finish();
+            return;
+        }
         if (requestCode == REQUEST_EXPORT) export(data.getData());
         else if (requestCode == REQUEST_IMPORT) read(data.getData());
         else if (requestCode == REQUEST_EXPORT_LOGS) exportLogs(data.getData());

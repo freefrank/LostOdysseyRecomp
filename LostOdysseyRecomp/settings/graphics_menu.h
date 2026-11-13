@@ -130,7 +130,7 @@ inline bool IsAction(int tab, int row)
            (tab == 2 && (row == int(GraphicsRow::NeuralRenderingTuning) || row == int(GraphicsRow::HdrCalibration) ||
                          row == int(GraphicsRow::Brightness) || row == int(GraphicsRow::Save))) ||
            (tab == 3 && (row == SystemAchievementsRow || row == SystemModsRow || row == SystemImportRow || row == SystemAddToSteamRow || row == SystemShaderBundleRow ||
-                         row == SystemShaderPreparationRow ||
+                         row == SystemShaderPreparationRow || row == SystemAndroidDiagnosticsRow ||
                          row == SystemSaveRow));
 }
 static_assert(int(GraphicsRow::DlssQuality) + 1 == int(GraphicsRow::DlssModel));

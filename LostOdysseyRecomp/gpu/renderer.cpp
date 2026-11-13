@@ -634,6 +634,7 @@ namespace gpu::renderer
                 std::unique_ptr<RenderCommandList> srContinuation;
                 std::unique_ptr<RenderCommandFence> fence;
                 std::unique_ptr<RenderQueryPool> timingQueries;
+                uint64_t previousTimingEnd = 0;
                 // This batch wrote both timestamps (LO_RENDER_TIMING or the
                 // Detailed performance overlay); only then are they read.
                 bool timed = false;
@@ -4884,7 +4885,7 @@ void main()
                     s.timed = false;
                     s.timingQueries->queryResults();
                     const auto* results = s.timingQueries->getResults();
-                    if (results) gpu_busy::AddBatch(results[0], results[1]);
+                    if (results) gpu_busy::AddBatch(results[0], results[1], s.previousTimingEnd);
                     if (render_timing::Enabled()) {
                         if (results) gpuTiming.AddBatch(results[0], results[1]);
                         else gpuTiming.AddUnavailableBatch();
@@ -9240,7 +9241,15 @@ void main()
                     pipelineDeferred = true;
                     return nullptr;
                 }
+#if defined(__ANDROID__)
+                auto& tester = ::diagnostics::android_tester::g_recorder;
+                const bool measurePipeline = tester.Detailed();
+                const uint64_t pipelineStart = measurePipeline ? ::diagnostics::android_tester::NowNs() : 0;
+#endif
                 auto pipeline = CreatePipeline(key, vs, ps, true, fastLinkPipelines);
+#if defined(__ANDROID__)
+                if (measurePipeline) tester.AddPipeline(!pipeline, ::diagnostics::android_tester::NowNs() - pipelineStart, key.vs, key.ps);
+#endif
                 NotePipelineMiss(key, elapsed(), knownRecipes.contains(key),
                     take == JobTake::Claimed ? "claim" : take == JobTake::Inline ? "inline" : "create");
                 RenderPipeline* result = pipeline.get();
@@ -13764,6 +13773,10 @@ void main()
             // The public XE_SWAP Flush advances real-frame identity only AFTER
             // successful submission. Internal mid-frame Flush never calls this.
             void AdvanceAfterPublicFlush() {
+#if defined(__ANDROID__)
+                if (::diagnostics::android_tester::g_recorder.recording.load(std::memory_order_relaxed))
+                    ::diagnostics::android_tester::g_recorder.SetRenderer(frame, drawsThisFrame);
+#endif
                 if (fgUiCapture && fgUiCapture->frame == frame && !fgUiCapture->finalRecorded)
                     ExportFgUiCapture(fgUiCapture);
                 OcclusionFrameEnd();
