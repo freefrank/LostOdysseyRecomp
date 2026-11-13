@@ -34,6 +34,7 @@ std::string PackId(std::string text)
 Config Validate(Config value)
 {
     value.encounterRate = ValidEncounterRate(value.encounterRate);
+    value.battleIntroSkip = ValidBattleIntroSkip(value.battleIntroSkip);
     value.gpuDevice = TextValue(std::move(value.gpuDevice));
     value.displayName = TextValue(std::move(value.displayName));
     value.gameLanguagePack = PackId(std::move(value.gameLanguagePack));
@@ -321,6 +322,8 @@ Config Read()
             value.encounterRate = ValidEncounterRate(EncounterRate(number));
         else if (key == "battle_exp_double" && number <= 1)
             value.battleExpDouble = number == 1;
+        else if (key == "battle_intro_skip" && number <= 2)
+            value.battleIntroSkip = BattleIntroSkip(number);
         else if (key == "fast_forward" && number <= 1)
             value.fastForward = number == 1;
         else if (key == "fast_forward_mode")
@@ -430,6 +433,7 @@ void PreviewConfig(const Config &value)
     merged.saveAnywhere = Current().saveAnywhere;
     merged.encounterRate = Current().encounterRate;
     merged.battleExpDouble = Current().battleExpDouble;
+    merged.battleIntroSkip = Current().battleIntroSkip;
     CopyFastForward(merged, Current());
     merged.menuAnimationRate = Current().menuAnimationRate;
     merged.audioOutput = Current().audioOutput;
@@ -519,6 +523,7 @@ static bool WriteConfig(const Config &value)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
            << "\nencounter_rate=" << uint32_t(value.encounterRate)
            << "\nbattle_exp_double=" << (value.battleExpDouble ? 1 : 0)
+           << "\nbattle_intro_skip=" << uint32_t(value.battleIntroSkip)
            << "\nfast_forward=" << (value.fastForward ? 1 : 0)
            << "\nfast_forward_mode=" << value.fastForwardMode
            << "\nfast_forward_button=" << value.fastForwardButton
@@ -551,6 +556,7 @@ bool SaveConfig(const Config &requested)
     value.saveAnywhere = Current().saveAnywhere;
     value.encounterRate = Current().encounterRate;
     value.battleExpDouble = Current().battleExpDouble;
+    value.battleIntroSkip = Current().battleIntroSkip;
     CopyFastForward(value, Current());
     value.menuAnimationRate = Current().menuAnimationRate;
     value.audioOutput = Current().audioOutput;
@@ -630,6 +636,15 @@ bool SaveBattleExpDouble(bool enabled)
     persisted.battleExpDouble = enabled;
     if (!WriteConfig(persisted)) return false;
     Current().battleExpDouble = enabled;
+    return true;
+}
+bool SaveBattleIntroSkip(BattleIntroSkip mode)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.battleIntroSkip = ValidBattleIntroSkip(mode);
+    if (!WriteConfig(persisted)) return false;
+    Current().battleIntroSkip = persisted.battleIntroSkip;
     return true;
 }
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button)

@@ -2,6 +2,7 @@
 #include <os/logger.h>
 #include "no_encounters.h"
 #include "battle_tour.h"
+#include <patches/battle_intro_gate.h>
 #include <settings/config.h>
 #include <atomic>
 #include <bit>
@@ -84,6 +85,7 @@ PPC_FUNC(sub_829E3268)
     {
         PPC_STORE_U32(formationSlot, static_cast<uint32_t>(formation));
         ctx.r3.u64 = 1;
+        battle_intro_skip::NoteTourDraw(formation);
         LOG_INFO("battle tour: formation {} drawn", formation);
         return;
     }

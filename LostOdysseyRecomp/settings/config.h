@@ -13,6 +13,12 @@
 namespace settings
 {
 inline constexpr uint32_t MenuAnimationRates[] = {1, 2, 4};
+// Debug Menu -> Cheats -> Battle -> Skip battle animation. Stable settings.ini values (battle_intro_skip).
+enum class BattleIntroSkip : uint32_t { Off, Press, Always };
+inline constexpr BattleIntroSkip ValidBattleIntroSkip(BattleIntroSkip mode)
+{
+    return uint32_t(mode) <= uint32_t(BattleIntroSkip::Always) ? mode : BattleIntroSkip::Off;
+}
 // Persisted 2 (the removed exclusive fullscreen) loads as Borderless.
 enum class WindowMode : uint32_t
 {
@@ -191,6 +197,7 @@ struct Config
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     EncounterRate encounterRate = EncounterRate::Normal; // Debug-only walking encounters.
     bool battleExpDouble = false; // Debug-only battle reward preference.
+    BattleIntroSkip battleIntroSkip = BattleIntroSkip::Off; // Debug-only battle intro skip.
     // Debug-menu fast-forward, persisted like saveAnywhere: switch, 0 Hold / 1 Toggle,
     // multiplier (one of debug_menu::fast_forward::Rates).
     bool fastForward = false;
@@ -209,6 +216,7 @@ bool SaveDebugLanguage(uint32_t language);
 bool SaveSaveAnywhere(bool enabled);
 bool SaveEncounterRate(EncounterRate rate);
 bool SaveBattleExpDouble(bool enabled);
+bool SaveBattleIntroSkip(BattleIntroSkip mode);
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button);
 bool SaveMenuAnimationRate(uint32_t rate);
 // Cheap, thread-safe read for the camp-menu tween hook.

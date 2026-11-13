@@ -53,6 +53,9 @@ namespace
     // A second row grows down, away from the toast. Its wider key box fits
     // Backspace without narrowing the translated label or changing the credit.
     constexpr int kQuitHintX = 934, kQuitHintY = 676, kQuitHintKey = 104, kQuitHintGap = 8;
+    // The battle intro's skip legend: the Settings legend's row, right-aligned
+    // to its right edge, with room on the left for a long key name.
+    constexpr int kSkipLeft = 916;
     constexpr int kHintLeft = kHintX - 8, kHintTop = kHintY - 4, kHintRight = kHintX + kHintWidth + 8,
                   kHintBottom = kQuitHintY + kHintHeight + 4;
     // Share the legend's centred canvas and safe margin, leaving a gap before
@@ -574,6 +577,18 @@ settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
             edge(c.offsetY + std::max(kHintBottom + footerOffset, creditY + 2 * kCreditLineHeight + 4) * c.scale, height)};
 }
 
+settings::MenuRect settings::SkipPromptBounds(uint32_t width, uint32_t height)
+{
+    // Inside the centred 16:9 canvas on every output, like the battle HUD.
+    const Canvas c(nullptr, width, height);
+    const auto edge = [](double value, uint32_t limit) {
+        return size_t(std::clamp(int(std::lround(value)), 0, int(limit)));
+    };
+    return {edge(c.offsetX + (kSkipLeft - 8) * c.scale, width), edge(c.offsetY + kHintTop * c.scale, height),
+            edge(c.offsetX + kHintRight * c.scale, width),
+            edge(c.offsetY + (kHintY + kHintHeight + 4) * c.scale, height)};
+}
+
 settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, int x, int y)
 {
     const Canvas c(nullptr, width, height);
@@ -683,7 +698,7 @@ namespace
 settings::HelpFit settings::MeasureHelp(const MenuSnapshot &s)
 {
     HelpFit fit;
-    if (s.titleHint || s.dialogOnly) return fit;
+    if (s.titleHint || s.skipPrompt || s.dialogOnly) return fit;
     if (s.neuralRendering.open)
     {
         fit.help = Fit(s, NrHelp(s.language, s.neuralRendering.focus), kNrHelpWidth, kNrHelpHeight, kNrHelpSize);
@@ -755,8 +770,11 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     // If output dimensions differ, scale and center onto the output buffer.
     // The title hint rasterizes only its own rectangle of the output.
     const Canvas output(nullptr, width, height);
-    const MenuRect hint = current.titleHint ? TitleHintBounds(width, height) : MenuRect{};
-    if (current.titleHint)
+    const bool footer = current.titleHint || current.skipPrompt;
+    const MenuRect hint = current.titleHint    ? TitleHintBounds(width, height)
+                          : current.skipPrompt ? SkipPromptBounds(width, height)
+                                               : MenuRect{};
+    if (footer)
     {
         width = uint32_t(hint.x1 - hint.x0);
         height = uint32_t(hint.y1 - hint.y0);
@@ -766,7 +784,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     pixels.assign(size_t(width) * height, 0xFF000000u);
     uint32_t *dib = pixels.data();
 
-    const Canvas canvas = current.titleHint ? Canvas(dib, width, height, output, int(hint.x0), int(hint.y0))
+    const Canvas canvas = footer ? Canvas(dib, width, height, output, int(hint.x0), int(hint.y0))
                                             : Canvas(dib, width, height);
     const double scale = canvas.scale;
     const double offsetX = canvas.offsetX;
@@ -917,6 +935,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     const uint32_t outline = MakeColor(255, 8, 8, 8);
     const uint32_t selectedEdge = outline;
 
+    // Returns the layout x where the drawn text starts.
     auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
                      uint32_t edge = MakeColor(255, 8, 8, 8), int minimum = 13, bool prompts = true,
@@ -968,6 +987,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             double left = x;
             if (alignment == 1) left += (w - advance) * .5;
             else if (alignment == 2) left += w - advance;
+            const double start = left;
             for (const auto c : drawn)
             {
                 if (c == L' ') { left += (font.height * 0.3) * ratioX; continue; }
@@ -1000,7 +1020,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                        left, top, g.width * ratioX, g.height * ratioY, 255, false, color, edge);
                 left += (int(g.width) + font.kerning) * ratioX;
             }
-            return;
+            return start;
         }
 #ifdef LO_MENU_RENDER_TRACE
         LoMenuRenderTrace(value, false);
@@ -1062,6 +1082,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                 for (int dx = -1; dx <= 1; ++dx)
                     if (dx || dy) draw(dx, dy, edge);
         draw(0, 0, color);
+        return (left - offsetX) / scale;
     };
 
     auto brushedCell = [&](int x, int y, int w, int h, uint32_t base) {
@@ -1164,12 +1185,47 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         return true;
     }
 
-    if (current.titleHint)
+    if (footer)
     {
         // The key on its own, so a PlayStation face does not move the label off
         // the menu font. Drawn over black and over white: the difference is
         // the coverage, so the legend keeps the font's outline in straight alpha.
         const uint32_t face = MakeColor(255, 196, 197, 194);
+        const auto alphaLayer = [&](const auto &draw, int opacity) {
+            std::fill(pixels.begin(), pixels.end(), 0xFF000000u);
+            draw();
+            const std::vector<uint32_t> overBlack = pixels;
+            std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
+            draw();
+            for (size_t i = 0; i < pixels.size(); ++i)
+            {
+                auto &p = pixels[i];
+                const uint32_t b = overBlack[i];
+                int spread = 0;
+                for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
+                const int alpha = std::clamp(255 - spread / 3, 0, 255);
+                const auto channel = [&](int c) {
+                    return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
+                };
+                p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
+            }
+        };
+        if (current.skipPrompt)
+        {
+            // One legend row at the hint's right edge: the label right-aligned,
+            // the key (an icon, or a keyboard key's name) just before it.
+            alphaLayer([&] {
+                const double start = text(kSkipLeft, kHintY, kHintRight - 8 - kSkipLeft, kHintHeight, current.help,
+                                          18, face, false, 2, outline, 12, false);
+                // An icon's advance leaves room on both sides: pull it to the colon.
+                const int keyRight = int(std::floor(start)) + (current.skipKeyName ? 0 : 3);
+                text(kSkipLeft, kHintY, keyRight - kSkipLeft, kHintHeight, current.skipKey,
+                     // A key name of more than one letter at 16 pt, as Backspace in the quit row.
+                     current.skipKeyName && current.skipKey.size() > 1 ? 16 : 18, face, false, 2, outline, 12,
+                     !current.skipKeyName);
+            }, 255);
+            return true;
+        }
         const int creditY = CreditTop(output);
         const int hintY = kHintY + FooterOffset(output), quitY = kQuitHintY + FooterOffset(output);
         const std::wstring refund = Translate(current.language, L"If you paid for this, ask for a refund.",
@@ -1218,28 +1274,9 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         };
         // Keep the credit's lower opacity independent of the two shortcuts:
         // the wider Backspace key can extend left of the credit box's edge.
-        const auto alphaLayer = [&](bool credit, int opacity) {
-            std::fill(pixels.begin(), pixels.end(), 0xFF000000u);
-            legend(credit);
-            const std::vector<uint32_t> overBlack = pixels;
-            std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFFu);
-            legend(credit);
-            for (size_t i = 0; i < pixels.size(); ++i)
-            {
-                auto &p = pixels[i];
-                const uint32_t b = overBlack[i];
-                int spread = 0;
-                for (int c = 0; c < 3; ++c) spread += int((p >> (8 * c)) & 255) - int((b >> (8 * c)) & 255);
-                const int alpha = std::clamp(255 - spread / 3, 0, 255);
-                const auto channel = [&](int c) {
-                    return uint8_t(alpha ? std::min(255, int((b >> (8 * c)) & 255) * 255 / alpha) : 0);
-                };
-                p = host_ui::PackRgba(channel(0), channel(1), channel(2), uint8_t(alpha * opacity / 255));
-            }
-        };
-        alphaLayer(true, 184);
+        alphaLayer([&] { legend(true); }, 184);
         const std::vector<uint32_t> credit = pixels;
-        alphaLayer(false, 255);
+        alphaLayer([&] { legend(false); }, 255);
         for (size_t i = 0; i < pixels.size(); ++i)
             pixels[i] = ColorBlend(credit[i], pixels[i]);
         return true;

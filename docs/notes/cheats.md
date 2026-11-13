@@ -31,6 +31,11 @@ a selector or confirmation before closing F1.
   replacement; the CT says to keep its override enabled before loading a save.
   This implementation only writes the current data value once and does not
   promise the CT's continuous pre-load override behavior.
+- Battle: **Skip battle animation**, Off (default), Press to skip or Always,
+  saved at once as `battle_intro_skip` in `settings.ini`. Press to skip shows a
+  prompt at the start of a random walking battle; the game's cancel button skips
+  the intro. Always skips it with no prompt. Boss, story and scripted battles
+  keep their intro. Details: [Battle intro skip](battle-intro-skip.md).
 - Developer: experimental retail EDIT MENU flag, accessed by LT+RT after
   closing F1. Exit the retail editor before switching the option off. This is
   not the prototype debug menu and does not implement the CT's five native

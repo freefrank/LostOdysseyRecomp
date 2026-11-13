@@ -3,6 +3,7 @@
 #include "fast_forward.h"
 #include "no_encounters.h"
 #include "battle_exp.h"
+#include "battle_intro_skip_setting.h"
 #include "../host_ui/rasterizer.h"
 #include "../settings/config.h"
 #include "controller_hint.h"
@@ -16,7 +17,12 @@ enum class Picker { None, Character, Item, Skill, Equipment };
 inline constexpr const wchar_t* Categories[][2] = {
     {L"Quick tools",L"快捷操作"}, {L"Characters",L"角色与技能"},
     {L"Inventory",L"物品与素材"}, {L"Equipment",L"装备"},
-    {L"Party",L"队伍"}, {L"Developer",L"开发者"}};
+    {L"Party",L"队伍"}, {L"Battle",L"战斗"},
+    {L"Developer",L"开发者"}};
+inline constexpr unsigned BattleCategory = 5, DeveloperCategory = 6;
+inline constexpr int CategoryColumnWidth = 142;
+// The Battle category has one long label, so its label column is wider.
+inline constexpr int BattleLabelColumnWidth = 220;
 inline constexpr unsigned Quantities[] = {1,10,50,99};
 inline constexpr int QuickToolRowHeight = 22;
 inline constexpr const wchar_t* FastForwardButtonLabel[] = {L"Fast-forward button",L"变速按键"};
@@ -34,6 +40,19 @@ inline unsigned EncounterRateIndex() {
     return debug_menu::EncounterEveryStepEnabled() ? 3 : unsigned(debug_menu::GetEncounterRate());
 }
 inline constexpr const wchar_t* BattleExpLabel[] = {L"Battle EXP ×2",L"战斗 EXP ×2"};
+inline constexpr const wchar_t* BattleIntroSkipLabel[] = {L"Skip battle animation",L"跳过战斗动画"};
+// Indexed by settings::BattleIntroSkip.
+inline constexpr const wchar_t* BattleIntroSkipValues[][2] = {
+    {L"Off",L"关闭"}, {L"Press to skip",L"按键跳过"}, {L"Always",L"总是跳过"}};
+// Indexed by settings::BattleIntroSkip: the help for the current value.
+inline constexpr const wchar_t* BattleIntroSkipHelp[][2] = {
+    {L"Off: every battle intro plays in full, as in the original game.",
+     L"关闭：所有战斗开场完整播放，与原版游戏相同。"},
+    {L"Press to skip: a skip prompt shows when a random battle starts. Press the cancel button to skip the intro.",
+     L"按键跳过：随机战斗一开始就显示跳过提示，按取消键即可跳过开场。"},
+    {L"Always: random battles skip the intro with no button press. Boss and story battles keep their intro.",
+     L"总是跳过：随机战斗自动跳过开场，无需按键。首领战与剧情战斗保留开场。"}};
+static_assert(std::size(BattleIntroSkipValues)==std::size(BattleIntroSkipHelp));
 inline constexpr const wchar_t* MenuAnimationLabel[] = {L"Menu animations",L"菜单动画"};
 inline constexpr const wchar_t* MenuAnimationValues[][2] = {
     {L"Normal (1x)",L"正常 (1x)"}, {L"Fast (2x)",L"快速 (2x)"}, {L"Faster (4x)",L"更快 (4x)"}};
@@ -58,7 +77,7 @@ struct Model {
     Request request;
     std::wstring notice;
     unsigned menuAnimationRate=1;
-    unsigned Rows() const { constexpr unsigned rows[]={13,8,6,5,7,2}; return rows[category]; }
+    unsigned Rows() const { constexpr unsigned rows[]={13,8,6,5,7,2,2}; return rows[category]; }
     void ChangeCategory(int direction) { category=Wrap(category,direction,unsigned(std::size(Categories))); row=0; }
     std::span<const cheats::data::Entry> EquipmentList() const {
         if (equipmentSlot==0) return cheats::data::Weapons;
@@ -211,7 +230,10 @@ struct Model {
             else if(row==4)backRow=1-backRow;
             else if(row==5 && activate)Write(Action::SetRow,backRow ? 0x80:0,0,true,zh);
             else if(row==6 && activate)Write(Action::SetFieldCharacter,character,0,true,zh);
-        } else if(category==5 && row==1 && activate) {
+        } else if(category==BattleCategory) {
+            if(row==1) debug_menu::SetBattleIntroSkip(settings::BattleIntroSkip(Wrap(unsigned(debug_menu::GetBattleIntroSkip()),
+                direction,unsigned(std::size(BattleIntroSkipValues)))));
+        } else if(category==DeveloperCategory && row==1 && activate) {
             const auto s=cheats::session.Get();
             if(s.editorRequested)cheats::session.SetEditor(false);
             else if(s.enabled && s.available) { confirmation=Confirmation::Editor;confirm=true;yes=false; }
@@ -254,15 +276,17 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
     const auto s=cheats::session.Get(); const auto speed=fast_forward::GetStatus();
     const auto color=host_ui::MakeColor;
     const auto text=color(255,226,233,243),muted=color(255,145,158,178),gold=color(255,229,196,126);
-    const int side=142,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=m.category==0 ? QuickToolRowHeight:35;
+    const int side=CategoryColumnWidth,gap=16,rx=x+side+gap,rw=width-side-gap,rowH=m.category==0 ? QuickToolRowHeight:35;
     auto drawText=[&](int px,int py,std::wstring t,int maxWidth,uint32_t c) {
         r.DrawWString(px,py,Fit(r,controller_hint::ShoulderLabels(std::move(t),playStation),maxWidth),c);
     };
-    for(unsigned i=0;i<6;++i) {
+    // Seven buttons end at y+242, above the side notes at y+248.
+    for(unsigned i=0;i<std::size(Categories);++i) {
         const bool selected=m.category==i;
-        r.FillRect(x,y+int(i)*39,side,32,selected ? color(255,47,59,76):color(255,27,32,41));
-        if(selected)r.FillRect(x,y+int(i)*39,3,32,gold);
-        drawText(x+12,y+int(i)*39+8,Categories[i][zh],side-20,selected ? gold:muted);
+        const int py=y+int(i)*35;
+        r.FillRect(x,py,side,32,selected ? color(255,47,59,76):color(255,27,32,41));
+        if(selected)r.FillRect(x,py,3,32,gold);
+        drawText(x+12,py+8,Categories[i][zh],side-20,selected ? gold:muted);
     }
     drawText(x,y+248,zh ? L"默认关闭" : L"OFF by default",side,muted);
     drawText(x,y+270,zh ? L"先备份存档" : L"Back up saves",side,gold);
@@ -275,7 +299,7 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         const auto c=enabled ? text:muted;
         if(value.empty())drawText(rx+12,textY,label,rw-24,c);
         else {
-            const int labelWidth=m.category==0 ? 192:180;
+            const int labelWidth=m.category==0 ? 192 : m.category==BattleCategory ? BattleLabelColumnWidth:180;
             drawText(rx+12,textY,label,labelWidth-10,c);
             drawText(rx+labelWidth,textY,std::move(value),rw-labelWidth-12,selected ? gold:c);
         }
@@ -325,12 +349,15 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         row(4,zh ? L"前后排" : L"Battle row",m.backRow ? (zh ? L"后排":L"Back"):(zh ? L"前排":L"Front"));
         row(5,zh ? L"应用角色前后排" : L"Apply character row",L"",writable);
         row(6,zh ? L"设为场景角色（实验性）" : L"Set field character (experimental)",L"",writable);
-    } else {
+    } else if(m.category==BattleCategory) {
+        row(1,BattleIntroSkipLabel[zh],BattleIntroSkipValues[unsigned(debug_menu::GetBattleIntroSkip())][zh]);
+    } else if(m.category==DeveloperCategory) {
         row(1,zh ? L"原版场景编辑器" : L"Retail field editor",s.editorRequested ? (s.editorApplied ? L"ON":L"PENDING") : (s.editorApplied ? L"STOPPING":L"OFF"),writable);
         drawText(rx+12,y+94,zh ? L"实验性：LT + RT 尝试打开原版 EDIT MENU" : L"Experimental: try LT + RT for retail EDIT MENU",rw-24,gold);
         drawText(rx+12,y+123,zh ? L"不是 Prototype Debug Menu" : L"Not the prototype debug menu",rw-24,muted);
         drawText(rx+12,y+152,zh ? L"先退出原版编辑器，再关闭此开关" : L"Exit the retail editor before disabling this switch",rw-24,muted);
     }
+    const unsigned skipMode=unsigned(debug_menu::GetBattleIntroSkip());
     const wchar_t* hints[][2]={
         {speed.mode==fast_forward::Mode::Hold
             ? L"Hold the selected button to boost; release for 1x. Paired buttons do not boost."
@@ -342,7 +369,9 @@ inline void Render(host_ui::Rasterizer& r,const Model& m,bool zh,int x,int y,int
         {L"Choose item: A opens a paged list. Sort the inventory once to refresh.",L"按 A 打开可翻页列表；修改后在游戏内整理物品以刷新。"},
         {L"Only existing accessory slots. Check character compatibility before applying.",L"仅能修改已有饰品槽；应用前请确认角色适用的装备。"},
         {L"Assigning a present member swaps slots. Field character may require reloading.",L"重复成员会交换位置；场景角色修改可能需要重新读档。"},
+        {BattleIntroSkipHelp[skipMode][0],BattleIntroSkipHelp[skipMode][1]},
         {L"Guest flag only. No executable patches. Leave this OFF during normal play.",L"只修改 guest 标记，不改宿主机器码。正常游玩建议关闭。"}};
+    static_assert(sizeof(hints)/sizeof(hints[0])==std::size(Categories));
     // Warnings wrap instead of disappearing behind an ellipsis.
     auto paragraph=[&](int px,int py,std::wstring value,int maxWidth,uint32_t c) {
         value=controller_hint::ShoulderLabels(std::move(value),playStation);
