@@ -339,17 +339,23 @@ float3 mapHighlights(float3 color, float peak) {
     }
     return color;
 }
+// Decode the final display signal, after the guest ramp and user adjustments.
+// Diffuse SDR pixels must have the same response in an extended scene, a video
+// frame and a host menu. A pure 2.2 power crushes the sRGB toe in HDR only.
+// Keep the existing gamma-2.2 excess above white (and the highlight shoulder).
+// Select the base/exponent before pow: still one power operation per channel.
+float3 displayToLinear(float3 color, bool extended) {
+    color=max(color,0);
+    float3 highlight=extended ? step(1.0,color) : 0.0;
+    float3 base=lerp((color+0.055)/1.055,color,highlight);
+    float3 exponent=lerp(2.4.xxx,2.2.xxx,highlight);
+    return lerp(pow(base,exponent),color/12.92,step(color,0.04045));
+}
 // Our HDR output conversion of a display signal; extended keeps values above 1.
 float4 outputSignal(float3 color, bool extended) {
     if ((outputFlags & 1) != 0) {
-        color=max(color,0);
-        if (extended) {
-            color=mapHighlights(pow(color,2.2),peakRatio);
-        } else {
-            // Inactive linear output: the compositor re-encodes with the sRGB
-            // curve, so decoding with it returns the SDR pixels unchanged.
-            color=lerp(pow((color+0.055)/1.055,2.4),color/12.92,step(color,0.04045));
-        }
+        color=displayToLinear(color,extended);
+        if (extended) color=mapHighlights(color,peakRatio);
         color*=outputScale;
     }
     return float4(encodeOutput(color),1);
@@ -411,7 +417,7 @@ float4 pixel(float4 position : SV_Position) : SV_Target {
             if ((outputFlags & 128) != 0) color=applyGammaRamp(color);
             if ((outputFlags & 32) != 0) color=max((color-16.0/255.0)*(255.0/219.0),0);
             if ((outputFlags & 4096) != 0) color=applyUserCurve(color);
-            color=pow(max(color,0),2.2);
+            color=displayToLinear(color,true);
             color=peak ? mapHighlights(color,peakRatio) : saturate(color);
             return float4(encodeOutput(color*outputScale),1);
         }

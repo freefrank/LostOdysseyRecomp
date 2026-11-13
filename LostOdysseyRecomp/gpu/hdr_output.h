@@ -90,21 +90,21 @@ inline std::array<float, 3> MapLinear(std::array<float, 3> color, float peakRati
     return color;
 }
 
-// An inactive linear output (scRGB or EDR without HDR) carries sRGB-decoded
-// pixels, so its preview re-encodes with the sRGB curve, as the compositor does.
+// Every linear output carries sRGB-decoded diffuse pixels. A clipped SDR
+// preview re-encodes that range with the sRGB curve, as the compositor does.
 inline float EncodeSrgb(float linear)
 {
     return linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
 }
 
-inline uint32_t PreviewRgba(float red, float green, float blue, float outputScale, bool srgb = false)
+inline uint32_t PreviewRgba(float red, float green, float blue, float outputScale)
 {
     // Diagnostic PNG/PPM consumers are SDR. Clearly mark these as SDR previews
     // in the caller; the original FP16 readback must never be interpreted as RGBA8.
     const float scale = FinitePositive(outputScale, 1.0f);
-    const auto encode = [scale, srgb](float value) {
+    const auto encode = [scale](float value) {
         const float linear = std::isfinite(value) ? std::clamp(value / scale, 0.0f, 1.0f) : 0.0f;
-        return uint32_t(std::lround((srgb ? EncodeSrgb(linear) : std::pow(linear, 1.0f / 2.2f)) * 255.0f));
+        return uint32_t(std::lround(EncodeSrgb(linear) * 255.0f));
     };
     return encode(red) | (encode(green) << 8) | (encode(blue) << 16) | 0xff000000u;
 }
