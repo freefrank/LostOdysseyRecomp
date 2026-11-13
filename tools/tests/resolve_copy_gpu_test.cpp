@@ -14,7 +14,12 @@ int main(int argc, char** argv) {
     const bool vulkan=argc>1 && std::strcmp(argv[1],"--vulkan")==0;
     if(vulkan){--argc;++argv;}
     const bool skipInit = argc == 2 && std::strcmp(argv[1], "--uninitialized") == 0;
+#if defined(_WIN32)
     auto api = vulkan ? CreateVulkanInterface() : CreateD3D12Interface();
+#else
+    if (!vulkan) { std::puts("Use --vulkan on this platform"); return 77; }
+    auto api = CreateVulkanInterface();
+#endif
     if (!api) return 2;
     auto device = api->createDevice();
     if (!device) return 2;
@@ -55,19 +60,19 @@ int main(int argc, char** argv) {
             unsigned recorded = 0, skipped = 0, resolveOrdinal = 0;
             const auto resolve = [&] {
                 copies.BeginResolve();
-                commands->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(src.get(), RenderTextureLayout::COPY_SOURCE));
-                commands->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(dst.get(), RenderTextureLayout::COPY_DEST));
                 const gpu::resolve_copy::Copy copy{allocation * 2 + 1, allocation * 2 + 2,
                     srcWidth, srcHeight, dstWidth, dstHeight, uint32_t(format),
                     uint32_t(box.left), uint32_t(box.top), uint32_t(box.right - box.left), uint32_t(box.bottom - box.top)};
                 if (copies.CanReuse(copy)) ++skipped;
                 else {
+                    commands->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(src.get(), RenderTextureLayout::COPY_SOURCE));
+                    commands->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(dst.get(), RenderTextureLayout::COPY_DEST));
                     commands->copyTextureRegion(RenderTextureCopyLocation::Subresource(dst.get()),
                         RenderTextureCopyLocation::Subresource(src.get()), box.left, box.top, 0, &box);
+                    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(dst.get(), RenderTextureLayout::SHADER_READ));
                     ++recorded;
                 }
                 copies.Record(copy);
-                commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(dst.get(), RenderTextureLayout::SHADER_READ));
                 ++resolveOrdinal; // Logical resolve side effects also run on reuse.
                 copies.EndResolve();
             };
