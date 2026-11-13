@@ -177,3 +177,6 @@ add_subdirectory("${LO_TESTS}/steam_artwork" "${CMAKE_CURRENT_BINARY_DIR}/steam_
 
 # Native cutscene and game-pause lifecycle, compiled against guest-call stubs.
 add_subdirectory("${LO_TESTS}/cinematic_bars" "${CMAKE_CURRENT_BINARY_DIR}/cinematic_bars")
+
+# Per-object shadow selection and cache, using the complete production hooks.
+add_subdirectory("${LO_TESTS}/shadow_budget" "${CMAKE_CURRENT_BINARY_DIR}/shadow_budget")
