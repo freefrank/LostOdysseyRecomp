@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include "audio.h"
 #include "audio_callback.h"
+#include "audio_queue_refill.h"
 #include "fast_forward_audio.h"
 #include "matrix_surround.h"
 #include "test_signal.h"
@@ -54,6 +55,7 @@ namespace apu
         // the driver gave up catching up after a stall; logged with the frames.
         std::atomic<uint32_t> g_starved{ 0 };
         std::atomic<uint32_t> g_clockResets{ 0 };
+        std::atomic<uint32_t> g_refillFrames{ 0 };
         // Guest frames per output frame in this period: 1, or under
         // fast-forward up to its rate. The driver runs the guest callback this
         // many times per period. SubmitFrame shortens them by the same factor,
@@ -149,6 +151,14 @@ namespace apu
             std::lock_guard lock(g_deviceMutex);
             return g_stream ? std::max(0, SDL_GetAudioStreamQueued(g_stream)) / FrameBytes() : 0;
         }
+
+#if LO_PLATFORM_ANDROID
+        bool CanRefillQueue()
+        {
+            std::lock_guard lock(g_deviceMutex);
+            return g_running && g_device && g_stream && !g_paused;
+        }
+#endif
 
 #if LO_PLATFORM_ANDROID
         // SDL hands the app lifecycle events only to event watchers, on the
@@ -309,7 +319,23 @@ namespace apu
                         g_boostFrames = std::min(g_boostFrames + 1, kMaxBoostFrames);
                 }
                 else
+                {
                     dispatch(1);
+#if LO_PLATFORM_ANDROID
+                    // Keep the intended eight-frame reserve even when a host
+                    // stall reset `next`. One timed callback per period cannot
+                    // rebuild that reserve: production only matches playback.
+                    const uint32_t refills = detail::RefillAudioQueue(kQueuedFrames,
+                        QueuedFrames, CanRefillQueue, [&] { dispatch(1); });
+                    if (refills)
+                    {
+                        g_refillFrames.fetch_add(refills, std::memory_order_relaxed);
+                        // The device queue now supplies pacing. Do not replay
+                        // overdue wall-clock deadlines for these same frames.
+                        next = std::chrono::steady_clock::now();
+                    }
+#endif
+                }
             }
         }
     }
@@ -532,9 +558,9 @@ namespace apu
             }
         }
         if (report)
-            LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={} starved={} clock_resets={}",
+            LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={} starved={} clock_resets={} refill_frames={}",
                 n, peak, queued, mute, queueDrops, queueErrors, g_starved.load(std::memory_order_relaxed),
-                g_clockResets.load(std::memory_order_relaxed));
+                g_clockResets.load(std::memory_order_relaxed), g_refillFrames.load(std::memory_order_relaxed));
     }
 
     void SetPaused(bool paused)
