@@ -22,6 +22,7 @@ Each directory configures on its own, without game data or the full dependency t
 | Directory | Covers | Configure |
 |---|---|---|
 | `review_regressions/` | Sanitizer fixtures from the 2026-09-30 project review, updater and packaging scripts | see below |
+| `xma_streaming/` | Production XMA input waits, pending PCM/output state and bit-exact packet assembly across stream/buffer boundaries; decoder stand-in | `cmake -S tools/tests/xma_streaming -B out/xma-streaming` |
 | `cinematic_bars/` | Native cutscene, fade-tail and game-pause signals against guest-call stubs; also included in review regressions | `cmake -S tools/tests/cinematic_bars -B out/cinematic-tests` |
 | `settings_menu/` | Settings menu interaction and raster contracts | `cmake -S tools/tests/settings_menu -B out/menu` |
 | `streamline_fg/` | GPU-free frame generation, selection and SR input contracts (plus `settings_menu/`) | `cmake -S tools/tests/streamline_fg -B out/fg-contracts` |
