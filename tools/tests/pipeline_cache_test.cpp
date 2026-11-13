@@ -58,6 +58,42 @@ static cache::Key SampleKey()
     return key;
 }
 
+static void HashTests()
+{
+    // Every bit of every equality field must affect an in-memory lookup. Decode
+    // avoids assumptions about native struct layout, padding or signed bias.
+    for (const auto base : {cache::Key{}, SampleKey()}) {
+        const auto encoded = cache::detail::Encode(base);
+        for (size_t bit = 0; bit < encoded.size() * 8; ++bit) {
+            auto changed = encoded;
+            changed[bit / 8] ^= uint8_t(1u << (bit % 8));
+            const auto key = cache::detail::Decode(changed.data());
+            Check(key != base, "single-bit key differs");
+            Check(cache::KeyHash{}(key) != cache::KeyHash{}(base), "all key bits participate in lookup hash");
+            Check(cache::KeyHash{}(cache::detail::Decode(encoded.data())) == cache::KeyHash{}(base),
+                "equal keys hash equally");
+        }
+    }
+    // Structured keys: vary just one field, including aligned shader IDs and
+    // float/sign bits. Check both lookup correctness and low bucket-bit spread.
+    for (size_t field = 0; field < 14; ++field) {
+        std::unordered_map<cache::Key, uint32_t, cache::KeyHash> table;
+        std::array<size_t, 1024> buckets{};
+        for (uint32_t i = 0; i < 4096; ++i) {
+            auto encoded = cache::detail::Encode(SampleKey());
+            if (field < 2) cache::detail::Put64(encoded.data() + field * 8, uint64_t(i) << 12);
+            else cache::detail::Put32(encoded.data() + 16 + (field - 2) * 4, i);
+            const auto key = cache::detail::Decode(encoded.data());
+            Check(table.emplace(key, i).second, "distinct structured keys inserted");
+            ++buckets[cache::KeyHash{}(key) & (buckets.size() - 1)];
+        }
+        Check(*std::max_element(buckets.begin(), buckets.end()) < 32, "structured lookup hash spreads bucket bits");
+        table.rehash(table.bucket_count() * 2);
+        for (const auto& [key, value] : table)
+            Check(table.find(key)->second == value, "structured lookups survive rehash");
+    }
+}
+
 static bool ValidateEnums(const cache::Key& key)
 {
     return (key.prim == 4 || key.prim == 8) && key.rtFormat == 7 &&
@@ -192,8 +228,9 @@ int main(int argc, char** argv)
         Check(loaded.status == cache::Status::Loaded && Keys(loaded.records) == std::vector<cache::Key>{ key, second }, "key round trip");
         Check(cache::Write(path, records, shaderVersion, recipeVersion, ValidateEnums).ok && Read(path) == original,
             "deterministic replacement");
-        Check(cache::KeyHash{}(key) == static_cast<size_t>(cache::detail::Hash(cache::detail::Encode(key))),
-            "stable key hash");
+        Check(cache::detail::Hash(cache::detail::Encode(key)) == 0x8D8785339A357C34ull,
+            "persistent key hash remains stable independently of in-memory lookups");
+        HashTests();
         auto distinct = key;
         distinct.slopeBias ^= 0x80000000;
         Check(distinct != key && cache::detail::Encode(distinct) != cache::detail::Encode(key), "exact slope sign equality");
