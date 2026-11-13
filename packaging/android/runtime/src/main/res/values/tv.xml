@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This experimental TV page currently provides English and Italian. Other
+     app locales intentionally use Android's English fallback for this page. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="tv_mode">TV mode</string>
+    <string-array name="tv_modes"><item>Automatic</item><item>TV 16:9</item><item>Original mirroring</item><item>Off</item></string-array>
+    <string name="tv_resolution">TV render resolution</string>
+    <string-array name="tv_resolutions"><item>1280 × 720</item><item>1920 × 1080</item></string-array>
+    <string name="tv_apply">Apply</string>
+    <string name="tv_hide_touch">Hide touch gamepad on TV (keep CTRL available)</string>
+    <string name="tv_dim_phone">Black out and dim phone while on TV (panel stays on). Touch phone to wake.</string>
+    <string name="tv_audio_explanation">Game audio follows Android media routing. The test requests HDMI for its own tone and records its actual route. It does not change or verify the game’s audio route.</string>
+    <string name="tv_test_audio">Test HDMI audio (left, then right)</string>
+    <string name="tv_diagnostics">Record display/audio/controller diagnostics</string>
+    <string name="tv_explanation">Uses one game surface on an external presentation display. Automatic selects 16:9 displays. TV 16:9 also fits other display shapes without cropping or stretching. Android controls mirroring and may ignore the requested HDMI signal mode. Original mirroring and Off leave the system output unchanged.</string>
+    <string name="tv_status_no_display">No eligible external presentation display. System mirroring may still be active.</string>
+    <string name="tv_status_mirroring">TV output is managed by Android.</string>
+    <string name="tv_status_rejected">Android rejected independent output. Original phone output restored.</string>
+    <string name="tv_status_active">External output active. Requested game buffer: %1$d × %2$d.</string>
+</resources>

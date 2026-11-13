@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tv_mode">Modalità TV</string>
+    <string-array name="tv_modes"><item>Automatica</item><item>TV 16:9</item><item>Mirroring originale</item><item>Disattivata</item></string-array>
+    <string name="tv_resolution">Risoluzione di rendering TV</string>
+    <string name="tv_apply">Applica</string>
+    <string name="tv_hide_touch">Nascondi il gamepad touch sulla TV (CTRL resta disponibile)</string>
+    <string name="tv_dim_phone">Oscura il telefono durante il gioco sulla TV (pannello acceso). Tocca per riattivarlo.</string>
+    <string name="tv_audio_explanation">Il gioco usa l’uscita multimediale scelta da Android. Il test richiede HDMI per il solo segnale acustico e registra la sua uscita effettiva. Non modifica né verifica l’uscita audio del gioco.</string>
+    <string name="tv_test_audio">Prova audio HDMI (sinistra, poi destra)</string>
+    <string name="tv_diagnostics">Registra diagnostica display, audio e controller</string>
+    <string name="tv_explanation">Usa una sola superficie di gioco su un display esterno indipendente. Automatica seleziona i display 16:9. TV 16:9 adatta il gioco anche ad altri formati senza deformazioni o ritagli. Android gestisce il mirroring e può ignorare la modalità HDMI richiesta. Mirroring originale e Disattivata lasciano invariata l’uscita di sistema.</string>
+    <string name="tv_status_no_display">Nessun display esterno indipendente utilizzabile. Il mirroring di sistema può essere attivo.</string>
+    <string name="tv_status_mirroring">Uscita TV gestita da Android.</string>
+    <string name="tv_status_rejected">Android ha rifiutato l’uscita indipendente. Ripristinato lo schermo del telefono.</string>
+    <string name="tv_status_active">Uscita esterna attiva. Buffer di gioco richiesto: %1$d × %2$d.</string>
+</resources>

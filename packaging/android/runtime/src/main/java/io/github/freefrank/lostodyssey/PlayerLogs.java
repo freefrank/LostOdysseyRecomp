@@ -40,11 +40,11 @@ final class PlayerLogs {
         + "native-stderr.log and any java-crash-*.txt. Open the app once after a crash\n"
         + "so a PC sees the complete files.\n";
     private static final Pattern LOG_FILE = Pattern.compile(
-        "runtime-\\d+\\.log|shader-\\d+\\.jsonl|native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt|README\\.txt");
+        "runtime-\\d+\\.log|shader-\\d+\\.jsonl|native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt|README\\.txt|tv-display\\.log");
     private static final Pattern JAVA_CRASH = Pattern.compile("java-crash-(\\d+)\\.txt");
     private static final Pattern RUNTIME_LOG = Pattern.compile("runtime-(\\d+)\\.log");
     private static final Pattern EXPORTED = Pattern.compile(
-        "native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt");
+        "native-stderr(\\.previous)?\\.log|java-crash-\\d+\\.txt|tv-display\\.log");
     /** Runtime logs in an export: this run and the two before it, for a crash in the last one. */
     static final int RUNTIME_LOGS_EXPORTED = 3;
 
