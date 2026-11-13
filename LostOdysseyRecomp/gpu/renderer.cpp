@@ -5412,7 +5412,7 @@ void main()
                     bindings[used] = texture_descriptors::RewriteBindings(bindings[used], textures, dummy.texture.get(),
                         [&](uint32_t slot, RenderTexture* texture) {
                             WriteTextureBinding(set, slot, texture);
-                        });
+                        }, activeSlots);
                     ++used;
                     return set;
                 };
@@ -12590,7 +12590,7 @@ void main()
                             }
                             // XeFsrMaskTap reads a mask's .r raw: never through an R/B-swapped view.
                             const uint32_t maskSwapSlots = textureSwapSlots & ~maskSlots;
-                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0], maskSwapSlots);
+                            auto* maskSet1 = AcquireTextureSet(1, maskBindings[0], activeTextureSlots[0] | maskSlots, maskSwapSlots);
                             auto* maskSet2 = AcquireTextureSet(2, maskBindings[1], activeTextureSlots[1], maskSwapSlots);
                             auto* maskSet3 = AcquireTextureSet(3, maskBindings[2], activeTextureSlots[2], maskSwapSlots);
                             const RenderBufferReference maskConstants[3] = {
