@@ -113,6 +113,8 @@ def main():
         package.mkdir()
         shutil.copy2(runtime, package / runtime.name)
         shutil.copy2(ROOT / 'docs/INSTALLING.md', package / 'README.md')
+        # Launcher setup, settings and folder paths; see docs/RECOMPLAUNCHER.md.
+        shutil.copy2(ROOT / 'recomplauncher.json', package / 'recomplauncher.json')
         steam_artwork = package / 'assets/steam'
         steam_artwork.mkdir(parents=True)
         for filename in ('portrait.png', 'header.png', 'hero.png', 'logo.png', 'icon.png'):

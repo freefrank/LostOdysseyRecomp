@@ -81,6 +81,15 @@ int wmain(int argc, wchar_t** argv)
     Write("width=1600\n");
     Check(!settings::Read().saveAnywhere, "missing key defaults off");
     CheckFreshProcess(executable, "0");
+    Write("  internal_resolution = 1440 \r\nframe_rate\t=\t60\r\nvsync = 0\r\n"
+          "variable_refresh_rate = 0\r\nframe_generation_provider = 2\r\n"
+          "frame_generation_multiplier = 3\r\ndisplay_brightness = -10\r\n");
+    const auto launcher = settings::Read();
+    Check(launcher.internalResolution == 1440 && launcher.frameRate == 60 && !launcher.vsync &&
+          !launcher.variableRefreshRate && launcher.displayBrightness == -10,
+          "external INI spacing and CRLF reach the actual graphics settings");
+    Check(launcher.frameGenerationProvider == framegen::Provider::Fsr && launcher.frameGenerationMultiplier == 2,
+          "FSR frame generation remains fixed at 2x after external edits");
     Write("save_anywhere=2\n");
     Check(!settings::Read().saveAnywhere, "invalid key defaults off");
     Write("no_random_encounters=1\n");

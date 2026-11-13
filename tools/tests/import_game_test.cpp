@@ -2,13 +2,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <csignal>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "install/import_game.h"
+#include "install/prepare_content.h"
 #include "os/user_paths.h"
 #include "gpu/shader/resource_cpx_index_sha256.h"
 
@@ -828,6 +831,92 @@ void RunSharedArchiveTest()
             Require(ReadText(entry.path()) == ReadText(any / "disc1" / entry.path().filename()), "shared copy content changed");
     std::cout << "[PASS] shared archives: import, later disc, link failure, compaction, interrupted rename, lock, clones" << std::endl;
 }
+void RunPrepareContentTest()
+{
+    namespace fs = std::filesystem;
+    const bool wasPortable = os::user_paths::UsePortableLayout();
+    const auto previousExecutable = os::user_paths::ExecutableDir();
+    const auto root = fs::temp_directory_path() /
+        ("lo-prepare-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup { fs::path path; ~Cleanup() { std::error_code ec; fs::remove_all(path, ec); } } cleanup{root};
+    const auto source = root / fs::u8path("sources with spaces-\u03b4"), exe = root / "portable";
+    fs::create_directories(exe);
+    os::user_paths::Initialize(exe);
+    WriteDiscFiles(source / "disc1", 1);
+    WriteDiscFiles(source / "disc2", 2);
+    WriteTinyStfs(source / "source.stfs");
+    const auto destination = exe / "game";
+    std::ostringstream progress, errors;
+    const auto run = [&](const install::prepare_content::Request& request, const install::Cancelled& cancel = {}) {
+        progress.str(""); errors.str("");
+        return install::prepare_content::Run(request, exe, progress, errors, cancel);
+    };
+    install::prepare_content::Request request{{source}, destination};
+    Require(run(request) == 0, "headless import failed: " + errors.str());
+    Require(fs::exists(destination / "disc1/default.xex") && fs::exists(destination / "disc2/default.xex"),
+            "headless import did not publish both discs");
+    Require(fs::exists(destination / "dlc"), "headless import omitted DLC");
+    Require(progress.str().find("progress 1 Content ready") != std::string::npos, "missing completion progress");
+    Require(fs::exists(exe / "game-path.txt"), "headless import did not persist its game path");
+    Require(!fs::exists(exe / "settings.ini"), "content setup changed graphics preferences");
+    const auto original = ReadBytes(destination / "disc1/default.xex");
+    Require(run(request) == 0, "repeated setup failed");
+    Require(ReadBytes(destination / "disc1/default.xex") == original, "repeat changed imported data");
+    Require(run({{destination}, destination}) == 0, "could not adopt an existing imported installation");
+    Require(run(request, [] { return true; }) == 3, "headless cancellation was not reported");
+    Require(ReadBytes(destination / "disc1/default.xex") == original, "cancellation changed installed data");
+    Require(run(request, [&] { return progress.str().find("default.xex") != std::string::npos; }) == 3,
+            "headless cancellation during copying was not reported");
+    Require(ReadBytes(destination / "disc1/default.xex") == original && !fs::exists(destination / ".import.lock"),
+            "mid-copy cancellation changed installed data or kept its lock");
+    bool signalled = false;
+    Require(run(request, [&] {
+        if (!signalled && progress.str().find("default.xex") != std::string::npos)
+        {
+            signalled = true;
+            std::raise(SIGTERM);
+        }
+        return false;
+    }) == 3 && signalled, "SIGTERM did not cancel through the transactional importer");
+    Require(run({{source / "source.stfs"}, destination}) == 0, "DLC-only setup of an existing game failed");
+    const auto european = root / "usa-europe";
+    WriteDiscFiles(european, 1);
+    const auto europeanXex = MakeXex(1, 0x368DE6DD, 3, 3);
+    {
+        std::ofstream xex(european / "default.xex", std::ios::binary | std::ios::trunc);
+        xex.write(reinterpret_cast<const char*>(europeanXex.data()), europeanXex.size());
+    }
+    Require(run({{european}, exe / "european-game"}) == 0, "USA/Europe setup failed");
+    Require(run({{european}, destination}) != 0, "mixed-edition reimport retained incompatible Disc 2");
+    const auto missing = root / "missing-disc1";
+    WriteDiscFiles(missing / "disc2", 2);
+    Require(run({{missing}, root / "new-game"}) != 0, "accepted a fresh installation without Disc 1");
+    Require(!fs::exists(root / "new-game/disc2"), "failed setup published a partial installation");
+    // Failure to publish game-path.txt must roll back content too.
+    fs::remove(exe / "game-path.txt");
+    fs::create_directory(exe / "game-path.txt");
+    std::ofstream(exe / "game-path.txt/keep") << "existing";
+    Require(run({{source}, exe / "rollback"}) != 0, "ignored game-path commit failure");
+    Require(!fs::exists(exe / "rollback/disc1"), "game-path failure did not roll back content");
+    Require(fs::exists(exe / "game-path.txt/keep"), "overwrote the blocked config path");
+    const auto sourceUtf8 = source.u8string(), destinationUtf8 = destination.u8string();
+    std::vector<std::string> arguments{"game", "--prepare-content", "--source",
+        std::string(sourceUtf8.begin(), sourceUtf8.end()), "--destination",
+        std::string(destinationUtf8.begin(), destinationUtf8.end())};
+    std::vector<char*> pointers;
+    for (auto& argument : arguments) pointers.push_back(argument.data());
+    const auto parsed = install::prepare_content::ParseArguments(int(pointers.size()), pointers.data());
+    Require(parsed && parsed->sources.front() == source && parsed->destination == destination,
+            "prepare arguments did not retain Unicode paths");
+    pointers.pop_back();
+    bool malformed = false;
+    try { install::prepare_content::ParseArguments(int(pointers.size()), pointers.data()); }
+    catch (const install::Error&) { malformed = true; }
+    Require(malformed, "accepted a missing destination argument");
+    os::user_paths::g_usePortableLayout = wasPortable;
+    os::user_paths::g_executableDirectory = previousExecutable;
+    std::cout << "[PASS] Headless import: discs, DLC, Unicode paths, retry, adoption, cancellation, rollback, arguments\n";
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -859,7 +948,13 @@ int main(int argc, char** argv)
         try { RunCompactionEstimateTest(); RunGameDataSharingProbeTest(); RunSharedArchiveTest(); return 0; }
         catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
     }
+    if (argc > 1 && std::string(argv[1]) == "--prepare-content-test")
+    {
+        try { RunPrepareContentTest(); return 0; }
+        catch (const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
+    }
     std::cout << "Starting LoImportGameTest..." << std::endl;
+    RunPrepareContentTest();
     RunDlcIoTest();
     RunCompactionEstimateTest();
     RunGameDataSharingProbeTest();

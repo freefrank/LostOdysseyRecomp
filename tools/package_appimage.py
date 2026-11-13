@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from portable_shader_pack_payload import stage_shader_pack_license
 from appimage_compat import CompatibilityError, compiler_libraries, validate_abi, validate_loader
+from recomplauncher_linux import package as package_launcher
 
 ROOT = Path(__file__).resolve().parents[1]
 LINUX_PACKAGING = ROOT / "packaging/linux"
@@ -243,6 +244,9 @@ def main():
             validate_ngx_snippet(dlss_runtime, final_appdir)
         destination = output / f"{name}.AppImage"
         shutil.move(str(produced), destination)
+        launcher_bundle = output / f"{name}.tar.gz"
+        package_launcher(destination, launcher_bundle)
+        print(f"LauncherBundle: {launcher_bundle.name}")
         if appdir_destination:
             appdir_destination.parent.mkdir(parents=True, exist_ok=True)
             # Flatpak consumes the same bytes that were verified above.

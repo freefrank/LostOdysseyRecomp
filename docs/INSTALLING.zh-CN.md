@@ -38,6 +38,8 @@
 
 ZIP 中还有一个 `mo2` 文件夹，里面是 Mod Organizer 2 的插件，用法见[Mod Organizer 2](wiki/Mod-Organizer-2.md)。
 
+**通过 RecompLauncher 游玩：** 本源码构建的 Windows ZIP 与 Linux 启动器 `.tar.gz` 包内含 `recomplauncher.json`，提供无窗口光盘/DLC 导入与画质设置。Linux 请选 `.tar.gz` 包，其中包含 AppImage 和 Linux 配置。请使用已修复 `save.bin` 备份的启动器版本，并检查新的备份。参见[集成说明、包选择与交付状态](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。
+
 <a id="automatic-content-import"></a>
 
 ## 导入游戏数据
@@ -287,6 +289,7 @@ Xenia 的存档格式相同，不需要转换。
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏：包含 `default.xex` 或 `disc1/` 的文件夹，或 `default.xex` 文件。跳过导入器；找不到 `default.xex` 时报错退出。 |
 | `--install` | 即使已经设置好游戏也打开导入器，完成后退出。 |
+| `--prepare-content --source <路径> --destination <文件夹>` | 无窗口导入光盘和 DLC 后退出。可重复 `--source` 指定多个来源；进度写入标准输出，错误写入标准错误。参见 [RecompLauncher 集成](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。 |
 | `--add-to-steam` | 把游戏及库封面加入 Steam，然后返回状态码并退出。请先关闭 Steam；移动游戏后需重新添加。 |
 | `--setup` | 打开设置页面，然后进入游戏（Windows；其他平台只会保存当前设置）。 |
 | `--setup-only` | 同 `--setup`，完成后退出。 |
@@ -294,7 +297,7 @@ Xenia 的存档格式相同，不需要转换。
 | `--compact-game-data` | 把多张光盘里相同的资源包只存一份，然后退出。可以中途停止后再运行；日志里写有省出的空间。 |
 | `--quiet-kernel` | 日志中不记录内核跟踪行。 |
 
-`--game <路径>` 要写成两个参数，`--game=<路径>` 和无法识别的参数都会被忽略。程序不会向控制台输出内容，请查看日志。
+`--game <路径>` 要写成两个参数；普通启动时会忽略 `--game=<路径>` 和无法识别的参数。`--prepare-content` 会拒绝无法识别或不完整的参数。普通游戏启动的诊断信息写入日志。
 
 ```bash
 LostOdysseyRecomp.exe --game "D:\Games\Lost Odyssey"

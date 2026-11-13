@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Works with RecompLauncher: Windows ZIPs and Linux `.tar.gz` launcher bundles carry `recomplauncher.json` for headless disc/DLC setup, graphics settings and folder actions. The Linux bundle includes the AppImage; standalone AppImages remain available ([integration guide](docs/RECOMPLAUNCHER.md)).
+
+### 简体中文
+
+- 适配 RecompLauncher：Windows ZIP 与 Linux `.tar.gz` 启动器包内含 `recomplauncher.json`，提供无窗口光盘/DLC 导入、画质设置与目录操作。Linux 包内含 AppImage，独立 AppImage 仍可下载（[集成说明](docs/RECOMPLAUNCHER.md)）。
+
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
 ### English

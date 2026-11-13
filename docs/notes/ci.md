@@ -37,7 +37,7 @@ git push origin refs/tags/vX.Y.Z
 | Create draft release | `ubuntu-24.04` | Draft with the matching `CHANGELOG.md` entry; checks that the tag exists |
 | Prepare FSR Vulkan build inputs | `windows-2022` | FSR build-input artifact |
 | Windows Release | `windows-2022` | Windows x64 ZIP |
-| Linux Release | `ubuntu-22.04` | AppImage and Flatpak from one compiled AppDir |
+| Linux Release | `ubuntu-22.04` | AppImage, launcher tar.gz bundle and Flatpak from one compiled AppDir |
 | Android Release | `ubuntu-22.04` | Android arm64 APK |
 | macOS Release | `macos-26` (Apple Silicon) | macOS arm64 DMG |
 | Publish complete release | `ubuntu-24.04` | Verified assets on the GitHub release, then publication |
@@ -47,7 +47,7 @@ Windows builds use four compile jobs and no compiler cache: ccache rejects the V
 Build jobs upload distinct `actions/upload-artifact@v4` artifacts. The publish job downloads the package artifacts with `actions/download-artifact@v4`, uploads missing assets to the draft, and checks the exact set:
 
 ```text
-expected = Windows ZIP, Linux AppImage, Linux Flatpak, Android APK, macOS DMG
+expected = Windows ZIP, Linux AppImage, Linux launcher tar.gz, Linux Flatpak, Android APK, macOS DMG
 names == expected
 ```
 
@@ -59,7 +59,7 @@ The macOS job checks out recursive submodules, applies the repository's XenonRec
 
 ### Build-only rehearsal
 
-An empty `release_tag` builds the selected branch and keeps the Windows ZIP, AppImage, Flatpak, APK and DMG as GitHub Actions artifacts. It skips draft creation and publication, and sends no release announcement.
+An empty `release_tag` builds the selected branch and keeps the Windows ZIP, AppImage, Linux launcher tar.gz, Flatpak, APK and DMG as GitHub Actions artifacts. It skips draft creation and publication, and sends no release announcement.
 
 ```powershell
 gh workflow run release.yml --repo freefrank/LostOdysseyRecomp --ref <branch> -f release_tag=

@@ -28,6 +28,8 @@
 
 [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) · [Discord](https://discord.gg/z2yPct6z2w) · [Project board](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
+<a href="https://recomplauncher.com/game/lostodysseyrecomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 </div>
 
 ## Contents
@@ -52,6 +54,7 @@ Download the package for your platform from the [latest release](https://github.
 | :--- | :--- | :--- |
 | Windows x64 | `LostOdysseyRecomp-windows-x64-<version>.zip` | Extract the whole ZIP to a writable folder and run `LostOdysseyRecomp.exe`. Needs a CPU with AVX. |
 | Linux x64 | `LostOdysseyRecomp-linux-x64-<version>.AppImage` | Make it executable with `chmod +x`, then run it. |
+| Linux x64, RecompLauncher | `LostOdysseyRecomp-linux-x64-<version>.tar.gz` | AppImage with a Linux launcher profile; select this package in the launcher. |
 | Linux x64 | `LostOdysseyRecomp-linux-x64-<version>.flatpak` | Install the Freedesktop 26.08 runtime, then the bundle ([commands](docs/INSTALLING.md#flatpak)). |
 | macOS arm64 | `LostOdysseyRecomp-macos-arm64-<version>.dmg` | Drag `LostOdysseyRecomp.app` to Applications. Needs an Apple Silicon Mac with macOS 15 or later. |
 | Android arm64 | `LostOdysseyRecomp-android-arm64-<version>.apk` | Install the APK and open it once. Needs a 64-bit Android 8.0+ device with Vulkan. |
@@ -63,6 +66,8 @@ On Steam Deck, use **Settings → System → Add to Steam** with either Linux pa
 3. **Add the other discs and DLC** in Settings → **System → Import discs & DLC**. With all four discs imported, the game changes discs on its own.
 
 Disc 1 is required to start. Use one supported four-disc set (Asian multilingual or USA/Europe) and don't mix editions; the [installation guide](docs/INSTALLING.md) shows how to check yours.
+
+Windows ZIPs and Linux launcher `.tar.gz` bundles built from this source include a `recomplauncher.json`, so [RecompLauncher](https://recomplauncher.com/) can import discs and DLC from a source folder and put graphics settings on its game page. Linux bundles contain the AppImage and a generated Linux profile. See [integration details, package selection and delivery status](docs/RECOMPLAUNCHER.md).
 
 ### macOS
 
