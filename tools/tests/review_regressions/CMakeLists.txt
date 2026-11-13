@@ -153,6 +153,7 @@ if(UNIX)
     lo_review_python(gpu_commands gpu_command_safety_regression.py --out --cxx ${sanitizer_flags})
     lo_review_python(guest_main_exit guest_main_exit_regression.py --out --cxx)
     lo_review_python(kernel_lifetime kernel_lifetime_regression.py --out --cxx ${sanitizer_flags})
+    lo_review_python(read_only_depth_draw read_only_depth_draw_test.py --out --cxx ${sanitizer_flags})
 endif()
 
 # Builds the unmodified updater apply mode and checks AppImage backup cleanup,

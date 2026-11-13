@@ -1092,6 +1092,11 @@ namespace gpu::renderer
                 return !value || std::string_view(value) != "0";
             }();
             uint32_t resolveCopiesRecorded = 0, resolveCopiesSkipped = 0;
+            const bool skipReadOnlyDepthDraws = [] {
+                const char* value = getenv("LO_SKIP_READ_ONLY_DEPTH_DRAWS");
+                return !value || std::string_view(value) != "0";
+            }();
+            uint32_t readOnlyDepthDrawsSkipped = 0;
             temporal::SceneObservation temporalScene;
             temporal::DrawTemporalTracker drawTemporalTracker;
             temporal::SuspectTracker suspectTracker;
@@ -11938,7 +11943,15 @@ void main()
                     commandList->beginOcclusionQuery(occlusionPool, occlusionIndex % kOcclusionPoolQueries);
                 }
                 recordProbe.Enter(record_timing::Phase::Draw);
-                if (useIndices)
+                // Mode 5 has no pixel shader/color exports; its translated VS
+                // only reads resources. No Z writes, stencil or active query
+                // means the native draw has no observable output. Elide only
+                // that command: EDRAM alias handoffs, pending clears and all
+                // before/after draw bookkeeping must still run unchanged.
+                if (skipReadOnlyDepthDraws && modeControl == 5 &&
+                    (Reg(REG_RB_DEPTHCONTROL) & 5u) == 0 && !occlusion.Active())
+                    ++readOnlyDepthDrawsSkipped;
+                else if (useIndices)
                 {
                     RenderIndexBufferView view(RenderBufferReference(preparedIndexBuffer, preparedIndexOffset), uint32_t(indices.size() * 4), RenderFormat::R32_UINT);
                     commandList->setIndexBuffer(&view);
@@ -15216,6 +15229,10 @@ void main()
                 LOG_INFO("renderer resolve copies frame={} recorded={} skipped={} reuse={} scope=current_frame_consecutive_color_resolves",
                     g_renderer->frame, g_renderer->resolveCopiesRecorded, g_renderer->resolveCopiesSkipped, g_renderer->resolveCopyReuse);
             g_renderer->resolveCopiesRecorded = g_renderer->resolveCopiesSkipped = 0;
+            if (render_timing::Enabled())
+                LOG_INFO("renderer read-only depth draws frame={} skipped={} enabled={} scope=current_frame_no_attachment_writes_no_query",
+                    g_renderer->frame, g_renderer->readOnlyDepthDrawsSkipped, g_renderer->skipReadOnlyDepthDraws);
+            g_renderer->readOnlyDepthDrawsSkipped = 0;
             if (g_renderer->vertexTimingEnabled)
             {
                 auto& r = *g_renderer;
