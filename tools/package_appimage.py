@@ -158,6 +158,8 @@ def main():
         stage_shader_pack_license(appdir / "usr/share/licenses/lost-odyssey-recomp")
         shutil.copy2(ROOT / "thirdparty/licenses/XeGTAO.txt",
                      appdir / "usr/share/licenses/lost-odyssey-recomp/XeGTAO.txt")
+        shutil.copy2(ROOT / "thirdparty/licenses/SnapdragonGSR.txt",
+                     appdir / "usr/share/licenses/lost-odyssey-recomp/SnapdragonGSR.txt")
         for source, license_name in (("LICENSE.txt", "Signalsmith-Stretch.txt"),
                              ("signalsmith-linear/LICENSE.txt", "Signalsmith-Linear.txt")):
             shutil.copy2(ROOT / "thirdparty/signalsmith-stretch" / source,

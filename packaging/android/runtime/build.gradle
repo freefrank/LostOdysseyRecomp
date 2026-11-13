@@ -12,6 +12,7 @@ def stageAudioLicenses = tasks.register('stageAudioLicenses', Copy) {
     into audioLicenses.map { it.dir('licenses') }
     from('../../../thirdparty/signalsmith-stretch/LICENSE.txt') { rename { 'Signalsmith-Stretch.txt' } }
     from('../../../thirdparty/signalsmith-stretch/signalsmith-linear/LICENSE.txt') { rename { 'Signalsmith-Linear.txt' } }
+    from('../../../thirdparty/licenses/SnapdragonGSR.txt')
 }
 def runtimeLibraries = ['libmain.so', 'libSDL3.so', 'libc++_shared.so', 'libdxcompiler.so']
 // libadrenotools hook libraries: present only when the custom Vulkan driver loader is built.
