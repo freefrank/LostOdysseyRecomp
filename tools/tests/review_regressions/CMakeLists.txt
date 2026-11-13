@@ -29,6 +29,10 @@ function(lo_review_test name source)
     set_tests_properties(${name} PROPERTIES TIMEOUT 30)
 endfunction()
 
+lo_review_test(LoCheatsSkillTest cheats_skill_test.cpp)
+add_test(NAME LoCheatCatalogTest COMMAND "${Python3_EXECUTABLE}" -B "${LO_TESTS}/cheat_catalog_test.py")
+set_tests_properties(LoCheatCatalogTest PROPERTIES TIMEOUT 30)
+
 lo_review_test(LoTextureKeyTest texture_key_test.cpp)
 lo_review_test(LoTextureContentTest texture_content_test.cpp)
 target_compile_definitions(LoTextureContentTest PRIVATE XXH_INLINE_ALL)

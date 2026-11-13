@@ -75,17 +75,101 @@ maxima, EXP progress, and item/material quantities are **big-endian float32**;
 gold and party IDs are big-endian u32; equipped IDs are big-endian u16;
 learned flags are bytes. Learned writes OR `0x80`, retaining other bits.
 
-The CT's learned-skill rows contain disagreements (including Mack offsets) and
-unknown `N/A`/`?` labels. Only the **161 named rows whose relative offset and
-name agree across all nine characters** are enabled. Excluded rows are not
-silently corrected, and "learn known skills" does not mean every game skill.
-Generate a local exclusion report and verify the catalog without modifying it:
+The converted CT contains eleven named Mack rows at incorrect offsets. Exact
+corrections are recorded and checked against the original Xenia CT described
+below. All **172 supported offsets now agree across all nine characters**.
+Unknown `N/A`/`?` rows and any other disagreements remain excluded. The two
+CT IDs named Ultimate Hit remain separate and are labelled by ID; 172 offsets
+cover the 171 distinct names reported in issue #755, not 172 proven distinct
+retail abilities. "Learn known skills" still touches only catalogued bytes.
+Generate an exclusion/correction report and verify the catalog:
 
 ```sh
 python tools/cheats/import_ct_catalog.py /path/to/LostOdysseyRecomp_v1.4.CT \
   --output LostOdysseyRecomp/debug/cheat_data.h --check \
   --report out/cheats/excluded-skills.json
 ```
+
+
+### Missing skills (#755): source evidence and remaining acceptance
+
+The original source is WAZAAAAA's
+[LostOdyssey-xenia-canary-eeb96f9(2024-07-15).CT](https://fearlessrevolution.com/viewtopic.php?p=362871#p362871),
+SHA-256 `50c3f4dbbb5005760a40f2354dcf202d7bfcdaac13ec27c50ca1e4d10e9f7572`.
+The converted [v1.4 table](https://opencheattables.com/viewtopic.php?t=2144)
+retains the previously recorded input hash. Neither table is executed or
+included in the repository.
+
+In the original CT, Gold is at `0x16F911044`, anchoring its equivalent LO_BASE
+at `0x16F911000`. Subtracting that base gives the same HP, MP and EXP offsets
+for each of the nine characters as the converted table. Every supported
+learned byte was compared by character, original name, type and address:
+**172 × 9 = 1,548 explicit reference rows**. The original Mack rows, rather
+than a presumed regular sequence or a majority vote, establish these fixes:
+
+| Skill | Converted Mack relative offset | Verified relative offset |
+| --- | --- | --- |
+| Mental Stability 1 | 0xFA8 | 0xEA8 |
+| Auto Shield | 0xFB8 | 0xEB8 |
+| Auto Barrier | 0xFC8 | 0xEC8 |
+| Auto HP Recovery | 0xFD8 | 0xED8 |
+| Auto MP Recovery | 0xFE8 | 0xEE8 |
+| Reduce Casting Time 1 | 0xFF8 | 0xEF8 |
+| Reduce Casting Time 2 | 0x1008 | 0xF08 |
+| MP Conservation | 0x1018 | 0xF18 |
+| Double Back | 0x1058 | 0xF58 |
+| Counter Up | 0x1068 | 0xF68 |
+| Angel Heart | 0x1098 | 0xF98 |
+
+These offsets are relative to the start of a character record (Kaim's
+catalogued offsets); add Mack's existing `6 * 0x37E4` for LO_BASE offsets.
+For example, Mental Stability 1 is explicitly at original
+`0x16F926E00`, equivalent to LO_BASE+`0x15E00`; the converted table incorrectly
+uses LO_BASE+`0x15F00`, aliasing Resourceful. The importer applies only these
+eleven named, exact old/new pairs and rejects an unexpected input.
+
+The old all-character intersection discarded those eleven skills globally.
+It counted two different fields named Ultimate Hit (`0xD08`, ID `0x1C`, and
+`0x1888`, ID `0xD4`), explaining the apparent 161/171 versus eleven missing
+names. Both IDs also appear in the original CT's equipped-skill dropdown.
+They remain supported to preserve existing behavior and now have distinct
+labels. Whether they are equivalent, unused, or separate in the retail game
+still requires original game tables or a live check; neither is removed or
+renamed to a different ability on an assumption.
+
+Display spellings are normalized to the
+[171-name issue list](https://github.com/freefrank/LostOdysseyRecomp/issues/755#issuecomment-6521853695):
+Double-Cast, Cut Down, Drain Shower, Special Accessory, Composite Magic,
+Elements Resistance Up, Slot +3/+5/+10, and removal of CT-only exclamation
+marks. Raw source names are compared before display normalization.
+
+To repeat the full two-source check, supply both local files:
+
+~~~sh
+python tools/cheats/import_ct_catalog.py /path/to/LostOdysseyRecomp_v1.4.CT \
+  --reference-table '/path/to/LostOdyssey-xenia-canary-eeb96f9(2024-07-15).CT' \
+  --output LostOdysseyRecomp/debug/cheat_data.h --check \
+  --report out/cheats/excluded-skills.json
+~~~
+
+Both hashes are verified before their input is used. The normal regeneration
+also retains the pinned v1.4 hash and the reviewed correction allowlist.
+
+Game-free regressions are included in tools/tests/review_regressions:
+LoCheatsSkillTest compiles the production Plan/Commit code and checks all nine
+characters, every individual skill, bulk writes, all 256 existing flag-byte
+values, adjacent/unrelated bytes, invalid indices, short spans, uninitialized
+targets and scene cancellation. LoCheatCatalogTest checks the importer on
+synthetic XML and compares the complete catalog with the issue list.
+LoDebugMenuInteractionTest traverses the actual picker for all nine characters.
+
+These checks establish source correspondence and bounded byte operations,
+not gameplay or save compatibility. Real-game acceptance remains: on a backed-up
+save, learn Counter Up and Double Back individually, try Learn known skills for
+each initialized character, inspect the game's own skill list, and save/reload.
+The public repository has no generated PPC sources (only a placeholder) or
+original game executables/assets, so a fresh XenonRecomp run and a full game
+build/gameplay check require a supported local game dump.
 
 ## Runtime binding and write boundary
 
