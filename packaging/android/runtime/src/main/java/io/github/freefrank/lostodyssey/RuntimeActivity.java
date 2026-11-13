@@ -35,6 +35,8 @@ public final class RuntimeActivity extends SDLActivity {
     private static final long BOOT_SETTLED_MS = 15000;
 
     private TouchControlsView touchControls;
+    /** Companion panel on the second display of dual-screen handhelds (AYN Thor). */
+    private DualScreenCompanion dualScreen;
     /** Why the renderer could not start with the selected driver; set from native code. */
     private volatile String graphicsFailure;
     private final Handler bootHandler = new Handler(Looper.getMainLooper());
@@ -72,6 +74,28 @@ public final class RuntimeActivity extends SDLActivity {
                 RelativeLayout.LayoutParams.MATCH_PARENT,
                 RelativeLayout.LayoutParams.MATCH_PARENT));
             nativeSetTouchInput(0, 0, 0, 0, 0, 0, 0);
+            dualScreen = new DualScreenCompanion(this);
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (dualScreen != null) dualScreen.start();
+    }
+
+    @Override
+    protected void onStop() {
+        if (dualScreen != null) dualScreen.stop();
+        super.onStop();
+    }
+
+    /** CTRL dialog: turns the second-screen panel on or off at once. */
+    void setDualScreenEnabled(boolean enabled) {
+        DualScreenCompanion.setEnabled(this, enabled);
+        if (dualScreen != null) {
+            dualScreen.stop();
+            dualScreen.start();
         }
     }
 
@@ -132,6 +156,7 @@ public final class RuntimeActivity extends SDLActivity {
     @Override
     protected void onPause() {
         if (touchControls != null) touchControls.onHostPause();
+        if (dualScreen != null) dualScreen.releaseButtons();
         // Leaving the game is when a player connects USB to fetch the log.
         PlayerLogs.publish(this);
         super.onPause();

@@ -15,6 +15,7 @@ namespace
 {
 std::mutex g_mutex;
 State g_state;
+State g_companion;
 }
 
 void Update(int32_t buttons, int32_t leftTrigger, int32_t rightTrigger,
@@ -36,13 +37,28 @@ void Update(int32_t buttons, int32_t leftTrigger, int32_t rightTrigger,
 State Snapshot()
 {
     std::lock_guard lock(g_mutex);
-    return g_state;
+    State merged = g_state;
+    merged.buttons |= g_companion.buttons;
+    merged.leftTrigger = std::max(merged.leftTrigger, g_companion.leftTrigger);
+    merged.rightTrigger = std::max(merged.rightTrigger, g_companion.rightTrigger);
+    return merged;
 }
 
 void Clear()
 {
     std::lock_guard lock(g_mutex);
     g_state = {};
+    g_companion = {};
+}
+
+void SetCompanion(int32_t buttons, int32_t leftTrigger, int32_t rightTrigger)
+{
+    State next{};
+    next.buttons = static_cast<uint16_t>(buttons & 0xF3FF);
+    next.leftTrigger = static_cast<uint8_t>(std::clamp(leftTrigger, 0, 255));
+    next.rightTrigger = static_cast<uint8_t>(std::clamp(rightTrigger, 0, 255));
+    std::lock_guard lock(g_mutex);
+    g_companion = next;
 }
 }
 

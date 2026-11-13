@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">Annulla cambio previsto</string>
     <string name="touch_hide_all">Nascondi tutti i comandi touch</string>
     <string name="touch_hide_all_help">Mostra le barre di sistema o usa Indietro di Android per mostrare CTRL per 4 secondi.</string>
+    <string name="touch_dual_screen">Pannello sul secondo schermo (dispositivi a doppio schermo)</string>
     <string name="touch_settings_title">Impostazioni comandi</string>
     <string name="touch_show_controls">Mostra comandi touch</string>
     <string name="touch_controller_hint">Controller collegato. I comandi touch si nascondono automaticamente; attivali qui per usare entrambi insieme.</string>

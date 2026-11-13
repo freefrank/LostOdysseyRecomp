@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">Cancelar cambio pendiente</string>
     <string name="touch_hide_all">Ocultar todos los controles táctiles</string>
     <string name="touch_hide_all_help">Muestra las barras del sistema o usa Atrás de Android para mostrar CTRL durante 4 segundos.</string>
+    <string name="touch_dual_screen">Panel en la segunda pantalla (consolas de doble pantalla)</string>
     <string name="touch_settings_title">Ajustes de controles</string>
     <string name="touch_show_controls">Mostrar controles táctiles</string>
     <string name="touch_controller_hint">Mando conectado. Los controles táctiles se ocultan automáticamente; actívalos aquí para usar ambos a la vez.</string>
