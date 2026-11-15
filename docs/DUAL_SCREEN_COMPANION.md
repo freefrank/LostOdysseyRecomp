@@ -9,7 +9,7 @@ On Android handhelds with a second screen, such as the AYN Thor, the second scre
 | **Bag** | Items and materials with their counts. |
 | **Pad** | Touch buttons held while pressed: D-pad, A/B/X/Y, LB/RB/LT/RT, Start, Back, a large **Ring (RT)** button and LB+RB for the Debug Menu. The panel switches to this tab when a battle starts and back when it ends. |
 
-The header shows the map name, the state (exploring, battle, menu, scene, title), the disc and gold. **☾** turns the panel black until it is tapped; **⚙** has language (English/Spanish), vibration, the battle switch, teleport and **Turn panel off**. **CTRL → Second-screen panel** turns the panel on or off.
+The header shows the map name, the state (exploring, battle, menu, scene, title), the disc and gold. **☾** turns the panel black until it is tapped; **⚙** has language (English, or Spanish when the system language is Spanish), vibration, the battle switch, teleport and **Turn panel off**. The panel is **off by default**: **CTRL → Second-screen panel** turns it on or off, so a tablet mirrored to a TV over HDMI never gets it by itself.
 
 ## Game look from the player's files
 
@@ -25,7 +25,8 @@ Only `LO.fpi`, `xenon_sys.fpd`, `xenon_loc.fpd` and `xenon_vfx.fpd` from `disc1`
 
 ## Limits
 
-- HP and MP are the out-of-battle values the Cheats page already uses. During a battle the panel shows the last field values and says so.
+- HP and MP are the out-of-battle values the Cheats page already uses. During a battle the panel shows the last field values and says so. Those cached values are dropped on the title screen, in the save/load menu, on a disc change and whenever the panel was hidden.
+- The panel text is English and Spanish; other system languages get English.
 - The radar uses the engine's X/Y axes; there is no camera heading or map drawing.
 - Item, weapon, ring and accessory names come from the English cheat catalog.
 
@@ -33,13 +34,13 @@ Only `LO.fpi`, `xenon_sys.fpd`, `xenon_loc.fpd` and `xenon_vfx.fpd` from `disc1`
 
 | Part | Files |
 | :--- | :--- |
-| Samples the state on the GEngine tick every 200 ms into an owned JSON snapshot; nothing else touches guest memory | `LostOdysseyRecomp/companion/companion.{h,cpp}`, called from `debug/teleport.cpp` (Android only) |
+| Samples the state on the GEngine tick every 200 ms into an owned JSON snapshot, only while the Presentation is showing (an atomic flag set over JNI; otherwise the tick returns at once); nothing else touches guest memory | `LostOdysseyRecomp/companion/companion.{h,cpp}`, called from `debug/teleport.cpp` (Android only) |
 | Read-only inventory counts and learned skills in the cheats snapshot | `LostOdysseyRecomp/debug/cheats.h` |
 | Panel buttons as a second touch source merged with the on-screen controls | `LostOdysseyRecomp/hid/android_touch.{h,cpp}` |
 | An Android `Presentation` with a WebView on the second display. Its window is not focusable, so controllers keep driving the game | `packaging/android/runtime/src/main/java/.../DualScreenCompanion.java` |
 | Start/stop with the activity; CTRL switch | `RuntimeActivity.java`, `TouchControlsView.java`, `res/values*/strings.xml` |
 | Panel page | `packaging/android/runtime/src/main/assets/companion/` |
 
-The display is chosen as Eden Duo does: the union of presentation displays and all displays, without the main one, physical panels first. The page and the theme share one origin (`https://appassets.androidplatform.net/companion/`) so `fetch` and `localStorage` work.
+The display is chosen as Eden Duo does: the union of presentation displays and all displays, without the main one, physical panels first. The page and the theme share one origin (`https://appassets.androidplatform.net/companion/`) so `fetch` and `localStorage` work. Every other URL gets a 404 and network loads are blocked, so a theme cannot make the page load anything remote.
 
 To preview the page on a PC with sample data, serve `packaging/android/runtime/src/main/assets/companion/` (for example `python -m http.server`) and open `index.html` at 1240×1080; add `?mode=battle`, and `&theme=<URL of a companion-theme folder served with CORS>`.

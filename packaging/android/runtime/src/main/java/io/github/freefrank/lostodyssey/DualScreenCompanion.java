@@ -60,6 +60,8 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
     static final String SHARED_FOLDER = "LostOdyssey";
     static final String PREF_ENABLED = "enabled";
 
+    /** Turns the native sampler on while the panel is showing; it costs nothing otherwise. */
+    static native void nativeSetActive(boolean active);
     static native String nativeState();
     static native void nativeButtons(int buttons, int leftTrigger, int rightTrigger);
     static native boolean nativeAction(String json);
@@ -75,8 +77,9 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
         this.displays = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
     }
 
+    /** Off until turned on from CTRL, so a display mirrored over HDMI never gets the panel by itself. */
     static boolean isEnabled(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_ENABLED, true);
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_ENABLED, false);
     }
 
     static void setEnabled(Context context, boolean enabled) {
@@ -118,6 +121,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
             try {
                 candidate.show();
                 presentation = candidate;
+                safeActive(true);
                 Log.i(TAG, "companion on display " + display.getDisplayId() + " (" + display.getName() + ")");
                 return;
             } catch (WindowManager.InvalidDisplayException | IllegalStateException e) {
@@ -127,6 +131,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
     }
 
     private void dismiss() {
+        safeActive(false);
         releaseButtons();
         if (presentation != null) {
             try {
@@ -170,9 +175,12 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
         refresh();
     }
 
-    /** /companion/theme/* from the theme folder, any other /companion/* from the APK assets. */
+    /**
+     * /companion/theme/* from the theme folder, any other /companion/* from the APK assets.
+     * Everything else is refused, so a theme cannot make the page load remote URLs.
+     */
     private WebResourceResponse serve(Uri url) {
-        if (url == null || !HOST.equals(url.getHost())) return null;
+        if (url == null || !"https".equals(url.getScheme()) || !HOST.equals(url.getHost())) return notFound();
         List<String> parts = url.getPathSegments();
         if (parts.size() < 2 || !"companion".equals(parts.get(0))) return notFound();
         for (String part : parts) if (part.isEmpty() || part.equals("..") || part.contains("/")) return notFound();
@@ -228,6 +236,14 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
         return "application/octet-stream";
     }
 
+    private static void safeActive(boolean active) {
+        try {
+            nativeSetActive(active);
+        } catch (UnsatisfiedLinkError ignored) {
+            // libmain not loaded: nothing samples the state.
+        }
+    }
+
     private static void safeButtons(int buttons, int lt, int rt) {
         try {
             nativeButtons(buttons, lt, rt);
@@ -268,6 +284,8 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
             settings.setDomStorageEnabled(true);
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(false);
+            // Only the intercepted local origin is served (see serve()); no network at all.
+            settings.setBlockNetworkLoads(true);
             settings.setMediaPlaybackRequiresUserGesture(true);
             settings.setTextZoom(100);
             web.setWebViewClient(new WebViewClient() {
@@ -289,6 +307,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
 
         @Override
         protected void onStop() {
+            safeActive(false);
             safeButtons(0, 0, 0);
             if (web != null) {
                 web.removeJavascriptInterface("LO");

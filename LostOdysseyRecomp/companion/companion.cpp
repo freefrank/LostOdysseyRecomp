@@ -12,6 +12,7 @@
 #include <settings/menu.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <mutex>
@@ -34,14 +35,28 @@ constexpr uint32_t Title = 0x832644EC, DiscManager = 0x832640B0;
 constexpr uint32_t StorageMenu = 0x832688E8;
 constexpr size_t MaxPois = 64;
 
+// Set over JNI while the Presentation is showing; nothing is sampled otherwise.
+std::atomic<bool> g_active{false};
+// Counts the times the Presentation was shown, so the engine thread notices a
+// hide and show between two of its ticks.
+std::atomic<uint32_t> g_shown{0};
 std::mutex g_mutex;
 std::string g_json = "{}";
 std::string g_body; // last snapshot without its serial
 uint64_t g_serial = 0;
 // The party block is only readable in the field. Battles show the last field
-// values, marked as such, instead of an empty panel.
+// values, marked as such, instead of an empty panel. Engine thread only; cleared
+// on the title screen, in the save/load menu, on a disc change and whenever the
+// panel was hidden, so another save's party is never shown.
 debug_menu::cheats::Snapshot g_lastParty;
 bool g_haveParty = false;
+int g_lastDisc = 0;
+
+void ForgetParty()
+{
+    g_lastParty = {};
+    g_haveParty = false;
+}
 
 bool Object(uint32_t p) { return p >= 0x100000 && p < 0x7BFF0000 && !(p & 3); }
 
@@ -230,7 +245,15 @@ void Tick(uint8_t* base)
     constexpr bool Enabled = false;
 #endif
     if constexpr (!Enabled) return;
-    if (!base) return;
+    // Costs one relaxed load unless the panel is on screen.
+    if (!g_active.load(std::memory_order_relaxed) || !base) return;
+    static uint32_t seen = 0;
+    if (const auto shown = g_shown.load(std::memory_order_relaxed); shown != seen)
+    {
+        // Anything cached before the panel was hidden may belong to another save.
+        seen = shown;
+        ForgetParty();
+    }
     using Clock = std::chrono::steady_clock;
     static Clock::time_point next{};
     const auto now = Clock::now();
@@ -239,9 +262,14 @@ void Tick(uint8_t* base)
 
     nlohmann::json state;
     const char* mode = Mode(base);
-    const int disc = int(base[DiscManager + 8]) << 8 | base[DiscManager + 9];
+    const int rawDisc = int(base[DiscManager + 8]) << 8 | base[DiscManager + 9];
+    const int disc = rawDisc >= 1 && rawDisc <= 4 ? rawDisc : 0;
     state["mode"] = mode;
-    state["disc"] = disc >= 1 && disc <= 4 ? disc : 0;
+    state["disc"] = disc;
+    // Title, the save/load menu and a disc change can all bring in another save.
+    if (std::string_view(mode) == "title" || Word(base, StorageMenu + 20) > 1 || disc != g_lastDisc)
+        ForgetParty();
+    g_lastDisc = disc;
     state["paused"] = host_ui::IsGamePaused();
 
     if (std::string_view(mode) != "title")
@@ -290,6 +318,17 @@ void Tick(uint8_t* base)
     g_json.insert(1, "\"serial\":" + std::to_string(++g_serial) + ",");
 }
 
+void SetActive(bool active)
+{
+    if (active) g_shown.fetch_add(1, std::memory_order_relaxed);
+    g_active.store(active, std::memory_order_relaxed);
+    if (active) return;
+    // A stale snapshot must not reach the next Presentation before the first sample.
+    std::lock_guard lock(g_mutex);
+    g_json = "{}";
+    g_body.clear();
+}
+
 std::string StateJson()
 {
     std::lock_guard lock(g_mutex);
@@ -330,6 +369,12 @@ Java_io_github_freefrank_lostodyssey_DualScreenCompanion_nativeState(JNIEnv* env
 {
     // ensure_ascii keeps the text plain ASCII, safe for NewStringUTF.
     return env->NewStringUTF(companion::StateJson().c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_freefrank_lostodyssey_DualScreenCompanion_nativeSetActive(JNIEnv*, jclass, jboolean active)
+{
+    companion::SetActive(active == JNI_TRUE);
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -63,9 +63,10 @@
     JSON.parse(localStorage.getItem('lo-companion') || '{}'));
   const save = () => localStorage.setItem('lo-companion', JSON.stringify(settings));
 
+  // Spanish only for a Spanish system language; English otherwise and when none is set.
   function lang() {
-    if (settings.lang !== 'auto') return settings.lang;
-    const l = ((bridge && bridge.language && bridge.language()) || navigator.language || 'es').toLowerCase();
+    if (STRINGS[settings.lang]) return settings.lang;
+    const l = String((bridge && bridge.language && bridge.language()) || navigator.language || 'en').toLowerCase();
     return l.startsWith('es') ? 'es' : 'en';
   }
   let T = STRINGS[lang()];

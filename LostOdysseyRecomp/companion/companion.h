@@ -10,8 +10,11 @@
 // that string and sends button presses back. It never touches guest memory.
 namespace companion
 {
-// Engine thread only (the GEngine tick hook in debug/teleport.cpp).
+// Engine thread only (the GEngine tick hook in debug/teleport.cpp). Returns at
+// once unless the panel is showing (SetActive).
 void Tick(uint8_t* base);
+// Any thread: the Presentation shows (true) or is dismissed (false).
+void SetActive(bool active);
 // Any thread: the latest snapshot as JSON ("{}" before the first sample).
 std::string StateJson();
 // Any thread: actions requested from the panel, as a small JSON object.
