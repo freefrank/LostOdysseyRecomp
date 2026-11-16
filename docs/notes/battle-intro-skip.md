@@ -8,7 +8,7 @@ Debug Menu (F1 or LB+RB) → Cheats → **Battle** → **Skip battle animation**
 | Press to skip | 1 | In a random walking battle, a prompt "(cancel button): Skip" shows from the battle request until the first command menu. A press of the game's cancel button skips the intro. |
 | Always | 2 | Every random walking battle skips its intro, with no prompt and no press. |
 
-Boss, story, scripted, world map, retry and debug battles keep the retail intro and show no prompt. The value saves at once, like the other Debug Menu values. The game thread reads it when a battle is requested and when the intro actor spawns.
+Boss, story, scripted, retry and debug battles keep the retail intro and show no prompt. The value saves at once, like the other Debug Menu values. The game thread reads it when a battle is requested and when the intro actor spawns.
 
 Code: `patches/battle_intro_skip.cpp` (hooks), `patches/battle_intro_skip.h` (pure decisions), `patches/battle_intro_gate.h` (prompt API), `hid/skip_latch.h` (input latch), `debug/battle_intro_skip_setting.*` (option), `settings/title_entry.cpp` and `settings/menu_render.cpp` (prompt drawing).
 
@@ -33,9 +33,19 @@ The skip lets the script run every statement. It only removes the waiting:
 
 Phase 2 then starts with the retail state: all pawns visible, the camera cuts to the command camera, and the battle UI opens on its own trigger (the first phase 2 tick in `sub_82388BE0`). The encounter effect (purple, about 1.2-2.1 s after the request) can show over the first menu for a short time after an early press.
 
+A collapsed Sleep with no pawn load tasks left gives no tick (latent op cleared), so the skip is safe only if the script has no other loop that polls a condition with Sleep. The bytecode of `bsSMpha_Start.PHASE_ON` and `bsSMpha_StartNoVoice.PHASE_ON` (`rpbattle__setmotion.xxx`; offsets of `bsSMpha_Start`, NoVoice has the same loops at shifted offsets) has these loops:
+
+| Loop | Sleep | Ends on |
+|---|---|---|
+| `02ab`-`02f1` (retry from label `CLOSS_FADE` at `020e`) | `Sleep(0.1)` | `GetRestPawnLoaderCount(0)` and `(107)`, at most 35 passes |
+| `0a81`-`0bf3` party stagger, `0df6`-`0f37` enemy stagger | `Sleep(GetDivisionNum)` | a counter over the party or the enemies |
+| four more (party and enemy setup, status effects) | none | a counter; retail also runs them in one tick |
+
+The pawn loader loop is the only polling loop. Its exit at `02f4` checks the loader counts again, so the script leaves it only when the loads are done. After 35 passes it goes to `CLOSS_FADE`, which holds on `Wait(0,30)` and starts the loop again. The steps that need loaded data wait on `Wait(107,20)`, `Wait(0,21)` and `Wait(0,22)`, which the skip keeps.
+
 ## Random battles only
 
-`RequestBattle` (`sub_828278A0`, hooked in `patches/encounter_defer.cpp`) records each accepted request. Only the walking draw (return address `0x829E3220`) counts as random. Script opcodes, the world map script, `BATTLEREBOOT` (retry), the opening battle and the battle tour are not random. The battle tour also uses the walking draw, so `debug/no_encounters.cpp` marks its formation. The world map controller turns the walking draw off (vtable `+1632` stub), so world map and sea battles never count. The spawn uses the record once, and only when the formation matches the battle ID.
+`RequestBattle` (`sub_828278A0`, hooked in `patches/encounter_defer.cpp`) records each accepted request. Only the walking draw (return address `0x829E3220`) counts as random. Script opcodes, `BATTLEREBOOT` (retry), the opening battle and the battle tour are not random. The battle tour also uses the walking draw, so `debug/no_encounters.cpp` marks its formation. The spawn uses the record once, and only when the formation matches the battle ID.
 
 Other exclusions: the `OPCrowd` class, an active matinee (`*(0x832CBFB0 + 24)`), and battle IDs -1, 255 and 256.
 
@@ -47,15 +57,9 @@ Other exclusions: the `OPCrowd` class, an active matinee (`*(0x832CBFB0 + 24)`),
 - **Cancel button.** The game's own option `config + 4 & 0x02000000` (Confirmation button A/B or B/A). The game applies a change at once, without a restart, and so does the latch. The prompt icon follows it.
 - **Prompt.** A host overlay in the title hint style (game font Maru23, face (196,197,194), black outline, no panel) at the bottom right of the 16:9 area. It uses the icon family of the active device (`hid::PromptFamily()`), or the bound key name with keyboard prompts (no prompt if the key is unbound). It fades in over 250 ms with no delay, hides at once, and changes opacity only. It is redrawn only when the size, language, family, cancel bit or key changes. Text: "Skip" in all UI languages.
 
-Only keys bound to game input switch the prompts to the keyboard style (`hid::HandleKeyboardEvent`). Before this branch any key did, so a screenshot key changed a pad player's icons.
+## Tests and results
 
-## Diagnostics and tests
-
-- `LO_TRACE_BATTLE_INTRO=1` logs the intro natives, the gate, the window, the press and the sound actions. It only reads guest memory. Unset, each hook costs one cached bool.
-- `LO_SKIP_LATCH_TEST=arm|once` arms the latch for input tests. `LO_TRACE_INPUT` logs latch events.
-- `tools/battle_intro_test.py` runs the game with an isolated save copy (`bwrap`, the player's folders read-only, checksum check). It starts formations or walks to random encounters, presses at a set time (`--press-at`, `--press-at-request`), plays real turns (`--real`), takes screenshots and writes a JSON summary per battle.
-- Unit tests: `LoBattleIntroSkipTest`, `LoSkipLatchTest`, the prompt checks in `tools/tests/settings_menu/raster_test.cpp`, the Debug Menu tests, and the key check in `LoHidTest`.
-- Known issue, also on `main`: `LoHidTest` fails at "virtual non-PS controller retains regular prompts" when a real PlayStation pad is connected, because the test takes the real pad as the active device. It passes with the pad hidden: `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x054C/0x0CE6`.
+- Unit tests: `LoSkipLatchTest`, the prompt checks in `tools/tests/settings_menu/raster_test.cpp` and the Debug Menu tests.
 
 Results on Linux (AMD RX 580, Vulkan, 60 fps):
 
@@ -67,5 +71,8 @@ Results on Linux (AMD RX 580, Vulkan, 60 fps):
 | Always | First menu 0.66-1.0 s after the spawn |
 | Soaks (Press, Always, Off; 34 + 40 battles) | All won and returned to the field; the guest never saw a skip press; no sound slot leak; music unchanged; RSS flat after the first battle |
 | Boss 157, tour, scripted, Off | Retail intro, no prompt |
+| Disc 4, Legacy of the Eastern Tribe (`ev4_0`), formations 171-174 | Always: first menu 0.82-0.87 s after the spawn; Press: 1.27-2.79 s; all won and returned to the field. Played again after the review changes: Always, Press and Off as expected |
+| Sea of Baus - Crater Island (map 70, sea battle stage `ua0_b2`), formations 27 and 28, with the save from #203 | Always (2), Press (3) and Off (1): skip as expected, music unchanged, all returned to the field |
+| Disc 4 music formations 243 and 282 (`s26_gs.xwv`), started by the battle tour with a local build that lets tour battles skip | Always (243, 282) and Press (282): skip worked, music played normally. The music continues in the field after the battle; a control battle with Off does the same, so the skip does not cause it (the tour starts these formations away from their own map) |
 
-Not tested: Windows, macOS and Android; frame generation (the prompt fade is opacity only); fast-forward during the skip (at high rates the window can close before the player sees it); 30 fps with Press; the B/A option on real hardware; world map and sea battles; disc 4 maps and the disc 4 music formations (243-247, 282-284); a soft reset inside the early window.
+Not tested: Windows, macOS and Android; frame generation (the prompt fade is opacity only); fast-forward during the skip (at high rates the window can close before the player sees it); 30 fps with Press; the B/A option on real hardware; disc 4 maps other than `ev4_0`; music formations 244-247, 283 and 284, and the music formations on their own map; a soft reset inside the early window.

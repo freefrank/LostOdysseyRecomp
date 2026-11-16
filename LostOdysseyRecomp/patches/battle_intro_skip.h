@@ -74,8 +74,8 @@ constexpr bool EndRunningSleep(const SleepState& s, uint32_t latentOp, uint32_t 
 }
 
 // Random gate. Only a battle that the field walking draw requested is random. Script
-// opcodes, the world map, a retry (BATTLEREBOOT), the opening battle and the debug
-// battle tour (which uses the walking draw with its own formation) are not.
+// opcodes, a retry (BATTLEREBOOT), the opening battle and the debug battle tour
+// (which uses the walking draw with its own formation) are not.
 struct BattleRequest
 {
     int32_t id = -1;
@@ -150,17 +150,9 @@ constexpr bool EarlyWindowOpens(Option option, const BattleRequest& r, StartClas
 // ends when the slot is empty before that pick (the request was cancelled), or when no
 // battle spawns within EarlyWindowMaxMs (a map load, a reset, a lost battle).
 constexpr uint64_t EarlyWindowMaxMs = 8000;
-enum class EarlyEnd
+constexpr bool EarlyWindowEnds(bool picked, int32_t battleSlotPhase, uint64_t sinceRequestMs)
 {
-    None,
-    Gone,
-    Timeout
-};
-constexpr EarlyEnd EarlyWindowEnds(bool picked, int32_t battleSlotPhase, uint64_t sinceRequestMs)
-{
-    if (!picked && battleSlotPhase <= 0) return EarlyEnd::Gone;
-    if (sinceRequestMs >= EarlyWindowMaxMs) return EarlyEnd::Timeout;
-    return EarlyEnd::None;
+    return (!picked && battleSlotPhase <= 0) || sinceRequestMs >= EarlyWindowMaxMs;
 }
 
 // A press in the early window is stored. It acts only for the battle it was made for

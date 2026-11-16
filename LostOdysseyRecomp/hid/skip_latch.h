@@ -32,7 +32,6 @@ public:
         rearmed_.store(true);
         armed_.store(true);
     }
-    bool Armed() const { return armed_.load(); }
 
     // True once for each fired press.
     bool TakePress() { return pressed_.exchange(false); }
@@ -44,7 +43,6 @@ public:
     // False: Sample would change nothing (not armed and nothing hidden).
     bool Active() const { return hidden_ || armed_.load(); }
     bool Hidden() const { return hidden_; }
-    uint16_t Bit() const { return bit_; }
 
     // One guest read. raw: every source merged, before any filter. buttons: the value
     // that the guest gets, after the filters; the latch removes its bit in place.

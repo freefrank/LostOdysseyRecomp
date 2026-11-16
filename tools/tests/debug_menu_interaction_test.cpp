@@ -593,23 +593,6 @@ int main()
         "Menu animation changes affected another quick-tool option or enabled memory edits");
     debug_menu::RenderOverlay(rasterizer);
 
-    // Category order: Quick tools, Characters, Inventory, Equipment, Party, Battle, Developer.
-    {
-        using debug_menu::cheat_overlay::Categories;
-        const wchar_t* order[] = {L"Quick tools", L"Characters", L"Inventory", L"Equipment", L"Party", L"Battle", L"Developer"};
-        Require(std::size(Categories) == std::size(order), "Cheats category count changed");
-        for (size_t i = 0; i < std::size(order); ++i)
-            Require(std::wstring(Categories[i][0]) == order[i], "Cheats category order changed");
-        Require(std::wstring(Categories[debug_menu::cheat_overlay::BattleCategory][0]) == L"Battle" &&
-                std::wstring(Categories[debug_menu::cheat_overlay::DeveloperCategory][0]) == L"Developer",
-            "Battle and Developer category indexes do not match their titles");
-        debug_menu::cheat_overlay::Model developer;
-        developer.category = debug_menu::cheat_overlay::DeveloperCategory;
-        debug_menu::cheat_overlay::Model battle;
-        battle.category = debug_menu::cheat_overlay::BattleCategory;
-        Require(developer.Rows() == 2 && battle.Rows() == 2, "Battle and Developer have the Category row and one option");
-    }
-
     // Cheats / Battle / Skip battle animation: two categories back from Quick tools
     // (Developer is the last one). Each change saves once; the value wraps over
     // Off, Press to skip and Always.

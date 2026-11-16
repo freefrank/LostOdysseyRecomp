@@ -111,21 +111,6 @@ namespace
     hid::skip_latch::Latch g_skipLatch;
     std::atomic<uint16_t (*)()> g_skipCancelSource{nullptr};
 
-    // Rig only: LO_SKIP_LATCH_TEST=arm keeps the latch armed and takes each press;
-    // =once disarms at the first press, as the battle code does.
-    enum class SkipLatchTest { Off, Arm, Once };
-    SkipLatchTest SkipLatchTestMode()
-    {
-        static const SkipLatchTest mode = [] {
-            const char* value = getenv("LO_SKIP_LATCH_TEST");
-            if (!value) return SkipLatchTest::Off;
-            if (strcmp(value, "arm") == 0) return SkipLatchTest::Arm;
-            if (strcmp(value, "once") == 0) return SkipLatchTest::Once;
-            return SkipLatchTest::Off;
-        }();
-        return mode;
-    }
-
     // Match XInput/Xam semantics: rumble is enabled by default and remains at
     // the requested motor speeds until the guest changes or clears the state.
     // LO_CONTROLLER_RUMBLE=0 is an explicit host-side opt-out.
@@ -254,10 +239,7 @@ void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
     if (scancode >= 0 && scancode < SDL_SCANCODE_COUNT)
     {
         g_keys[scancode] = pressed;
-        // Only keys bound to game input switch the prompts to the keyboard. A screenshot
-        // key, Alt+Tab or a function key must not change the icons of a pad player.
-        const bool bound = scancode != map::NoKey && std::find(g_keyboardMap.begin(), g_keyboardMap.end(), uint16_t(scancode)) != g_keyboardMap.end();
-        if (pressed && bound) { g_promptController.Keyboard(); PublishPromptStyle(); }
+        if (pressed) { g_promptController.Keyboard(); PublishPromptStyle(); }
     }
 }
 
@@ -724,34 +706,11 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     }
     // After the overlay and Settings filters: a press that a host menu took never fires.
     // defaultButtons is not hidden: only the Settings filter above reads it.
-    if (SkipLatchTestMode() != SkipLatchTest::Off)
-    {
-        static bool armedOnce = false;
-        if (!std::exchange(armedOnce, true)) g_skipLatch.SetArmed(true);
-    }
     if (g_skipLatch.Active())
     {
         const auto source = g_skipCancelSource.load();
-        const bool wasHidden = g_skipLatch.Hidden();
-        const bool fired = g_skipLatch.Sample(mergedButtons, gp.wButtons, source ? source() : uint16_t(XAMINPUT_GAMEPAD_B),
-                                              skip_latch::Clock::now());
-        static const bool trace = SkipLatchTestMode() != SkipLatchTest::Off || getenv("LO_TRACE_INPUT") != nullptr;
-        if (trace)
-        {
-            static bool wasDown = false;
-            const bool down = (mergedButtons & g_skipLatch.Bit()) != 0;
-            const char* event = fired ? "fired" : wasHidden && !g_skipLatch.Hidden() ? "ended"
-                : g_skipLatch.Hidden() && down != wasDown ? (down ? "hidden_press" : "released") : nullptr;
-            wasDown = down;
-            if (event)
-                LOG_INFO("skip latch: {} swap={} bit={:#06x} merged={:#06x}", event, g_presentedSwaps.load(),
-                    g_skipLatch.Bit(), mergedButtons);
-        }
-        if (fired && SkipLatchTestMode() != SkipLatchTest::Off)
-        {
-            g_skipLatch.TakePress();
-            if (SkipLatchTestMode() == SkipLatchTest::Once) g_skipLatch.SetArmed(false);
-        }
+        g_skipLatch.Sample(mergedButtons, gp.wButtons, source ? source() : uint16_t(XAMINPUT_GAMEPAD_B),
+                           skip_latch::Clock::now());
     }
     if (inputTicks && traceInputSerial)
     {

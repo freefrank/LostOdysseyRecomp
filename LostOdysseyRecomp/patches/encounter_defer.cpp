@@ -70,9 +70,6 @@ PPC_FUNC(sub_828278A0)
 {
     const uint32_t caller = static_cast<uint32_t>(ctx.lr);
     const uint32_t id = ctx.r4.u32;
-    static const bool traceRequests = std::getenv("LO_TRACE_BATTLE_INTRO") != nullptr;
-    if (traceRequests)
-        LOG_NOTICE("battle request: formation={} caller={:#x} walking={}", id, caller, caller == WalkingEncounterReturn);
     if (caller != WalkingEncounterReturn &&
         encounter_defer::DropForScriptedRequest(static_cast<int32_t>(PPC_LOAD_U32(BattleSlot)),
             PPC_LOAD_U32(BattleSlot + 16), heldRequest))

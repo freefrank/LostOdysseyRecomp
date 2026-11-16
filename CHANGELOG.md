@@ -8,11 +8,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Debug Menu (L1 + R1) → Cheats → Battle → Skip battle animation: Off (default), Press to skip or Always. Press to skip shows a skip prompt as soon as a random battle starts; press the cancel button to skip the intro and go to the first command menu. Always skips the intro of random battles with no prompt and no press. Bosses and story battles keep their intro.
+- Debug Menu → Cheats → Battle → Skip battle animation skips the intro of random battles on a cancel press, or always (Off by default).
 
 ### 简体中文
 
-- 调试菜单（L1 + R1）→ 辅助 / 修改 → 战斗 → “跳过战斗动画”：关闭（默认）、按键跳过或总是跳过。选择“按键跳过”后，随机战斗一开始就会显示跳过提示，按取消键即可跳过开场，直接进入第一个指令菜单；选择“总是跳过”后，随机战斗自动跳过开场，不显示提示，无需按键。首领战与剧情战斗保留原有开场。
+- 调试菜单 → 辅助 / 修改 → 战斗 → “跳过战斗动画”可在按下取消键时或总是跳过随机战斗的开场（默认关闭）。
 
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
