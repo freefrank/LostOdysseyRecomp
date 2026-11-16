@@ -12,8 +12,10 @@ namespace settings::quit_text
 inline constexpr uint32_t LabelId = 9104;
 inline constexpr uint32_t HelpId = 9114;
 inline constexpr uint32_t PromptId = 9120;
+// The prompt's Yes option. Retail says "Return to title", but it now quits.
+inline constexpr uint32_t ConfirmId = 9123;
 inline constexpr size_t DescriptorSize = 60;
-inline constexpr uint32_t TextIds[] = {LabelId, HelpId, PromptId};
+inline constexpr uint32_t TextIds[] = {LabelId, HelpId, PromptId, ConfirmId};
 
 constexpr size_t TextIndex(uint32_t id)
 {
@@ -29,6 +31,7 @@ constexpr std::u16string_view Text(uint32_t id, uint32_t language)
     switch (id)
     {
     case LabelId:
+    case ConfirmId:
         switch (language)
         {
         case 1: return u"Quit to Desktop";
