@@ -67,7 +67,7 @@ Steam Deck 上，两个 Linux 安装包都可通过 **设置 → 系统 → 添�
 
 启动需要 Disc 1。请使用一套受支持的四盘版本（亚洲多语言版或 USA/Europe 版），不要混装不同版本；[安装指南](docs/INSTALLING.zh-CN.md)介绍如何核对。
 
-本源码构建的 Windows ZIP 与 Linux 启动器 `.tar.gz` 包内含 `recomplauncher.json`，因此 [RecompLauncher](https://recomplauncher.com/) 可以从源文件夹导入光盘与 DLC，并在其游戏页面提供画质设置。Linux 包包含 AppImage 和生成的 Linux 配置。参见[集成说明、包选择与交付状态](docs/RECOMPLAUNCHER.md)。
+支持 [RecompLauncher](https://recomplauncher.com/)：用自己的光盘完成设置，无需编辑文件即可调整画质。参见[详情](docs/RECOMPLAUNCHER.md)。
 
 ### macOS
 

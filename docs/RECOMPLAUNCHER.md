@@ -4,7 +4,6 @@ Portable Windows ZIPs built from this source include [`recomplauncher.json`](../
 `LostOdysseyRecomp.exe`. Linux launcher `.tar.gz` bundles contain the AppImage and a generated Linux
 profile beside it. RecompLauncher reads these profiles in preference to its catalog or boot profile.
 It provides a folder-based setup step, graphics settings, and buttons for saves, mods and logs.
-For delivery and validation status, see the [status ledger](STATUS.md#recomplauncher-integration).
 
 ## Set up and play
 

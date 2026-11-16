@@ -67,7 +67,7 @@ On Steam Deck, use **Settings → System → Add to Steam** with either Linux pa
 
 Disc 1 is required to start. Use one supported four-disc set (Asian multilingual or USA/Europe) and don't mix editions; the [installation guide](docs/INSTALLING.md) shows how to check yours.
 
-Windows ZIPs and Linux launcher `.tar.gz` bundles built from this source include a `recomplauncher.json`, so [RecompLauncher](https://recomplauncher.com/) can import discs and DLC from a source folder and put graphics settings on its game page. Linux bundles contain the AppImage and a generated Linux profile. See [integration details, package selection and delivery status](docs/RECOMPLAUNCHER.md).
+Works with [RecompLauncher](https://recomplauncher.com/): set up from your own discs and change graphics settings without editing a file. See [details](docs/RECOMPLAUNCHER.md).
 
 ### macOS
 

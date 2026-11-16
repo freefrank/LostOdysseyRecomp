@@ -10,6 +10,7 @@
     {
       "id": "main",
       "format": "ini",
+      "ensure": {"vsync": "1"},
       "file": [
         {"path": "{install}/settings.ini"}
       ]
