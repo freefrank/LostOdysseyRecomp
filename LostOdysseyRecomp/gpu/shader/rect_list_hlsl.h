@@ -10,10 +10,9 @@ namespace xenos::rect_list {
 // slow on many desktop GPUs), each rectangle becomes six host indices. Each
 // index encodes the rectangle's first guest vertex and the corner:
 // firstVertex << kCornerBits | corner. Every invocation runs the translated
-// program for all three guest vertices. Reuse the two shared corners so the
-// post-transform cache can shade four vertices rather than six, without
-// changing either triangle or adding resources/bindings. Reuse is a driver
-// optimization, not a guarantee of four invocations.
+// program for all three guest vertices. The two shared corners reuse one
+// index each, so the post-transform cache can shade four vertices instead of
+// six; both triangles and their first (provoking) vertex are unchanged.
 inline constexpr uint32_t kCornerBits = 3;
 inline constexpr uint32_t kVerticesPerRect = 6;
 inline constexpr uint32_t kTriangleCorners[kVerticesPerRect] = {0, 1, 2, 2, 1, 5};
@@ -49,7 +48,7 @@ float4 XeRectListPick(float4 v0, float4 v1, float4 v2, uint c, uint corner)
 // supported when their three indices are consecutive; any other rectangle,
 // or one past the encodable range, is skipped and counted.
 inline uint32_t ExpandIndices(std::vector<uint32_t>& indices, std::vector<uint32_t>& scratch,
-    bool& useIndices, uint32_t indexCount, uint32_t baseVertex, bool reuseCorners = true) {
+    bool& useIndices, uint32_t indexCount, uint32_t baseVertex) {
     auto& out = scratch;
     out.clear();
     const uint32_t rects = (useIndices ? uint32_t(indices.size()) : indexCount) / 3;
@@ -61,7 +60,7 @@ inline uint32_t ExpandIndices(std::vector<uint32_t>& indices, std::vector<uint32
         const uint32_t first = v0 + baseVertex;
         if (first > kMaxFirstVertex) { skipped++; continue; }
         for (uint32_t corner = 0; corner < kVerticesPerRect; corner++)
-            out.push_back((first << kCornerBits) | (reuseCorners ? kTriangleCorners[corner] : corner));
+            out.push_back((first << kCornerBits) | kTriangleCorners[corner]);
     }
     indices.swap(out);
     useIndices = true;
