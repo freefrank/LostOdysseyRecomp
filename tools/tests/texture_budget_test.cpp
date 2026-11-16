@@ -19,15 +19,33 @@ using Entries = std::vector<Candidate<int>>;
 static void TestLimits()
 {
     const uint64_t vram = 8192 * kMib;
-    Check(LimitsFor(vram, nullptr).hardBytes == 4096 * kMib, "the default is half of the video memory");
-    Check(LimitsFor(vram, nullptr).softBytes == 3072 * kMib, "the soft limit is 3/4 of the hard limit");
-    Check(LimitsFor(vram, "").hardBytes == 4096 * kMib, "an empty override keeps the default");
-    Check(LimitsFor(vram, "2048").hardBytes == 2048 * kMib, "an override replaces the hard limit");
-    Check(LimitsFor(vram, "0").hardBytes == 0, "0 turns the budget off");
-    Check(LimitsFor(vram, "12x").hardBytes == 4096 * kMib, "a bad override keeps the default");
-    Check(LimitsFor(vram, "-1").hardBytes == 4096 * kMib, "a negative override keeps the default");
-    Check(LimitsFor(vram, "99999999999999").hardBytes == 4096 * kMib, "a huge override keeps the default");
-    Check(LimitsFor(0, nullptr).hardBytes == 0, "no reported video memory has no budget");
+    Check(LimitsFor(vram, nullptr, true).hardBytes == 4096 * kMib, "the default is half of the video memory");
+    Check(LimitsFor(vram, nullptr, true).softBytes == 3072 * kMib, "the soft limit is 3/4 of the hard limit");
+    Check(LimitsFor(vram, "", true).hardBytes == 4096 * kMib, "an empty override keeps the default");
+    Check(LimitsFor(vram, "2048", true).hardBytes == 2048 * kMib, "an override replaces the hard limit");
+    Check(LimitsFor(vram, "0", true).hardBytes == 0, "0 turns the budget off");
+    Check(LimitsFor(vram, "12x", true).hardBytes == 4096 * kMib, "a bad override keeps the default");
+    Check(LimitsFor(vram, "-1", true).hardBytes == 4096 * kMib, "a negative override keeps the default");
+    Check(LimitsFor(vram, "99999999999999", true).hardBytes == 4096 * kMib, "a huge override keeps the default");
+    Check(LimitsFor(0, nullptr, true).hardBytes == 0, "no reported video memory has no budget");
+}
+
+static void TestNoReplacementsNoDefault()
+{
+    const uint64_t vram = 8192 * kMib;
+    Check(LimitsFor(vram, nullptr, false).hardBytes == 0, "without replacements there is no default budget");
+    Check(LimitsFor(128 * kMib, nullptr, false).hardBytes == 0, "a small integrated GPU without replacements has no budget");
+    Check(LimitsFor(vram, "12x", false).hardBytes == 0, "a bad override without replacements has no budget");
+    Check(LimitsFor(vram, "2048", false).hardBytes == 2048 * kMib, "an override applies without replacements");
+}
+
+static void TestFloor()
+{
+    Check(LimitsFor(128 * kMib, nullptr, true).hardBytes == kMinHardBytes, "128 MB of reported memory gets the floor, not 64 MB");
+    Check(LimitsFor(128 * kMib, nullptr, true).softBytes == kMinHardBytes / 4 * 3, "the soft limit follows the floor");
+    Check(LimitsFor(2 * kMinHardBytes, nullptr, true).hardBytes == kMinHardBytes, "half of the memory at the floor is the floor");
+    Check(LimitsFor(2 * kMinHardBytes + 2 * kMib, nullptr, true).hardBytes == kMinHardBytes + kMib, "above the floor half applies");
+    Check(LimitsFor(128 * kMib, "256", true).hardBytes == 256 * kMib, "an override can go below the floor");
 }
 
 static void TestOffAndUnderLimit()
@@ -100,6 +118,8 @@ int main()
     try
     {
         TestLimits();
+        TestNoReplacementsNoDefault();
+        TestFloor();
         TestOffAndUnderLimit();
         TestSoftLimitTakesOnlyLongIdle();
         TestSoftLimitStopsWhenReached();

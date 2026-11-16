@@ -1038,7 +1038,9 @@ namespace gpu::renderer
             uint64_t texturesVersion = 1;
             // Uploaded bytes of everything in `textures`, and the limits on them.
             uint64_t textureCacheBytes = 0;
-            texture_budget::Limits textureBudget;
+            texture_budget::Limits textureBudget; // set at each mod generation (UpdateTextureBudget)
+            uint64_t textureBudgetVideoMemory = 0;
+            const char* textureBudgetLimitMib = nullptr;
             uint64_t nextTextureBudgetFrame = 0;
             uint64_t textureBudgetLoggedBytes = 0, textureBudgetLoggedReleased = 0;
             uint64_t textureBudgetReleased = 0, textureBudgetReleasedBytes = 0;
@@ -2781,8 +2783,8 @@ namespace gpu::renderer
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 if (!readback) return InitFailure("readback.create", kReadbackSize);
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
-                textureBudget = texture_budget::LimitsFor(device->getDescription().dedicatedVideoMemory, getenv("LO_TEXTURE_CACHE_LIMIT_MIB"));
-                LOG_NOTICE("renderer: texture budget soft {} MiB, hard {} MiB", textureBudget.softBytes >> 20, textureBudget.hardBytes >> 20);
+                textureBudgetVideoMemory = device->getDescription().dedicatedVideoMemory;
+                textureBudgetLimitMib = getenv("LO_TEXTURE_CACHE_LIMIT_MIB");
                 if (const char* sync = getenv("LO_MODS_TEXTURE_SYNC"); sync && *sync && strcmp(sync, "0") != 0)
                     textureReplacementSync = true;
                 if (const char* path = getenv("LO_TEXTURE_FINGERPRINT_LOG"); path && *path && !textureFingerprintLog) {
@@ -8231,6 +8233,7 @@ void main()
                         LOG_INFO("[mods] texture replacements: the mod list changed; replaceable textures are made again");
                     }
                     textureModsGeneration = generation;
+                    UpdateTextureBudget();
                 }
                 const auto now = std::chrono::steady_clock::now();
                 auto& cost = replacementCost;
@@ -8254,6 +8257,20 @@ void main()
                         ReadyReplacement{std::move(*read.data), read.format, read.width, read.height, frame});
                 }
                 std::erase_if(replacementsReady, [&](const auto& entry) { return frame - entry.second.frame > kReplacementReadyFrames; });
+            }
+
+            // The default budget follows the loaded texture replacements
+            // (texture_budget::LimitsFor), so a mod list saved in game turns it on or off.
+            void UpdateTextureBudget()
+            {
+                const auto limits = texture_budget::LimitsFor(textureBudgetVideoMemory, textureBudgetLimitMib,
+                    modding::HasTextureReplacements());
+                if (limits.hardBytes == textureBudget.hardBytes && limits.softBytes == textureBudget.softBytes) return;
+                textureBudget = limits;
+                if (limits.hardBytes)
+                    LOG_NOTICE("renderer: texture budget soft {} MiB, hard {} MiB", limits.softBytes >> 20, limits.hardBytes >> 20);
+                else
+                    LOG_NOTICE("renderer: texture budget off");
             }
 
             enum class ReplacementUpload { Uploaded, Skipped, Failed };

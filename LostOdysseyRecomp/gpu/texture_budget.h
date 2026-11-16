@@ -28,10 +28,18 @@ namespace gpu::texture_budget
         return {hardBytes / 4 * 3, hardBytes};
     }
 
-    // Half of the video memory; render targets and buffers need the rest.
-    // limitMib (LO_TEXTURE_CACHE_LIMIT_MIB) replaces the hard limit, and 0 turns
-    // the budget off. A device that reports no video memory has no budget.
-    inline Limits LimitsFor(uint64_t videoMemoryBytes, const char* limitMib)
+    // The default hard limit never goes below this. A D3D12 integrated GPU can
+    // report 128 MB or less of dedicated memory, and half of that holds fewer
+    // textures than one map needs.
+    constexpr uint64_t kMinHardBytes = uint64_t(1024) << 20;
+
+    // Only texture replacements make the cache grow without end, so the default
+    // budget is on only while they are loaded: half of the video memory (render
+    // targets and buffers need the rest), but at least kMinHardBytes. limitMib
+    // (LO_TEXTURE_CACHE_LIMIT_MIB) replaces the hard limit with or without
+    // replacements, and 0 turns the budget off. A device that reports no video
+    // memory has no default budget.
+    inline Limits LimitsFor(uint64_t videoMemoryBytes, const char* limitMib, bool replacementsLoaded)
     {
         if (limitMib && *limitMib) {
             uint64_t mib = 0;
@@ -40,7 +48,8 @@ namespace gpu::texture_budget
             if (parsed.ec == std::errc{} && parsed.ptr == end && mib <= (uint64_t(1) << 40))
                 return LimitsForHardBytes(mib << 20);
         }
-        return LimitsForHardBytes(videoMemoryBytes / 2);
+        if (!replacementsLoaded || !videoMemoryBytes) return {};
+        return LimitsForHardBytes(std::max(videoMemoryBytes / 2, kMinHardBytes));
     }
 
     template <class Handle>
