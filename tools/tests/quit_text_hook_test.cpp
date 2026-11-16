@@ -106,7 +106,7 @@ int main()
     for (uint32_t language = 1; language <= 9; ++language)
         for (auto id : TextIds) Check(!Text(id, language).empty(), "all resource languages translated");
     Check(Text(LabelId, 1) == u"Quit to Desktop" && Text(LabelId, 2) == u"デスクトップに戻る" &&
-        Text(LabelId, 8) == u"退出到桌面" && Text(LabelId, 9) == u"退出到桌面", "requested labels");
+        Text(LabelId, 8) == u"結束遊戲" && Text(LabelId, 9) == u"退出游戏", "requested labels");
     Check(Text(PromptId, 1).find(u"Unsaved progress") != std::u16string_view::npos,
         "native confirmation must mention lost progress");
 
