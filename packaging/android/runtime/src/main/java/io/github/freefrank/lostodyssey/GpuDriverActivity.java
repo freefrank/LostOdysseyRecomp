@@ -123,7 +123,7 @@ public final class GpuDriverActivity extends Activity {
         new AlertDialog.Builder(this)
             .setTitle("GPU driver not supported")
             .setMessage("This device's Vulkan driver cannot run the game: " + graphicsFailure
-                + ".\n\nThe log is in Android/data/io.github.freefrank.lostodyssey/files/logs/.")
+                + ".\n\nThe log is in Android/data/" + getPackageName() + "/files/logs/.")
             .setPositiveButton("Close", (dialog, which) -> finish())
             .setOnCancelListener(dialog -> finish())
             .show();
