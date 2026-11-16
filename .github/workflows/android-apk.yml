@@ -33,6 +33,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Select authorized private build input
+        id: build-input
+        env:
+          LO_BUILD_XEX_URL: ${{ secrets.LO_BUILD_XEX_URL }}
+          LO_BUILD_INPUT_KEY: ${{ secrets.LO_BUILD_INPUT_KEY }}
+        run: |
+          if [[ -n "$LO_BUILD_XEX_URL" ]]; then
+            echo 'source=url' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$LO_BUILD_INPUT_KEY" ]]; then
+            echo 'source=repository' >> "$GITHUB_OUTPUT"
+          else
+            echo '::error::Missing authorized Disc 1 default.xex. Set LO_BUILD_XEX_URL to a private HTTPS URL, or LO_BUILD_INPUT_KEY for the configured private build-input repository. No game code or APK has been built.'
+            exit 1
+          fi
       - name: Install host toolchain for the recompiler tools
         run: bash tools/release/install_appimage_toolchain.sh
       - name: Install build dependencies
@@ -72,11 +86,12 @@ jobs:
             android-ccache-${{ runner.os }}-ndk28.2.13676358-${{ hashFiles('tools/android/*.sh', 'CMakeLists.txt', 'cmake/**') }}-
             android-ccache-${{ runner.os }}-ndk28.2.13676358-
       - name: Retrieve private build input
+        if: steps.build-input.outputs.source == 'repository'
         uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.LO_BUILD_INPUT_KEY }}
-          repository: freefrank/LostOdysseyRecomp-build-inputs
-          ref: 2ba529b72c68ae2ee01903d24f7eac55cbb900df
+          repository: ${{ vars.LO_BUILD_INPUT_REPOSITORY || 'freefrank/LostOdysseyRecomp-build-inputs' }}
+          ref: ${{ vars.LO_BUILD_INPUT_REF || '2ba529b72c68ae2ee01903d24f7eac55cbb900df' }}
           path: out/build-input
           sparse-checkout: |
             /default.xex
@@ -86,7 +101,8 @@ jobs:
           persist-credentials: false
       - name: Verify private build input
         env:
-          LO_BUILD_XEX_PATH: out/build-input/default.xex
+          LO_BUILD_XEX_PATH: ${{ steps.build-input.outputs.source == 'repository' && 'out/build-input/default.xex' || '' }}
+          LO_BUILD_XEX_URL: ${{ secrets.LO_BUILD_XEX_URL }}
         run: python tools/release/fetch_build_input.py
       - name: Apply dependency patches
         run: |
