@@ -1,0 +1,39 @@
+name: Android TV diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-tv-probe.yml
+      - packaging/android/runtime/src/main/java/io/github/freefrank/lostodyssey/Tv*.java
+      - packaging/android/runtime/src/main/res/**/tv.xml
+      - packaging/android/tvprobe/**
+      - tools/android/*tv*.py
+      - tools/tests/*Tv*.java
+      - tools/tests/android_tv_test.cpp
+      - LostOdysseyRecomp/gpu/android_tv.h
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The action's default package list includes the removed SDK "tools".
+      # Install only supported packages to keep sdkmanager available on PATH.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install required Android SDK packages
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+      - run: python3 tools/android/test-tv.py
+      - run: python3 tools/android/build-tv-probe.py --sdk "$ANDROID_HOME" --jdk "$JAVA_HOME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LostOdyssey-TV-Probe
+          path: out/tv-probe/LostOdyssey-TV-Probe.apk
+          if-no-files-found: error

@@ -1167,6 +1167,9 @@ std::wstring DlssNotice()
 }
 bool SystemRowHidden(int r)
 {
+#if !LO_PLATFORM_ANDROID
+    if (r == SystemTvOutputRow) return true;
+#endif
 #if LO_PLATFORM_ANDROID || defined(__SWITCH__) || defined(__NX__) || !(defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
     return r == SystemDiscordStatusRow || r == SystemAddToSteamRow;
 #else
@@ -1676,6 +1679,8 @@ void Publish(uint8_t *base, uint32_t config)
         next.rows.back().hidden = SystemRowHidden(SystemAddToSteamRow);
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Prepare shaders again", L"重新準備著色器", Tr(L"Prepare again", L"重新準備"));
+        addAction(L"TV mode (Android)", L"電視模式 (Android)", Tr(L"Open", L"開啟"));
+        next.rows.back().hidden = SystemRowHidden(SystemTvOutputRow);
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
     }
     // Keep the focused row inside the visible window. Scroll persists per tab
@@ -3954,6 +3959,12 @@ PPC_FUNC(sub_822F19B0)
         importChoice = 1;
 #endif
         status.clear();
+    }
+    if ((input & 0x1000) && tab == 3 && row == SystemTvOutputRow && !SystemRowHidden(row))
+    {
+#if LO_PLATFORM_ANDROID
+        SDL_SendAndroidMessage(0x8001, 0);
+#endif
     }
     if ((input & 0x1000) && tab == 3 && row == SystemAddToSteamRow && !SystemRowHidden(row))
     {

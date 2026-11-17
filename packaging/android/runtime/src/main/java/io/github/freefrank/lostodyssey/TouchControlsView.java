@@ -73,6 +73,7 @@ final class TouchControlsView extends View {
     private TextView controllerHint;
     private boolean settingsChoiceEdited, syncingSettingsToggle;
     private boolean editing, customLayout, hostResumed, deviceListenerRegistered;
+    private boolean tvControlsHidden;
     private int settingsPointer = -1, dragPointer = -1, toolbarPointer = -1;
     private int selected = -1, toolbarPressed = -1;
     private float dragOffsetX, dragOffsetY, baseUnit;
@@ -166,7 +167,14 @@ final class TouchControlsView extends View {
     }
 
     private boolean controlsVisible() {
-        return !ctrl.hideAll() && visibility.visible();
+        return !tvControlsHidden && !ctrl.hideAll() && visibility.visible();
+    }
+
+    void setTvControlsHidden(boolean hidden) {
+        if (tvControlsHidden == hidden) return;
+        tvControlsHidden = hidden;
+        clearTouches();
+        invalidate();
     }
 
     boolean hidesAllControls() { return ctrl.hideAll(); }
@@ -448,6 +456,9 @@ final class TouchControlsView extends View {
         hideAll.setText(strings.getString(R.string.touch_hide_all));
         hideAll.setChecked(ctrl.hideAll());
         content.addView(hideAll);
+        Button tvButton = new Button(activity);
+        tvButton.setText(R.string.tv_mode);
+        content.addView(tvButton);
         TextView hideAllHelp = new TextView(activity);
         hideAllHelp.setText(strings.getString(R.string.touch_hide_all_help));
         content.addView(hideAllHelp);
@@ -492,6 +503,10 @@ final class TouchControlsView extends View {
             settingsChoiceEdited = false;
             settingsDialogOpen = false;
             syncCtrlPin();
+        });
+        tvButton.setOnClickListener(v -> {
+            settingsDialog.dismiss();
+            activity.openTvSettings();
         });
         if (driverButton != null) {
             driverButton.setOnClickListener(v -> {
