@@ -4,6 +4,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Debug Menu → Cheats → Battle → Skip battle animation skips the intro of random battles on a cancel press, or always (Off by default).
+
+### 简体中文
+
+- 调试菜单 → 辅助 / 修改 → 战斗 → “跳过战斗动画”可在按下取消键时或总是跳过随机战斗的开场（默认关闭）。
+
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
 ### English

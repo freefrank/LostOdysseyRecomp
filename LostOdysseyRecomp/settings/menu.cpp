@@ -4530,3 +4530,8 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     revision = current.revision;
     return true;
 }
+
+std::wstring settings::KeyboardKeyName(uint16_t scancode)
+{
+    return Widen(hid::KeyName(scancode));
+}

@@ -16,6 +16,7 @@
 #include "battle_tour.h"
 #include "soft_reset.h"
 #include <patches/mod_hot_reload.h>
+#include <patches/battle_intro_gate.h>
 #include <discord/game_state.h>
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
@@ -530,6 +531,7 @@ PPC_FUNC(sub_82290B60)
     if (engine)
     {
         debug_menu::UpdateMapInfo(base); debug_menu::PartySwitchTick(base); Tick(ctx, base); MapJumpTick(ctx, base); debug_menu::PollSceneLoads(base); debug_menu::battle_tour::Poll(base);
+        battle_intro_skip::EngineTick(base);
         gpu::cinematic_bars::UpdatePause(base);
         discord_rpc::Tick(base);
         bool playerInField;

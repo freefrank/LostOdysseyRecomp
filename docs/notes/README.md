@@ -91,6 +91,7 @@ Check current status first for implementation, validation, acceptance and releas
 
 | Document | Type |
 |---|---|
+| [Battle intro skip: intro phase, press-to-skip, input latch and sounds](battle-intro-skip.md) | Reference |
 | [Built-in cheats and LT speed control](cheats.md) | Reference |
 | [Multiple controllers and keyboard input](controller-input.md) | Reference |
 | [Debug Map ID and Localized Names (2026-09-05)](debug-map-info.md) · [简体中文](debug-map-info.zh-CN.md) | Reference |

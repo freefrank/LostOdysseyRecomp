@@ -1,6 +1,7 @@
 #include <stdafx.h>
 #include <os/logger.h>
 #include "encounter_defer.h"
+#include "battle_intro_gate.h"
 #include <chrono>
 
 // Issue #114. The walking encounter (sub_829E3048) queues a battle in the
@@ -80,10 +81,15 @@ PPC_FUNC(sub_828278A0)
         sub_82826E80(ctx, base);
         ctx = saved;
         heldRequest = {};
+        battle_intro_skip::NoteRequestDropped();
     }
     __imp__sub_828278A0(ctx, base);
     if (ctx.r3.s32 == 0)
+    {
         heldRequest = {caller == WalkingEncounterReturn, id, 0};
+        // The battle intro skip prompt is only for the walking draw.
+        battle_intro_skip::NoteBattleRequest(id, caller == WalkingEncounterReturn);
+    }
 }
 
 // The other writer of slot 1 (stores phase 1 without the busy check). If it
@@ -94,7 +100,12 @@ PPC_FUNC(sub_82828698)
     for (int i = 0; i < 6; ++i) before[i] = PPC_LOAD_U32(BattleSlot + 4 * i);
     __imp__sub_82828698(ctx, base);
     for (int i = 0; i < 6; ++i)
-        if (PPC_LOAD_U32(BattleSlot + 4 * i) != before[i]) { heldRequest = {}; break; }
+        if (PPC_LOAD_U32(BattleSlot + 4 * i) != before[i])
+        {
+            heldRequest = {};
+            battle_intro_skip::NoteSlotRewritten();
+            break;
+        }
 }
 
 PPC_FUNC(sub_8231F5E0)
@@ -108,6 +119,9 @@ PPC_FUNC(sub_8231F5E0)
             std::chrono::duration_cast<std::chrono::milliseconds>(now - holdStart).count());
         if (encounter_defer::HoldPick(state, heldRequest, PlayerHasControl(base), heldMs))
         {
+            // The first pick is always skipped; a later one is a hold for a field event.
+            if (heldRequest.heldPicks > 0)
+                battle_intro_skip::NoteRequestHeld();
             if (heldRequest.heldPicks++ == 1)
                 LOG_INFO("encounter defer: holding encounter {} while a field event has player control", heldRequest.id);
             ctx.r3.u64 = 0; // the original's result when it starts nothing
@@ -118,6 +132,8 @@ PPC_FUNC(sub_8231F5E0)
         {
             if (heldRequest.heldPicks > 1 && encounter_defer::PicksBattle(state))
                 LOG_INFO("encounter defer: starting encounter {} after {} held picks ({} ms)", heldRequest.id, heldRequest.heldPicks, heldMs);
+            if (encounter_defer::PicksBattle(state) && state.battleId == heldRequest.id)
+                battle_intro_skip::NoteBattlePicked(heldRequest.id);
             heldRequest.active = false;
         }
     }
