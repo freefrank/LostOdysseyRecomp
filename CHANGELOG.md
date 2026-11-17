@@ -8,11 +8,19 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- Debug Menu → Cheats → Battle → Skip battle animation skips the intro of random battles on a cancel press, or always (Off by default).
+- Debug Menu → Cheats → Battle → Skip battle animation skips the intro of random battles on a cancel press, or always (Off by default) (#768).
+- With a texture pack, old textures are now released before video memory fills up, so long sessions no longer slow down as you visit more maps (#759).
+- Changing internal or shadow resolution in Settings during play no longer loses parts of the paused scene (#726).
+- Fixed a recompiled game routine that could return a wrong comparison result (#738).
+- The Settings quit prompt now says Yes quits the game, and the Chinese quit option no longer shows a missing character (#788, #789).
 
 ### 简体中文
 
-- 调试菜单 → 辅助 / 修改 → 战斗 → “跳过战斗动画”可在按下取消键时或总是跳过随机战斗的开场（默认关闭）。
+- 调试菜单 → 辅助 / 修改 → 战斗 → “跳过战斗动画”可在按下取消键时或总是跳过随机战斗的开场（默认关闭）（#768）。
+- 使用贴图包时，旧贴图会在显存占满前释放，长时间游玩、走过更多地图后不再变卡（#759）。
+- 游戏中在设置里修改内部分辨率或阴影分辨率时，暂停画面不再丢失部分内容（#726）。
+- 修复一处重编译游戏函数可能返回错误比较结果的问题（#738）。
+- 设置中退出确认的“是”现在明确为退出游戏；中文退出选项不再显示缺字（#788、#789）。
 
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
