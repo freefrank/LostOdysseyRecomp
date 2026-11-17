@@ -147,8 +147,12 @@ int main()
     SDL_SetJoystickVirtualButton(b, SDL_GAMEPAD_BUTTON_EAST, 1);
     auto state = sample();
     Check((state.wButtons & XAMINPUT_GAMEPAD_B) && !(state.wButtons & XAMINPUT_GAMEPAD_A), "second controller takes over");
+    hid::HandleKeyboardEvent(SDL_SCANCODE_F12, true);
+    hid::HandleKeyboardEvent(SDL_SCANCODE_F12, false);
+    Check(!hid::UsesKeyboardPrompts(), "an unbound key keeps the pad prompts");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, true);
     state = sample();
+    Check(hid::UsesKeyboardPrompts(), "a bound key switches to keyboard prompts");
     Check(!hid::UsesPlayStationPrompts(), "keyboard retains regular prompts");
     Check((state.wButtons & (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B)) == (XAMINPUT_GAMEPAD_A | XAMINPUT_GAMEPAD_B), "keyboard with connected controllers");
     hid::HandleKeyboardEvent(SDL_SCANCODE_Z, false);
