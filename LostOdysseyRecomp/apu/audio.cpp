@@ -165,20 +165,25 @@ namespace apu
 
         // Driver thread, while the device queue stays full: a device that has
         // not drained since the app came back to the foreground is opened again.
-        void ReopenIfStalledAfterResume()
+        void ReopenIfStalledAfterResume(std::chrono::steady_clock::time_point waitStarted)
         {
             auto resumed = g_resumedAt.load(std::memory_order_relaxed);
             if (!resumed) return;
-            const auto now = std::chrono::steady_clock::now().time_since_epoch();
-            const auto stalled = now - std::chrono::steady_clock::duration(resumed);
+            const auto now = std::chrono::steady_clock::now();
+            // A resume timestamp is not evidence of a stalled device: the queue
+            // may have drained normally for seconds before it briefly filled.
+            const auto stalled = now - waitStarted;
             if (stalled < kResumeDrainTimeout) return;
             std::lock_guard lock(g_deviceMutex);
             if (!g_stream) return;
             // A paused device keeps its queue; the wait starts over when it plays.
-            if (g_paused) { g_resumedAt.compare_exchange_strong(resumed, now.count()); return; }
+            if (g_paused) { g_resumedAt.compare_exchange_strong(resumed, now.time_since_epoch().count()); return; }
+            const uint32_t queued = std::max(0, SDL_GetAudioStreamQueued(g_stream)) / FrameBytes();
+            // The device may drain during our last sleep. Never close a working
+            // AAudio stream because an older resume exceeded the timeout.
+            if (queued < kQueuedFrames) return;
             // Lost to a pause that began meanwhile, or to a newer resume.
             if (!g_resumedAt.compare_exchange_strong(resumed, 0)) return;
-            const uint32_t queued = std::max(0, SDL_GetAudioStreamQueued(g_stream)) / FrameBytes();
             LOG_WARNING("audio: device not draining {} ms after resume (queued {}), reopened",
                 std::chrono::duration_cast<std::chrono::milliseconds>(stalled).count(), queued);
             OpenDevice(g_surroundOpen);
@@ -260,13 +265,14 @@ namespace apu
 #if LO_PLATFORM_ANDROID
                 auto resumed = g_resumedAt.load(std::memory_order_relaxed);
                 bool waited = false;
+                const auto waitStarted = std::chrono::steady_clock::now();
 #endif
                 while (QueuedFrames() >= kQueuedFrames)
                 {
                     os::scheduling::PreciseSleepFor(std::chrono::milliseconds(1));
 #if LO_PLATFORM_ANDROID
                     waited = true;
-                    ReopenIfStalledAfterResume();
+                    ReopenIfStalledAfterResume(waitStarted);
 #endif
                 }
 #if LO_PLATFORM_ANDROID
