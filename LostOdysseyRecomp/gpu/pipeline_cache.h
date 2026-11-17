@@ -294,7 +294,28 @@ namespace gpu::pipeline_cache
     {
         size_t operator()(const Key& key) const noexcept
         {
-            return static_cast<size_t>(detail::Hash(detail::Encode(key)));
+            // In-memory lookups need every field, but not the portable file's
+            // byte encoding and 64 dependent FNV multiplies. Keep that stable
+            // hash in detail::Hash/Encode for checksums and driver cache names.
+            const auto pair = [](uint32_t low, uint32_t high) {
+                return uint64_t(low) | (uint64_t(high) << 32);
+            };
+            uint64_t hash = key.vs;
+            const auto combine = [&](uint64_t value) {
+                hash ^= value + 0x9E3779B97F4A7C15ull + (hash << 6) + (hash >> 2);
+            };
+            combine(key.ps);
+            combine(pair(key.blend, key.depthControl));
+            combine(pair(key.modeCull, key.colorMask));
+            combine(pair(key.prim, key.rtFormat));
+            combine(pair(key.depthFormat, key.flags));
+            combine(pair(key.stencilRefMask, key.stencilRefMaskBack));
+            combine(pair(uint32_t(key.depthBias), key.slopeBias));
+            // Mix high state bits into low bucket bits too (aligned shader IDs,
+            // small enums and keys differing only in signed/float bias bits).
+            hash = (hash ^ (hash >> 30)) * 0xBF58476D1CE4E5B9ull;
+            hash = (hash ^ (hash >> 27)) * 0x94D049BB133111EBull;
+            return static_cast<size_t>(hash ^ (hash >> 31));
         }
     };
 
