@@ -3,6 +3,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 
 namespace gpu {
@@ -39,6 +40,27 @@ struct ConstantBankSnapshot
     // Zero-register fallback work since the caller last reset them (diagnostics).
     uint64_t mmioBlockChecks = 0, mmioBlockDiffs = 0, mmioWordChanges = 0;
 };
+
+// Each 16-word dirty block covers four vec4 constants. Draw-local edits
+// are restored from the immutable snapshot together with guest writes.
+constexpr uint64_t ConstantVectorBlock(unsigned slot)
+{
+    return uint64_t{1} << (slot / (ConstantBankSnapshot::kBlockWords / 4));
+}
+
+inline void RestoreDrawConstantBlocks(uint32_t (&draw)[ConstantBankSnapshot::kWords],
+    const ConstantBankSnapshot& snapshot, uint64_t blocks)
+{
+    if (blocks == UINT64_MAX) {
+        std::memcpy(draw, snapshot.values, sizeof(draw));
+        return;
+    }
+    constexpr size_t words = ConstantBankSnapshot::kBlockWords;
+    for (; blocks; blocks &= blocks - 1) {
+        const size_t first = size_t(std::countr_zero(blocks)) * words;
+        std::memcpy(draw + first, snapshot.values + first, words * sizeof(uint32_t));
+    }
+}
 
 // Re-reads the dirty blocks (all of them for a new snapshot), then, with
 // checkMmio, the zero-register words whose MMIO word changed. Returns the
