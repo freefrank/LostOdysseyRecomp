@@ -28,6 +28,7 @@
 #include "sampler_palette.h"
 #include "texture_key.h"
 #include "texture_content.h"
+#include "texture_budget.h"
 #include "guest_writes.h"
 #include "depth_format.h"
 #include "depth_clear_layout.h"
@@ -479,6 +480,7 @@ namespace gpu::renderer
             uint32_t mipAddress = 0, mipBytes = 0; // stored mip chain, if uploaded
             uint64_t guestHash = 0, guestFullHash = 0;
             uint64_t checkedFrame = ~0ull;      // last frame this texture was bound
+            uint64_t cacheBytes = 0;             // uploaded bytes, for the texture budget
             uint64_t nextFullScanFrame = 0;
             uint32_t writeGeneration = 0;        // guest_writes generation at the last look
             uint64_t replacementPending = 0; // fingerprint of a mod replacement still being read
@@ -1034,6 +1036,15 @@ namespace gpu::renderer
             // Changes on every insert into or erase from `textures`; an iterator
             // remembered at an unchanged version is still valid.
             uint64_t texturesVersion = 1;
+            // Uploaded bytes of everything in `textures`, and the limits on them.
+            uint64_t textureCacheBytes = 0;
+            texture_budget::Limits textureBudget; // set at each mod generation (UpdateTextureBudget)
+            uint64_t textureBudgetVideoMemory = 0;
+            const char* textureBudgetLimitMib = nullptr;
+            uint64_t nextTextureBudgetFrame = 0;
+            uint64_t textureBudgetLoggedBytes = 0, textureBudgetLoggedReleased = 0;
+            uint64_t textureBudgetReleased = 0, textureBudgetReleasedBytes = 0;
+            std::vector<texture_budget::Candidate<decltype(textures)::iterator>> textureBudgetScratch;
             struct TextureLookup { TextureKey key{}; decltype(textures)::iterator it{}; uint64_t version = 0; };
             std::array<TextureLookup, 256> textureLookups{};
 
@@ -2772,6 +2783,8 @@ namespace gpu::renderer
                 readback = device->createBuffer(RenderBufferDesc::ReadbackBuffer(kReadbackSize));
                 if (!readback) return InitFailure("readback.create", kReadbackSize);
                 resolveReadback = getenv("LO_RESOLVE_READBACK") != nullptr;
+                textureBudgetVideoMemory = device->getDescription().dedicatedVideoMemory;
+                textureBudgetLimitMib = getenv("LO_TEXTURE_CACHE_LIMIT_MIB");
                 if (const char* sync = getenv("LO_MODS_TEXTURE_SYNC"); sync && *sync && strcmp(sync, "0") != 0)
                     textureReplacementSync = true;
                 if (const char* path = getenv("LO_TEXTURE_FINGERPRINT_LOG"); path && *path && !textureFingerprintLog) {
@@ -3045,16 +3058,26 @@ namespace gpu::renderer
                     return;
                 const uint32_t w = dst.ScaleX(std::min(src.guestWidth, dst.guestWidth));
                 const uint32_t h = dst.ScaleY(std::min(src.guestHeight, dst.guestHeight));
-                // A source that still owes one whole colour clear holds one value
-                // everywhere, so the transfer would write one value too: owe that as
-                // a clear of the destination region instead of drawing. The source
-                // keeps its own clear.
+                // A source that still owes one colour clear over every sampled
+                // texel makes the transfer constant: owe that value as a clear of
+                // the destination region instead of drawing. Keep the source clear.
                 if (src.pendingClear.Size() == 1 && src.format == RenderFormat::R16G16B16A16_FLOAT &&
                     dst.format == RenderFormat::R16G16B16A16_FLOAT)
                 {
                     const pending_clear::Op& owed = src.pendingClear.Ops()[0];
+                    // With matching scales the shader loads int2(pos.xy), so its
+                    // source footprint is exactly [0,w) x [0,h). A partial clear
+                    // must contain that footprint in ONE rectangle; do not infer
+                    // coverage from a bounding box, or across different scales.
+                    const bool cleared = owed.Whole() ||
+                        (src.resolutionSize == dst.resolutionSize && w && h &&
+                         w <= src.width && h <= src.height && w <= INT32_MAX && h <= INT32_MAX &&
+                         owed.rects.size() <= 32 &&
+                         std::any_of(owed.rects.begin(), owed.rects.end(), [&](const pending_clear::Rect& r) {
+                             return r.left <= 0 && r.top <= 0 && r.right >= int32_t(w) && r.bottom >= int32_t(h);
+                         }));
                     float value[4];
-                    if (owed.aspects == pending_clear::Color && owed.Whole() &&
+                    if (owed.aspects == pending_clear::Color && cleared &&
                         edram_transfer::ConstantTransfer(owed.color, srcClass, dstClass, value))
                     {
                         std::vector<pending_clear::Rect> rects;
@@ -7721,8 +7744,18 @@ void main()
                     framebuffers.clear();
                     lastFramebuffer = nullptr;
                     renderTargets.clear();
-                    resolved.clear();
-                    resolvedBases.reset();
+                    // Resolves stand in for guest memory: the GPU-only path
+                    // never writes their pixels back to RAM. A paused scene
+                    // can keep sampling them after a settings change, before
+                    // the guest resolves again (including k_24_8_FLOAT depth).
+                    // Keep those pixels and their original scale; the next
+                    // resolve replaces an allocation when its size changes.
+                    // Only the old frame-plan/FG lineage becomes invalid.
+                    for (auto& [base, surfaces] : resolved)
+                        for (auto& surface : surfaces) {
+                            InvalidateFgResolve(surface);
+                            surface.sourcePlanValid = false;
+                        }
                     tileOwner.clear();
                     if (temporalHistory) temporalHistory->Reset();
                     temporalScene.Reset(frame);
@@ -8200,6 +8233,7 @@ void main()
                         LOG_INFO("[mods] texture replacements: the mod list changed; replaceable textures are made again");
                     }
                     textureModsGeneration = generation;
+                    UpdateTextureBudget();
                 }
                 const auto now = std::chrono::steady_clock::now();
                 auto& cost = replacementCost;
@@ -8223,6 +8257,20 @@ void main()
                         ReadyReplacement{std::move(*read.data), read.format, read.width, read.height, frame});
                 }
                 std::erase_if(replacementsReady, [&](const auto& entry) { return frame - entry.second.frame > kReplacementReadyFrames; });
+            }
+
+            // The default budget follows the loaded texture replacements
+            // (texture_budget::LimitsFor), so a mod list saved in game turns it on or off.
+            void UpdateTextureBudget()
+            {
+                const auto limits = texture_budget::LimitsFor(textureBudgetVideoMemory, textureBudgetLimitMib,
+                    modding::HasTextureReplacements());
+                if (limits.hardBytes == textureBudget.hardBytes && limits.softBytes == textureBudget.softBytes) return;
+                textureBudget = limits;
+                if (limits.hardBytes)
+                    LOG_NOTICE("renderer: texture budget soft {} MiB, hard {} MiB", limits.softBytes >> 20, limits.hardBytes >> 20);
+                else
+                    LOG_NOTICE("renderer: texture budget off");
             }
 
             enum class ReplacementUpload { Uploaded, Skipped, Failed };
@@ -8311,6 +8359,7 @@ void main()
                             memcpy(dst, src, size_t(w) * 4);
                     }
                     texBytes += size_t(rowPitch) * rows;
+                    tex.cacheBytes += size_t(rowPitch) * rows;
                     Transition(tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                     // The footprint row width is in texels: blocks per pitch times the block width.
                     commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(tex.texture.get(), level, 0),
@@ -8614,6 +8663,7 @@ void main()
                         return SelectControllerAtlas(cached, bindingInfo);
                     }
                     if (!replacementArrived) textureReuploads++;
+                    textureCacheBytes -= it->second->cacheBytes;
                     Gpu().retiredTextures.push_back(std::move(it->second));
                     textures.erase(it);
                     ++texturesVersion;
@@ -8822,6 +8872,7 @@ void main()
                         if (uploaded == ReplacementUpload::Uploaded)
                         {
                             HostTexture* result = tex.get();
+                            textureCacheBytes += tex->cacheBytes;
                             textures.emplace(key, std::move(tex));
                             ++texturesVersion;
                             return SelectControllerAtlas(result, bindingInfo);
@@ -8880,6 +8931,7 @@ void main()
                 if (dred::Enabled()) tex->texture->setName(fmt::format("guest {:08x}", tex->guestAddress));
 
                 texBytes += upload.size();
+                tex->cacheBytes = upload.size();
                 const size_t keepFree = upload.size() + kUploadHeadroom <= kUploadRingSize ? kUploadHeadroom : 0;
                 uint64_t offset = Upload(upload.data(), upload.size(), 512, keepFree);
                 if (offset == UINT64_MAX)
@@ -8898,9 +8950,46 @@ void main()
                 Transition(*tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
 
                 HostTexture* result = tex.get();
+                textureCacheBytes += tex->cacheBytes;
                 textures.emplace(key, std::move(tex));
                 ++texturesVersion;
                 return SelectControllerAtlas(result, bindingInfo);
+            }
+
+            // Frame end: gives back video memory held by textures no draw has used
+            // for a while (texture_budget.h). A texture that returns is made again
+            // from guest memory, and a mod payload is read again in the background
+            // while the original shows. A controller atlas keeps its children.
+            void EnforceTextureBudget()
+            {
+                const uint64_t logStep = 256ull << 20;
+                const uint64_t logDelta = textureCacheBytes > textureBudgetLoggedBytes
+                    ? textureCacheBytes - textureBudgetLoggedBytes : textureBudgetLoggedBytes - textureCacheBytes;
+                if (logDelta >= logStep || textureBudgetReleasedBytes - textureBudgetLoggedReleased >= logStep) {
+                    textureBudgetLoggedBytes = textureCacheBytes;
+                    textureBudgetLoggedReleased = textureBudgetReleasedBytes;
+                    LOG_NOTICE("renderer: texture cache {} MiB in {} textures, {} released so far ({} MiB)",
+                        textureCacheBytes >> 20, textures.size(), textureBudgetReleased, textureBudgetReleasedBytes >> 20);
+                }
+                if (!textureBudget.hardBytes || textureCacheBytes <= textureBudget.softBytes || frame < nextTextureBudgetFrame) return;
+                auto& candidates = textureBudgetScratch;
+                candidates.clear();
+                for (auto it = textures.begin(); it != textures.end(); ++it)
+                    if (!it->second->controllerAtlasRecognized)
+                        candidates.push_back({it, it->second->checkedFrame, it->second->cacheBytes});
+                const size_t count = texture_budget::SelectEvictions(candidates, textureCacheBytes, textureBudget, frame);
+                // A full scan finds nothing again soon when everything is in use.
+                nextTextureBudgetFrame = frame + (count ? 1 : 30);
+                for (size_t i = 0; i < count; ++i) {
+                    auto it = candidates[i].handle;
+                    textureCacheBytes -= it->second->cacheBytes;
+                    textureBudgetReleased++;
+                    textureBudgetReleasedBytes += it->second->cacheBytes;
+                    // Freed after the next fence wait, as in InvalidateRange.
+                    Gpu().retiredTextures.push_back(std::move(it->second));
+                    textures.erase(it);
+                }
+                if (count) ++texturesVersion;
             }
 
             // A depth clear drawn through one pitch reaches the other pitches' views of
@@ -8971,6 +9060,7 @@ void main()
                     {
                         // The command list being recorded may still reference it, so
                         // hand it to the retired list (freed after the next fence wait).
+                        textureCacheBytes -= it->second->cacheBytes;
                         Gpu().retiredTextures.push_back(std::move(it->second));
                         textures.erase(it);
                         ++texturesVersion;
@@ -14177,16 +14267,22 @@ void main()
                 const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
                 if (rs.tex->format == color.format)
                 {
-                    Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
-                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy)) {
+                    // A reused copy has no transfer access to synchronize. Keep
+                    // the destination readable instead of making a COPY_DEST ->
+                    // SHADER_READ round trip. Pending clears must still execute
+                    // through Transition before deciding that pixels are reusable.
+                    if (resolveCopyReuse && color.pendingClear.Empty() && rs.tex->pendingClear.Empty() &&
+                        consecutiveResolveCopies.CanReuse(copy)) {
+                        MarkFgWritable(*rs.tex, "writable_transition");
                         ++resolveCopiesSkipped;
                         resolveOperation = "copy_reused";
                     }
                     else
                     {
+                        Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
+                        Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                         RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
                         commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
                             RenderTextureCopyLocation::Subresource(color.texture.get()), x0, y0, 0, &box);
@@ -15191,6 +15287,7 @@ void main()
             if (!g_renderer->Flush()) return;
             g_renderer->PublishDlssFrameOutcome();
             g_renderer->CollectTextureReplacements();
+            g_renderer->EnforceTextureBudget();
             g_renderer->ReportReplacementCost();
             {
                 auto& r = *g_renderer;

@@ -48,6 +48,16 @@ namespace hid
     std::string KeyName(uint32_t scancode);
     void RefreshKeyNames();
 
+    // Battle intro skip press (skip_latch.h). While armed, a new press of the
+    // game's cancel button fires once and never reaches the guest; the latch
+    // keeps that button hidden after a disarm, until 250 ms after its release.
+    void SetSkipArmed(bool armed);
+    // Guest thread: true once for each fired press.
+    bool TakeSkipPress();
+    // The guest's cancel bit (XAMINPUT_GAMEPAD_*), read on the guest thread in
+    // GetState. Without a source the latch uses B.
+    void SetSkipCancelSource(uint16_t (*source)());
+
     uint32_t GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState);
     uint32_t SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration);
     uint32_t GetCapabilities(uint32_t dwUserIndex, XAMINPUT_CAPABILITIES* pCaps);

@@ -7,13 +7,15 @@
 namespace xenos::rect_list {
 // Xenos rect lists draw a rectangle per three vertices; the hardware derives
 // the fourth corner. Instead of a geometry shader (Metal has none, and it is
-// slow on many desktop GPUs), each rectangle becomes six host vertices. The
-// index of each encodes the rectangle's first guest vertex and the corner:
+// slow on many desktop GPUs), each rectangle becomes six host indices. Each
+// index encodes the rectangle's first guest vertex and the corner:
 // firstVertex << kCornerBits | corner. Every invocation runs the translated
-// program for all three guest vertices and emits its corner of the two
-// triangles, so no extra resources or bindings are needed.
+// program for all three guest vertices. The two shared corners reuse one
+// index each, so the post-transform cache can shade four vertices instead of
+// six; both triangles and their first (provoking) vertex are unchanged.
 inline constexpr uint32_t kCornerBits = 3;
 inline constexpr uint32_t kVerticesPerRect = 6;
+inline constexpr uint32_t kTriangleCorners[kVerticesPerRect] = {0, 1, 2, 2, 1, 5};
 inline constexpr uint32_t kMaxFirstVertex = (UINT32_MAX >> kCornerBits) - 2;
 
 inline constexpr const char* kCornerHelper = R"HLSL(
@@ -58,7 +60,7 @@ inline uint32_t ExpandIndices(std::vector<uint32_t>& indices, std::vector<uint32
         const uint32_t first = v0 + baseVertex;
         if (first > kMaxFirstVertex) { skipped++; continue; }
         for (uint32_t corner = 0; corner < kVerticesPerRect; corner++)
-            out.push_back((first << kCornerBits) | corner);
+            out.push_back((first << kCornerBits) | kTriangleCorners[corner]);
     }
     indices.swap(out);
     useIndices = true;

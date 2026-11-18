@@ -7,6 +7,7 @@
 #include <debug/auto_continue.h>
 #include <hid/hid.h>
 #include <kernel/io/file_system.h>
+#include <patches/battle_intro_gate.h>
 #include <patches/save_menu_holds.h>
 #include "config.h"
 #include "menu.h"
@@ -102,6 +103,29 @@ std::atomic<Clock::rep> hintIdleSince{0}, hintTick{0};
 // Presentation owns the closing fade after the guest has dismissed the modal.
 std::atomic<bool> dialogDrawn{false};
 
+// A new output size counts only once it has held for ResizeSettle.
+struct SizeSettle
+{
+    uint32_t width = 0, height = 0;
+    Clock::time_point since;
+    bool Waiting(uint32_t cachedWidth, uint32_t cachedHeight, uint32_t outputWidth, uint32_t outputHeight)
+    {
+        if (!cachedWidth || (outputWidth == cachedWidth && outputHeight == cachedHeight))
+        {
+            width = height = 0;
+            return false;
+        }
+        const auto now = Clock::now();
+        if (outputWidth != width || outputHeight != height)
+        {
+            width = outputWidth;
+            height = outputHeight;
+            since = now;
+        }
+        return now - since < ResizeSettle;
+    }
+};
+
 void ReportHint(bool idle)
 {
     const auto now = Clock::now().time_since_epoch().count();
@@ -143,8 +167,7 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
     static uint32_t cachedWidth = 0, cachedHeight = 0, cachedLanguage = ~0u;
     static int cachedPrompts = -1;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
-    static uint32_t pendingWidth = 0, pendingHeight = 0;
-    static Clock::time_point pendingSince;
+    static SizeSettle settle;
     static uint64_t dialogRevision = 0, uploadedDialogRevision = 0;
     if (settings::DrawTitleQuit(hint.pixels, dialogRevision, outputWidth, outputHeight))
     {
@@ -159,20 +182,8 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
     }
     if (dialogDrawn.exchange(false))
         cachedWidth = 0; // Restore the footer after its full-output modal raster.
-    if (cachedWidth && (outputWidth != cachedWidth || outputHeight != cachedHeight))
-    {
-        const auto now = Clock::now();
-        if (outputWidth != pendingWidth || outputHeight != pendingHeight)
-        {
-            pendingWidth = outputWidth;
-            pendingHeight = outputHeight;
-            pendingSince = now;
-        }
-        if (now - pendingSince < ResizeSettle)
-            return nullptr;
-    }
-    else
-        pendingWidth = pendingHeight = 0;
+    if (settle.Waiting(cachedWidth, cachedHeight, outputWidth, outputHeight))
+        return nullptr;
     const uint32_t language = GetConfig().uiLanguage;
     const bool keyboard = hid::UsesKeyboardPrompts();
     const int prompts = hid::PromptFamily(); // redrawn when the icon family changes
@@ -203,6 +214,82 @@ const settings::title_entry::Hint* settings::title_entry::DrawHint(uint32_t outp
         snapshot.titleQuitLabel = Translate(language, L"Quit game", L"退出遊戲");
         // Only the credit and legend's footer rectangle is rasterized.
         const auto bounds = TitleHintBounds(outputWidth, outputHeight);
+        std::vector<uint32_t> pixels;
+        if (RasterizeMenu(snapshot, outputWidth, outputHeight, pixels) &&
+            pixels.size() == (bounds.x1 - bounds.x0) * (bounds.y1 - bounds.y0))
+        {
+            hint.x = uint32_t(bounds.x0);
+            hint.y = uint32_t(bounds.y0);
+            hint.width = uint32_t(bounds.x1 - bounds.x0);
+            hint.height = uint32_t(bounds.y1 - bounds.y0);
+            hint.pixels = std::move(pixels);
+        }
+    }
+    return hint.width ? &hint : nullptr;
+}
+
+bool settings::title_entry::SkipShown()
+{
+    return battle_intro_skip::prompt::Shown() && !settings::IsOpen();
+}
+
+float settings::title_entry::SkipOpacity()
+{
+    if (!SkipShown())
+        return 0.0f;
+    // No delay: the prompt opens at the battle request, and the encounter effect starts
+    // about 0.3 s later. The fade-in ends at about that time.
+    const auto shown = std::chrono::milliseconds(battle_intro_skip::prompt::ShownForMs());
+    return float(std::clamp(std::chrono::duration<double>(shown) / std::chrono::duration<double>(HintFade), 0.0, 1.0));
+}
+
+const settings::title_entry::Hint* settings::title_entry::DrawSkip(uint32_t outputWidth, uint32_t outputHeight)
+{
+    static Hint hint;
+    static uint32_t cachedWidth = 0, cachedHeight = 0, cachedLanguage = ~0u;
+    static int cachedPrompts = -1;
+    static bool cachedCancelA = false;
+    static int cachedScancode = -1;
+    static std::shared_ptr<const menu_assets::Assets> cachedAssets;
+    static SizeSettle settle;
+    if (settle.Waiting(cachedWidth, cachedHeight, outputWidth, outputHeight))
+        return nullptr;
+    const uint32_t language = GetConfig().uiLanguage;
+    const int prompts = hid::PromptFamily();
+    const bool cancelA = battle_intro_skip::prompt::CancelIsA();
+    const bool keyboard = hid::UsesKeyboardPrompts();
+    // Keyboard players see the key bound to the cancel button (Controls page);
+    // with no key bound, the keyboard cannot skip, so there is no prompt.
+    const int scancode = keyboard ? hid::KeyboardMapSnapshot()[cancelA ? hid::input_map::A : hid::input_map::B] : -1;
+    if (scancode == hid::input_map::NoKey)
+        return nullptr;
+    auto assets = menu_assets::Cached(FileSystem::GetGameRoot(), language);
+    if (outputWidth != cachedWidth || outputHeight != cachedHeight || language != cachedLanguage ||
+        prompts != cachedPrompts || cancelA != cachedCancelA || scancode != cachedScancode ||
+        assets != cachedAssets)
+    {
+        cachedWidth = outputWidth;
+        cachedHeight = outputHeight;
+        cachedLanguage = language;
+        cachedPrompts = prompts;
+        cachedCancelA = cancelA;
+        cachedScancode = scancode;
+        cachedAssets = assets;
+        hint.pixels.clear();
+        hint.x = hint.y = hint.width = hint.height = 0;
+        ++hint.revision;
+        MenuSnapshot snapshot;
+        snapshot.skipPrompt = true;
+        snapshot.language = language;
+        snapshot.playStationPrompts = hid::UsesPlayStationPrompts();
+        snapshot.promptFamily = prompts;
+        snapshot.promptIcons = PromptIcons(prompts);
+        snapshot.assets = assets;
+        // The help line convention, as "Y: Settings": the key, then the label.
+        snapshot.help = std::wstring(Translate(language, L"B: Skip", L"B：跳過")).substr(1);
+        snapshot.skipKey = keyboard ? KeyboardKeyName(uint16_t(scancode)) : std::wstring(cancelA ? L"A" : L"B");
+        snapshot.skipKeyName = keyboard;
+        const auto bounds = SkipPromptBounds(outputWidth, outputHeight);
         std::vector<uint32_t> pixels;
         if (RasterizeMenu(snapshot, outputWidth, outputHeight, pixels) &&
             pixels.size() == (bounds.x1 - bounds.x0) * (bounds.y1 - bounds.y0))

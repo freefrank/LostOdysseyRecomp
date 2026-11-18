@@ -12,8 +12,10 @@ namespace settings::quit_text
 inline constexpr uint32_t LabelId = 9104;
 inline constexpr uint32_t HelpId = 9114;
 inline constexpr uint32_t PromptId = 9120;
+// The prompt's Yes option. Retail says "Return to title", but it now quits.
+inline constexpr uint32_t ConfirmId = 9123;
 inline constexpr size_t DescriptorSize = 60;
-inline constexpr uint32_t TextIds[] = {LabelId, HelpId, PromptId};
+inline constexpr uint32_t TextIds[] = {LabelId, HelpId, PromptId, ConfirmId};
 
 constexpr size_t TextIndex(uint32_t id)
 {
@@ -29,6 +31,7 @@ constexpr std::u16string_view Text(uint32_t id, uint32_t language)
     switch (id)
     {
     case LabelId:
+    case ConfirmId:
         switch (language)
         {
         case 1: return u"Quit to Desktop";
@@ -38,7 +41,9 @@ constexpr std::u16string_view Text(uint32_t id, uint32_t language)
         case 5: return u"Salir al escritorio";
         case 6: return u"Esci al desktop";
         case 7: return u"바탕 화면으로 종료";
-        case 8: case 9: return u"退出到桌面";
+        // The game's Chinese fonts have no 桌, so these rows avoid "desktop".
+        case 8: return u"結束遊戲";
+        case 9: return u"退出游戏";
         }
         break;
     case HelpId:
@@ -51,8 +56,8 @@ constexpr std::u16string_view Text(uint32_t id, uint32_t language)
         case 5: return u"Salir del juego y volver al escritorio.";
         case 6: return u"Esci dal gioco e torna al desktop.";
         case 7: return u"게임을 종료하고 바탕 화면으로 돌아갑니다.";
-        case 8: return u"結束遊戲並返回桌面。";
-        case 9: return u"退出游戏并返回桌面。";
+        case 8: return u"結束遊戲。";
+        case 9: return u"退出游戏。";
         }
         break;
     case PromptId:
@@ -65,8 +70,8 @@ constexpr std::u16string_view Text(uint32_t id, uint32_t language)
         case 5: return u"¿Salir del juego y volver al escritorio? Se perderá el progreso no guardado.";
         case 6: return u"Uscire dal gioco e tornare al desktop? I progressi non salvati andranno persi.";
         case 7: return u"게임을 종료하고 바탕 화면으로 돌아갈까요? 저장하지 않은 진행 상황은 사라집니다.";
-        case 8: return u"結束遊戲並返回桌面嗎？未儲存的進度將會遺失。";
-        case 9: return u"退出游戏并返回桌面吗？未保存的进度将会丢失。";
+        case 8: return u"結束遊戲嗎？未儲存的進度將會遺失。";
+        case 9: return u"退出游戏吗？未保存的进度将会丢失。";
         }
         break;
     default: return {};

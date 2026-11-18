@@ -28,8 +28,6 @@
 
 [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/freefrank/LostOdysseyRecomp/issues) · [Discord](https://discord.gg/z2yPct6z2w) · [Project board](https://github.com/users/freefrank/projects/3) · [Build from source](docs/BUILDING.md)
 
-<a href="https://recomplauncher.com/game/lostodysseyrecomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
-
 </div>
 
 ## Contents
@@ -172,6 +170,7 @@ Press **F1**, or **LB+RB** on a controller (**L1+R1** on PlayStation layouts), t
 | **Inventory** | Set items and materials to 1, 10, 50 or 99, or fill whole categories. Sort the in-game inventory to refresh it. |
 | **Equipment** | Weapon, ring and accessory changes. |
 | **Party** | Party members, rows and field character. |
+| **Battle** | **Skip battle animation**: **Off** (default), **Press to skip** or **Always**. Press to skip: a skip prompt shows as soon as a random battle starts; press the cancel button while it shows to skip the intro. Always: random battles skip the intro with no prompt and no press. Bosses and story battles keep their intro. |
 | **Developer** | The original **EDIT MENU**: enable it, close F1, press **LT+RT**. |
 
 **Menu animations** sets camp menu opening, closing and submenu transitions to **Normal (1×)**, **Fast (2×)** or **Faster (4×)**. The choice is saved; **Normal** is the default. Gameplay and audio keep their usual speed.

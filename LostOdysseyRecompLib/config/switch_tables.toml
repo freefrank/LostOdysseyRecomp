@@ -20748,3 +20748,8 @@ labels = [
     0x82FB21D4,
     0x82FB21D4,
 ]
+# Seven-way comparison helper (kept in switch_tables_manual.toml too).
+[[switch]]
+base = 0x82F80FEC
+r = 11
+labels = [0x82F8100C, 0x82F81014, 0x82F8101C, 0x82F81024, 0x82F8102C, 0x82F81034, 0x82F81040]

@@ -15,6 +15,7 @@ extern std::atomic<uint32_t> g_presentedSwaps;
 #include "face_buttons.h"
 #include "input_map.h"
 #include "android_touch.h"
+#include "skip_latch.h"
 
 // SDL game controller -> XInput state. Player 1 only for now; the keyboard
 // mirrors the pad so the game can be driven without a controller.
@@ -105,6 +106,10 @@ namespace
     // Lock order: logical input -> HID devices; never call menu code under g_hidMutex.
     Mutex g_getStateMutex;
     uint32_t g_packet = 0;
+
+    // Battle intro skip press. Sampled only in GetState, under g_getStateMutex.
+    hid::skip_latch::Latch g_skipLatch;
+    std::atomic<uint16_t (*)()> g_skipCancelSource{nullptr};
 
     // Match XInput/Xam semantics: rumble is enabled by default and remains at
     // the requested motor speeds until the guest changes or clears the state.
@@ -225,6 +230,7 @@ void hid::HandleControllerEvent(uint32_t eventType, uint32_t which)
             return true;
         });
     }
+    g_skipLatch.Restart();
 }
 
 void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
@@ -304,7 +310,12 @@ void hid::ClearKeyboardState()
 {
     std::lock_guard lock(g_hidMutex);
     g_keys.fill(0);
+    g_skipLatch.Restart();
 }
+
+void hid::SetSkipArmed(bool armed) { g_skipLatch.SetArmed(armed); }
+bool hid::TakeSkipPress() { return g_skipLatch.TakePress(); }
+void hid::SetSkipCancelSource(uint16_t (*source)()) { g_skipCancelSource.store(source); }
 
 static uint16_t ReadRawButtonsLocked(uint8_t& lt, uint8_t& rt)
 {
@@ -665,6 +676,9 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     // Capture overlay state BEFORE processing input, because ProcessHostInput
     // may close the overlay (Cancel/B), and we must still filter that button.
     const bool overlayVisibleBefore = debug_menu::IsOverlayVisible();
+    // Every source, after the player's layouts and before any filter: the skip latch
+    // follows the button with it, so a hidden press ends only on a real release.
+    const uint16_t mergedButtons = gp.wButtons;
 
     if (!g_externalPump)
     {
@@ -689,6 +703,14 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     if (menuFiltered) {
         gp.sThumbLX=gp.sThumbLY=gp.sThumbRX=gp.sThumbRY=0;
         gp.bLeftTrigger=gp.bRightTrigger=0;
+    }
+    // After the overlay and Settings filters: a press that a host menu took never fires.
+    // defaultButtons is not hidden: only the Settings filter above reads it.
+    if (g_skipLatch.Active())
+    {
+        const auto source = g_skipCancelSource.load();
+        g_skipLatch.Sample(mergedButtons, gp.wButtons, source ? source() : uint16_t(XAMINPUT_GAMEPAD_B),
+                           skip_latch::Clock::now());
     }
     if (inputTicks && traceInputSerial)
     {
