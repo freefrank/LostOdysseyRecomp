@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">Annuler le changement prévu</string>
     <string name="touch_hide_all">Masquer toutes les commandes tactiles</string>
     <string name="touch_hide_all_help">Affichez les barres système ou utilisez Retour sur Android pour afficher CTRL pendant 4 secondes.</string>
+    <string name="touch_dual_screen">Panneau sur le second écran (appareils à double écran)</string>
     <string name="touch_settings_title">Réglages des commandes</string>
     <string name="touch_show_controls">Afficher les commandes tactiles</string>
     <string name="touch_controller_hint">Manette connectée. Les commandes tactiles se masquent automatiquement ; activez-les ici pour utiliser les deux ensemble.</string>
