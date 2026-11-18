@@ -2518,7 +2518,7 @@ namespace gpu::renderer
             uint64_t constantSnapshotVersion[2]{};
             uint64_t constantMmioEpoch[2]{}; // sync period of the last zero-register MMIO check
             uint32_t drawConstants[2][256 * 4]{};
-            bool drawConstantsModified[2]{true, true};
+            uint64_t drawConstantOverrides[2]{UINT64_MAX, UINT64_MAX};
 
             // version: content version when data is the unmodified snapshot,
             // else 0. A matching version skips the compare.
@@ -9916,17 +9916,8 @@ void main()
                             changedBlocks = ~0ull;
                         }
                     }
-                    if (drawConstantsModified[bank]) {
-                        std::memcpy(drawConstants[bank], snapshot.values, sizeof(drawConstants[bank]));
-                        drawConstantsModified[bank] = false;
-                    } else {
-                        // An unmodified copy equals the snapshot outside the changed blocks.
-                        constexpr size_t kBlock = ConstantBankSnapshot::kBlockWords;
-                        for (uint64_t blocks = changedBlocks; blocks; blocks &= blocks - 1) {
-                            const size_t first = size_t(std::countr_zero(blocks)) * kBlock;
-                            std::memcpy(drawConstants[bank] + first, snapshot.values + first, kBlock * sizeof(uint32_t));
-                        }
-                    }
+                    RestoreDrawConstantBlocks(drawConstants[bank], snapshot, changedBlocks | drawConstantOverrides[bank]);
+                    drawConstantOverrides[bank] = 0;
                     constantGeneration[bank] = constantSnapshotVersion[bank];
                 }
                 // Player DoF/bloom settings edit the tone-map draw's constant copy.
@@ -9944,7 +9935,8 @@ void main()
                                 std::bit_cast<float>(psConstants[5 * 4 + component]) * scale);
                     }
                     if (!post.bloom) psConstants[7 * 4] = 0;
-                    if (post.depthOfFieldPercent < 100 || !post.bloom) drawConstantsModified[1] = true;
+                    if (post.depthOfFieldPercent < 100 || !post.bloom)
+                        drawConstantOverrides[1] |= ConstantVectorBlock(5) | ConstantVectorBlock(7);
                 }
                 // Diagnostic selection uses only GPU draw constants, not the CPU
                 // presented-swap counter. Shader/layout recognition is deliberately
@@ -10338,8 +10330,9 @@ void main()
                     constantScreenSample);
                 // Jitter writes the draw's constant copy; the next draw restores it.
                 if (drawJitter.applied) {
-                    drawConstantsModified[0] = true;
-                    if (drawJitter.shadowCompensated) drawConstantsModified[1] = true;
+                    // Four consecutive VP rows can cross one block boundary.
+                    drawConstantOverrides[0] |= ConstantVectorBlock(drawJitter.slot) | ConstantVectorBlock(drawJitter.slot + 3);
+                    if (drawJitter.shadowCompensated) drawConstantOverrides[1] |= ConstantVectorBlock(4);
                 }
                 if (temporalActive && drawJitter.applied) {
                     if (!actualRasterJitterCaptured) {
@@ -11449,9 +11442,9 @@ void main()
                 render_batch::CpuTimer<> tIndex0(cpuTimingEnabled);
 
                 uint64_t vsOffset = UploadUnchanged(0, vsConstants, sizeof(vsConstants),
-                    drawConstantsModified[0] ? 0 : constantGeneration[0]);
+                    drawConstantOverrides[0] ? 0 : constantGeneration[0]);
                 uint64_t psOffset = UploadUnchanged(1, psConstants, sizeof(psConstants),
-                    drawConstantsModified[1] ? 0 : constantGeneration[1]);
+                    drawConstantOverrides[1] ? 0 : constantGeneration[1]);
                 uint64_t sharedOffset = UploadUnchanged(2, &shared, sizeof(shared));
                 if (vsOffset == UINT64_MAX || psOffset == UINT64_MAX || sharedOffset == UINT64_MAX)
                 {
