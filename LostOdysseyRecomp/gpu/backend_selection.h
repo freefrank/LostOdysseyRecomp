@@ -87,7 +87,7 @@ Selection Select(Backend requested, Try&& attempt, Reset&& reset) {
     if (!Known(requested)) { result.attempts.push_back({requested, "Unsupported: unknown backend"}); return result; }
     if (requested == Backend::D3D11) result.attempts.push_back({requested, Missing(requested, {})});
 #ifndef _WIN32
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     const auto candidate = Backend::Metal;
 #else
     const auto candidate = Backend::Vulkan;

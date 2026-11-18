@@ -1,7 +1,7 @@
 #include "main_thread.h"
 #include <os/platform.h>
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -11,7 +11,7 @@
 
 namespace os::main_thread
 {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 namespace
 {
 struct Request

@@ -46,7 +46,7 @@ Config Validate(Config value)
         value.internalResolution != 720 && value.internalResolution != 1080 &&
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     if (value.scalingQuality > ScalingMetalFx) value.scalingQuality = 1;
 #else
     if (value.scalingQuality > 1) value.scalingQuality = 1;
@@ -118,7 +118,7 @@ Config Validate(Config value)
         value.audioOutput = AudioOutputStereo;
     if (!gpu::backend::Known(value.graphicsBackend))
         value.graphicsBackend = GraphicsBackend::Vulkan;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     value.graphicsBackend = GraphicsBackend::Metal; // The only macOS backend.
 #elif !defined(_WIN32)
     if (value.graphicsBackend != GraphicsBackend::Vulkan)
@@ -136,7 +136,7 @@ Config Validate(Config value)
     if (uint32_t(value.aspectRatio) >= gpu::aspect_ratio::ModeCount)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // Metal always keeps display sync; the menu offers only ProMotion there.
     value.vsync = true;
 #endif

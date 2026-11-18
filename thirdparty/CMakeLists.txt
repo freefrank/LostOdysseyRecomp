@@ -46,7 +46,7 @@ if(LO_BUILD_GPU)
     if(TARGET sdl_headers_copy)
         add_dependencies(plume sdl_headers_copy)
     endif()
-    if(LO_TARGET_PLATFORM STREQUAL "macos")
+    if(LO_TARGET_APPLE)
         # plume's Metal backend translates the runtime's SPIR-V to MSL at shader
         # creation (tools/patches/plume-macos.patch). Only the MSL target is needed.
         set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)

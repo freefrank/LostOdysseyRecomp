@@ -13,7 +13,7 @@ namespace os
 // thread default, while macOS gives secondary threads only 512 KiB.
 inline constexpr size_t kGuestCodeStackSize = 1024 * 1024;
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 // The std::thread subset the runtime uses, created with kGuestCodeStackSize
 // (std::thread cannot set a stack size).
 class GuestCodeThread

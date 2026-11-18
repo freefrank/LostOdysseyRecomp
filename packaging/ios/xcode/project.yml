@@ -1,0 +1,45 @@
+# Signing wrapper for the CMake-built iOS app. CMake (Ninja) compiles and
+# links out/build/ios/LostOdysseyRecomp/LostOdysseyRecomp.app; this project
+# copies that bundle's contents into its product so Xcode can provision and
+# sign it with the developer's team. Generate with: xcodegen (in this folder).
+name: LostOdysseyRecompIOS
+options:
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    LO_CMAKE_BUILD_DIR: $(SRCROOT)/../../../out/build/ios
+targets:
+  LostOdysseyRecomp:
+    type: application
+    platform: iOS
+    sources: []
+    settings:
+      base:
+        PRODUCT_NAME: LostOdysseyRecomp
+        EXECUTABLE_NAME: LostOdysseyRecomp
+        PRODUCT_BUNDLE_IDENTIFIER: $(LO_IOS_BUNDLE_ID)
+        LO_IOS_BUNDLE_ID: io.github.freefrank.LostOdysseyRecomp
+        INFOPLIST_FILE: $(LO_CMAKE_BUILD_DIR)/LostOdysseyRecomp/LostOdysseyRecomp.app/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../LostOdysseyRecomp.entitlements
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: iphoneos
+        ARCHS: arm64
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_BITCODE: NO
+        ALWAYS_SEARCH_USER_PATHS: NO
+    postBuildScripts:
+      - name: Copy CMake-built app
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          src="${LO_CMAKE_BUILD_DIR}/LostOdysseyRecomp/LostOdysseyRecomp.app"
+          dst="${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+          if [ ! -x "$src/LostOdysseyRecomp" ]; then
+            echo "error: build the runtime first: cmake --build out/build/ios --target LostOdysseyRecomp"
+            exit 1
+          fi
+          mkdir -p "$dst"
+          rsync -a --delete --exclude Info.plist --exclude _CodeSignature --exclude embedded.mobileprovision \
+            --exclude PkgInfo "$src/" "$dst/"

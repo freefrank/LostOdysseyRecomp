@@ -105,7 +105,7 @@ public:
     SrResult RecordIsolated(plume::D3D12CommandList& commands, const SrRequest& request,
         plume::D3D12Texture& output, dlss::EvaluateCapture* capture = nullptr);
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // MetalFX on the Metal backend. Sizing needs no GPU work.
     upscaling::OutputSizing QuerySizing(const plume::RenderDevice& device, const upscaling::SizingKey& key);
     SrResult Prepare(plume::RenderDevice& device, const SrRequest& request);

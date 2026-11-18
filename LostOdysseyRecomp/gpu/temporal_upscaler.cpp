@@ -10,7 +10,7 @@
 #include <cfloat>
 #include <cstdlib>
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <os/logger.h>
 #include <cstdio>
 #include <cstdlib>
@@ -271,7 +271,7 @@ SrResult TemporalUpscaler::RecordIsolated(plume::D3D12CommandList& commands,
 
 #endif
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 // MetalFX has no fixed quality modes; the FSR ratios pick the render extent.
 upscaling::OutputSizing TemporalUpscaler::QuerySizing(const plume::RenderDevice&, const upscaling::SizingKey& key) {
     upscaling::OutputSizing sizing{};

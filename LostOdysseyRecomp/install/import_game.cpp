@@ -217,7 +217,7 @@ std::string Trim(std::string value)
 bool IsSymlinkOrReparse(const std::filesystem::path& path)
 {
     std::error_code ec;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // macOS links /etc, /tmp and /var to /private. Root-owned links directly
     // under / are part of the system layout, not a redirection.
     struct stat status{};

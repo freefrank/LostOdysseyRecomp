@@ -13,12 +13,26 @@
 #define LO_PLATFORM_LINUX 1
 #define LO_PLATFORM_MACOS 0
 #elif defined(__APPLE__)
+#include <TargetConditionals.h>
 #define LO_PLATFORM_WINDOWS 0
 #define LO_PLATFORM_LINUX 0
+#if TARGET_OS_IPHONE
+#define LO_PLATFORM_MACOS 0
+#define LO_PLATFORM_IOS 1
+#else
 #define LO_PLATFORM_MACOS 1
+#define LO_PLATFORM_IOS 0
+#endif
 #else
 #error "Unsupported host platform"
 #endif
+
+#ifndef LO_PLATFORM_IOS
+#define LO_PLATFORM_IOS 0
+#endif
+// Darwin (macOS and iOS): Mach VM, pthread QoS, Metal. Use LO_PLATFORM_MACOS
+// only for AppKit, process spawning and other macOS-only services.
+#define LO_PLATFORM_APPLE (LO_PLATFORM_MACOS || LO_PLATFORM_IOS)
 
 #if defined(__ANDROID__)
 #define LO_PLATFORM_ANDROID 1
@@ -28,4 +42,4 @@
 
 // Android also uses the Linux/POSIX memory and scheduling implementations.
 // Desktop-only process, updater and storage paths test Android separately.
-#define LO_PLATFORM_POSIX (LO_PLATFORM_LINUX || LO_PLATFORM_MACOS)
+#define LO_PLATFORM_POSIX (LO_PLATFORM_LINUX || LO_PLATFORM_APPLE)

@@ -54,7 +54,13 @@ endfunction()
 
 # SDK availability is also checked in Objective-C++; older SDKs retain a clean
 # unavailable path, and macOS 26 checks the actual GPU with supportsDevice:.
-option(LO_ENABLE_METALFX_FG "Build macOS MetalFX 2x frame generation" ${APPLE})
+# macOS only: the iOS build does not use MetalFX frame interpolation yet.
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(_lo_metalfx_fg_default ON)
+else()
+    set(_lo_metalfx_fg_default OFF)
+endif()
+option(LO_ENABLE_METALFX_FG "Build macOS MetalFX 2x frame generation" ${_lo_metalfx_fg_default})
 function(lo_enable_metalfx_fg target)
     if(NOT APPLE OR NOT LO_ENABLE_METALFX_FG)
         return()

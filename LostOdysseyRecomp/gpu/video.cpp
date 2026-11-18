@@ -58,7 +58,10 @@
 #include <kernel/memory.h>
 #include <os/main_thread.h>
 #include <os/platform.h>
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_IOS
+#include <os/ios_support.h>
+#endif
+#if LO_PLATFORM_APPLE
 #include <objc/message.h>
 #include <objc/runtime.h>
 #endif
@@ -91,7 +94,7 @@
 #include <plume_d3d12.h>
 #include "d3d12_dred.h"
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 // Declared the way plume's examples do; plume_metal.h pulls in metal-cpp.
 
 namespace plume {
@@ -372,7 +375,7 @@ namespace gpu::video
             return true;
         }
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         // Main-thread owned; the swap chain presents to the view's CAMetalLayer.
         SDL_MetalView g_metalView = nullptr;
         void* g_cocoaWindow = nullptr;
@@ -404,7 +407,7 @@ namespace gpu::video
                 g_cursorManaged = false;
                 g_cursorHidden = false;
             }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             if (g_metalView) { SDL_Metal_DestroyView(g_metalView); g_metalView = nullptr; }
             g_cocoaWindow = g_metalLayer = nullptr;
 #endif
@@ -694,7 +697,7 @@ namespace gpu::video
         } g_hdrCalibrationCache;
         std::atomic<bool> g_calibrationGameMenuOpen{false}, g_calibrationCaptureRequested{false};
         uint32_t g_lastSceneAddress = 0, g_lastSceneWidth = 0, g_lastSceneHeight = 0;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         std::unique_ptr<plume::RenderTexture> g_metalFxOutput;
         uint32_t g_metalFxWidth = 0, g_metalFxHeight = 0;
 #endif
@@ -823,7 +826,7 @@ namespace gpu::video
             return submitted;
         }
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         // plume's Metal fence is a counting semaphore: each submission signals it
         // once and each wait consumes one signal. The runtime's waits assume an
         // idempotent fence (a completed Vulkan fence or D3D12 value stays
@@ -982,7 +985,7 @@ namespace gpu::video
             PresentScope progress(g_presentProgress, PresentStage::Submit);
             uint64_t acceptedSerial = 0;
             const auto submit = [&] {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 if (g_metal) {
                     progress.Set(PresentStage::SubmitNative);
                     return SubmitMetal(lists, count, waits, waitCount, signals, signalCount,
@@ -1104,7 +1107,7 @@ namespace gpu::video
         {
 #ifdef _WIN32
             plume::RenderSwapChainDesc desc(g_nativeWindow, kSwapChainFormat, kSwapChainBuffers);
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
             plume::RenderSwapChainDesc desc(plume::RenderWindow{ g_cocoaWindow, g_metalLayer }, kSwapChainFormat, kSwapChainBuffers);
 #else
             plume::RenderSwapChainDesc desc(g_window, kSwapChainFormat, kSwapChainBuffers);
@@ -1624,7 +1627,7 @@ namespace gpu::video
             // libxess.dll and adapter support are checked by the sizing query.
             snapshot.xessAvailable = snapshot.deviceReady && !vulkan;
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             snapshot.fsrAvailable = false;
             snapshot.metalFxAvailable = snapshot.deviceReady && g_temporalUpscaler &&
                 snapshot.backend == backend::Backend::Metal && plume::SupportsMetalFxTemporal(g_device.get());
@@ -1710,7 +1713,7 @@ namespace gpu::video
     bool BeginGpuCommands(plume::RenderCommandList* list) {
         if (GpuWorkStopped()) return false;
         if (!list) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         // Metal command encoding reports no errors at record time.
         if (g_metal) { list->begin(); return true; }
 #endif
@@ -1738,7 +1741,7 @@ namespace gpu::video
     bool EndGpuCommands(plume::RenderCommandList* list) {
         if (GpuWorkStopped()) return false;
         if (!list) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (g_metal) { list->end(); return true; }
 #endif
         if (!g_vulkan) {
@@ -1765,7 +1768,7 @@ namespace gpu::video
         PresentScope progress(g_presentProgress, fence == g_fence.get() ? PresentStage::Fence : PresentStage::RendererFence);
         auto* queueHolder = ActiveSubmissionQueue();
         if (!queueHolder || !fence) { StopGpuWork(submission::VulkanState::InvalidState); return false; }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (g_metal) {
             ConsumeMetalFenceSignals(queueHolder, fence);
             const bool complete = g_submissionState.WaitSubmitted([] { return submission::VulkanState::Success; });
@@ -1839,7 +1842,7 @@ namespace gpu::video
 #if !defined(LO_VIDEO_SUBMISSION_UNIT)
     void DrainGpuForShutdown() {
         if (!g_device) return;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (g_metal) {
             // Every submission signalled a counted fence; consuming them all
             // proves completion.
@@ -1928,7 +1931,7 @@ namespace gpu::video
         plume::RenderCommandFence* fence, uint64_t& submissionSerial, int32_t& rawResult,
         bool* executionMayBeInFlight)
     {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (g_metal) {
             if (executionMayBeInFlight) *executionMayBeInFlight = false;
             return SubmitMetal(lists, count, nullptr, 0, nullptr, 0, fence, &submissionSerial, &rawResult);
@@ -2012,7 +2015,7 @@ namespace gpu::video
 #ifdef _WIN32
         else
             frame_plan::PublishSizing(g_temporalUpscaler->QuerySizing(*static_cast<plume::D3D12Device*>(g_device.get()), *key));
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
         else
             frame_plan::PublishSizing(g_temporalUpscaler->QuerySizing(*g_device, *key));
 #endif
@@ -2286,7 +2289,7 @@ namespace gpu::video
         g_calibrationCaptureRequested = false;
         g_lastSceneAddress = g_lastSceneWidth = g_lastSceneHeight = 0;
         settings::SetHdrCalibrationSceneAvailable(false);
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         g_metalFxOutput.reset();
         g_metalFxWidth = g_metalFxHeight = 0;
 #endif
@@ -2405,9 +2408,15 @@ namespace gpu::video
             const bool background = getenv("LO_BACKGROUND") != nullptr;
             const auto config=settings::GetConfig();
             SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | (background ? SDL_WINDOW_HIDDEN : 0);
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             // macOS renders through plume's Metal backend (CAMetalLayer).
             flags |= SDL_WINDOW_METAL;
+#if LO_PLATFORM_IOS
+            // plume sizes the swap chain in pixels (points x nativeScale); SDL's
+            // UIKit Metal view must use the same scale or its layout resets the
+            // drawable to the point size. iOS windows are always full screen.
+            flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
+#endif
 #elif !defined(_WIN32)
             // Without it a scaled Wayland desktop gets a logical-size swapchain
             // that the compositor upscales.
@@ -2488,7 +2497,7 @@ namespace gpu::video
             const auto windowIcon = reinterpret_cast<HICON>(GetClassLongPtrW(g_nativeWindow, GCLP_HICON));
             LOG_INFO("video: window icon resource match={}", resourceIcon && windowIcon == resourceIcon);
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             // plume's Metal swap chain presents to this view's CAMetalLayer.
             g_metalView = SDL_Metal_CreateView(g_window);
             if (!g_metalView)
@@ -2499,8 +2508,15 @@ namespace gpu::video
                 return false;
             }
             g_cocoaWindow = SDL_GetPointerProperty(SDL_GetWindowProperties(g_window),
+#if LO_PLATFORM_IOS
+                SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
+#else
                 SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+#endif
             g_metalLayer = SDL_Metal_GetLayer(g_metalView);
+#if LO_PLATFORM_IOS
+            os::ios::FitMetalView(g_cocoaWindow, g_metalView);
+#endif
 #endif
             return true;
         };
@@ -2619,7 +2635,7 @@ namespace gpu::video
                 dred::ConfigureBeforeDeviceCreation(settings::GetConfig().debugLog);
                 g_interface = plume::CreateD3D12Interface();
             }
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
             // NGX/FSR are D3D12/Vulkan only; on Metal the upscaler records MetalFX.
             g_metal.store(candidate == backend::Backend::Metal);
             g_temporalUpscaler = std::make_unique<TemporalUpscaler>(static_cast<dlss::Controller*>(nullptr));
@@ -3322,7 +3338,7 @@ namespace gpu::video
 #endif
     }
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // Scaling filter "MetalFX": Apple's spatial upscaler brings the scene to the
     // size presentation would scale it to (aspect kept), so the normal pass then
     // runs 1:1 with its AA, RGB range and UI. Falls back to the source on failure.
@@ -3630,6 +3646,10 @@ namespace gpu::video
         while (SDL_PollEvent(&event))
         {
             const bool windowEvent = event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST;
+#if LO_PLATFORM_IOS
+            if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+                os::ios::FitMetalView(g_cocoaWindow, g_metalView);
+#endif
 #if defined(__ANDROID__)
             // The return to the foreground sends RESTORED and FOCUS_GAINED
             // (the pause is handled in WatchAndroidLifecycle).
@@ -4049,7 +4069,7 @@ namespace gpu::video
     }
 #endif
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // plume's HDR_LINEAR chain puts the CAMetalLayer in EDR with an extended
     // linear sRGB colorspace; an SDR chain on the same layer needs both back to
     // the defaults a fresh SDR start has. AppKit layers change on the main thread.
@@ -4121,7 +4141,7 @@ namespace gpu::video
         g_swapChain.reset();
         g_presentSemaphores.clear();
         g_hdrSwapchain = desired;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (!g_hdrSwapchain) ResetMetalLayerToSdr();
 #endif
         g_swapChain = g_queue->createSwapChain(SwapChainDescription());
@@ -4130,7 +4150,7 @@ namespace gpu::video
             LOG_ERROR("HDR: HDR swap chain creation failed; SDR retained until the setting changes");
             g_hdrSwapchainRefused = desired;
             g_hdrSwapchain = false;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             ResetMetalLayerToSdr();
 #endif
             g_swapChain = g_queue->createSwapChain(SwapChainDescription());
@@ -4195,7 +4215,7 @@ namespace gpu::video
             if (previewOpen && !cache.previewOpen && !cache.copy) cache.attempted = false;
             cache.previewOpen = previewOpen;
         }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         if (g_metalFxOutput && settings::GetConfig().scalingQuality != settings::ScalingMetalFx) {
             if (!WaitForPresentGpu()) return false;
             g_metalFxOutput.reset();
@@ -4236,7 +4256,7 @@ namespace gpu::video
         // The FidelityFX Vulkan presenter paces its own presents (see startup).
         forceImmediate = forceImmediate || (g_fsrVulkanFg && g_fsrVulkanFg->UsesProxySwapchain());
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         // Normal Metal presentation keeps display sync. Loading uses the same
         // non-blocking presentation policy as the other backends.
         // Adaptive sync and targets above the 60 Hz guest clock present each
@@ -5319,7 +5339,7 @@ namespace gpu::video
                     // MetalFX spatial scaling below outputs RGBA8; keep the SDR
                     // frame as its input and apply the scene as a gain afterwards.
                     bool metalFxUpscale = false;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                     if (g_presentation && g_swapChain && settings::GetConfig().scalingQuality == settings::ScalingMetalFx &&
                         sourceWidth && sourceHeight) {
                         const double scale = std::min(double(g_swapChain->getWidth()) / sourceWidth, double(g_swapChain->getHeight()) / sourceHeight);
@@ -5465,7 +5485,7 @@ namespace gpu::video
                     *static_cast<plume::VulkanSwapChain*>(g_swapChain.get()),
                     *static_cast<plume::VulkanCommandList*>(g_commandList.get()));
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 if (g_presentation && settings::GetConfig().scalingQuality == settings::ScalingMetalFx)
                     source = UpscaleWithMetalFx(source, sourceWidth, sourceHeight);
 #endif

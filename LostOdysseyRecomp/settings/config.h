@@ -104,7 +104,7 @@ struct Config
                                   // 720/1080/1440/2160 select scene height;
                                   // InternalResolutionNative renders at the drawable's pixel size.
     WindowMode windowMode = WindowMode::Windowed;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     GraphicsBackend graphicsBackend = GraphicsBackend::Metal; // The only macOS backend.
 #else
     GraphicsBackend graphicsBackend = GraphicsBackend::Vulkan; // Every other platform's default. Applied on the next process start.

@@ -2,7 +2,7 @@
 #include "config.h"
 #include <atomic>
 #include <os/platform.h>
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -462,7 +462,7 @@ inline ChildHandshake WaitForParentIfRestartChild(int argc, char *const argv[])
 }
 #endif
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 // macOS has no pidfd. The parent instead keeps the write end of a lifeline pipe
 // (close-on-exec, so no other process inherits it) and the child receives the
 // read end: the child sees end-of-file exactly when the parent has exited, with
