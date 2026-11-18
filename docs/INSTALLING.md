@@ -38,6 +38,8 @@ You need Windows x64 and a CPU with AVX. The game uses Vulkan by default; Direct
 
 The ZIP also contains an `mo2` folder with the plugins for Mod Organizer 2; see [Mod Organizer 2](wiki/Mod-Organizer-2.md).
 
+**Playing through RecompLauncher:** Windows ZIPs and Linux launcher `.tar.gz` bundles built from this source include `recomplauncher.json` for headless disc/DLC import and graphics settings. On Linux, choose the `.tar.gz` package, which includes the AppImage and its Linux profile. Use a launcher build with the `save.bin` backup fix and verify a fresh backup. See [integration details, package selection and delivery status](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md).
+
 <a id="automatic-content-import"></a>
 
 ## Importing game data
@@ -285,6 +287,7 @@ Saves cannot be moved back to a console.
 | :--- | :--- |
 | `--game <path>` | Use this game: a folder with `default.xex` or `disc1/`, or the `default.xex` file. Skips the importer; exits with an error if no `default.xex` is found. |
 | `--install` | Open the importer even when a game is set up, then exit. |
+| `--prepare-content --source <path> --destination <folder>` | Import discs and DLC without a window, then exit. Repeat `--source` for multiple sources. Reports progress on stdout and errors on stderr; see [RecompLauncher integration](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md). |
 | `--add-to-steam` | Add the game to Steam with library artwork, then exit with a status code. Close Steam first; add it again if you move the game. |
 | `--setup` | Open the setup page, then start the game (Windows; elsewhere it only saves the current settings). |
 | `--setup-only` | Like `--setup`, then exit. |
@@ -292,7 +295,7 @@ Saves cannot be moved back to a console.
 | `--compact-game-data` | Store archives that are the same on several discs once, then exit. Safe to stop and run again; the log shows the space freed. |
 | `--quiet-kernel` | Leave kernel trace lines out of the log. |
 
-Write `--game <path>` as two arguments; `--game=<path>` and unknown arguments are ignored. The program prints nothing to a console; check the log.
+Write `--game <path>` as two arguments; `--game=<path>` and unknown arguments are ignored during normal launches. `--prepare-content` rejects unknown or incomplete arguments. Normal game launches write diagnostics to the log.
 
 ```bash
 LostOdysseyRecomp.exe --game "D:\Games\Lost Odyssey"

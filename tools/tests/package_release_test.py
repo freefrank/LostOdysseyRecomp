@@ -42,6 +42,7 @@ class PackageReleaseTests(unittest.TestCase):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'fixture source')
+            (root / 'recomplauncher.json').write_bytes((ROOT / 'recomplauncher.json').read_bytes())
             for relative in ('thirdparty/SDL', 'thirdparty/plume', 'thirdparty/o1heap',
                              'thirdparty/unordered_dense', 'thirdparty/smaa',
                              'tools/XenonRecomp', 'build/_deps/lo_ffmpeg-src'):
@@ -72,6 +73,9 @@ class PackageReleaseTests(unittest.TestCase):
                 self.assertEqual({name for name in package.namelist() if '/assets/steam/' in name
                                   and not name.endswith('/')}, art_paths)
                 manifest = json.loads(package.read(prefix + 'manifest.json'))
+                profile = package.read(prefix + 'recomplauncher.json')
+                self.assertEqual(profile, (ROOT / 'recomplauncher.json').read_bytes())
+                self.assertEqual(manifest['files']['recomplauncher.json'], release.hashlib.sha256(profile).hexdigest())
                 for filename in filenames:
                     relative = 'assets/steam/' + filename
                     payload = package.read(prefix + relative)

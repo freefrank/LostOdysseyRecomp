@@ -26,10 +26,12 @@
 #include <os/crash_handler.h>
 #include <os/startup_diagnostics.h>
 #include <cstring>
+#include <iostream>
 #include <ctime>
 #include <chrono>
 #include "settings/first_run.h"
 #include "settings/config.h"
+#include "settings/ini.h"
 #include "settings/game_path.h"
 #include "settings/restart.h"
 #include "updater/update.h"
@@ -40,6 +42,7 @@
 #include "version.h"
 #include "install/host.h"
 #include "install/import_game.h"
+#include "install/prepare_content.h"
 #include "install/compaction_prompt.h"
 #include "modding/mod_api.h"
 #include "modding/asset_export.h"
@@ -120,10 +123,17 @@ static void PreferSystemDxgiOnVulkan(const std::filesystem::path& executableDire
     auto configured = settings::Config{}.graphicsBackend;
     std::ifstream input(os::user_paths::SettingsPath());
     for (std::string line; std::getline(input, line);)
-        if (line.rfind("graphics_backend=", 0) == 0) {
-            const auto saved = settings::GraphicsBackend(std::strtoul(line.c_str() + 17, nullptr, 10));
-            configured = gpu::backend::Known(saved) ? saved : settings::Config{}.graphicsBackend;
-        }
+    {
+        const auto equal = line.find('=');
+        if (equal == std::string::npos || settings::ini::Trim(std::string_view(line).substr(0, equal)) != "graphics_backend")
+            continue;
+        const auto digits = settings::ini::Trim(std::string_view(line).substr(equal + 1));
+        uint32_t number = 0;
+        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
+        if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) continue;
+        const auto saved = settings::GraphicsBackend(number);
+        configured = gpu::backend::Known(saved) ? saved : settings::Config{}.graphicsBackend;
+    }
     if (gpu::backend::Requested(configured, getenv("LO_GRAPHICS_API")) != gpu::backend::Backend::Vulkan) return;
     const HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     wchar_t loaded[MAX_PATH]{};
@@ -328,6 +338,17 @@ int main(int argc, char* argv[])
 #endif
     os::user_paths::Initialize(executableDirectory);
 #if !LO_PLATFORM_ANDROID
+    // A launcher setup command must exit before logs, updates, mods, SDL, or the GPU.
+    try
+    {
+        if (const auto request = install::prepare_content::ParseArguments(argc, argv))
+            return install::prepare_content::Run(*request, executableDirectory, std::cout, std::cerr);
+    }
+    catch (const std::exception& error)
+    {
+        std::fprintf(stderr, "%s\n", error.what());
+        return 2;
+    }
     // This host-only command reads original artwork from available game data,
     // then exits without an SDL window or GPU (bundled art remains a fallback).
     for (int i = 1; i < argc; ++i)

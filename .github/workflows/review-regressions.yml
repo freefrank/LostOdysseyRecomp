@@ -6,6 +6,9 @@ on:
     branches: ['**']
     paths:
       - '.github/workflows/review-regressions.yml'
+      - 'recomplauncher.json'
+      - 'tools/recomplauncher_linux.py'
+      - 'LostOdysseyRecomp/settings/ini.h'
       - 'LostOdysseyRecomp/apu/audio*'
       - 'LostOdysseyRecomp/gpu/command_processor.*'
       - 'LostOdysseyRecomp/gpu/indirect_buffer_guard.h'
@@ -43,6 +46,9 @@ on:
   pull_request:
     paths:
       - '.github/workflows/review-regressions.yml'
+      - 'recomplauncher.json'
+      - 'tools/recomplauncher_linux.py'
+      - 'LostOdysseyRecomp/settings/ini.h'
       - 'LostOdysseyRecomp/apu/audio*'
       - 'LostOdysseyRecomp/gpu/command_processor.*'
       - 'LostOdysseyRecomp/gpu/indirect_buffer_guard.h'
