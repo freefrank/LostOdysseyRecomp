@@ -25,6 +25,7 @@
 #include <os/log_file.h>
 #include <os/crash_handler.h>
 #include <os/startup_diagnostics.h>
+#include <os/cloud_saves.h>
 #include <cstring>
 #include <iostream>
 #include <ctime>
@@ -706,6 +707,8 @@ int main(int argc, char* argv[])
     if (!prepareShadersOnly)
         install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
+    // Before the guest lists its saves: take newer slots from iCloud, send newer ones up.
+    os::cloud_saves::Start(os::user_paths::SaveDir());
     XamInit();
 
     uint32_t entry = XexLoader::Load(gameRoot / "default.xex");

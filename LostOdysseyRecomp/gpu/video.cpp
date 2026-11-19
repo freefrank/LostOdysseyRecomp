@@ -4272,8 +4272,14 @@ namespace gpu::video
 #if defined(LO_ENABLE_METALFX_FG)
             if (g_metalFg && g_metalFg->Requested()) presentationMultiplier = 2;
 #endif
-            const double duration = !loading::Active() && (adaptive || presentationMultiplier > 1) && paced
+            double duration = !loading::Active() && (adaptive || presentationMultiplier > 1) && paced
                 ? std::max(0.0, 1.0 / (double(paced) * presentationMultiplier) - 0.001) : 0.0;
+#if LO_PLATFORM_IOS
+            // Info.plist lifts iOS's 60 Hz cap for ProMotion screens; the Debug
+            // menu's Device tab can put it back to save battery.
+            if (settings::GetConfig().maxRefreshRate <= 60)
+                duration = std::max(duration, 1.0 / 60.0 - 0.001);
+#endif
             if (duration != nativePolicy.metalMinimumPresentDuration) {
                 plume::SetMetalMinimumPresentDuration(g_swapChain.get(), duration);
                 nativePolicy.metalMinimumPresentDuration = duration;

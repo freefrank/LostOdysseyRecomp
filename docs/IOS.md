@@ -59,3 +59,26 @@ desktop importer writes) into the app's Documents: Finder → the device → Fil
 Lost Odyssey, or `xcrun devicectl device copy to --domain-type appDataContainer
 --domain-identifier <bundle id> --destination Documents/game/disc1 --source <disc1>`.
 Copy `shaders/portable_vk.lospv` the same way, or let the app download it.
+
+## iCloud saves (iOS and macOS)
+
+`os/cloud_saves.h` mirrors save slots through the iOS app's iCloud container,
+`LO_ICLOUD_CONTAINER` (default `iCloud.<LO_IOS_BUNDLE_ID>` on iOS, off on macOS).
+The local `save/` folder stays the game's working copy:
+
+- At startup every slot (`save/user00`, `user01`, …) is compared with
+  `<container>/Documents/Saves/<slot>` by the time of its game data; the newer copy
+  wins in either direction. A local slot that iCloud replaces is moved to
+  `save/.cloud-backup/<slot>-<time>` (the 10 newest are kept).
+- After each save (`XamContentClose`) the slot is copied to iCloud in the background.
+- The container is public, so it shows as **Lost Odyssey** in iCloud Drive (Files, Finder).
+- A macOS build configured with the same `-DLO_ICLOUD_CONTAINER=iCloud.<bundle id>`
+  reads `~/Library/Mobile Documents/iCloud~<bundle~id>/Documents/Saves`, which macOS
+  syncs for every container of the account; it needs no iCloud entitlement. The
+  folder exists once the iOS app has used iCloud.
+- Debug menu → Device: **iCloud Saves** on/off (applies at the next start) and the
+  last sync. Changes made on another device arrive at the next start.
+
+The App ID needs the iCloud container once: open `packaging/ios/xcode/LostOdysseyRecompIOS.xcodeproj`,
+target → Signing & Capabilities → iCloud → tick **iCloud Documents** and add the
+container `iCloud.<bundle id>`. Later command-line builds reuse it.

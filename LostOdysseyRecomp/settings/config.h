@@ -194,6 +194,12 @@ struct Config
     // Performance overlay over game frames (ui/performance_overlay.cpp): 0 Off,
     // 1 FPS, 2 Detailed (upscaler, FG, CPU and GPU load). Applied live.
     uint32_t performanceOverlay = 0;
+    // Highest display refresh rate on iPhone/iPad: 60, or 120 for ProMotion
+    // screens (Debug menu -> Device). Other platforms ignore it. Applied live.
+    uint32_t maxRefreshRate = 60;
+    // Mirror save slots through iCloud Drive between the iOS and macOS builds
+    // (os/cloud_saves.h). Only builds with an iCloud container. Applied at start.
+    bool icloudSaves = true;
     bool saveAnywhere = false; // Debug-only preference; defaults off for existing profiles.
     EncounterRate encounterRate = EncounterRate::Normal; // Debug-only walking encounters.
     bool battleExpDouble = false; // Debug-only battle reward preference.
@@ -219,6 +225,8 @@ bool SaveBattleExpDouble(bool enabled);
 bool SaveBattleIntroSkip(BattleIntroSkip mode);
 bool SaveFastForward(bool enabled, uint32_t mode, uint32_t rate, bool keepAudioPitch, uint32_t button);
 bool SaveMenuAnimationRate(uint32_t rate);
+bool SaveMaxRefreshRate(uint32_t hz);
+bool SaveIcloudSaves(bool enabled);
 // Cheap, thread-safe read for the camp-menu tween hook.
 uint32_t MenuAnimationRate();
 bool SaveAudioOutput(uint32_t output);

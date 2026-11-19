@@ -290,6 +290,21 @@ elseif(UNIX)
 endif()
 target_link_libraries(LostOdysseyRecomp PRIVATE lo_avcodec)
 
+# iCloud save sync between the iOS and macOS builds (os/cloud_saves.h). The iOS
+# app owns the container; a macOS build reaches the same container through
+# ~/Library/Mobile Documents, so both must name the same identifier.
+if(LO_TARGET_PLATFORM STREQUAL "ios")
+    set(_lo_icloud_default "iCloud.${LO_IOS_BUNDLE_ID}")
+else()
+    set(_lo_icloud_default "")
+endif()
+set(LO_ICLOUD_CONTAINER "${_lo_icloud_default}" CACHE STRING
+    "iCloud container for save sync (e.g. iCloud.<iOS bundle id>); empty turns sync off")
+if(LO_TARGET_APPLE AND LO_ICLOUD_CONTAINER)
+    target_compile_definitions(LostOdysseyRecomp PRIVATE LO_ICLOUD_CONTAINER="${LO_ICLOUD_CONTAINER}")
+    message(STATUS "iCloud save sync: ${LO_ICLOUD_CONTAINER}")
+endif()
+
 if(LO_BUILD_GPU)
     target_link_libraries(LostOdysseyRecomp PRIVATE plume)
     target_include_directories(LostOdysseyRecomp PRIVATE

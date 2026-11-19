@@ -13,13 +13,15 @@ targets:
   LostOdysseyRecomp:
     type: application
     platform: iOS
-    sources: []
+    sources:
+      - Assets.xcassets
     settings:
       base:
         PRODUCT_NAME: LostOdysseyRecomp
         EXECUTABLE_NAME: LostOdysseyRecomp
         PRODUCT_BUNDLE_IDENTIFIER: $(LO_IOS_BUNDLE_ID)
         LO_IOS_BUNDLE_ID: io.github.freefrank.LostOdysseyRecomp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: $(LO_CMAKE_BUILD_DIR)/LostOdysseyRecomp/LostOdysseyRecomp.app/Info.plist
         CODE_SIGN_ENTITLEMENTS: ../LostOdysseyRecomp.entitlements
         CODE_SIGN_STYLE: Automatic
@@ -29,9 +31,15 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_BITCODE: NO
         ALWAYS_SEARCH_USER_PATHS: NO
+    attributes:
+      SystemCapabilities:
+        com.apple.iCloud:
+          enabled: 1
     postBuildScripts:
       - name: Copy CMake-built app
         basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/$(EXECUTABLE_NAME)
         script: |
           set -euo pipefail
           src="${LO_CMAKE_BUILD_DIR}/LostOdysseyRecomp/LostOdysseyRecomp.app"
@@ -42,4 +50,4 @@ targets:
           fi
           mkdir -p "$dst"
           rsync -a --delete --exclude Info.plist --exclude _CodeSignature --exclude embedded.mobileprovision \
-            --exclude PkgInfo "$src/" "$dst/"
+            --exclude PkgInfo --exclude Assets.car --exclude 'AppIcon*' "$src/" "$dst/"

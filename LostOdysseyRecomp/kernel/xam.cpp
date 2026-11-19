@@ -1,3 +1,4 @@
+#include <os/cloud_saves.h>
 #include <stdafx.h>
 #include "xam.h"
 #include "xdm.h"
@@ -505,7 +506,11 @@ void XamSyncSaveRoot(const std::string_view& root)
     const std::filesystem::path path = std::u8string_view(reinterpret_cast<const char8_t*>(root.data()), root.size());
     const auto relative = path.lexically_normal().lexically_relative(GetSavePath().lexically_normal());
     if (!relative.empty() && *relative.begin() != "..")
+    {
         FileSystem::SyncFiles(path);
+        // The slot is complete on disk: mirror it to iCloud (Apple builds with a container).
+        os::cloud_saves::PushSlot(path);
+    }
 }
 
 uint32_t XamContentClose(const char* szRootName, XXOVERLAPPED* pOverlapped)

@@ -54,6 +54,9 @@
 		<key>UIColorName</key>
 		<string></string>
 	</dict>
+	<!-- Allow 120 Hz on ProMotion iPhones; the Debug menu's Device tab caps it at 60. -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>GCSupportsControllerUserInteraction</key>
 	<true/>
 	<key>GCSupportsGameMode</key>
@@ -62,6 +65,19 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- Saves sync through this container; it shows as "Lost Odyssey" in iCloud Drive. -->
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>${LO_ICLOUD_CONTAINER}</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>Lost Odyssey</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.role-playing-games</string>
 </dict>
