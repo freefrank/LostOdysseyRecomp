@@ -13,6 +13,9 @@
 #include <os/thread_name.h>
 #include <SDL3/SDL.h>
 #include <cmath>
+#if defined(__ANDROID__)
+#include <diagnostics/android_tester.h>
+#endif
 
 namespace apu
 {
@@ -535,6 +538,11 @@ namespace apu
             LOG_INFO("audio frames submitted: {} peak={} queued={} mute={} queue_drops={} queue_errors={} starved={} clock_resets={}",
                 n, peak, queued, mute, queueDrops, queueErrors, g_starved.load(std::memory_order_relaxed),
                 g_clockResets.load(std::memory_order_relaxed));
+#if defined(__ANDROID__)
+        if (::diagnostics::android_tester::g_recorder.recording.load(std::memory_order_relaxed))
+            ::diagnostics::android_tester::g_recorder.SetAudio(g_starved.load(std::memory_order_relaxed),
+                g_clockResets.load(std::memory_order_relaxed));
+#endif
     }
 
     void SetPaused(bool paused)

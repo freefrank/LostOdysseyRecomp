@@ -29,4 +29,6 @@ Until 2026-10-09 the same consent sent TAA shader data (shader hashes, original 
 
 Runtime logs in `logs/` and **Capture render state** archives in `captures/` stay on your computer unless you share them. They can contain local paths, so look through them before attaching them to a report.
 
+On Android, the optional **Android diagnostics** page records bounded performance traces in app-private storage. The document picker exports them only when requested, with a limited tail of the runtime log. The export includes device model, graphics device/driver, performance, thread names, thermal status and battery temperature. Runtime logs and thread names may still contain local paths or other context: review the ZIP before sharing it. The tester does not upload data. See [Android tester diagnostics](docs/ANDROID_TESTER.md).
+
 See the [Chinese privacy statement](PRIVACY.zh-CN.md) and the [log collector description](tools/taa-collector/README.md).

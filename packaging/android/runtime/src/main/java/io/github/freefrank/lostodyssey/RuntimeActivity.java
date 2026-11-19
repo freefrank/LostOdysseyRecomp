@@ -27,6 +27,9 @@ import org.libsdl.app.SDLActivity;
 public final class RuntimeActivity extends SDLActivity {
     /** Matches the SDL_SendAndroidMessage command in settings/menu.cpp. */
     private static final int COMMAND_OPEN_GAME_FOLDER = 0x8000;
+    private static final int COMMAND_TESTER_START = 0x8001;
+    private static final int COMMAND_TESTER_STOP = 0x8002;
+    private static final int COMMAND_TESTER_EXPORT = 0x8003;
     /** Starts the native importer (into {@link GameStorage#importRoot}) instead of the game. */
     static final String EXTRA_IMPORT = "import";
     /** Files and folders picked in the system file picker, which the importer scans at once. */
@@ -46,6 +49,12 @@ public final class RuntimeActivity extends SDLActivity {
     static native void nativeSetTouchInput(int buttons, int leftTrigger, int rightTrigger,
                                            int leftX, int leftY, int rightX, int rightY);
     static native boolean nativeHasConnectedController();
+    static native long[] nativeTesterStatus();
+    static native String nativeTesterGpu();
+    static native String nativeTesterGpuDriver();
+    static native String nativeTesterDrain();
+    static native void nativeTesterStop();
+    static native void nativeTesterCollectorFinished();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,6 +119,15 @@ public final class RuntimeActivity extends SDLActivity {
     protected boolean onUnhandledMessage(int command, Object param) {
         if (command == COMMAND_OPEN_GAME_FOLDER) {
             openGameFolderPage();
+            return true;
+        }
+        if (command == COMMAND_TESTER_START) { AndroidTester.get(this).start(); return true; }
+        if (command == COMMAND_TESTER_STOP) { AndroidTester.get(this).stop(); return true; }
+        if (command == COMMAND_TESTER_EXPORT) {
+            Intent intent = new Intent(this, SaveTransferActivity.class);
+            intent.putExtra(SaveTransferActivity.EXTRA_FROM_GAME, true);
+            intent.putExtra(SaveTransferActivity.EXTRA_START_TESTER_EXPORT, true);
+            startActivity(intent);
             return true;
         }
         return super.onUnhandledMessage(command, param);
@@ -201,6 +219,10 @@ public final class RuntimeActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (isFinishing() && !mBrokenLibraries) {
+            nativeTesterStop();
+            AndroidTester.get(this).stop();
+        }
         if (touchControls != null) touchControls.clearTouches();
         bootHandler.removeCallbacks(bootSettled);
         bootHandler.removeCallbacks(hideSystemBarsRunnable);

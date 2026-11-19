@@ -28,6 +28,25 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         const wchar_t *key, *japanese, *korean, *simplified;
     };
     static constexpr Entry entries[] = {
+        {L"Android diagnostics", L"Android 診断", L"Android 진단", L"Android 诊断"},
+        {L"Tester mode", L"テストモード", L"테스터 모드", L"测试模式"},
+        {L"Profile", L"プロファイル", L"프로필", L"配置"},
+        {L"Advanced", L"詳細", L"고급", L"高级"},
+        {L"Intensive", L"集中", L"집중", L"密集"},
+        {L"Detect slow frames", L"遅いフレームを検出", L"느린 프레임 감지", L"检测慢帧"},
+        {L"Thermal monitoring", L"温度監視", L"온도 모니터링", L"温度监测"},
+        {L"Recording", L"記録", L"기록", L"记录"},
+        {L"Start", L"開始", L"시작", L"开始"},
+        {L"Stop", L"停止", L"중지", L"停止"},
+        {L"Export diagnostics", L"診断を出力", L"진단 내보내기", L"导出诊断"},
+        {L"Export", L"出力", L"내보내기", L"导出"},
+        {L"D-pad: select / change     A: confirm     B: back", L"方向キー：選択／変更     A：決定     B：戻る", L"방향키: 선택/변경     A: 확인     B: 뒤로", L"方向键：选择／更改     A：确认     B：返回"},
+        {L"D-pad: select / change     B: confirm     A: back", L"方向キー：選択／変更     B：決定     A：戻る", L"방향키: 선택/변경     B: 확인     A: 뒤로", L"方向键：选择／更改     B：确认     A：返回"},
+        {L"Intensive mode can affect performance and stops after 2 minutes.", L"集中モードは性能に影響し、2分後に停止します。", L"집중 모드는 성능에 영향을 주며 2분 후 중지됩니다.", L"密集模式可能影响性能，2分钟后停止。"},
+        {L"Could not stop collector.", L"記録を停止できません。", L"수집을 중지할 수 없습니다.", L"无法停止收集。"},
+        {L"Could not start collector.", L"記録を開始できません。", L"수집을 시작할 수 없습니다.", L"无法开始收集。"},
+        {L"Could not open export.", L"出力を開けません。", L"내보내기를 열 수 없습니다.", L"无法打开导出。"},
+        {L"Finishing the previous recording. Try again.", L"前の記録を終了中です。もう一度お試しください。", L"이전 기록을 종료 중입니다. 다시 시도하세요.", L"正在结束上一次记录，请重试。"},
         // Startup offer for installations that still contain duplicate disc archives.
         {L"Free disk space", L"ディスク容量を節約", L"디스크 공간 확보", L"释放磁盘空间"},
         {L"Free about %s GB?", L"約 %s GB を節約しますか？", L"약 %s GB를 확보할까요?", L"释放约 %s GB？"},

@@ -45,6 +45,9 @@ namespace gpu::video
     // in use; empty before device creation. Safe to call from the menu thread.
     std::vector<std::string> GpuDeviceNames();
     std::string ActiveGpuDeviceName();
+#if defined(__ANDROID__)
+    std::string ActiveGpuDriverVersion();
+#endif
     // Connected displays in SDL order, published by the window owner thread.
     std::vector<display_choice::Display> Displays();
     // Latest committed device capability. Callers receive a copy and do not

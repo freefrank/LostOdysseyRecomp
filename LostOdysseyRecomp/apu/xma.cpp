@@ -8,6 +8,9 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#if defined(__ANDROID__)
+#include <diagnostics/android_tester.h>
+#endif
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/log.h>
@@ -384,8 +387,17 @@ namespace apu::xma
                 ctx.packet->size = int(bytes + 1);
                 t_decoderMessage[0] = 0;
                 const uint32_t frameIndex = ctx.framesSent++;
+#if defined(__ANDROID__)
+                auto& tester = ::diagnostics::android_tester::g_recorder;
+                const bool measureXma = tester.Detailed();
+                const uint64_t xmaStart = measureXma ? ::diagnostics::android_tester::NowNs() : 0;
+#endif
                 const int sent = avcodec_send_packet(ctx.decoder, ctx.packet);
                 const int decoded = sent >= 0 ? avcodec_receive_frame(ctx.decoder, ctx.frame) : sent;
+#if defined(__ANDROID__)
+                if (measureXma) tester.AddXma(decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP,
+                    ::diagnostics::android_tester::NowNs() - xmaStart);
+#endif
                 if (decoded < 0 || ctx.frame->nb_samples != 512 || ctx.frame->format != AV_SAMPLE_FMT_FLTP)
                 {
                     // Not starvation: every frame we send is complete, so a
