@@ -32,7 +32,7 @@ struct Identity {
 // pack (LO_SHADER_EXPORT_PACK). Play on Windows, Linux and Android ignores it.
 // Metal and DXIL never use uniform buffers.
 inline bool UboConstantsRequested() {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     return false;
 #else
     const char* value = std::getenv("LO_VK_UBO_CONSTANTS");

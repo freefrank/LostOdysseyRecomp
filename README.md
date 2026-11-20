@@ -1,3 +1,12 @@
+> [!TIP]
+> ### iOS & macOS Port Fork (`ios-port`) — Native iPhone/iPad + iCloud Drive Save Sync
+>
+> This fork adds **native iOS / iPadOS support** (iPhone 15 Pro+ / M-series iPad, iOS 18+, controller required) and **iCloud Drive save sync** between macOS and iOS on top of upstream **Lost Odyssey Recomp**.
+>
+> - **macOS build with iCloud Drive saves:** Upstream macOS releases do not include iCloud sync. Build macOS from this `ios-port` branch with `-DLO_ICLOUD_CONTAINER=iCloud.<your.bundle.id>` (no macOS iCloud entitlement required) to sync saves bidirectionally with iOS via iCloud Drive — see [docs/IOS.md#icloud-saves-ios-and-macos](docs/IOS.md#icloud-saves-ios-and-macos).
+> - **Full iOS build & deploy guide:** [docs/IOS.md](docs/IOS.md) *(requires Xcode, your own Apple Developer team, and your own legally dumped Lost Odyssey discs 1–4 — no copyrighted game files or prebuilt IPAs are distributed)*
+> - **Easiest way to build & deploy on Mac/iPhone:** [**Sessionist for macOS (Direct Edition + Recomp Hub)**](https://github.com/n-elnouby/SessionistApp/releases/latest) automates cloning this branch, patching submodules, building the Mac app & shader store, signing/deploying to iPhone, copying disc data, and tracking your playtime (with iCloud sync to [Sessionist on the iOS App Store](https://apps.apple.com/app/id6758464286)).
+
 <div align="center">
 
 <img src="assets/lost-odyssey-recomp.png" alt="Lost Odyssey Recomp logo" width="112">

@@ -46,7 +46,7 @@ Config Validate(Config value)
         value.internalResolution != 720 && value.internalResolution != 1080 &&
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     if (value.scalingQuality > ScalingMetalFx) value.scalingQuality = 1;
 #else
     if (value.scalingQuality > 1) value.scalingQuality = 1;
@@ -60,6 +60,7 @@ Config Validate(Config value)
     value.voiceVolume = std::min(value.voiceVolume, 100u);
     if (value.buttonPrompts > 5) value.buttonPrompts = 0;
     if (value.performanceOverlay > 2) value.performanceOverlay = 0;
+    if (value.maxRefreshRate != 60 && value.maxRefreshRate != 120) value.maxRefreshRate = 60;
     value.controllerMap = hid::input_map::ValidController(value.controllerMap);
     value.keyboardMap = hid::input_map::ValidKeyboard(value.keyboardMap);
     value.hdrPaperWhiteNits = std::clamp(value.hdrPaperWhiteNits, 80u, 400u);
@@ -118,7 +119,7 @@ Config Validate(Config value)
         value.audioOutput = AudioOutputStereo;
     if (!gpu::backend::Known(value.graphicsBackend))
         value.graphicsBackend = GraphicsBackend::Vulkan;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     value.graphicsBackend = GraphicsBackend::Metal; // The only macOS backend.
 #elif !defined(_WIN32)
     if (value.graphicsBackend != GraphicsBackend::Vulkan)
@@ -136,7 +137,7 @@ Config Validate(Config value)
     if (uint32_t(value.aspectRatio) >= gpu::aspect_ratio::ModeCount)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // Metal always keeps display sync; the menu offers only ProMotion there.
     value.vsync = true;
 #endif
@@ -315,6 +316,10 @@ Config Read()
             value.achievementSound = number == 1;
         else if (key == "performance_overlay")
             value.performanceOverlay = number;
+        else if (key == "max_refresh_rate")
+            value.maxRefreshRate = number;
+        else if (key == "icloud_saves" && number <= 1)
+            value.icloudSaves = number == 1;
         else if (key == "save_anywhere" && number <= 1)
             value.saveAnywhere = number == 1;
         else if (key == "no_random_encounters" && number <= 1)
@@ -521,6 +526,8 @@ static bool WriteConfig(const Config &value)
            << "\nachievement_notifications=" << (value.achievementNotifications ? 1 : 0)
            << "\nachievement_sound=" << (value.achievementSound ? 1 : 0)
            << "\nperformance_overlay=" << value.performanceOverlay
+           << "\nmax_refresh_rate=" << value.maxRefreshRate
+           << "\nicloud_saves=" << (value.icloudSaves ? 1 : 0)
            << "\nsave_anywhere=" << (value.saveAnywhere ? 1 : 0)
            << "\nencounter_rate=" << uint32_t(value.encounterRate)
            << "\nbattle_exp_double=" << (value.battleExpDouble ? 1 : 0)
@@ -672,6 +679,28 @@ bool SaveMenuAnimationRate(uint32_t rate)
     if (!WriteConfig(persisted)) return false;
     Current().menuAnimationRate = persisted.menuAnimationRate;
     menuAnimationRate.store(persisted.menuAnimationRate, std::memory_order_relaxed);
+    return true;
+}
+// Debug menu Device tab. Like the other debug saves, this leaves unconfirmed
+// Settings previews out of the file.
+bool SaveMaxRefreshRate(uint32_t hz)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.maxRefreshRate = hz;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    Current().maxRefreshRate = persisted.maxRefreshRate;
+    return true;
+}
+bool SaveIcloudSaves(bool enabled)
+{
+    std::lock_guard lock(mutex);
+    auto persisted = Read();
+    persisted.icloudSaves = enabled;
+    persisted = Validate(persisted);
+    if (!WriteConfig(persisted)) return false;
+    Current().icloudSaves = persisted.icloudSaves;
     return true;
 }
 uint32_t MenuAnimationRate()

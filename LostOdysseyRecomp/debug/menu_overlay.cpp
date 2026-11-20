@@ -17,6 +17,11 @@
 #include "../settings/config.h"
 #include "cheat_overlay.h"
 #include "controller_hint.h"
+#include "../os/platform.h"
+#include "../os/cloud_saves.h"
+#if LO_PLATFORM_IOS
+#include "../os/ios_support.h"
+#endif
 
 // hid.h also declares guest XAMINPUT types; the overlay only needs this host state.
 namespace hid { bool UsesPlayStationPrompts(); }
@@ -26,7 +31,7 @@ namespace debug_menu
     struct OverlayState
     {
         bool visible = false;
-        int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats
+        int activeTab = 0; // 0: Overview, 1: Teleport, 2: Cheats, 3: Device
         int selectedRow = 0;
         bool chinese = false;
         bool resetConfirmation = false;
@@ -46,6 +51,12 @@ namespace debug_menu
         std::wstring statusMessage;
         std::chrono::steady_clock::time_point statusExpiry{};
     };
+
+    static constexpr int kTabCount = 4;
+    // Device tab rows: iCloud saves on Apple builds, ProMotion refresh on iOS.
+    static constexpr int kRowIcloud = LO_PLATFORM_APPLE ? 0 : -1;
+    static constexpr int kRowRefresh = LO_PLATFORM_IOS ? 1 : -1;
+    static constexpr int kDeviceLastRow = LO_PLATFORM_IOS ? 1 : LO_PLATFORM_APPLE ? 0 : -1;
 
     static std::mutex g_overlayStateMutex;
     static std::mutex g_overlayActionMutex;
@@ -242,12 +253,12 @@ namespace debug_menu
             ToggleOverlayLocked();
             return;
         case InputAction::PrevTab:
-            g_overlayState.activeTab = (g_overlayState.activeTab + 3 - 1) % 3;
+            g_overlayState.activeTab = (g_overlayState.activeTab + kTabCount - 1) % kTabCount;
             g_overlayState.selectedRow = 0;
             g_overlayState.cheatsPage.Dismiss();
             return;
         case InputAction::NextTab:
-            g_overlayState.activeTab = (g_overlayState.activeTab + 1) % 3;
+            g_overlayState.activeTab = (g_overlayState.activeTab + 1) % kTabCount;
             g_overlayState.selectedRow = 0;
             g_overlayState.cheatsPage.Dismiss();
             return;
@@ -257,7 +268,8 @@ namespace debug_menu
             return;
         case InputAction::Down:
             // Overview ends at row 6; Teleport ends at row 8 (Debug Event Room).
-            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 : 8))
+            if (g_overlayState.selectedRow < (g_overlayState.activeTab == 0 ? 6 :
+                                              g_overlayState.activeTab == 3 ? kDeviceLastRow : 8))
                 g_overlayState.selectedRow++;
             return;
         default:
@@ -474,6 +486,31 @@ namespace debug_menu
                 break;
             }
         }
+        else if (g_overlayState.activeTab == 3)
+        {
+            const bool change = action == InputAction::Confirm || action == InputAction::Left || action == InputAction::Right;
+            if (change && g_overlayState.selectedRow == kRowIcloud && os::cloud_saves::GetStatus().supported)
+            {
+                const bool zh = g_overlayState.chinese;
+                stateLock.unlock();
+                const bool next = !settings::GetConfig().icloudSaves;
+                if (!settings::SaveIcloudSaves(next))
+                    SetOverlayStatus(zh ? L"保存 iCloud 设置失败" : L"Failed to save iCloud setting");
+                else
+                    SetOverlayStatus(zh ? L"下次启动时生效" : L"Applies the next time the game starts");
+                return;
+            }
+            // Display refresh (iOS ProMotion, 60 or 120 Hz)
+            if (change && g_overlayState.selectedRow == kRowRefresh)
+            {
+                const bool zh = g_overlayState.chinese;
+                stateLock.unlock();
+                const uint32_t next = settings::GetConfig().maxRefreshRate > 60 ? 60 : 120;
+                if (!settings::SaveMaxRefreshRate(next))
+                    SetOverlayStatus(zh ? L"保存刷新率设置失败" : L"Failed to save refresh rate setting");
+                return;
+            }
+        }
     }
 
     // Render debug overlay onto a 1280x720 pixel buffer (alpha composited over frozen frame)
@@ -503,13 +540,14 @@ namespace debug_menu
 
         // Centered Tab buttons
         int tabW = 160;
-        int tabGap = 20;
-        int totalTabsW = tabW * 3 + tabGap * 2;
+        int tabGap = 14;
+        int totalTabsW = tabW * kTabCount + tabGap * (kTabCount - 1);
         int tabStartX = panelX + (panelW - totalTabsW) / 2;
         int tabY = panelY + 44;
         host_ui::DrawButton(r, tabStartX, tabY, tabW, 30, zh ? L"常规" : L"Overview", state.activeTab == 0, state.activeTab == 0);
         host_ui::DrawButton(r, tabStartX + tabW + tabGap, tabY, tabW, 30, zh ? L"传送" : L"Teleport", state.activeTab == 1, state.activeTab == 1);
         host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 2, tabY, tabW, 30, zh ? L"辅助 / 修改" : L"Cheats", state.activeTab == 2, state.activeTab == 2);
+        host_ui::DrawButton(r, tabStartX + (tabW + tabGap) * 3, tabY, tabW, 30, zh ? L"设备" : L"Device", state.activeTab == 3, state.activeTab == 3);
 
         // Footer at bottom of panel
         int footerY = panelY + panelH - 32;
@@ -720,6 +758,81 @@ namespace debug_menu
         else if (state.activeTab == 2)
         {
             cheat_overlay::Render(r, state.cheatsPage, zh, panelX + 30, contentY, panelW - 60, playStation);
+        }
+        else if (state.activeTab == 3)
+        {
+            const int btnW = 520;
+            const int btnX = panelX + (panelW - btnW) / 2;
+            const uint32_t label = host_ui::MakeColor(255, 170, 175, 185);
+            const uint32_t normal = host_ui::MakeColor(255, 225, 228, 235);
+            const auto centered = [&](const std::wstring& text, int y, uint32_t color) {
+                r.DrawWString(panelX + (panelW - r.MeasureWString(text)) / 2, y, text, color);
+            };
+            int y = contentY;
+#if LO_PLATFORM_APPLE
+            const auto cloud = os::cloud_saves::GetStatus();
+            if (cloud.supported)
+            {
+                const bool on = settings::GetConfig().icloudSaves;
+                host_ui::DrawButton(r, btnX, y, btnW, 30,
+                    zh ? (on ? L"iCloud 存档同步: 开" : L"iCloud 存档同步: 关") : (on ? L"iCloud Saves: On" : L"iCloud Saves: Off"),
+                    state.selectedRow == kRowIcloud);
+                std::wstring detail = zh ? L"状态: " : L"Status: ";
+                for (const char c : cloud.lastSync) detail += wchar_t(c);
+                centered(detail, y + 36, label);
+            }
+            else
+            {
+                host_ui::DrawButton(r, btnX, y, btnW, 30, zh ? L"iCloud 存档同步: 未启用" : L"iCloud Saves: not in this build",
+                    state.selectedRow == kRowIcloud);
+            }
+            y += 76;
+#endif
+#if LO_PLATFORM_IOS
+            const bool promotion = settings::GetConfig().maxRefreshRate > 60;
+            const std::wstring refresh = zh
+                ? (promotion ? L"屏幕刷新率: 120 Hz (ProMotion)" : L"屏幕刷新率: 60 Hz")
+                : (promotion ? L"Display Refresh: 120 Hz (ProMotion)" : L"Display Refresh: 60 Hz");
+            host_ui::DrawButton(r, btnX, y, btnW, 30, refresh, state.selectedRow == kRowRefresh);
+            centered(zh ? L"60 Hz 更省电；120 Hz 让 60 帧以上更流畅。"
+                        : L"60 Hz saves battery; 120 Hz smooths frame rates above 60.", y + 36, label);
+            y += 84;
+
+            const auto status = os::ios::ReadDeviceStatus();
+            const auto line = [&](const std::wstring& name, const std::wstring& value, uint32_t color) {
+                r.DrawWString(btnX, y, name, label);
+                r.DrawWString(btnX + 220, y, value, color);
+                y += 32;
+            };
+            std::wstring battery = status.batteryPercent < 0 ? std::wstring(zh ? L"未知" : L"Unknown")
+                                                             : std::to_wstring(status.batteryPercent) + L"%";
+            switch (status.battery)
+            {
+            case os::ios::BatteryState::Charging: battery += zh ? L"（充电中）" : L" (charging)"; break;
+            case os::ios::BatteryState::Full: battery += zh ? L"（已充满）" : L" (full)"; break;
+            case os::ios::BatteryState::Unplugged: battery += zh ? L"（使用电池）" : L" (on battery)"; break;
+            default: break;
+            }
+            const bool lowBattery = status.batteryPercent >= 0 && status.batteryPercent <= 20 &&
+                status.battery == os::ios::BatteryState::Unplugged;
+            line(zh ? L"电池" : L"Battery", battery, lowBattery ? host_ui::MakeColor(255, 240, 120, 90) : normal);
+            line(zh ? L"低电量模式" : L"Low Power Mode", status.lowPowerMode ? (zh ? L"开" : L"On") : (zh ? L"关" : L"Off"),
+                status.lowPowerMode ? host_ui::MakeColor(255, 240, 200, 90) : normal);
+            const wchar_t* thermalNames[] = {zh ? L"正常" : L"Nominal", zh ? L"偏热" : L"Fair",
+                                             zh ? L"严重（降频）" : L"Serious (throttling)", zh ? L"危急" : L"Critical"};
+            const uint32_t thermalColors[] = {normal, host_ui::MakeColor(255, 240, 200, 90),
+                                              host_ui::MakeColor(255, 245, 150, 70), host_ui::MakeColor(255, 240, 90, 80)};
+            const int thermal = int(status.thermal);
+            line(zh ? L"温度状态" : L"Thermal State", thermalNames[thermal], thermalColors[thermal]);
+            if (status.thermal >= os::ios::ThermalState::Serious || status.lowPowerMode)
+                centered(zh ? L"设备在限制性能：可在设置中降低渲染分辨率或帧率。"
+                            : L"Performance is limited: lower resolution or frame rate in Settings.", y + 8, label);
+#elif !LO_PLATFORM_APPLE
+            centered(zh ? L"此页面仅在 Apple 设备上提供选项。" : L"These options are for Apple devices.", y + 20, label);
+            (void)btnX; (void)normal;
+#else
+            (void)normal;
+#endif
         }
 
         // Status message at bottom of panel (Centered)

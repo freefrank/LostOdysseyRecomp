@@ -3,7 +3,7 @@
 #include <os/platform.h>
 #include <chrono>
 #include <thread>
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <mach/thread_policy.h>
@@ -39,7 +39,7 @@ void RaiseAudioThreadPriority();
 // kernel never demotes a thread for running long computations as real-time.
 inline void PreciseSleepUntil(std::chrono::steady_clock::time_point deadline)
 {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
         deadline - std::chrono::steady_clock::now());
     if (remaining.count() <= 0)

@@ -1,6 +1,6 @@
 #include "guest_code_thread.h"
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <exception>
 #include <future>
 #include <pthread.h>
