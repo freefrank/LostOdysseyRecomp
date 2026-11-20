@@ -23,6 +23,11 @@ Vulkan requests FP16 extended-linear or packed ten-bit HDR10/PQ only when the ac
 
 The SDR screenshot/preview path remains an explicitly gamma-encoded preview of the linear output. It is useful for checking fallback and tone-map continuity, but it is not an HDR display capture.
 
+The extended-scene output now uses the same sRGB diffuse response as SDR/video
+and preserves its original gamma-2.2 highlights above white. See the
+[#744 shadow-transfer investigation](hdr-shadow-transfer-744.md) for unchanged-
+upstream A/B tests, reproducible shader readbacks and physical-display limits.
+
 For the platform API background, see Microsoft's [High Dynamic Range](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range) guidance and Apple's [Performing your own tone mapping](https://developer.apple.com/documentation/metal/performing-your-own-tone-mapping).
 
 ## Current validation

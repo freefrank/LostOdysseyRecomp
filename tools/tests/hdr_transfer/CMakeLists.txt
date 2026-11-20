@@ -1,0 +1,40 @@
+cmake_minimum_required(VERSION 3.24)
+project(LoHdrTransfer LANGUAGES C CXX)
+enable_testing()
+get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+set(CMAKE_CXX_STANDARD 20)
+add_executable(LoHdrTransferCpuTest cpu_test.cpp)
+target_include_directories(LoHdrTransferCpuTest PRIVATE "${ROOT}/LostOdysseyRecomp")
+add_test(NAME hdr_transfer_cpu COMMAND LoHdrTransferCpuTest)
+option(LO_HDR_GPU_TESTS "Build real production presentation readbacks (no window or game data)" ON)
+set(LO_HDR_PRESENTATION_SOURCE "${ROOT}/LostOdysseyRecomp/gpu/presentation.cpp" CACHE FILEPATH "Presentation source under test (override for upstream A/B)")
+if(LO_HDR_GPU_TESTS)
+    set(PLUME_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(PLUME_SDL_VULKAN_ENABLED OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${ROOT}/thirdparty/plume" plume)
+    add_subdirectory("${ROOT}/tools/XenosRecomp/thirdparty/fmt" fmt EXCLUDE_FROM_ALL)
+    add_executable(LoPresentationTest
+        "${ROOT}/tools/tests/presentation_test.cpp"
+        "${ROOT}/tools/tests/motion_replay/platform_stub.cpp"
+        "${LO_HDR_PRESENTATION_SOURCE}"
+        "${ROOT}/LostOdysseyRecomp/gpu/shader/dxc_compiler.cpp")
+    target_include_directories(LoPresentationTest BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_include_directories(LoPresentationTest PRIVATE "${ROOT}/LostOdysseyRecomp"
+        "${ROOT}/LostOdysseyRecomp/gpu"
+        "${ROOT}/tools/XenosRecomp/thirdparty/dxc-bin/inc"
+        "${ROOT}/tools/XenosRecomp/thirdparty/xxHash")
+    target_compile_definitions(LoPresentationTest PRIVATE LO_GPU_PLUME NOMINMAX)
+    target_link_libraries(LoPresentationTest PRIVATE plume fmt::fmt ${CMAKE_DL_LIBS})
+    if(WIN32)
+        target_link_libraries(LoPresentationTest PRIVATE d3d12 dxgi)
+        set(backend_args)
+    else()
+        find_package(X11 REQUIRED)
+        target_link_libraries(LoPresentationTest PRIVATE X11::X11)
+        set(backend_args --vulkan)
+    endif()
+    foreach(mode hdr-transfer hdr hdr-calibration separated-ui)
+        add_test(NAME ${mode}_gpu COMMAND LoPresentationTest ${backend_args} --${mode}-only)
+    endforeach()
+    add_test(NAME presentation_sdr_gpu COMMAND LoPresentationTest ${backend_args})
+endif()
