@@ -3,28 +3,33 @@
 Portable Windows ZIPs built from this source include [`recomplauncher.json`](../recomplauncher.json) beside
 `LostOdysseyRecomp.exe`. Linux launcher `.tar.gz` bundles contain the AppImage and a generated Linux
 profile beside it. RecompLauncher reads these profiles in preference to its catalog or boot profile.
-It provides a folder-based setup step, graphics settings, and buttons for saves, mods and logs.
+It provides a setup step for your discs and DLC, graphics settings, and buttons for saves, mods
+and logs.
 
 ## Set up and play
 
 1. Install the Windows ZIP or Linux launcher `.tar.gz` through RecompLauncher. For Linux package
    selection and local-build testing, see [Linux](#linux).
-2. Choose a source folder containing your supported Lost Odyssey discs: ISO images, extracted
-   folders or GOD packages. Disc 1 is required for a new installation; later discs and optional
-   DLC can be in the same folder or a subfolder. Use one edition and one source per disc.
-   Keep unrelated games and title-update packages outside this source folder.
-3. The launcher's setup screen runs our importer without opening another window. It validates
-   disc identities and edition compatibility, then imports to `game/disc1` through `game/disc4`
-   and `game/dlc`. `game-path.txt` remembers that installation.
+2. The setup screen asks for each disc on its own: Disc 1 to Disc 4. Each one can be an ISO image,
+   an extracted folder (or its `default.xex`) or a Games on Demand package (its header file or
+   its `.data` folder). Use one edition for all four. Up to three DLC packages are optional:
+   each one is a Marketplace package file, or a folder with packages in it.
+3. The launcher checks that each pick is Lost Odyssey (title ID `4D5307FA`), then runs our
+   importer without opening another window. The importer tells the discs apart, checks the
+   edition, then imports to `game/disc1` through `game/disc4` and `game/dlc`. `game-path.txt`
+   remembers that installation.
 4. Change graphics options on the game's page and press Play. The game still prepares shaders
    during its normal startup. The in-game importer remains available for additional content.
 
-Use a separate source folder. Do not put source ISOs inside the destination `game/` folder.
-Selecting the destination itself is supported only to adopt an already imported installation.
-The importer must be able to read its sources for the duration of setup. On Windows it may need
+Do not pick files inside the destination `game/` folder. The importer must be able to read the
+picked files for the duration of setup. RecompLauncher runs setup again after each new release,
+which imports the picked discs again, so keep them where they are. On Windows it may need
 substantial extra free space while replacing existing content; old selected slots remain until
-publication and game-path persistence succeed. Repeating setup reimports the selected content.
-Unselected discs, saves and graphics preferences remain in place.
+publication and game-path persistence succeed. Saves and graphics preferences remain in place.
+
+The profile uses input options first shipped with RecompLauncher's named inputs
+([elripalda/RecompLauncher#429](https://github.com/elripalda/RecompLauncher/pull/429)). Older
+launchers can't read it: use a launcher release with that change.
 
 ## Graphics settings
 
@@ -63,7 +68,9 @@ profile synchronized with [`settings/config.cpp`](../LostOdysseyRecomp/settings/
 LostOdysseyRecomp.exe --prepare-content --source "D:\My discs" --destination "D:\Lost Odyssey\game"
 ```
 
-`--source` can be repeated. Paths are decoded as UTF-8 after the Windows command line is read
+`--source` can be repeated, and can be written as one argument, `--source=<path>`: the profile
+does that for each disc and DLC, so the launcher can leave out one the player didn't pick.
+Paths are decoded as UTF-8 after the Windows command line is read
 as Unicode. The command runs before logs, updates, mods, windows or renderer initialization.
 It uses the same scanner and transactional importer as the game, and commits `game-path.txt`
 only after content publication. A failure to persist that path rolls the selected content back.
@@ -71,8 +78,8 @@ It does not download or compile shaders, change graphics preferences, or start t
 
 Progress is written and flushed to stdout as `progress 0.4 Importing Disc 2`.
 Failures go to stderr. Exit codes are 0 for success, 1 for an import failure, 2 for malformed
-arguments and 3 for cooperative cancellation (SIGINT/SIGTERM). The profile allows up to two hours
-for setup. The command is available on desktop builds; profiles are packaged for Windows and Linux.
+arguments and 3 for cooperative cancellation (SIGINT/SIGTERM). The launcher sets no time limit,
+but stops a setup that prints nothing for an hour. The command is available on desktop builds; profiles are packaged for Windows and Linux.
 
 A launcher that forcibly terminates the process cannot run its rollback handlers. Keep the
 source files and any `.import-staging-*` folders after an interrupted publication; do not delete
@@ -82,9 +89,9 @@ simultaneous import operations.
 ## Verification and save backups
 
 The launcher developer checker calls this level 3 because it has a real `prepare` step.
-**That does not mean the source folder has a verified-dump badge.** The current launcher only
-compares `game.dumps` CRC32/size entries against one selected file. A folder containing several
-ISOs cannot receive that badge. The importer checks supported XEX identities and edition
+**That does not mean the discs get a verified-dump badge.** The profile lists no `dumps`, so the
+launcher only checks each pick's title ID (`4D5307FA`) and never reads a whole disc; it can't
+tell Disc 2 from Disc 3, or one edition from the other. The importer checks supported XEX identities and edition
 compatibility and the content needed to import the game. This validation is sufficient for the
 supported setup flow. The clean-dump badge is optional and belongs to the launcher; this
 integration adds no whole-disc integrity certification to the game.
@@ -146,8 +153,8 @@ packages do not ship a launcher profile. Flatpak integration requires separate s
   production settings bodies and round-trip every Windows and Linux choice, including spaced INI lines.
 - Build `LoImportGameTest` and run `--prepare-content-test` for synthetic headless-import tests.
 - In RecompLauncher, enable **Settings → Developers → Developer tools**, add the extracted build,
-  and use **Check again** on its Developer tab. A missing `game.check` is expected: the folder may
-  contain several source formats, and our preparation command performs the authoritative scan.
+  and use **Check again** on its Developer tab. Each input checks the title ID only; our
+  preparation command tells the discs apart and performs the authoritative scan.
 - Test a fresh installation and a previously configured game through the launcher on each platform,
   including save backup/restore. Fixture results do not establish an end-to-end Linux game session.
 

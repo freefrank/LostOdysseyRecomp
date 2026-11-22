@@ -699,11 +699,24 @@
     {"id": "logs", "label": "Logs", "help": "One log per run. The newest one goes with a bug report.", "open": "logs"}
   ],
   "looks": {"allowed": false, "reason": "The game has its own anti-aliasing, upscaling, frame generation and HDR settings, and draws with Vulkan or Direct3D 12 chosen in its own menu."},
-  "game": {"kind": "folder", "label": "A folder containing your Lost Odyssey discs (ISO, extracted files or GOD), with Disc 1 at least. Use one supported edition; optional DLC may be in the same folder."},
+  "inputs": [
+    {"id": "game", "label": "Disc 1: its ISO, extracted folder or Games on Demand package. All four discs from one edition (USA/Europe or Asian)", "role": "game", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc2", "label": "Disc 2", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc3", "label": "Disc 3", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc4", "label": "Disc 4", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc1", "label": "Lost Odyssey DLC: a Marketplace package, or a folder with your DLC packages", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc2", "label": "Another Lost Odyssey DLC package", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc3", "label": "Another Lost Odyssey DLC package", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}}
+  ],
   "prepare": {
     "program": ["LostOdysseyRecomp.exe"],
-    "args": ["--prepare-content", "--source", "{game}", "--destination", "{install}/game"],
+    "args": [
+      "--prepare-content",
+      "--source={input:game}", "--source={input:disc2}", "--source={input:disc3}", "--source={input:disc4}",
+      "--source={input:dlc1}", "--source={input:dlc2}", "--source={input:dlc3}",
+      "--destination", "{install}/game"
+    ],
     "label": "Importing Lost Odyssey discs and DLC",
-    "timeout": 7200
+    "done": ["{install}/game/disc1/default.xex"]
   }
 }
