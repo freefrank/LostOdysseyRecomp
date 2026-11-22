@@ -700,7 +700,7 @@
   ],
   "looks": {"allowed": false, "reason": "The game has its own anti-aliasing, upscaling, frame generation and HDR settings, and draws with Vulkan or Direct3D 12 chosen in its own menu."},
   "inputs": [
-    {"id": "disc1", "label": "Disc 1: its disc image (.iso) or Games on Demand file. All four discs from one edition (USA/Europe or Asian)", "role": "game", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc1", "label": "Disc 1", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
     {"id": "disc2", "label": "Disc 2", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
     {"id": "disc3", "label": "Disc 3", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
     {"id": "disc4", "label": "Disc 4", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
