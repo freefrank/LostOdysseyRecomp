@@ -37,13 +37,24 @@ std::optional<Request> ParseArguments(int argc, char* const argv[])
     Request request;
     for (int i = 1; i < argc; ++i)
     {
-        const std::string_view argument(argv[i]);
+        std::string_view argument(argv[i]);
         if (argument == "--prepare-content") continue;
+        // --source=<path> is one argument, so a launcher can leave out a disc or DLC the player
+        // didn't pick without leaving a --source behind that would take the next flag as its path.
+        const auto equals = argument.find('=');
+        const bool joined = equals != std::string_view::npos;
+        std::string_view value = joined ? argument.substr(equals + 1) : std::string_view();
+        if (joined) argument = argument.substr(0, equals);
         if (argument != "--source" && argument != "--destination")
             throw Error("Unknown content preparation argument: " + std::string(argument));
-        if (++i == argc || std::string_view(argv[i]).starts_with("--") || !*argv[i])
-            throw Error("Missing path after " + std::string(argument));
-        const auto path = std::filesystem::absolute(std::filesystem::u8path(argv[i])).lexically_normal();
+        if (!joined)
+        {
+            if (++i == argc || std::string_view(argv[i]).starts_with("--"))
+                throw Error("Missing path after " + std::string(argument));
+            value = argv[i];
+        }
+        if (value.empty()) throw Error("Missing path after " + std::string(argument));
+        const auto path = std::filesystem::absolute(std::filesystem::u8path(value)).lexically_normal();
         if (argument == "--source") request.sources.push_back(path);
         else
         {

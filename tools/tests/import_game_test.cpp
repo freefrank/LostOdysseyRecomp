@@ -913,6 +913,22 @@ void RunPrepareContentTest()
     try { install::prepare_content::ParseArguments(int(pointers.size()), pointers.data()); }
     catch (const install::Error&) { malformed = true; }
     Require(malformed, "accepted a missing destination argument");
+    // The launcher's form: each disc or DLC as one --source=<path> argument.
+    std::vector<std::string> joinedArguments{"game", "--prepare-content",
+        "--source=" + std::string(sourceUtf8.begin(), sourceUtf8.end()),
+        "--source=" + (root / "dlc=1").string(), "--destination",
+        std::string(destinationUtf8.begin(), destinationUtf8.end())};
+    std::vector<char*> joinedPointers;
+    for (auto& argument : joinedArguments) joinedPointers.push_back(argument.data());
+    const auto joined = install::prepare_content::ParseArguments(int(joinedPointers.size()), joinedPointers.data());
+    Require(joined && joined->sources.size() == 2 && joined->sources.front() == source, "did not read --source=<path>");
+    Require(joined->sources.back() == fs::absolute(root / "dlc=1").lexically_normal(), "split a path containing '='");
+    std::string empty = "--source=";
+    joinedPointers[2] = empty.data();
+    bool emptyRejected = false;
+    try { install::prepare_content::ParseArguments(int(joinedPointers.size()), joinedPointers.data()); }
+    catch (const install::Error&) { emptyRejected = true; }
+    Require(emptyRejected, "accepted --source= without a path");
     os::user_paths::g_usePortableLayout = wasPortable;
     os::user_paths::g_executableDirectory = previousExecutable;
     std::cout << "[PASS] Headless import: discs, DLC, Unicode paths, retry, adoption, cancellation, rollback, arguments\n";
