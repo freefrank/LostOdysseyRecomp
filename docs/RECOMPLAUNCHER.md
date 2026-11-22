@@ -10,10 +10,10 @@ and logs.
 
 1. Install the Windows ZIP or Linux launcher `.tar.gz` through RecompLauncher. For Linux package
    selection and local-build testing, see [Linux](#linux).
-2. The setup screen asks for each disc on its own: Disc 1 to Disc 4. Each one can be an ISO image,
-   an extracted folder (or its `default.xex`) or a Games on Demand package (its header file or
-   its `.data` folder). Use one edition for all four. Up to three DLC packages are optional:
-   each one is a Marketplace package file, or a folder with packages in it.
+2. The setup screen asks for each disc on its own: Disc 1 to Disc 4. Each one is one file: a disc
+   image (`.iso`) or a Games on Demand header file, with its `.data` folder beside it. Use one
+   edition for all four. Up to three DLC packages are optional, one Marketplace package file each.
+   Extracted folders still import through the in-game importer.
 3. The launcher checks that each pick is Lost Odyssey (title ID `4D5307FA`), then runs our
    importer without opening another window. The importer tells the discs apart, checks the
    edition, then imports to `game/disc1` through `game/disc4` and `game/dlc`. `game-path.txt`
@@ -65,11 +65,14 @@ profile synchronized with [`settings/config.cpp`](../LostOdysseyRecomp/settings/
 ## Headless setup command
 
 ```text
-LostOdysseyRecomp.exe --prepare-content --source "D:\My discs" --destination "D:\Lost Odyssey\game"
+LostOdysseyRecomp.exe --prepare-content "--disc1=D:\Discs\Disc 1.iso" "--disc2=D:\Discs\Disc 2.iso" "--dlc1=D:\DLC\package" "--destination=D:\Lost Odyssey\game"
 ```
 
-`--source` can be repeated, and can be written as one argument, `--source=<path>`: the profile
-does that for each disc and DLC, so the launcher can leave out one the player didn't pick.
+`--disc1` to `--disc4` and `--dlc1` to `--dlc3` each take one file, once. The profile passes
+each flag and its path as one argument, so the launcher leaves out the whole argument for a
+disc or DLC the player didn't pick. The importer still tells the discs apart itself, so a disc
+in another disc's slot imports to the right place. `--source <path>` (repeatable, any file or
+folder) still works, and every flag can be written as `--flag <path>` or `--flag=<path>`.
 Paths are decoded as UTF-8 after the Windows command line is read
 as Unicode. The command runs before logs, updates, mods, windows or renderer initialization.
 It uses the same scanner and transactional importer as the game, and commits `game-path.txt`

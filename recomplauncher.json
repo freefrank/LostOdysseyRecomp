@@ -700,21 +700,21 @@
   ],
   "looks": {"allowed": false, "reason": "The game has its own anti-aliasing, upscaling, frame generation and HDR settings, and draws with Vulkan or Direct3D 12 chosen in its own menu."},
   "inputs": [
-    {"id": "game", "label": "Disc 1: its ISO, extracted folder or Games on Demand package. All four discs from one edition (USA/Europe or Asian)", "role": "game", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "disc2", "label": "Disc 2", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "disc3", "label": "Disc 3", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "disc4", "label": "Disc 4", "role": "disc", "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "dlc1", "label": "Lost Odyssey DLC: a Marketplace package, or a folder with your DLC packages", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "dlc2", "label": "Another Lost Odyssey DLC package", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}},
-    {"id": "dlc3", "label": "Another Lost Odyssey DLC package", "role": "dlc", "optional": true, "formats": [{"type": "file"}, {"type": "folder"}], "check": {"ids": ["4D5307FA"]}}
+    {"id": "disc1", "label": "Disc 1: its disc image (.iso) or Games on Demand file. All four discs from one edition (USA/Europe or Asian)", "role": "game", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc2", "label": "Disc 2", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc3", "label": "Disc 3", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "disc4", "label": "Disc 4", "role": "disc", "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc1", "label": "Lost Odyssey DLC: one Marketplace package file", "role": "dlc", "optional": true, "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc2", "label": "Another Lost Odyssey DLC package file", "role": "dlc", "optional": true, "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}},
+    {"id": "dlc3", "label": "Another Lost Odyssey DLC package file", "role": "dlc", "optional": true, "formats": [{"type": "file"}], "check": {"ids": ["4D5307FA"]}}
   ],
   "prepare": {
     "program": ["LostOdysseyRecomp.exe"],
     "args": [
       "--prepare-content",
-      "--source={input:game}", "--source={input:disc2}", "--source={input:disc3}", "--source={input:disc4}",
-      "--source={input:dlc1}", "--source={input:dlc2}", "--source={input:dlc3}",
-      "--destination", "{install}/game"
+      "--disc1={input:disc1}", "--disc2={input:disc2}", "--disc3={input:disc3}", "--disc4={input:disc4}",
+      "--dlc1={input:dlc1}", "--dlc2={input:dlc2}", "--dlc3={input:dlc3}",
+      "--destination={install}/game"
     ],
     "label": "Importing Lost Odyssey discs and DLC",
     "done": ["{install}/game/disc1/default.xex"]
