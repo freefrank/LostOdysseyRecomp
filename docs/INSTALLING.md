@@ -287,7 +287,7 @@ Saves cannot be moved back to a console.
 | :--- | :--- |
 | `--game <path>` | Use this game: a folder with `default.xex` or `disc1/`, or the `default.xex` file. Skips the importer; exits with an error if no `default.xex` is found. |
 | `--install` | Open the importer even when a game is set up, then exit. |
-| `--prepare-content --source <path> --destination <folder>` | Import discs and DLC without a window, then exit. Repeat `--source` for multiple sources; `--source=<path>` works too. Reports progress on stdout and errors on stderr; see [RecompLauncher integration](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md). |
+| `--prepare-content --source <path> --destination <folder>` | Import discs and DLC without a window, then exit. Repeat `--source` for multiple sources, or give one file per slot with `--disc1=<path>` to `--disc4` and `--dlc1=<path>` to `--dlc3`. Reports progress on stdout and errors on stderr; see [RecompLauncher integration](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md). |
 | `--add-to-steam` | Add the game to Steam with library artwork, then exit with a status code. Close Steam first; add it again if you move the game. |
 | `--setup` | Open the setup page, then start the game (Windows; elsewhere it only saves the current settings). |
 | `--setup-only` | Like `--setup`, then exit. |

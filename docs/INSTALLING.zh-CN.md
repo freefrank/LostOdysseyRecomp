@@ -289,7 +289,7 @@ Xenia 的存档格式相同，不需要转换。
 | :--- | :--- |
 | `--game <路径>` | 使用指定的游戏：包含 `default.xex` 或 `disc1/` 的文件夹，或 `default.xex` 文件。跳过导入器；找不到 `default.xex` 时报错退出。 |
 | `--install` | 即使已经设置好游戏也打开导入器，完成后退出。 |
-| `--prepare-content --source <路径> --destination <文件夹>` | 无窗口导入光盘和 DLC 后退出。可重复 `--source` 指定多个来源，也可写成 `--source=<路径>`；进度写入标准输出，错误写入标准错误。参见 [RecompLauncher 集成](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。 |
+| `--prepare-content --source <路径> --destination <文件夹>` | 无窗口导入光盘和 DLC 后退出。可重复 `--source` 指定多个来源，也可用 `--disc1=<路径>` 至 `--disc4`、`--dlc1=<路径>` 至 `--dlc3` 为每个位置各指定一个文件；进度写入标准输出，错误写入标准错误。参见 [RecompLauncher 集成](https://github.com/freefrank/LostOdysseyRecomp/blob/main/docs/RECOMPLAUNCHER.md)。 |
 | `--add-to-steam` | 把游戏及库封面加入 Steam，然后返回状态码并退出。请先关闭 Steam；移动游戏后需重新添加。 |
 | `--setup` | 打开设置页面，然后进入游戏（Windows；其他平台只会保存当前设置）。 |
 | `--setup-only` | 同 `--setup`，完成后退出。 |

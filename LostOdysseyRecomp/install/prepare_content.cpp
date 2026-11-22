@@ -1,7 +1,9 @@
 #include "prepare_content.h"
 #include <algorithm>
+#include <array>
 #include <csignal>
 #include <iostream>
+#include <set>
 #include <string_view>
 
 namespace install::prepare_content
@@ -34,19 +36,27 @@ std::optional<Request> ParseArguments(int argc, char* const argv[])
         requested |= std::string_view(argv[i]) == "--prepare-content";
     if (!requested) return {};
 
+    // One flag per disc and DLC slot, so a launcher passes each file the player picked on its own.
+    // The scanner still tells the discs apart, so a disc in another disc's slot imports correctly.
+    static constexpr std::array<std::string_view, 7> slots{
+        "--disc1", "--disc2", "--disc3", "--disc4", "--dlc1", "--dlc2", "--dlc3"};
+    std::set<std::string_view> slotsGiven;
     Request request;
     for (int i = 1; i < argc; ++i)
     {
         std::string_view argument(argv[i]);
         if (argument == "--prepare-content") continue;
-        // --source=<path> is one argument, so a launcher can leave out a disc or DLC the player
-        // didn't pick without leaving a --source behind that would take the next flag as its path.
+        // --disc2=<path> is one argument, so a launcher can leave out a disc or DLC the player
+        // didn't pick without leaving a flag behind that would take the next flag as its path.
         const auto equals = argument.find('=');
         const bool joined = equals != std::string_view::npos;
         std::string_view value = joined ? argument.substr(equals + 1) : std::string_view();
         if (joined) argument = argument.substr(0, equals);
-        if (argument != "--source" && argument != "--destination")
+        const bool slot = std::find(slots.begin(), slots.end(), argument) != slots.end();
+        if (!slot && argument != "--source" && argument != "--destination")
             throw Error("Unknown content preparation argument: " + std::string(argument));
+        if (slot && !slotsGiven.insert(argument).second)
+            throw Error("Specify " + std::string(argument) + " only once");
         if (!joined)
         {
             if (++i == argc || std::string_view(argv[i]).starts_with("--"))
@@ -55,15 +65,16 @@ std::optional<Request> ParseArguments(int argc, char* const argv[])
         }
         if (value.empty()) throw Error("Missing path after " + std::string(argument));
         const auto path = std::filesystem::absolute(std::filesystem::u8path(value)).lexically_normal();
-        if (argument == "--source") request.sources.push_back(path);
-        else
+        if (argument != "--destination")
         {
-            if (!request.destination.empty()) throw Error("Specify --destination only once");
-            request.destination = path;
+            request.sources.push_back(path);
+            continue;
         }
+        if (!request.destination.empty()) throw Error("Specify --destination only once");
+        request.destination = path;
     }
     if (request.sources.empty() || request.destination.empty())
-        throw Error("Usage: --prepare-content --source <folder-or-disc> [--source <path> ...] --destination <game-folder>");
+        throw Error("Usage: --prepare-content --disc1=<disc> [--disc2=<disc> ... --dlc1=<package> ...] [--source <path> ...] --destination <game-folder>");
     return request;
 }
 

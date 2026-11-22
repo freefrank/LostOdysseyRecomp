@@ -913,22 +913,34 @@ void RunPrepareContentTest()
     try { install::prepare_content::ParseArguments(int(pointers.size()), pointers.data()); }
     catch (const install::Error&) { malformed = true; }
     Require(malformed, "accepted a missing destination argument");
-    // The launcher's form: each disc or DLC as one --source=<path> argument.
-    std::vector<std::string> joinedArguments{"game", "--prepare-content",
-        "--source=" + std::string(sourceUtf8.begin(), sourceUtf8.end()),
-        "--source=" + (root / "dlc=1").string(), "--destination",
-        std::string(destinationUtf8.begin(), destinationUtf8.end())};
-    std::vector<char*> joinedPointers;
-    for (auto& argument : joinedArguments) joinedPointers.push_back(argument.data());
-    const auto joined = install::prepare_content::ParseArguments(int(joinedPointers.size()), joinedPointers.data());
-    Require(joined && joined->sources.size() == 2 && joined->sources.front() == source, "did not read --source=<path>");
-    Require(joined->sources.back() == fs::absolute(root / "dlc=1").lexically_normal(), "split a path containing '='");
-    std::string empty = "--source=";
-    joinedPointers[2] = empty.data();
-    bool emptyRejected = false;
-    try { install::prepare_content::ParseArguments(int(joinedPointers.size()), joinedPointers.data()); }
-    catch (const install::Error&) { emptyRejected = true; }
-    Require(emptyRejected, "accepted --source= without a path");
+    // The launcher's form: each disc and DLC in its own slot, flag and path in one argument.
+    const auto utf8 = [](const fs::path& path) { const auto text = path.u8string(); return std::string(text.begin(), text.end()); };
+    std::vector<std::string> slotArguments{"game", "--prepare-content", "--disc1=" + utf8(source / "disc1"),
+        "--disc2=" + utf8(source / "disc2"), "--dlc1=" + utf8(source / "source.stfs"),
+        "--destination=" + utf8(exe / "slots")};
+    std::vector<char*> slotPointers;
+    for (auto& argument : slotArguments) slotPointers.push_back(argument.data());
+    const auto slots = install::prepare_content::ParseArguments(int(slotPointers.size()), slotPointers.data());
+    Require(slots && slots->sources.size() == 3 && slots->sources.back() == source / "source.stfs", "did not read the disc and DLC slots");
+    // The rollback check above left game-path.txt blocked by a folder.
+    fs::remove_all(exe / "game-path.txt");
+    Require(run(*slots) == 0, "import from disc and DLC slots failed: " + errors.str());
+    Require(fs::exists(exe / "slots/disc2/default.xex") && fs::exists(exe / "slots/dlc"), "slots did not import both discs and the DLC");
+    const auto parse = [](std::vector<std::string> arguments) {
+        std::vector<char*> pointers;
+        for (auto& argument : arguments) pointers.push_back(argument.data());
+        return install::prepare_content::ParseArguments(int(pointers.size()), pointers.data());
+    };
+    const auto rejects = [&](std::vector<std::string> arguments) {
+        try { parse(arguments); }
+        catch (const install::Error&) { return true; }
+        return false;
+    };
+    Require(rejects({"game", "--prepare-content", "--disc1=", "--destination=/game"}), "accepted --disc1= without a path");
+    Require(rejects({"game", "--prepare-content", "--disc1=/a", "--disc1=/b", "--destination=/game"}), "accepted --disc1 twice");
+    Require(rejects({"game", "--prepare-content", "--disc5=/a", "--destination=/game"}), "accepted a fifth disc slot");
+    const auto equalsSign = parse({"game", "--prepare-content", "--dlc2=/dlc=a", "--destination=/game"});
+    Require(equalsSign && equalsSign->sources.front() == fs::path("/dlc=a"), "split a path containing '='");
     os::user_paths::g_usePortableLayout = wasPortable;
     os::user_paths::g_executableDirectory = previousExecutable;
     std::cout << "[PASS] Headless import: discs, DLC, Unicode paths, retry, adoption, cancellation, rollback, arguments\n";
