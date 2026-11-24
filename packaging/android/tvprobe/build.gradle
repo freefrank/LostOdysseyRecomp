@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'io.github.freefrank.lostodyssey'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+    defaultConfig {
+        applicationId 'io.github.freefrank.lostodyssey.tvprobe'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0-tv'
+    }
+    sourceSets.main {
+        java.srcDir '../runtime/src/main/java'
+        java.include '**/TvProbeActivity.java', '**/TvModePolicy.java', '**/TvDisplayDiagnostics.java',
+            '**/TvOutputController.java', '**/TvSettingsDialog.java', '**/TvAudioProbe.java'
+        res.srcDir layout.buildDirectory.dir('generated/tv-res')
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { disable 'MissingTranslation' }
+}
+def stageTvResources = tasks.register('stageTvResources', Copy) {
+    from('../runtime/src/main/res') { include 'values/tv.xml', 'values-it/tv.xml' }
+    into layout.buildDirectory.dir('generated/tv-res')
+}
+tasks.named('preBuild') { dependsOn stageTvResources }
