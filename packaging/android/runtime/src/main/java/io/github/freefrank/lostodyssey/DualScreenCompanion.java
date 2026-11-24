@@ -20,6 +20,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.net.Uri;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -71,6 +72,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
     private final Handler main = new Handler(Looper.getMainLooper());
     private CompanionPresentation presentation;
     private boolean started;
+    private boolean rendererGone;
 
     DualScreenCompanion(Activity activity) {
         this.activity = activity;
@@ -91,6 +93,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
     void start() {
         if (started || displays == null) return;
         started = true;
+        rendererGone = false;
         displays.registerDisplayListener(this, main);
         refresh();
     }
@@ -109,7 +112,7 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
     }
 
     private void refresh() {
-        if (!started || activity.isFinishing() || !isEnabled(activity)) {
+        if (!started || rendererGone || activity.isFinishing() || !isEnabled(activity)) {
             dismiss();
             return;
         }
@@ -297,6 +300,17 @@ final class DualScreenCompanion implements DisplayManager.DisplayListener {
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     return true; // the panel never navigates away
+                }
+
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    // Without this a WebView renderer crash also ends the game process.
+                    Log.w(TAG, "companion renderer gone (crash=" + detail.didCrash() + ")");
+                    // Stay hidden until the next start, so a crashing page cannot loop.
+                    rendererGone = true;
+                    if (presentation == CompanionPresentation.this) DualScreenCompanion.this.dismiss();
+                    else CompanionPresentation.this.dismiss();
+                    return true;
                 }
             });
             web.setWebChromeClient(new WebChromeClient());
