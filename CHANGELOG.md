@@ -13,7 +13,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Changing internal or shadow resolution in Settings during play no longer loses parts of the paused scene (#726).
 - Fixed a recompiled game routine that could return a wrong comparison result (#738).
 - The Settings quit prompt now says Yes quits the game, and the Chinese quit option no longer shows a missing character (#788, #789).
-- Works with RecompLauncher: set up from your own discs and change graphics settings without editing a file (#761).
+- Works with RecompLauncher: set up from your own discs and change graphics settings without editing a file (#761). Its setup asks for each disc and DLC file on its own (#797).
+- Pressing a key that isn't bound to the game, such as a screenshot key or Alt+Tab, no longer switches the button prompts to the keyboard (#791).
 
 ### 简体中文
 
@@ -22,7 +23,8 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 游戏中在设置里修改内部分辨率或阴影分辨率时，暂停画面不再丢失部分内容（#726）。
 - 修复一处重编译游戏函数可能返回错误比较结果的问题（#738）。
 - 设置中退出确认的“是”现在明确为退出游戏；中文退出选项不再显示缺字（#788、#789）。
-- 支持 RecompLauncher：用自己的光盘完成设置，无需编辑文件即可调整画质（#761）。
+- 支持 RecompLauncher：用自己的光盘完成设置，无需编辑文件即可调整画质（#761）。设置时逐张选择各光盘与 DLC 文件（#797）。
+- 按下未绑定到游戏的按键（如截图键、Alt+Tab）时，按键提示不再切换为键盘图标（#791）。
 
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
