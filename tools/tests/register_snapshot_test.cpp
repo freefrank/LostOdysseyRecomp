@@ -88,5 +88,17 @@ int main() {
     Check(gpu::UpdateConstantBankSnapshot(snapshot, bank.data(), guest.data(), 0) == 1ull << 2 &&
         matches(snapshot) && snapshot.values[33] == 0x0badf00d);
     ++checked;
+    // Restore every possible four-row jitter range, also when it crosses blocks
+    // or a separate guest register changes before the next draw.
+    uint32_t draw[gpu::ConstantBankSnapshot::kWords]{};
+    gpu::RestoreDrawConstantBlocks(draw, snapshot, UINT64_MAX);
+    for (unsigned slot = 0; slot <= 252; ++slot) {
+        for (unsigned word = slot * 4; word < slot * 4 + 16; ++word) draw[word] ^= 0xffffffffu;
+        const unsigned guestSlot = (slot + 71) % 256;
+        snapshot.values[guestSlot * 4] ^= 0x80808080u;
+        gpu::RestoreDrawConstantBlocks(draw, snapshot, gpu::ConstantVectorBlock(slot)
+            | gpu::ConstantVectorBlock(slot + 3) | gpu::ConstantVectorBlock(guestSlot));
+        Check(std::equal(std::begin(draw), std::end(draw), snapshot.values));
+    }
     std::printf("register snapshot: %u values, MMIO fallback and upload reuse checks passed\n", checked);
 }
