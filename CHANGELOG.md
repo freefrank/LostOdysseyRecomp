@@ -15,6 +15,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The Settings quit prompt now says Yes quits the game, and the Chinese quit option no longer shows a missing character (#788, #789).
 - Works with RecompLauncher: set up from your own discs and change graphics settings without editing a file (#761). Its setup asks for each disc and DLC file on its own (#797).
 - Pressing a key that isn't bound to the game, such as a screenshot key or Alt+Tab, no longer switches the button prompts to the keyboard (#791).
+- Android: on dual-screen handhelds such as the AYN Thor, the second screen can show the party, a map radar, the bag and touch buttons (CTRL → Second-screen panel, off by default) (#771).
 
 ### 简体中文
 
@@ -25,6 +26,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 设置中退出确认的“是”现在明确为退出游戏；中文退出选项不再显示缺字（#788、#789）。
 - 支持 RecompLauncher：用自己的光盘完成设置，无需编辑文件即可调整画质（#761）。设置时逐张选择各光盘与 DLC 文件（#797）。
 - 按下未绑定到游戏的按键（如截图键、Alt+Tab）时，按键提示不再切换为键盘图标（#791）。
+- Android：在 AYN Thor 等双屏掌机上，副屏可显示队伍、地图雷达、背包和触摸按键（CTRL → 副屏面板，默认关闭）（#771）。
 
 ## [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) — 2026-10-26
 
