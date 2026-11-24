@@ -158,6 +158,7 @@ if(UNIX)
         lo_review_python(recomplauncher_config recomplauncher_config_test.py --out --cxx)
     endif()
     lo_review_python(kernel_lifetime kernel_lifetime_regression.py --out --cxx ${sanitizer_flags})
+    lo_review_python(read_only_depth_draw read_only_depth_draw_test.py --out --cxx ${sanitizer_flags})
 endif()
 
 # Builds the unmodified updater apply mode and checks AppImage backup cleanup,
