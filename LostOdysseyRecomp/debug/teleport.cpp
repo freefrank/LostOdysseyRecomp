@@ -18,6 +18,7 @@
 #include <patches/mod_hot_reload.h>
 #include <patches/battle_intro_gate.h>
 #include <discord/game_state.h>
+#include <companion/companion.h>
 
 extern "C" PPC_FUNC(__imp__sub_82290B60);
 extern "C" PPC_FUNC(__imp__sub_822FA548);
@@ -534,6 +535,7 @@ PPC_FUNC(sub_82290B60)
         battle_intro_skip::EngineTick(base);
         gpu::cinematic_bars::UpdatePause(base);
         discord_rpc::Tick(base);
+        companion::Tick(base);
         bool playerInField;
         {
             std::lock_guard lock(stateMutex);

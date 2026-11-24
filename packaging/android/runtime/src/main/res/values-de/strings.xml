@@ -27,6 +27,7 @@
     <string name="save_location_cancel_pending">Vorgemerkten Wechsel abbrechen</string>
     <string name="touch_hide_all">Alle Touch-Steuerelemente ausblenden</string>
     <string name="touch_hide_all_help">Blende die Systemleisten ein oder nutze die Android-Zurück-Funktion, um CTRL für 4 Sekunden anzuzeigen.</string>
+    <string name="touch_dual_screen">Panel auf dem zweiten Bildschirm (Dual-Screen-Geräte)</string>
     <string name="touch_settings_title">Steuerungseinstellungen</string>
     <string name="touch_show_controls">Touch-Steuerelemente anzeigen</string>
     <string name="touch_controller_hint">Controller angeschlossen. Die Touch-Steuerelemente werden automatisch ausgeblendet. Schalte sie hier ein, um beides gleichzeitig zu verwenden.</string>
