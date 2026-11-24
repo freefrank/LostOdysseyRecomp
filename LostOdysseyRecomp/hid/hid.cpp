@@ -239,7 +239,10 @@ void hid::HandleKeyboardEvent(int32_t scancode, bool pressed)
     if (scancode >= 0 && scancode < SDL_SCANCODE_COUNT)
     {
         g_keys[scancode] = pressed;
-        if (pressed) { g_promptController.Keyboard(); PublishPromptStyle(); }
+        // Only keys bound to game input switch the prompts to the keyboard. A screenshot
+        // key, Alt+Tab or a function key must not change the icons of a pad player.
+        const bool bound = scancode != map::NoKey && std::find(g_keyboardMap.begin(), g_keyboardMap.end(), uint16_t(scancode)) != g_keyboardMap.end();
+        if (pressed && bound) { g_promptController.Keyboard(); PublishPromptStyle(); }
     }
 }
 
