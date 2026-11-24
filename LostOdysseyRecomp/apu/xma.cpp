@@ -537,7 +537,11 @@ namespace apu::xma
             {
                 ProcessPacket(ctx, data);
                 Consume(ctx, data, ring);
-                if ((!data.anyInputValid() && !ctx.remainingSubframes) || data.errorStatus() == 4)
+                // An input refill can target the inactive packet buffer. In
+                // that case ProcessPacket cannot progress on the current one;
+                // release the decoder mutex instead of retrying 4096 times.
+                // Pending PCM has already drained through Consume above.
+                if ((!data.inputValid(data.currentBuffer()) && !ctx.remainingSubframes) || data.errorStatus() == 4)
                     break;
             }
             data.setOutputWriteOffset(ring.write / kOutputBytesPerBlock);
