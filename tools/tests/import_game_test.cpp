@@ -940,7 +940,7 @@ void RunPrepareContentTest()
     Require(rejects({"game", "--prepare-content", "--disc1=/a", "--disc1=/b", "--destination=/game"}), "accepted --disc1 twice");
     Require(rejects({"game", "--prepare-content", "--disc5=/a", "--destination=/game"}), "accepted a fifth disc slot");
     const auto equalsSign = parse({"game", "--prepare-content", "--dlc2=/dlc=a", "--destination=/game"});
-    Require(equalsSign && equalsSign->sources.front() == fs::path("/dlc=a"), "split a path containing '='");
+    Require(equalsSign && equalsSign->sources.front() == fs::absolute("/dlc=a").lexically_normal(),"split a path containing '='");
     os::user_paths::g_usePortableLayout = wasPortable;
     os::user_paths::g_executableDirectory = previousExecutable;
     std::cout << "[PASS] Headless import: discs, DLC, Unicode paths, retry, adoption, cancellation, rollback, arguments\n";
