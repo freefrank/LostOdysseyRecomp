@@ -2,6 +2,46 @@
 
 [Documentation](README.md) · [Roadmap](ROADMAP.md) / [路线图](ROADMAP.zh-CN.md) · [Changelog](../CHANGELOG.md)
 
+## v1.2.0 published — 2026-11-25
+
+[v1.2.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.2.0) was published at 2026-11-25T11:29:34Z by the workflow's own publish step. A GitHub API read on 2026-11-25 at about 11:31 UTC shows that it is not a draft or pre-release and is the GitHub Latest release. The release body matches the [Changelog, v1.2.0](../CHANGELOG.md#v120--2026-11-25) section; `tools/release/extract_release_notes.py` gives the same text except for a trailing blank line. It was cut from tag `v1.2.0` at commit `4d1c34b4`, the release PR [#800](https://github.com/freefrank/LostOdysseyRecomp/pull/800) squash. The previous release is v1.1.0, published 2026-10-26T01:12:52Z at `fcfda131`.
+
+The publish job runs in the `release` environment, and the maintainer approved this run before publish.
+
+The release run is GitHub Actions run [45603129907](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/45603129907), `Release` on tag `v1.2.0`. Every job succeeded. The release has six packages: the five from v1.1.0 plus the Linux RecompLauncher `.tar.gz` bundle, which is new in this release ([#761](https://github.com/freefrank/LostOdysseyRecomp/pull/761)).
+
+Before tagging, a build-only release rehearsal on main `154e52d6` (run [45598050123](https://github.com/freefrank/LostOdysseyRecomp/actions/runs/45598050123)) passed in every build job and produced the Linux launcher bundle.
+
+Changes since v1.1.0 (the [Changelog, v1.2.0](../CHANGELOG.md#v120--2026-11-25) section is the release body):
+
+- RecompLauncher support: headless setup from your own discs and graphics settings without editing a file, PRs [#761](https://github.com/freefrank/LostOdysseyRecomp/pull/761) and [#797](https://github.com/freefrank/LostOdysseyRecomp/pull/797). Setup asks for each disc and DLC file on its own.
+- Android dual-screen companion panel (CTRL → Second-screen panel, off by default): PR [#771](https://github.com/freefrank/LostOdysseyRecomp/pull/771).
+- Skip battle intro cheat in the Debug Menu: PR [#768](https://github.com/freefrank/LostOdysseyRecomp/pull/768).
+- Texture cache video memory budget for texture packs: PR [#759](https://github.com/freefrank/LostOdysseyRecomp/pull/759).
+- Changing internal or shadow resolution during play keeps the paused scene: PR [#726](https://github.com/freefrank/LostOdysseyRecomp/pull/726).
+- Fix for a recompiled game routine that could return a wrong comparison result: PR [#738](https://github.com/freefrank/LostOdysseyRecomp/pull/738).
+- Quit prompt wording and the Chinese quit glyph: PRs [#788](https://github.com/freefrank/LostOdysseyRecomp/pull/788) and [#789](https://github.com/freefrank/LostOdysseyRecomp/pull/789).
+- Unbound keys such as a screenshot key or Alt+Tab no longer switch the prompts to the keyboard: PR [#791](https://github.com/freefrank/LostOdysseyRecomp/pull/791).
+- PR [#801](https://github.com/freefrank/LostOdysseyRecomp/pull/801): a Windows-only installer test bug found by the #797 import check; the fix is in the tag.
+- Renderer performance PRs [#731](https://github.com/freefrank/LostOdysseyRecomp/pull/731), [#736](https://github.com/freefrank/LostOdysseyRecomp/pull/736), [#746](https://github.com/freefrank/LostOdysseyRecomp/pull/746) and [#792](https://github.com/freefrank/LostOdysseyRecomp/pull/792) are in this range but not in the Changelog section, so the release body does not describe them.
+
+Assets, as listed by the GitHub release API on 2026-11-25 (size and the SHA-256 digest GitHub reports; the files were not downloaded again for this record):
+
+| Asset | Bytes | SHA-256 |
+|---|---:|---|
+| `LostOdysseyRecomp-windows-x64-v1.2.0.zip` | 154,716,116 | `31ac7b54544cfa4ecc39c303eb1d47199f72e94f2f3d95751080d9496c1d4a17` |
+| `LostOdysseyRecomp-linux-x64-v1.2.0.AppImage` | 89,106,936 | `7eeafe106d84affe3a472c055f0a8c6bd75c97d0d8b324ba07729a7e9bbf88e2` |
+| `LostOdysseyRecomp-linux-x64-v1.2.0.flatpak` | 56,945,920 | `d3a78f54d35c16ddbb95c2c072fa97dce12e65cbd9e4742c002fbf78993f8653` |
+| `LostOdysseyRecomp-linux-x64-v1.2.0.tar.gz` | 88,501,695 | `c9e554822be2c82c3a5b16eee38551a8f8b780b9e38a98451dbb77d699db7345` |
+| `LostOdysseyRecomp-android-arm64-v1.2.0.apk` | 47,682,927 | `7c9f6a1ea366c94947e83cbe1f9461a790647ba8d14e875fb691de77b9cfcbfc` |
+| `LostOdysseyRecomp-macos-arm64-v1.2.0.dmg` | 65,694,632 | `fbdec80e8f8ea23586718dbf60167012d14abd40037a3dcbf72bf79618cd55a7` |
+
+Validation: the rehearsal above. A local Android APK of main `154e52d6` was built in WSL with lint reporting 0 errors; it was not run on a device, because the tablet is away. The #797 headless import was tested on Windows against real discs: a four-disc set with three DLC files in shuffled slots, US ISOs, and error cases. That test found the Windows-only bug fixed in #801. These checks ran on source builds or on Windows, not on the published packages.
+
+Limits: no game run with these release packages is recorded, and no macOS or Android device run is recorded.
+
+Acceptance: none. The maintainer has not accepted v1.2.0. Issue states were not re-read for this record. Publication is not acceptance ([Issues and acceptance](#issues-and-acceptance)).
+
 ## v1.1.0 published — 2026-10-26
 
 [v1.1.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.1.0) was published at 2026-10-26T01:12:52Z by the workflow's own publish step. A GitHub API read on 2026-10-26 shows that it is not a draft or pre-release and is the GitHub Latest release. The release body equals the [Changelog, v1.1.0](../CHANGELOG.md#v110--2026-10-26) section. It was cut from tag `v1.1.0` at commit `fcfda131`, the PR [#729](https://github.com/freefrank/LostOdysseyRecomp/pull/729) fix on top of the release PR [#728](https://github.com/freefrank/LostOdysseyRecomp/pull/728) (`e4d111f8`). The previous release is v1.0.6, published 2026-10-19T04:32:05Z at `b11c884e`.
