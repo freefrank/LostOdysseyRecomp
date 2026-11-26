@@ -66,6 +66,17 @@ struct Write { uint32_t offset = 0, value = 0; unsigned bytes = 4; };
 inline bool CatalogValue(std::span<const data::Entry> list, uint32_t v) {
     return std::any_of(list.begin(), list.end(), [v](const auto& e) { return e.value == v; });
 }
+inline constexpr bool ValidSkillCatalog() {
+    for (unsigned i = 0; i < std::size(data::LearnedSkills); ++i) {
+        const auto value = data::LearnedSkills[i].value;
+        if (value >= data::CharacterStride ||
+            uint64_t(value) + 8 * data::CharacterStride >= data::DataSize) return false;
+        for (unsigned j = 0; j < i; ++j)
+            if (data::LearnedSkills[j].value == value) return false;
+    }
+    return true;
+}
+static_assert(ValidSkillCatalog(), "Learned skills must have unique, bounded character byte offsets");
 // Build the whole transaction first. An invalid member aborts without any write.
 inline std::optional<std::vector<Write>> Plan(Memory m, const Request& r) {
     if (!Validate(m)) return {};
