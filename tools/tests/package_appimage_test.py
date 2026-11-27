@@ -146,8 +146,16 @@ class PackageAppImageTests(unittest.TestCase):
                 self.assertEqual(archive.getmember('LostOdysseyRecomp.AppImage').mode & 0o777, 0o755)
                 profile = json.load(archive.extractfile('recomplauncher.json'))
                 self.assertEqual(profile['prepare']['program'], ['LostOdysseyRecomp.AppImage'])
-                self.assertEqual(profile['config'][0]['file'][0]['path'], '{config}/lost-odyssey-recomp/settings.ini')
-                self.assertEqual(profile['saves'], ['{local}/lost-odyssey-recomp/save'])
+                adopted = '{data}/.copied-from-program-folder'
+                self.assertEqual(profile['config'][0]['file'], [
+                    {'path': '{data}/settings.ini', 'if': adopted},
+                    {'path': '{install}/usr/bin/settings.ini', 'if': '{install}/usr/bin/settings.ini'},
+                    {'path': '{data}/settings.ini'}])
+                self.assertEqual(profile['saves'], ['{data}/save', '{install}/usr/bin/save',
+                                                    '{local}/lost-odyssey-recomp/save'])
+                self.assertEqual(profile['folders']['saves'][0], {'path': '{data}/save', 'if': adopted})
+                self.assertEqual(profile['folders']['mods'][-1], {'path': '{data}/mods'})
+                self.assertEqual(profile['start']['env'], {'LO_LOG_DIR': '{data}/logs', 'LO_NO_UPDATE': '1'})
                 rows = {row['id']: row for row in profile['settings']}
                 self.assertNotIn('backend', rows)
                 self.assertNotIn('frame_generation', rows)

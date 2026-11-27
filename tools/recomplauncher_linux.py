@@ -9,17 +9,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def profile():
     result = json.loads((ROOT / 'recomplauncher.json').read_text(encoding='utf-8'))
+    # Given RECOMPLAUNCHER_DATA, the game copies what earlier builds wrote
+    # beside usr/bin/LostOdysseyRecomp into {data} once, then writes the marker
+    # and keeps everything in {data}. Until then it still uses usr/bin.
+    adopted = '{data}/.copied-from-program-folder'
+    old = '{install}/usr/bin'
+
+    def where(name):
+        return [{'path': f'{{data}}/{name}', 'if': adopted},
+                {'path': f'{old}/{name}', 'if': f'{old}/{name}'},
+                {'path': f'{{data}}/{name}'}]
+
     result['start'] = {
         'program': ['LostOdysseyRecomp.AppImage'],
-        'env': {'LO_LOG_DIR': '{install}/logs'},
+        'env': {'LO_LOG_DIR': '{data}/logs', 'LO_NO_UPDATE': '1'},
     }
     result['prepare']['program'] = ['LostOdysseyRecomp.AppImage']
-    result['config'][0]['file'] = [{'path': '{config}/lost-odyssey-recomp/settings.ini'}]
-    result['saves'] = ['{local}/lost-odyssey-recomp/save']
+    result['config'][0]['file'] = where('settings.ini')
+    # Backups made from an earlier place restore into the first entry.
+    result['saves'] = ['{data}/save', f'{old}/save', '{local}/lost-odyssey-recomp/save']
     result['folders'] = {
-        'saves': [{'path': result['saves'][0]}],
-        'mods': [{'path': '{local}/lost-odyssey-recomp/mods'}],
-        'logs': [{'path': '{install}/logs'}],
+        'saves': where('save'),
+        'mods': where('mods'),
+        'logs': [{'path': '{data}/logs'}],
     }
     # Linux releases have Vulkan DLSS/FSR SR, but no XeSS, neural rendering
     # or frame generation. Keep shared row IDs and persisted values in sync.
