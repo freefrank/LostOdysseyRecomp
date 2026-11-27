@@ -74,7 +74,17 @@ static void CheckLauncherData(const fs::path& root)
     Check(os::user_paths::PortableRoot(program) == program, "an interrupted copy left the program folder");
     Check(!fs::exists(recompdata / "mods") && !fs::exists(recompdata / "mods.part"), "a failed item was left in place");
     Check(!fs::exists(recompdata / "profile.part"), "a leftover .part item was kept");
-    Check(ReadText(recompdata / "profile/achievements.ini") == "earned", "profile not copied before the failure");
+    // The items this run copied are taken back; what was there before stays.
+    Check(!fs::exists(recompdata / "profile") && !fs::exists(recompdata / "game-path.txt") &&
+          !fs::exists(recompdata / "settings.ini"), "a failed copy kept the items it had copied");
+    Check(!fs::exists(recompdata / ".copying-items"), "a failed copy kept its journal");
+    Check(ReadText(recompdata / "save/user01/slot.bin") == "newer", "a failed copy removed an existing save");
+
+    // That start played from the program folder, so its saves there are newer.
+    WriteText(program / "profile/achievements.ini", "earned more");
+    // A start that stopped before its marker leaves journaled items behind.
+    WriteText(recompdata / "mod-list.ini", "stale\n");
+    WriteText(recompdata / ".copying-items", "mod-list.ini\n");
 
     // The next start finishes the copy.
     fs::remove(program / "mods/a/pipe");
@@ -82,6 +92,8 @@ static void CheckLauncherData(const fs::path& root)
     os::user_paths::Initialize(program);
     Check(fs::is_regular_file(marker), "the next start did not finish the copy");
     Check(os::user_paths::PortableRoot(program) == recompdata, "finished copy did not use the data folder");
+    Check(ReadText(recompdata / "profile/achievements.ini") == "earned more", "the next start kept an older copy");
+    Check(!fs::exists(recompdata / ".copying-items"), "a finished copy kept its journal");
     Check(ReadText(recompdata / "settings.ini") == "vsync=0\n", "old settings did not replace the launcher's");
     Check(ReadText(recompdata / "mod-list.ini") == "a\n", "mod list not copied");
     Check(ReadText(recompdata / "game-path.txt") == "/games/lo/game\n", "game path not copied");

@@ -55,15 +55,56 @@ namespace os::launcher_data
         }
     }
 
+    namespace detail
+    {
+        // Names the items this copy renamed into the data folder, so a run
+        // that fails partway can take back exactly those.
+        inline constexpr const char* CopyJournal = ".copying-items";
+
+        inline bool Journal(const std::filesystem::path& data, const std::string& item)
+        {
+            std::ofstream out(data / CopyJournal, std::ios::binary | std::ios::app);
+            out << item << '\n';
+            out.flush();
+            return static_cast<bool>(out);
+        }
+
+        // Removes the journaled items and the journal; nothing else in the
+        // data folder, and never the originals.
+        inline bool UndoJournaled(const std::filesystem::path& data)
+        {
+            const auto journal = data / CopyJournal;
+            bool exists = false;
+            if (!Exists(journal, exists)) return false;
+            if (!exists) return true;
+            {
+                std::ifstream in(journal, std::ios::binary);
+                if (!in) return false;
+                std::error_code error;
+                for (std::string line; std::getline(in, line);)
+                    for (const std::string item : ProgramFolderItems)
+                        if (line == item)
+                        {
+                            std::filesystem::remove_all(data / item, error);
+                            if (error) return false;
+                        }
+            }
+            std::error_code error;
+            std::filesystem::remove(journal, error);
+            return !error;
+        }
+    }
+
     // Copies the items above from the program folder into the data folder once.
-    // Each item goes to <name>.part first and is renamed into place only when
-    // the whole copy succeeded; the marker is written last. The originals are
-    // never moved or deleted. Until the marker exists this returns false, and
-    // the caller keeps using the program folder for that start; the next start
-    // removes leftover .part items and tries again. On this adoption start the
-    // old settings.ini replaces the one in the data folder (RecompLauncher
-    // writes that file before the game starts); no other item is copied over
-    // an existing one.
+    // Each item goes to <name>.part first, is journaled, and is renamed into
+    // place only when its copy succeeded; the marker is written last. The
+    // originals are never moved or deleted. Until the marker exists this
+    // returns false and the caller keeps using the program folder for that
+    // start, so the items this run renamed into place are removed again: the
+    // next start copies them afresh, with whatever changed in the program
+    // folder meanwhile. On this adoption start the old settings.ini replaces
+    // the one in the data folder (RecompLauncher writes that file before the
+    // game starts); no other item is copied over an existing one.
     inline bool AdoptProgramFolder(const std::filesystem::path& program, const std::filesystem::path& data)
     {
         bool exists = false;
@@ -72,28 +113,37 @@ namespace os::launcher_data
         std::error_code error;
         std::filesystem::create_directories(data, error);
         if (error) return false;
+        // A run that stopped before its marker left journaled items behind.
+        if (!detail::UndoJournaled(data)) return false;
+        const auto fail = [&] {
+            detail::UndoJournaled(data);
+            return false;
+        };
         for (const std::string item : ProgramFolderItems)
         {
             const auto source = program / item;
             const auto target = data / item;
             const auto part = data / (item + ".part");
             std::filesystem::remove_all(part, error);
-            if (error) return false;
-            if (!detail::Exists(source, exists)) return false;
+            if (error) return fail();
+            if (!detail::Exists(source, exists)) return fail();
             if (!exists) continue;
             const bool replaces = item == "settings.ini";
-            if (!detail::Exists(target, exists)) return false;
+            if (!detail::Exists(target, exists)) return fail();
             if (exists && !replaces) continue;
             std::filesystem::copy(source, part,
                 std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks, error);
+            if (!error && !detail::Journal(data, item)) error = std::make_error_code(std::errc::io_error);
             if (!error) std::filesystem::rename(part, target, error);
             if (error)
             {
                 std::error_code ignored;
                 std::filesystem::remove_all(part, ignored);
-                return false;
+                return fail();
             }
         }
-        return detail::WriteMarker(data);
+        if (!detail::WriteMarker(data)) return fail();
+        std::filesystem::remove(data / detail::CopyJournal, error);
+        return true;
     }
 }
