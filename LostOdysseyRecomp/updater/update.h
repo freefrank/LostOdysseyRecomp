@@ -146,6 +146,9 @@ struct StartupPreferences
 
 StartupPreferences ReadStartupPreferences(const std::filesystem::path &settingsPath);
 
+// Names the environment switch that turns update checks off, or returns null.
+// RecompLauncher brings new releases itself, so RECOMPLAUNCHER=1 counts as one.
+const char *UpdatesDisabledBy(const char *noUpdate, const char *recompLauncher);
 StartupResult PrepareAtStartup(const StartupOptions &options);
 std::filesystem::path CurrentExecutablePath();
 std::vector<std::wstring> CurrentLaunchArguments();

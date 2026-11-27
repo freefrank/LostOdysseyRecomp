@@ -73,7 +73,7 @@ bool ConfigureStandalone(const std::filesystem::path &helper, StartupOptions &op
     if (!std::filesystem::is_regular_file(options.executable, ec))
         options.currentVersion = "0.0.0"; // An empty folder needs a full installation.
     // A direct user request is independent of the saved automatic-check opt-out.
-    // PrepareAtStartup still respects the explicit LO_NO_UPDATE environment switch.
+    // PrepareAtStartup still respects LO_NO_UPDATE and RECOMPLAUNCHER=1.
     options.automaticUpdates = true;
     options.uiLanguage = 0;
     return true;
@@ -147,6 +147,8 @@ int RunStandalone(const std::filesystem::path &helper, PrepareUpdate prepare)
     case StartupStatus::Cancelled:
         return 0;
     case StartupStatus::Disabled:
+        if (result.detail == "RECOMPLAUNCHER")
+            return Notify(L"RecompLauncher keeps this installation up to date.", false);
         return Notify(L"Update checks are disabled by LO_NO_UPDATE.", false);
     default:
         return Notify(L"The update check could not complete. Please try again later.", true, result.detail);
