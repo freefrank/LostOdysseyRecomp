@@ -279,18 +279,15 @@ bool ConfirmUpdate(const Release &release, const StartupOptions &options)
 StartupResult PrepareAtStartup(const StartupOptions &options)
 {
     StartupResult result;
-    char disabledValue[8]{};
-#ifdef _WIN32
-    const bool environmentDisabled = GetEnvironmentVariableA("LO_NO_UPDATE", disabledValue, DWORD(std::size(disabledValue))) > 0 &&
-                                     std::string_view(disabledValue) != "0";
-#else
-    const char *disabled = std::getenv("LO_NO_UPDATE");
-    const bool environmentDisabled = disabled && std::string_view(disabled) != "0";
-#endif
-    if (!options.automaticUpdates || environmentDisabled)
+    char noUpdate[8]{};
+    char recompLauncher[8]{};
+    const bool noUpdateSet = GetEnvironmentVariableA("LO_NO_UPDATE", noUpdate, DWORD(std::size(noUpdate))) > 0;
+    const bool recompLauncherSet = GetEnvironmentVariableA("RECOMPLAUNCHER", recompLauncher, DWORD(std::size(recompLauncher))) > 0;
+    const char *disabledBy = UpdatesDisabledBy(noUpdateSet ? noUpdate : nullptr, recompLauncherSet ? recompLauncher : nullptr);
+    if (!options.automaticUpdates || disabledBy)
     {
         result.status = StartupStatus::Disabled;
-        result.detail = environmentDisabled ? "LO_NO_UPDATE" : "automatic_updates=0";
+        result.detail = disabledBy ? disabledBy : "automatic_updates=0";
         return result;
     }
     std::string error;

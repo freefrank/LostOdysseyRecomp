@@ -312,7 +312,7 @@ Environment variables override the saved settings for one run:
 | `LO_FPS` | Frame-rate cap from 0 to 1000; `0` means uncapped. |
 | `LO_FG_PROVIDER`, `LO_FG_MODE`, `LO_FG_MULTIPLIER`, `LO_FG_TARGET_FPS` | Frame generation: `off`/`dlss`/`fsr`/`xess`; `off`/`fixed`/`dynamic`; 2–6; target FPS ([details](notes/vulkan-fg-fsr4-metalfx.md)). |
 | `LO_OPTISCALER_PATH` | Windows: full path to your own `OptiScaler.dll` ([setup](notes/vulkan-fg-fsr4-metalfx.md#optional-optiscaler-loading-on-windows)). |
-| `LO_NO_UPDATE` | Any value other than `0` skips the update check. |
+| `LO_NO_UPDATE` | Any value other than `0` skips the update check. RecompLauncher sets `RECOMPLAUNCHER=1`, which does the same. |
 | `LO_SAVE_DIR` | Full path to a `save/` folder, containing `userNN` slot folders; useful for syncing Windows and Android saves. |
 | `LO_PROFILE_DIR`, `LO_SHADER_CACHE_DIR`, `LO_MODS_DIR` | Use another profile, shader cache or mods folder. An empty `LO_SHADER_CACHE_DIR` turns the shader cache off. |
 | `LO_MODS` | `0` or `false` disables mods. |

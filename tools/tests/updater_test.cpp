@@ -424,6 +424,14 @@ int wmain(int argc, wchar_t **argv)
     SetEnvironmentVariableW(L"LO_NO_UPDATE", nullptr);
     Expect(disabled.status == updater::StartupStatus::Disabled && disabled.detail == "LO_NO_UPDATE",
            "LO_NO_UPDATE bypasses networking before the formal-package check");
+    SetEnvironmentVariableW(L"RECOMPLAUNCHER", L"1");
+    auto launcher = updater::PrepareAtStartup(offlineOptions);
+    SetEnvironmentVariableW(L"RECOMPLAUNCHER", L"0");
+    auto notLauncher = updater::PrepareAtStartup(offlineOptions);
+    SetEnvironmentVariableW(L"RECOMPLAUNCHER", nullptr);
+    Expect(launcher.status == updater::StartupStatus::Disabled && launcher.detail == "RECOMPLAUNCHER",
+           "RECOMPLAUNCHER=1 bypasses networking: the launcher brings updates");
+    Expect(notLauncher.status == updater::StartupStatus::Offline, "RECOMPLAUNCHER=0 still checks for updates");
 
     if (failures) { std::cerr << failures << " updater fixture(s) failed\n"; return 1; }
     std::cout << "PASS: updater version/asset/staging/rollback/helper/preservation fixtures\n";

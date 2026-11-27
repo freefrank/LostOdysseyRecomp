@@ -434,6 +434,13 @@ bool ValidateApplyPlan(const ApplyPlan &plan, std::string &error)
     return true;
 }
 
+const char *UpdatesDisabledBy(const char *noUpdate, const char *recompLauncher)
+{
+    if (noUpdate && std::string_view(noUpdate) != "0") return "LO_NO_UPDATE";
+    if (recompLauncher && std::string_view(recompLauncher) == "1") return "RECOMPLAUNCHER";
+    return nullptr;
+}
+
 const char *StatusName(StartupStatus status)
 {
     switch (status)

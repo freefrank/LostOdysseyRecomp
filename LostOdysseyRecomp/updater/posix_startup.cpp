@@ -26,11 +26,11 @@ namespace updater
 StartupResult PrepareAtStartup(const StartupOptions &options)
 {
     StartupResult result;
-    const char *disabled = std::getenv("LO_NO_UPDATE");
-    if (!options.automaticUpdates || (disabled && std::string_view(disabled) != "0"))
+    const char *disabledBy = UpdatesDisabledBy(std::getenv("LO_NO_UPDATE"), std::getenv("RECOMPLAUNCHER"));
+    if (!options.automaticUpdates || disabledBy)
     {
         result.status = StartupStatus::Disabled;
-        result.detail = !options.automaticUpdates ? "automatic_updates=0" : "LO_NO_UPDATE";
+        result.detail = !options.automaticUpdates ? "automatic_updates=0" : disabledBy;
         return result;
     }
     std::string error;
@@ -74,11 +74,11 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
 StartupResult PrepareAtStartup(const StartupOptions &options)
 {
     StartupResult result;
-    const char *disabled = std::getenv("LO_NO_UPDATE");
-    if (!options.automaticUpdates || (disabled && std::string_view(disabled) != "0"))
+    const char *disabledBy = UpdatesDisabledBy(std::getenv("LO_NO_UPDATE"), std::getenv("RECOMPLAUNCHER"));
+    if (!options.automaticUpdates || disabledBy)
     {
         result.status = StartupStatus::Disabled;
-        result.detail = !options.automaticUpdates ? "automatic_updates=0" : "LO_NO_UPDATE";
+        result.detail = !options.automaticUpdates ? "automatic_updates=0" : disabledBy;
         return result;
     }
     const bool flatpak = std::getenv("FLATPAK_ID") || std::filesystem::exists("/.flatpak-info");
@@ -171,11 +171,11 @@ StartupResult PrepareAtStartup(const StartupOptions &options)
 StartupResult PrepareAtStartup(const StartupOptions &options)
 {
     StartupResult result;
-    const char *disabled = std::getenv("LO_NO_UPDATE");
-    if (!options.automaticUpdates || (disabled && std::string_view(disabled) != "0"))
+    const char *disabledBy = UpdatesDisabledBy(std::getenv("LO_NO_UPDATE"), std::getenv("RECOMPLAUNCHER"));
+    if (!options.automaticUpdates || disabledBy)
     {
         result.status = StartupStatus::Disabled;
-        result.detail = !options.automaticUpdates ? "automatic_updates=0" : "LO_NO_UPDATE";
+        result.detail = !options.automaticUpdates ? "automatic_updates=0" : disabledBy;
         return result;
     }
     std::string error;
