@@ -20,6 +20,7 @@ and logs.
    remembers that installation.
 4. Change graphics options on the game's page and press Play. The game still prepares shaders
    during its normal startup. The in-game importer remains available for additional content.
+   The game does not update itself when RecompLauncher runs it; the launcher brings new releases.
 
 Do not pick files inside the destination `game/` folder. The importer must be able to read the
 picked files for the duration of setup. RecompLauncher runs setup again after each new release,
