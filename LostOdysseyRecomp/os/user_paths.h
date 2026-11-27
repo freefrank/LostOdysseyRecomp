@@ -1,6 +1,7 @@
 #pragma once
 
 #include <os/platform.h>
+#include <os/launcher_data.h>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -15,10 +16,13 @@ namespace os::user_paths
 {
     inline bool g_usePortableLayout = true;
     inline std::filesystem::path g_executableDirectory;
+    // RecompLauncher's data folder once a Linux portable layout uses it.
+    inline std::filesystem::path g_launcherDataRoot;
     inline bool IsExecutableDirWritable(const std::filesystem::path& path);
     inline void Initialize(const std::filesystem::path& executableDirectory)
     {
         g_executableDirectory = executableDirectory;
+        g_launcherDataRoot.clear();
 #ifdef _WIN32
         g_usePortableLayout = true;
 #elif LO_PLATFORM_ANDROID
@@ -30,6 +34,17 @@ namespace os::user_paths
         g_usePortableLayout = directory.find(".app/Contents/") == std::string::npos &&
             IsExecutableDirWritable(executableDirectory);
 #else
+        // RecompLauncher plays the unpacked AppImage from a folder of its own
+        // and passes a data folder: keep everything there, portable. Until
+        // the earlier files beside the executable are copied in, the layout
+        // below stays as before.
+        if (const auto launcherData = launcher_data::Directory();
+            !launcherData.empty() && launcher_data::AdoptProgramFolder(executableDirectory, launcherData))
+        {
+            g_usePortableLayout = true;
+            g_launcherDataRoot = launcherData;
+            return;
+        }
         // Extract-and-run AppImages have a writable temporary executable
         // directory. Keep their persistent files in XDG storage, just as when
         // the same AppImage is mounted read-only through FUSE.
@@ -112,6 +127,12 @@ namespace os::user_paths
     inline bool UsePortableLayout() { return g_usePortableLayout; }
     // The running executable's directory; empty before Initialize.
     inline const std::filesystem::path& ExecutableDir() { return g_executableDirectory; }
+    // The folder a portable layout keeps settings, saves and mods in: the
+    // executable's, or RecompLauncher's data folder on Linux.
+    inline std::filesystem::path PortableRoot(const std::filesystem::path& executableDirectory)
+    {
+        return g_launcherDataRoot.empty() ? executableDirectory : g_launcherDataRoot;
+    }
 
     // Bundled read-only assets follow the executable rather than the working
     // directory. Windows/dev folders use assets/, installed Linux packages use

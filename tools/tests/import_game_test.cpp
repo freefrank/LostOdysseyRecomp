@@ -941,6 +941,19 @@ void RunPrepareContentTest()
     Require(rejects({"game", "--prepare-content", "--disc5=/a", "--destination=/game"}), "accepted a fifth disc slot");
     const auto equalsSign = parse({"game", "--prepare-content", "--dlc2=/dlc=a", "--destination=/game"});
     Require(equalsSign && equalsSign->sources.front() == fs::absolute("/dlc=a").lexically_normal(),"split a path containing '='");
+#if LO_PLATFORM_LINUX && !LO_PLATFORM_ANDROID
+    // Under RecompLauncher the setup step keeps game-path.txt in its data folder.
+    const auto launcherData = root / "recompdata";
+    const auto programPath = ReadText(exe / "game-path.txt");
+    setenv("RECOMPLAUNCHER_DATA", launcherData.c_str(), 1);
+    os::user_paths::Initialize(exe);
+    Require(ReadText(launcherData / "game-path.txt") == programPath, "launcher data did not take the earlier game path");
+    Require(run({{destination}, destination}) == 0, "launcher setup failed: " + errors.str());
+    Require(ReadText(launcherData / "game-path.txt") == "game\n", "launcher setup did not write its data folder");
+    Require(ReadText(exe / "game-path.txt") == programPath, "launcher setup changed the program folder's game path");
+    unsetenv("RECOMPLAUNCHER_DATA");
+    os::user_paths::Initialize(exe);
+#endif
     os::user_paths::g_usePortableLayout = wasPortable;
     os::user_paths::g_executableDirectory = previousExecutable;
     std::cout << "[PASS] Headless import: discs, DLC, Unicode paths, retry, adoption, cancellation, rollback, arguments\n";

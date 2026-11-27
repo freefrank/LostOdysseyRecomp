@@ -385,7 +385,7 @@ int main(int argc, char* argv[])
     // Direct launches keep all portable data beside the executable. Explicit
     // --game launches retain their caller's working directory for isolated tests.
     if(!explicitGame && os::user_paths::UsePortableLayout()) {
-        std::filesystem::current_path(executableDirectory);
+        std::filesystem::current_path(os::user_paths::PortableRoot(executableDirectory));
     } else if(!explicitGame) {
         // Installed layouts (a macOS .app, Linux packages) start in the config
         // directory: a Finder launch begins in "/", where files saved by
@@ -472,7 +472,7 @@ int main(int argc, char* argv[])
 #endif
     {
         const auto modsRoot = os::user_paths::UsePortableLayout()
-            ? executableDirectory / "mods"
+            ? os::user_paths::PortableRoot(executableDirectory) / "mods"
             : os::user_paths::DataDir() / "mods";
         // The folder shows players where mods go and gives Mod Organizer 2 an
         // existing data directory to map its virtual files onto.

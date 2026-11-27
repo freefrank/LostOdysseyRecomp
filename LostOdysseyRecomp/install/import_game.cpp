@@ -2011,7 +2011,7 @@ bool WriteGamePath(const std::filesystem::path& executableDirectory,
     std::error_code ec;
     auto absExe = std::filesystem::absolute(executableDirectory, ec).lexically_normal();
     auto configPath = os::user_paths::UsePortableLayout()
-        ? absExe / "game-path.txt"
+        ? os::user_paths::PortableRoot(absExe) / "game-path.txt"
         : os::user_paths::ConfigDir() / "game-path.txt";
 
     std::filesystem::create_directories(configPath.parent_path(), ec);

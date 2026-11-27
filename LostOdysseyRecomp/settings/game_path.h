@@ -153,7 +153,7 @@ namespace settings::game_path
         }
 #endif
         const auto configPath = os::user_paths::UsePortableLayout()
-            ? exeDirectory / "game-path.txt"
+            ? os::user_paths::PortableRoot(exeDirectory) / "game-path.txt"
             : os::user_paths::ConfigDir() / "game-path.txt";
         std::ifstream location(configPath, std::ios::binary);
         std::string configured;
