@@ -62,7 +62,7 @@ inline const char* ConfiguredPackPath() {
 // user data folder: never into a signed app bundle or a read-only AppImage.
 inline std::filesystem::path InstallDirectory() {
     return os::user_paths::UsePortableLayout() && !os::user_paths::g_executableDirectory.empty()
-        ? os::user_paths::g_executableDirectory / "shaders"
+        ? os::user_paths::PortableRoot(os::user_paths::g_executableDirectory) / "shaders"
         : os::user_paths::DataDir() / "shaders";
 }
 
