@@ -47,7 +47,7 @@ const char* FailureApiName(FailureOperation operation)
     case FailureOperation::CreateBacking: return "CreateFileMappingW";
     case FailureOperation::MapView: return "MapViewOfFile3";
     case FailureOperation::ProtectNull: return "VirtualProtect";
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
     case FailureOperation::ReservePreferred:
     case FailureOperation::ReserveAny:
     case FailureOperation::CreateBacking: return "mmap";
@@ -123,7 +123,7 @@ void RecordFailure(FailureOperation operation, uint32_t error, int32_t viewIndex
 
 // macOS: 16 KiB host pages cannot express the E view's 4 KiB offset; see
 // guest_address_space_macos.cpp.
-#if !LO_PLATFORM_MACOS
+#if !LO_PLATFORM_APPLE
 uint8_t* Allocate()
 {
     failure = {};

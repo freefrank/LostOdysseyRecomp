@@ -74,7 +74,7 @@ namespace gpu::frame_plan
     {
         if (width && height) drawable.store((uint64_t(width) << 32) | height, std::memory_order_release);
     }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // On Retina displays the drawable is a multiple of the window's point size.
     // "Follow output" means the window's logical size, as it does on Windows,
     // where the window size is the pixel size: a 1280x720 output renders the
@@ -94,7 +94,7 @@ namespace gpu::frame_plan
     {
         uint32_t PlannedInternalResolution(const settings::Config& config)
         {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             return InternalResolutionMode(uint32_t(config.internalResolution));
 #else
             return config.internalResolution == settings::InternalResolutionNative ? 0 : uint32_t(config.internalResolution);

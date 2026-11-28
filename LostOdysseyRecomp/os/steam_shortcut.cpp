@@ -23,7 +23,7 @@
 #include <signal.h>
 #include <unistd.h>
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <mach-o/dyld.h>
 #endif
 
@@ -317,7 +317,7 @@ fs::path ExecutablePath()
     std::array<char, 4096> buffer{};
     const auto length = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
     if (length > 0) return fs::path(std::string(buffer.data(), static_cast<size_t>(length)));
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
     uint32_t length = 0;
     _NSGetExecutablePath(nullptr, &length);
     std::string buffer(length, '\0');
@@ -552,7 +552,7 @@ Result AddToSteam(const fs::path &gameRoot)
         options.environment.windowsSteamRoot = RegistrySteamPath();
         const auto* home = std::getenv("USERPROFILE");
 #else
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         options.environment.platform = Platform::MacOS;
 #endif
         const auto* home = std::getenv("HOME");

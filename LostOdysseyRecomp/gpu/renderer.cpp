@@ -114,7 +114,7 @@
 #ifdef _WIN32
 #include <plume_d3d12.h>
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <plume_metal.h>
 namespace plume {
     // Orders the scene-copy SR command lists; plume resources are untracked on Metal.
@@ -3811,7 +3811,7 @@ namespace gpu::renderer
 #ifdef _WIN32
                     !vulkan ? controller.Prepare(*static_cast<plume::D3D12Device*>(device),
                         {activePlan, promotion.inputs, promotion.srOptions}) :
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
                     !nativeVulkan ? controller.Prepare(*device, {activePlan, promotion.inputs, promotion.srOptions}) :
 #endif
                     controller.Prepare(*static_cast<plume::VulkanDevice*>(device),
@@ -3878,7 +3878,7 @@ namespace gpu::renderer
                             RenderFormat::R32_FLOAT, depth.width, depth.height, 4, RenderTextureLayout::SHADER_READ);
                 }
                 Gpu().drawProbe.End(commandList);
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 if (!nativeVulkan) plume::EncodeMetalQueueSignal(commandList);
 #endif
                 if (!video::EndGpuCommands(commandList)) {
@@ -3901,7 +3901,7 @@ namespace gpu::renderer
                     !vulkan ? controller.RecordIsolated(*static_cast<plume::D3D12CommandList*>(Gpu().srIsolated.get()),
                         {activePlan, promotion.inputs, promotion.srOptions},
                         *static_cast<plume::D3D12Texture*>(promotion.scratch->texture.get()), evidence.get()) :
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
                     !nativeVulkan ? controller.RecordIsolated(*Gpu().srIsolated,
                         {activePlan, promotion.inputs, promotion.srOptions}, *promotion.scratch->texture, evidence.get()) :
 #endif
@@ -3966,7 +3966,7 @@ namespace gpu::renderer
                 }
                 Gpu().srIsolatedAccepted = accepted;
                 commandList = Gpu().srContinuation.get(); if (!video::BeginGpuCommands(commandList)) return false;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 if (!nativeVulkan) plume::EncodeMetalQueueWait(commandList);
 #endif
 #if defined(LO_GPU_PLUME) && defined(_WIN32)
@@ -4034,7 +4034,7 @@ namespace gpu::renderer
                     if (nativeVulkan) sourceFormat = static_cast<VulkanTexture*>(promotion.inputs.color.texture)->desc.format;
 #ifdef _WIN32
                     else sourceFormat = static_cast<D3D12Texture*>(promotion.inputs.color.texture)->desc.format;
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
                     else sourceFormat = static_cast<plume::MetalTexture*>(promotion.inputs.color.texture)->desc.format;
 #endif
                     auto snapshot = frame_generation::RecordProducerSnapshot(device, commandList,

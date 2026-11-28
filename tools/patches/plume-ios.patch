@@ -1,0 +1,155 @@
+--- a/plume_apple.mm
++++ b/plume_apple.mm
+@@ -8,7 +8,110 @@
+ #include "plume_apple.h"
+ 
+ #include <algorithm>
++
++#include <TargetConditionals.h>
++
++#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
++#import <UIKit/UIKit.h>
++#import <Foundation/Foundation.h>
++#import <QuartzCore/CAMetalLayer.h>
++
++// iOS: the window handle is a UIWindow (SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER).
++// UIKit state is read on the main thread; other threads read cached values.
++namespace plume {
++    RenderDeviceVendor getRenderDeviceVendor(uint64_t) {
++        return RenderDeviceVendor::APPLE;
++    }
++
++    static void readWindow(void* handle, CocoaWindowAttributes& attributes, int& refreshRate, float& current, float& potential) {
++        UIWindow* window = (__bridge UIWindow*)handle;
++        UIScreen* screen = window.windowScene.screen ?: UIScreen.mainScreen;
++#ifdef PLUME_APPLE_RETINA_ENABLED
++        const CGFloat scale = screen.nativeScale;
++#else
++        const CGFloat scale = 1.0;
++#endif
++        const CGRect bounds = window.bounds;
++        attributes.x = (int)round(bounds.origin.x);
++        attributes.y = (int)round(bounds.origin.y);
++        attributes.width = (int)round(bounds.size.width * scale);
++        attributes.height = (int)round(bounds.size.height * scale);
++        refreshRate = (int)screen.maximumFramesPerSecond;
++        current = std::max(1.0f, float(screen.currentEDRHeadroom));
++        potential = std::max(1.0f, float(screen.potentialEDRHeadroom));
++    }
++
++    CocoaWindow::CocoaWindow(void* window)
++        : windowHandle(window), cachedRefreshRate(60) {
++        cachedAttributes = {0, 0, 0, 0};
++        updateWindowAttributesInternal(true);
++    }
++
++    CocoaWindow::~CocoaWindow() {}
++
++    void CocoaWindow::updateWindowAttributesInternal(bool forceSync) {
++        auto cache = edrCache;
++        auto update = ^{
++            CocoaWindowAttributes attributes{};
++            int rate = 60;
++            float current = 1.0f, potential = 1.0f;
++            readWindow(windowHandle, attributes, rate, current, potential);
++            {
++                std::lock_guard<std::mutex> lock(attributesMutex);
++                cachedAttributes = attributes;
++            }
++            cachedRefreshRate.store(rate);
++            cache->current.store(current);
++            cache->potential.store(potential);
++            cache->updateQueued.store(false);
++        };
++        if ([NSThread isMainThread]) update();
++        else if (forceSync) dispatch_sync(dispatch_get_main_queue(), update);
++        else if (!cache->updateQueued.exchange(true)) dispatch_async(dispatch_get_main_queue(), update);
++    }
+ 
++    void CocoaWindow::updateRefreshRateInternal(bool forceSync) {
++        updateWindowAttributesInternal(forceSync);
++    }
++
++    void CocoaWindow::getWindowAttributes(CocoaWindowAttributes* attributes) const {
++        const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
++        std::lock_guard<std::mutex> lock(attributesMutex);
++        *attributes = cachedAttributes;
++    }
++
++    int CocoaWindow::getRefreshRate() const {
++        const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
++        return cachedRefreshRate.load();
++    }
++
++    bool CocoaWindow::configureEDRLayer(void* layerHandle) const {
++        __block bool configured = false;
++        auto configure = ^{
++            CAMetalLayer* metalLayer = (__bridge CAMetalLayer*)layerHandle;
++            CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
++            if (metalLayer != nil && colorSpace != nullptr) {
++                [metalLayer setColorspace:colorSpace];
++                [metalLayer setWantsExtendedDynamicRangeContent:YES];
++                configured = true;
++            }
++            if (colorSpace != nullptr) CGColorSpaceRelease(colorSpace);
++        };
++        if ([NSThread isMainThread]) configure();
++        else dispatch_sync(dispatch_get_main_queue(), configure);
++        return configured;
++    }
++
++    void CocoaWindow::getEDRHeadroom(float& current, float& potential) const {
++        const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
++        current = edrCache->current.load();
++        potential = edrCache->potential.load();
++    }
++
++    // iOS apps are always full screen.
++    void CocoaWindow::toggleFullscreen() {}
++}
++#else
+ #import <AppKit/AppKit.h>
+ #import <Foundation/Foundation.h>
+ #import <IOKit/IOKitLib.h>
+@@ -240,3 +343,4 @@
+         }
+     }
+ }
++#endif
+--- a/plume_metal.cpp
++++ b/plume_metal.cpp
+@@ -2235,12 +2235,21 @@
+ 
+     void MetalSwapChain::setVsyncEnabled(const bool vsyncEnabled) {
+         MetalAutoreleasePool releasePool;
++#if PLUME_IOS
++        // CAMetalLayer.displaySyncEnabled is macOS only: iOS always syncs.
++        (void)vsyncEnabled;
++#else
+         layer->setDisplaySyncEnabled(vsyncEnabled);
++#endif
+     }
+ 
+     bool MetalSwapChain::isVsyncEnabled() const {
+         MetalAutoreleasePool releasePool;
++#if PLUME_IOS
++        return true;
++#else
+         return layer->displaySyncEnabled();
++#endif
+     }
+ 
+     uint32_t MetalSwapChain::getWidth() const {
+@@ -4097,7 +4106,12 @@
+ 
+         const std::string deviceName(mtl->name()->utf8String());
+         description.name = deviceName;
++#if PLUME_IOS
++        // MTLDevice.location is macOS only; iOS GPUs are always integrated.
++        description.type = RenderDeviceType::INTEGRATED;
++#else
+         description.type = mapDeviceType(mtl->location());
++#endif
+         description.driverVersion = 1; // Unavailable
+         description.vendor = mtl->supportsFamily(MTL::GPUFamilyApple1) ? RenderDeviceVendor::APPLE : getRenderDeviceVendor(mtl->registryID());
+         description.dedicatedVideoMemory = mtl->recommendedMaxWorkingSetSize();

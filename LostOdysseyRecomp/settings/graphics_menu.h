@@ -11,7 +11,7 @@ inline bool HdrAvailable(GraphicsBackend backend)
 {
 #ifdef _WIN32
     return backend == GraphicsBackend::D3D12 || backend == GraphicsBackend::Vulkan;
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
     return backend == GraphicsBackend::Metal;
 #else
     return backend == GraphicsBackend::Vulkan;
@@ -19,7 +19,7 @@ inline bool HdrAvailable(GraphicsBackend backend)
 }
 // UI indices only. Keep the persisted AA/provider/quality IDs independent.
 // macOS offers MetalFX Temporal; Android has no NGX and builds FSR optionally.
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 inline constexpr uint32_t AaChoiceCount = 5;
 #elif LO_PLATFORM_ANDROID
 #if defined(LO_HAS_FSR) && LO_HAS_FSR
@@ -37,7 +37,7 @@ inline constexpr uint32_t AaChoiceCount = 6;
 inline uint32_t AaChoice(const Config& config)
 {
     using gpu::upscaling::Upscaler;
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // A DLSS/FSR value from another platform's settings shows the AA it falls back to.
     if (config.upscaler == Upscaler::MetalFx) return 4;
 #elif LO_PLATFORM_ANDROID
@@ -59,7 +59,7 @@ inline void SelectAa(Config& config, uint32_t choice)
         config.antialiasing = choice;
         config.fxaa = choice == 1;
     } else {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         config.upscaler = Upscaler::MetalFx;
 #elif LO_PLATFORM_ANDROID
         config.upscaler = Upscaler::Fsr;
@@ -71,7 +71,7 @@ inline void SelectAa(Config& config, uint32_t choice)
     }
 }
 // Render resolution choices, in menu order (Config::internalResolution values).
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 inline constexpr int RenderResolutions[] = {0, 720, 1080, 1440, 2160, InternalResolutionNative};
 #else
 inline constexpr int RenderResolutions[] = {0, 720, 1080, 1440, 2160};

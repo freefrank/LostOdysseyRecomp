@@ -25,6 +25,7 @@
 #include <os/log_file.h>
 #include <os/crash_handler.h>
 #include <os/startup_diagnostics.h>
+#include <os/cloud_saves.h>
 #include <cstring>
 #include <iostream>
 #include <ctime>
@@ -62,11 +63,17 @@
 #include <unistd.h>
 extern char** environ;
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <mach-o/dyld.h>
 #endif
 #if LO_PLATFORM_ANDROID
 #include <SDL3/SDL_system.h>
+#endif
+#if LO_PLATFORM_IOS
+#include <os/ios_support.h>
+// UIKit owns the process entry: SDL_main.h renames main() below to SDL_main
+// and SDL's application delegate calls it on the main thread after launch.
+#include <SDL3/SDL_main.h>
 #endif
 
 // Runtime entry: set up guest memory, load default.xex and run its entry point
@@ -92,7 +99,7 @@ static std::filesystem::path ExecutableDirectory()
         path[n] = '\0';
         return std::filesystem::path(path).parent_path();
     }
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
     // The dyld path may name a symlink; resolve it as /proc/self/exe does on Linux.
     char path[4096]{};
     uint32_t size = sizeof(path);
@@ -424,6 +431,9 @@ int main(int argc, char* argv[])
         }
         else LOG_WARNING("could not open log file: {}", FileSystem::PathUtf8(logPath));
     }
+#if LO_PLATFORM_IOS
+    os::ios::PrepareDocuments();
+#endif
     if (compactGameData)
         return CompactGameDataCommand(FindGameRoot(executableDirectory, explicitGamePath).root);
     InstallCrashHandler();
@@ -697,6 +707,8 @@ int main(int argc, char* argv[])
     if (!prepareShadersOnly)
         install::compaction::PrepareAtStartup(gameRoot);
     FileSystem::Init(gameRoot);
+    // Before the guest lists its saves: take newer slots from iCloud, send newer ones up.
+    os::cloud_saves::Start(os::user_paths::SaveDir());
     XamInit();
 
     uint32_t entry = XexLoader::Load(gameRoot / "default.xex");

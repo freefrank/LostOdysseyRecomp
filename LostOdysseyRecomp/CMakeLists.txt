@@ -137,6 +137,11 @@ if(ANDROID OR LO_TARGET_PLATFORM STREQUAL "switch")
     list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "/discord/")
 endif()
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "updater/posix_ui\\.cpp$")
+if(LO_TARGET_PLATFORM STREQUAL "ios")
+    # No libcurl in the iOS SDK (updater/ios_http.mm instead). Discord stays
+    # built: with no desktop client its IPC connection simply fails.
+    list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "updater/posix_http\\.cpp$")
+endif()
 list(FILTER LO_RUNTIME_SOURCES EXCLUDE REGEX "gpu/shader/portable_shader_pack\\.cpp$")
 
 set(LO_IMPORT_STUBS "${LO_RUNTIME_ROOT}/kernel/imports_stubs.cpp")
@@ -165,6 +170,37 @@ if(ANDROID)
         target_compile_definitions(LostOdysseyRecomp PRIVATE LO_HAS_ADRENOTOOLS=1)
         add_dependencies(LostOdysseyRecomp main_hook file_redirect_hook gsl_alloc_hook hook_impl)
     endif()
+elseif(LO_TARGET_PLATFORM STREQUAL "ios")
+    add_executable(LostOdysseyRecomp MACOSX_BUNDLE ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS}
+        ${LO_RUNTIME_ROOT}/updater/ios_http.mm
+        ${LO_RUNTIME_ROOT}/os/ios_support.mm)
+    set_source_files_properties(${LO_RUNTIME_ROOT}/updater/ios_http.mm ${LO_RUNTIME_ROOT}/os/ios_support.mm
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc" SKIP_PRECOMPILE_HEADERS ON)
+    set(LO_IOS_BUNDLE_ID "io.github.freefrank.LostOdysseyRecomp" CACHE STRING "iOS bundle identifier")
+    # Host shaders compiled by DXC on a Mac (iOS has no compiler); see
+    # docs/IOS.md for how to produce the store.
+    set(LO_IOS_HOST_SHADER_STORE "" CACHE FILEPATH "builtin_v<N>_spirv.lostore to bundle with the iOS app")
+    set(LO_IOS_DXC_IDENTITY "dxc-1.8" CACHE STRING "Identity of the DXC that made LO_IOS_HOST_SHADER_STORE")
+    target_compile_definitions(LostOdysseyRecomp PRIVATE LO_DXC_PRECOMPILED_IDENTITY="${LO_IOS_DXC_IDENTITY}")
+    set_target_properties(LostOdysseyRecomp PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/packaging/ios/Info.plist.in"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${LO_IOS_BUNDLE_ID}"
+        MACOSX_BUNDLE_EXECUTABLE_NAME LostOdysseyRecomp
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${LO_SOURCE_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+    target_link_libraries(LostOdysseyRecomp PRIVATE "-framework Foundation" "-framework UIKit"
+        "-framework Metal" "-framework QuartzCore" "-framework GameController")
+    if(LO_IOS_HOST_SHADER_STORE)
+        get_filename_component(_lo_store_name "${LO_IOS_HOST_SHADER_STORE}" NAME)
+        add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LO_IOS_HOST_SHADER_STORE}"
+                "$<TARGET_FILE_DIR:LostOdysseyRecomp>/${_lo_store_name}"
+            COMMENT "Bundling the precompiled host shader store" VERBATIM)
+    endif()
+    add_custom_command(TARGET LostOdysseyRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets/steam" "$<TARGET_FILE_DIR:LostOdysseyRecomp>/assets/steam"
+        COMMENT "Staging Steam library artwork" VERBATIM)
 else()
     add_executable(LostOdysseyRecomp ${LO_RUNTIME_SOURCES} ${LO_IMPORT_STUBS})
     lo_stage_portable_shader_pack(LostOdysseyRecomp)
@@ -243,6 +279,8 @@ target_link_libraries(LostOdysseyRecomp PRIVATE
     SDL3::SDL3)
 if(ANDROID)
     target_link_libraries(LostOdysseyRecomp PRIVATE android log dl nlohmann_json::nlohmann_json)
+elseif(LO_TARGET_PLATFORM STREQUAL "ios")
+    target_link_libraries(LostOdysseyRecomp PRIVATE pthread dl)
 elseif(UNIX)
     set_target_properties(LostOdysseyRecomp PROPERTIES
         INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
@@ -251,6 +289,21 @@ elseif(UNIX)
     target_link_libraries(LostOdysseyRecomp PRIVATE CURL::libcurl)
 endif()
 target_link_libraries(LostOdysseyRecomp PRIVATE lo_avcodec)
+
+# iCloud save sync between the iOS and macOS builds (os/cloud_saves.h). The iOS
+# app owns the container; a macOS build reaches the same container through
+# ~/Library/Mobile Documents, so both must name the same identifier.
+if(LO_TARGET_PLATFORM STREQUAL "ios")
+    set(_lo_icloud_default "iCloud.${LO_IOS_BUNDLE_ID}")
+else()
+    set(_lo_icloud_default "")
+endif()
+set(LO_ICLOUD_CONTAINER "${_lo_icloud_default}" CACHE STRING
+    "iCloud container for save sync (e.g. iCloud.<iOS bundle id>); empty turns sync off")
+if(LO_TARGET_APPLE AND LO_ICLOUD_CONTAINER)
+    target_compile_definitions(LostOdysseyRecomp PRIVATE LO_ICLOUD_CONTAINER="${LO_ICLOUD_CONTAINER}")
+    message(STATUS "iCloud save sync: ${LO_ICLOUD_CONTAINER}")
+endif()
 
 if(LO_BUILD_GPU)
     target_link_libraries(LostOdysseyRecomp PRIVATE plume)
@@ -1001,7 +1054,7 @@ if(WIN32 AND LO_BUILD_GPU)
         list(APPEND LO_DXC_RUNTIME_FILES "${LO_DXC_BINARY_DIR}/${binary}")
     endforeach()
     set(LO_DXC_RUNTIME_TARGETS LostOdysseyRecomp LoShaderTool LoShaderAluTest LoPresentationTest LoTemporalAATest LoAmbientOcclusionGpuTest LoRenderResolutionShaderTest LoVulkanBackendTest LoVulkanTextureReuseTest LoShaderStartupCacheTest LoBackendCacheTest LoBackendLifecycleTest LoPresentCaptureTest LoLazyClearGpuTest)
-elseif(UNIX AND NOT ANDROID AND LO_BUILD_GPU)
+elseif(UNIX AND NOT ANDROID AND LO_BUILD_GPU AND NOT LO_TARGET_PLATFORM STREQUAL "ios")
     if(LO_TARGET_PLATFORM STREQUAL "macos")
         # Universal (arm64 + x86_64) build shipped with dxc-bin.
         set(LO_DXC_SO "${CMAKE_SOURCE_DIR}/tools/XenosRecomp/thirdparty/dxc-bin/lib/arm64/libdxcompiler.dylib")

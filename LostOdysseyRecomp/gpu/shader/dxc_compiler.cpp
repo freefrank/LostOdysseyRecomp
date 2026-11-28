@@ -150,10 +150,17 @@ namespace xenos
             if (module)
                 g_createInstance = reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module, "DxcCreateInstance"));
         }
+#elif LO_PLATFORM_IOS
+        // iOS has no DXC build and may not load unsigned code. Host shaders come
+        // from the precompiled store bundled with the app (see DxcIdentity).
+        void LoadDxc()
+        {
+            g_loadError = "no shader compiler on iOS; host shaders come from the bundled store";
+        }
 #else
         void LoadDxc()
         {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             constexpr const char* kLibrary = "libdxcompiler.dylib";
 #else
             constexpr const char* kLibrary = "libdxcompiler.so";
@@ -170,7 +177,7 @@ namespace xenos
             {
                 candidates.push_back(cwd / kLibrary);
             }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             // dyld resolves this beside the running executable.
             candidates.push_back(std::string("@executable_path/") + kLibrary);
             const std::filesystem::path relativeDxc = "tools/XenosRecomp/thirdparty/dxc-bin/lib/arm64/libdxcompiler.dylib";
@@ -237,6 +244,11 @@ namespace xenos
     const std::string& DxcIdentity()
     {
         static const std::string identity = []() -> std::string {
+#if LO_PLATFORM_IOS && defined(LO_DXC_PRECOMPILED_IDENTITY)
+            // The compiler that made the bundled host-shader store on a Mac.
+            // Cache keys include it, so lookups match that store's records.
+            return LO_DXC_PRECOMPILED_IDENTITY;
+#endif
             if (!DxcAvailable()) return {};
             // Compiler version is cache compatibility metadata. Do not reread
             // and hash entire compiler/validator libraries during game startup.

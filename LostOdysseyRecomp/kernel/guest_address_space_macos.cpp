@@ -1,10 +1,16 @@
 #include <os/platform.h>
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include "guest_address_space_layout.h"
 #include <cerrno>
 #include <csignal>
 #include <mach/mach.h>
+#if LO_PLATFORM_IOS
+// The iOS SDK has no mach_vm.h; vm_remap takes the same 64-bit arguments there.
+// The 4 GiB reservation below needs the extended virtual addressing entitlement.
+#include <mach/vm_map.h>
+#else
 #include <mach/mach_vm.h>
+#endif
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -113,12 +119,21 @@ uint8_t* Allocate()
         munmap(base, kSize);
         return nullptr;
     }
-    auto alias = mach_vm_address_t(base + kStarts[2]);
+#if LO_PLATFORM_IOS
+    using RemapAddress = vm_address_t;
+    static_assert(sizeof(vm_address_t) == 8, "vm_remap needs 64-bit addresses");
+#define LO_VM_REMAP vm_remap
+#else
+    using RemapAddress = mach_vm_address_t;
+#define LO_VM_REMAP mach_vm_remap
+#endif
+    auto alias = RemapAddress(base + kStarts[2]);
     vm_prot_t current = VM_PROT_NONE, maximum = VM_PROT_NONE;
-    const kern_return_t remapped = mach_vm_remap(mach_task_self(), &alias, kSizes[2], 0,
-        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, mach_task_self(), mach_vm_address_t(base + kStarts[1]),
+    const kern_return_t remapped = LO_VM_REMAP(mach_task_self(), &alias, kSizes[2], 0,
+        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, mach_task_self(), RemapAddress(base + kStarts[1]),
         FALSE, &current, &maximum, VM_INHERIT_NONE);
-    if (remapped != KERN_SUCCESS || alias != mach_vm_address_t(base + kStarts[2]))
+#undef LO_VM_REMAP
+    if (remapped != KERN_SUCCESS || alias != RemapAddress(base + kStarts[2]))
     {
         RecordFailure(FailureOperation::MapView, uint32_t(remapped), 2, base + kStarts[2], kSizes[2], kOffsets[2]);
         munmap(base, kSize);

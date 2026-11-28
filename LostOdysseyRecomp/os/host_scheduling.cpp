@@ -1,7 +1,7 @@
 #include "host_scheduling.h"
 #include <os/platform.h>
 
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 #include <cstdint>
 #include <objc/message.h>
 #include <objc/runtime.h>
@@ -28,7 +28,7 @@
 
 namespace os::scheduling
 {
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
 void BeginLatencyCriticalActivity()
 {
     // [[NSProcessInfo processInfo] beginActivityWithOptions:reason:] through the

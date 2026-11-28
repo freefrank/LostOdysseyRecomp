@@ -21,9 +21,9 @@ namespace os::user_paths
         g_executableDirectory = executableDirectory;
 #ifdef _WIN32
         g_usePortableLayout = true;
-#elif LO_PLATFORM_ANDROID
+#elif LO_PLATFORM_ANDROID || LO_PLATFORM_IOS
         g_usePortableLayout = false;
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
         // Never write into an app bundle: it may be user-writable, but changing
         // its contents breaks the code signature. Plain folders stay portable.
         const auto directory = executableDirectory.generic_string();
@@ -46,7 +46,15 @@ namespace os::user_paths
             const char* value = std::getenv(name);
             return value != nullptr && *value != '\0' ? std::filesystem::path(value) : fallback;
         }
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_IOS
+        // iOS: HOME is the app's sandbox container. Everything lives in
+        // Documents, which Finder file sharing shows: the player copies the
+        // installed game/ folder there and can read logs back.
+        inline std::filesystem::path DocumentsPath()
+        {
+            return EnvironmentPath("HOME", std::filesystem::path{}) / "Documents";
+        }
+#elif LO_PLATFORM_APPLE
         // macOS keeps per-user app files under ~/Library, not the XDG directories.
         inline std::filesystem::path LibraryPath(const char* folder)
         {
@@ -61,7 +69,9 @@ namespace os::user_paths
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
 #elif LO_PLATFORM_ANDROID
         return g_executableDirectory / "config";
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_IOS
+        return detail::DocumentsPath();
+#elif LO_PLATFORM_APPLE
         return detail::LibraryPath("Application Support");
 #else
         const auto home = detail::EnvironmentPath("HOME", std::filesystem::path{});
@@ -75,7 +85,9 @@ namespace os::user_paths
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
 #elif LO_PLATFORM_ANDROID
         return g_executableDirectory;
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_IOS
+        return detail::DocumentsPath();
+#elif LO_PLATFORM_APPLE
         return detail::LibraryPath("Application Support");
 #else
         if (std::getenv("FLATPAK_ID") != nullptr || std::filesystem::exists("/.flatpak-info"))
@@ -91,7 +103,9 @@ namespace os::user_paths
         return executableDirectory.empty() ? std::filesystem::current_path() : executableDirectory;
 #elif LO_PLATFORM_ANDROID
         return g_executableDirectory / "state";
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_IOS
+        return detail::DocumentsPath();
+#elif LO_PLATFORM_APPLE
         return detail::LibraryPath("Logs");
 #else
         const auto home = detail::EnvironmentPath("HOME", std::filesystem::path{});

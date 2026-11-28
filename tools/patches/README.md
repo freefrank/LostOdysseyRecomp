@@ -112,3 +112,14 @@ cp thirdparty/plume/plume_metal.cpp thirdparty/plume/plume_metal.h thirdparty/pl
 git -C "$ref" diff > tools/patches/plume-macos.patch
 git -C thirdparty/plume worktree remove --force "$ref"
 ```
+
+## iOS plume patch
+
+`plume-ios.patch` applies after `plume-macos.patch` (all four in order). It adds a
+UIKit `CocoaWindow` (the window handle is a `UIWindow`) and guards the macOS-only
+`MTLDevice.location` and `CAMetalLayer.displaySyncEnabled` calls. See
+[docs/IOS.md](../../docs/IOS.md).
+
+```sh
+git -C thirdparty/plume apply ../../tools/patches/plume-ios.patch
+```

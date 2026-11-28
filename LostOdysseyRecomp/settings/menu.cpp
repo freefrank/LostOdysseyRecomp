@@ -1202,7 +1202,7 @@ bool GraphicsRowHidden(int r)
     if (r == int(GraphicsRow::DlssNeuralRendering))
         return true;
 #endif
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
     // No NGX on macOS; a DLSS value from another platform's settings is not run here.
     if (r == int(GraphicsRow::DlssModel))
         return true;
@@ -1467,7 +1467,7 @@ void Publish(uint8_t *base, uint32_t config)
 #ifdef _WIN32
         placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Direct3D 12", L"Vulkan", Tr(L"Direct3D 11 (unsupported)", L"Direct3D 11（尚未支援）")},
                    uint32_t(edit.graphicsBackend)));
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
         placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Metal"}, 0));
 #else
         placeGraphics(GraphicsRow::Backend, makeChoices(L"Graphics backend", L"圖形後端", {L"Vulkan"}, 0));
@@ -1514,7 +1514,7 @@ void Publish(uint8_t *base, uint32_t config)
                    {L"1×", L"2×", L"4×"}, graphics_menu::ShadowResolutionChoice(edit)));
         placeGraphics(GraphicsRow::DynamicShadows, makeChoices(L"Dynamic shadows", L"動態陰影",
                    {Tr(L"On", L"開"), Tr(L"Low", L"低"), Tr(L"Off", L"關")}, graphics_menu::DynamicShadowsChoice(edit)));
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA", L"MetalFX Temporal"};
 #elif LO_PLATFORM_ANDROID
         std::vector<std::wstring> aaChoices{Tr(L"Off", L"關"), L"FXAA", L"SMAA", L"TAA"};
@@ -1576,7 +1576,7 @@ void Publish(uint8_t *base, uint32_t config)
             cullingChoices.push_back(std::to_wstring(percent) + L"%");
         placeGraphics(GraphicsRow::Culling, makeChoices(L"Culling", L"剔除", std::move(cullingChoices),
                    (std::min(edit.cullingPercent, 200u) + 5) / 10));
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         placeGraphics(GraphicsRow::ScalingQuality, makeChoices(L"Scaling filter", L"縮放濾鏡",
                    {Tr(L"Standard", L"標準"), Tr(L"High", L"高"), L"MetalFX"},
                    std::min(edit.scalingQuality, ScalingMetalFx)));
@@ -1594,7 +1594,7 @@ void Publish(uint8_t *base, uint32_t config)
                    std::move(frameRates), gpu::frame_rate::MenuIndex(edit.frameRate)));
         placeGraphics(GraphicsRow::LoadingTransitions, makeChoices(L"Loading speed", L"載入速度",
                    {Tr(L"Original", L"原版"), Tr(L"Fast", L"快速")}, edit.loadingTransitions == 0 ? 0 : 1));
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
         placeGraphics(GraphicsRow::VariableRefreshRate, makeChoices(L"Adaptive sync (ProMotion)",
             L"自適應同步（ProMotion）", onOff(), edit.variableRefreshRate ? 0 : 1));
 #else
@@ -1799,7 +1799,7 @@ void Publish(uint8_t *base, uint32_t config)
                            L"兩者皆為 720p、30 FPS。低配置會關閉動態陰影、動態模糊、景深與光暈，並使用標準縮放濾鏡。");
             break;
         case GraphicsRow::RenderResolution:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
                            L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
 #else
@@ -1906,7 +1906,7 @@ void Publish(uint8_t *base, uint32_t config)
                            L"畫面邊緣的角色與物件何時停止繪製。100% 為原版；越低越耗影格率，越高越早隱藏。");
             break;
         case GraphicsRow::ScalingQuality:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             next.help = Tr(L"Controls filtering when upscaling is active. MetalFX uses Apple's spatial upscaler; pair it with a lower render resolution.",
                            L"控制啟用縮放時的取樣濾鏡。MetalFX 使用 Apple 的空間放大器，建議搭配較低的渲染解析度。");
 #else
@@ -1930,7 +1930,7 @@ void Publish(uint8_t *base, uint32_t config)
                            L"原版維持 Xbox 360 的載入節奏；快速以更高幀率載入。兩者的過場效果都維持正常速度。");
             break;
         case GraphicsRow::VariableRefreshRate:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             next.help = Tr(L"Shows each frame for one game frame, so ProMotion and adaptive-sync displays follow the game's frame rate. Display sync stays on.",
                            L"每個影格至少顯示一個遊戲影格的時間，讓 ProMotion 與自適應同步螢幕跟隨遊戲影格率；顯示同步保持開啟。");
 #else
@@ -1990,7 +1990,7 @@ void Publish(uint8_t *base, uint32_t config)
                      L"目前圖形後端無法使用 HDR 輸出。");
             break;
         case GraphicsRow::HdrPaperWhite:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
             next.help = Tr(L"Reference white uses system SDR white on Metal. Changes apply after saving.",
                            L"Metal 以系統 SDR 白位作為參考白位；儲存後套用。");
 #else
@@ -3678,7 +3678,7 @@ PPC_FUNC(sub_822F19B0)
             case GraphicsRow::Backend:
 #ifdef _WIN32
                 edit.graphicsBackend = GraphicsBackend(cycle(uint32_t(edit.graphicsBackend), 3));
-#elif LO_PLATFORM_MACOS
+#elif LO_PLATFORM_APPLE
                 edit.graphicsBackend = GraphicsBackend::Metal;
 #else
                 edit.graphicsBackend = GraphicsBackend::Vulkan;
@@ -3805,7 +3805,7 @@ PPC_FUNC(sub_822F19B0)
                 edit.cullingPercent = uint32_t(std::clamp(int(std::min(edit.cullingPercent, 200u) + 5) / 10 * 10 + delta * 10, 0, 200));
                 break;
             case GraphicsRow::ScalingQuality:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 edit.scalingQuality = cycle(edit.scalingQuality, ScalingMetalFx + 1);
 #else
                 edit.scalingQuality = cycle(edit.scalingQuality, 2);
@@ -3824,7 +3824,7 @@ PPC_FUNC(sub_822F19B0)
                 edit.loadingTransitions = edit.loadingTransitions == 0 ? 2 : 0;
                 break;
             case GraphicsRow::VariableRefreshRate:
-#if LO_PLATFORM_MACOS
+#if LO_PLATFORM_APPLE
                 edit.variableRefreshRate = !edit.variableRefreshRate;
 #else
             {
